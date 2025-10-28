@@ -1,0 +1,56 @@
+[project]
+name = "isvctl"
+version = "0.1.0"
+description = "ISV Lab controller for cluster lifecycle orchestration"
+readme = "README.md"
+license = "BSD-3-Clause"
+authors = [{ name = "Alexandre Begnoche", email = "abegnoche@nvidia.com" }]
+requires-python = ">=3.12"
+dependencies = [
+    "isvtest",
+    "isvreporter",
+    "jinja2>=3.1.6,<4.0.0",
+    "pydantic>=2.10.0,<3.0.0",
+    "pyyaml>=6.0.2,<7.0.0",
+    "typer>=0.21.1,<1.0.0",
+]
+
+[project.scripts]
+isvctl = "isvctl.main:app"
+
+[build-system]
+requires = ["uv_build"]
+build-backend = "uv_build"
+
+[tool.uv]
+package = true
+default-groups = ["dev"]
+
+[tool.uv.sources]
+isvtest = { workspace = true }
+isvreporter = { workspace = true }
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I", "A", "UP", "RUF"]
+ignore = ["E501", "RUF005"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-v --junitxml=junit.xml"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.0.0",
+    "pytest>=8.3.4,<9.0.0",
+    "pytest-cov>=6.0.0",
+]

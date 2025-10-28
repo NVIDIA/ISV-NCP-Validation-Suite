@@ -1,0 +1,92 @@
+# AWS IAM Validation Configuration
+#
+# Architecture:
+#   - Scripts: Platform-specific (boto3) - do all AWS work
+#   - Validations: Platform-agnostic - defined in tests.validations
+#
+# Steps:
+#   1. create_user - boto3: Creates IAM user with access keys (setup)
+#   2. test_credentials - boto3: Verifies credentials work (test)
+#   3. teardown - boto3: Deletes user (teardown)
+#
+# Validation timing is inferred from step's phase.
+#
+# Usage:
+#   uv run isvctl test run -f isvctl/configs/aws-iam.yaml
+
+version: "1.0"
+
+commands:
+  iam:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: create_user
+        phase: setup
+        command: "python ./stubs/aws/iam/create_user.py"
+        args:
+          - "--username"
+          - "isv-test-user"
+          - "--create-access-key"
+        timeout: 60
+
+      - name: test_credentials
+        phase: test
+        command: "python ./stubs/aws/iam/test_credentials.py"
+        args:
+          - "--access-key-id"
+          - "{{steps.create_user.access_key_id}}"
+          - "--secret-access-key"
+          - "{{steps.create_user.secret_access_key}}"
+          - "--region"
+          - "{{region}}"
+        sensitive_args: ["--secret-access-key"]
+        timeout: 60
+
+      - name: teardown
+        phase: teardown
+        command: "python ./stubs/aws/iam/delete_user.py"
+        args:
+          - "--username"
+          - "{{steps.create_user.username}}"
+          - "{{teardown_flag}}"
+        timeout: 120
+
+  kubernetes:
+    skip: true
+  slurm:
+    skip: true
+
+tests:
+  cluster_name: "aws-iam-validation"
+  description: "AWS IAM user lifecycle validation"
+  platform: iam
+
+  settings:
+    region: "us-west-2"
+    teardown_flag: "{{(env.AWS_IAM_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"
+
+  # Validations - timing inferred from step's phase
+  validations:
+    setup_checks:
+      step: create_user
+      checks:
+        - FieldExistsCheck:
+            fields: ["username", "access_key_id"]
+        - StepSuccessCheck: {}
+
+    credentials:
+      step: test_credentials
+      checks:
+        - FieldExistsCheck:
+            field: "account_id"
+        - StepSuccessCheck: {}
+
+    teardown_checks:
+      step: teardown
+      checks:
+        - StepSuccessCheck: {}
+
+  exclude:
+    markers:
+      - kubernetes
+      - slurm

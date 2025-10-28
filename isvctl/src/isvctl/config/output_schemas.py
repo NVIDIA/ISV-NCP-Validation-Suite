@@ -1,0 +1,680 @@
+"""Output schema registry for step-based command execution.
+
+This module provides:
+1. Step name → Schema mapping for auto-detection
+2. Built-in JSON schemas for validating command output
+3. Registration API for custom schemas and mappings
+
+Schemas are generic and provider-agnostic - the same schemas work for
+AWS, Azure, GCP, or any other ISV provider.
+
+Example usage:
+    from isvctl.config.output_schemas import get_schema_for_step, validate_output
+
+    # Auto-detect schema from step name
+    schema_name = get_schema_for_step("provision_cluster")  # Returns "cluster"
+
+    # Validate output against schema
+    is_valid, errors = validate_output(output_json, schema_name)
+"""
+
+from typing import Any
+
+import jsonschema
+
+# Step name → Schema mapping for auto-detection
+# The step name determines which schema is used for validation
+STEP_SCHEMA_MAPPING: dict[str, str | None] = {
+    # Cluster operations → "cluster" schema
+    "provision_cluster": "cluster",
+    "create_cluster": "cluster",
+    "setup_cluster": "cluster",
+    # Network operations → "network" schema
+    "create_network": "network",
+    "provision_network": "network",
+    "create_vpc": "network",
+    "setup_network": "network",
+    # Instance/VM operations → "instance" schema
+    "launch_instance": "instance",
+    "create_instance": "instance",
+    "provision_vm": "instance",
+    "create_vm": "instance",
+    # GPU setup → "gpu_setup" schema
+    "install_gpu_operator": "gpu_setup",
+    "setup_gpu": "gpu_setup",
+    "install_drivers": "gpu_setup",
+    # Workload execution → "workload_result" schema
+    "run_workload": "workload_result",
+    "run_test": "workload_result",
+    "run_benchmark": "workload_result",
+    "execute_workload": "workload_result",
+    # Teardown operations → "teardown" schema
+    "teardown": "teardown",
+    "cleanup": "teardown",
+    "destroy": "teardown",
+    # Control plane - API health
+    "check_api": "api_health",
+    "test_api": "api_health",
+    "verify_api": "api_health",
+    # Control plane - Access key operations
+    "create_access_key": "access_key",
+    "test_access_key": "auth_result",
+    "disable_access_key": "access_key_status",
+    "verify_key_rejected": "auth_rejection",
+    "delete_access_key": "teardown",
+    # Control plane - Tenant/Resource group operations
+    "create_tenant": "tenant",
+    "list_tenants": "tenant_list",
+    "get_tenant": "tenant",
+    "delete_tenant": "teardown",
+    # IAM operations
+    "create_user": "iam_user",
+    "delete_user": "teardown",
+    # Network test operations
+    "vpc_crud": "vpc_crud",
+    "vpc_crud_test": "vpc_crud",
+    "subnet_test": "subnet_config",
+    "subnet_config": "subnet_config",
+    "isolation_test": "vpc_isolation",
+    "vpc_isolation": "vpc_isolation",
+    "security_test": "security_blocking",
+    "security_blocking": "security_blocking",
+    "traffic_test": "traffic_flow",
+    "traffic_validation": "traffic_flow",
+    "test_connectivity": "connectivity_result",
+    "connectivity_test": "connectivity_result",
+    "launch_instances": "instance_launch",
+    "launch_test_instances": "instance_launch",
+    # ISO/Image import operations (provider-agnostic)
+    "upload_image": "iso_import",
+    "import_image": "iso_import",
+    "upload_iso": "iso_import",
+    "import_iso": "iso_import",
+    "create_image": "iso_import",
+}
+
+# Common fields present in all outputs
+COMMON_PROPERTIES = {
+    "success": {"type": "boolean", "description": "Whether the operation succeeded"},
+    "platform": {"type": "string", "description": "Platform type (e.g., kubernetes, vm, iam)"},
+}
+
+# Built-in schemas (generic, provider-agnostic)
+OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
+    "cluster": {
+        "type": "object",
+        "required": ["success", "platform", "cluster_name", "node_count"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "cluster_name": {"type": "string", "description": "Name of the cluster"},
+            "endpoint": {"type": "string", "description": "Cluster API endpoint"},
+            "node_count": {"type": "integer", "minimum": 0, "description": "Total number of nodes"},
+            "nodes": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "List of node names",
+            },
+            "gpu_count": {"type": "integer", "minimum": 0, "description": "Total GPUs in cluster"},
+            "gpu_per_node": {"type": "integer", "minimum": 0, "description": "GPUs per node"},
+            "driver_version": {"type": "string", "description": "NVIDIA driver version"},
+            "kubeconfig_path": {"type": "string", "description": "Path to kubeconfig file"},
+        },
+        "additionalProperties": True,
+    },
+    "network": {
+        "type": "object",
+        "required": ["success", "platform"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "network_id": {"type": "string", "description": "Network/VPC identifier"},
+            "cidr": {"type": "string", "description": "CIDR block for the network"},
+            "subnets": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "subnet_id": {"type": "string"},
+                        "cidr": {"type": "string"},
+                        "availability_zone": {"type": "string"},
+                        "az": {"type": "string"},
+                    },
+                },
+                "description": "List of subnets",
+            },
+            "region": {"type": "string", "description": "Cloud region"},
+        },
+        "additionalProperties": True,
+    },
+    "instance": {
+        "type": "object",
+        "required": ["success", "platform", "instance_id"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "instance_id": {"type": "string", "description": "Instance identifier"},
+            "state": {
+                "type": "string",
+                "enum": ["pending", "running", "stopped", "terminated"],
+                "description": "Instance state",
+            },
+            "public_ip": {"type": "string", "description": "Public IP address"},
+            "private_ip": {"type": "string", "description": "Private IP address"},
+            "instance_type": {"type": "string", "description": "Instance type/size"},
+            "ssh_user": {"type": "string", "description": "SSH username"},
+            "ssh_key_path": {"type": "string", "description": "Path to SSH private key"},
+        },
+        "additionalProperties": True,
+    },
+    "workload_result": {
+        "type": "object",
+        "required": ["success", "platform", "status"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "status": {
+                "type": "string",
+                "enum": ["passed", "failed", "skipped"],
+                "description": "Workload execution status",
+            },
+            "duration_seconds": {"type": "number", "minimum": 0, "description": "Execution duration"},
+            "metrics": {
+                "type": "object",
+                "additionalProperties": True,
+                "description": "Workload metrics (e.g., bandwidth, latency)",
+            },
+            "logs": {"type": "string", "description": "Workload output logs"},
+        },
+        "additionalProperties": True,
+    },
+    "gpu_setup": {
+        "type": "object",
+        "required": ["success", "platform", "installed"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "installed": {"type": "boolean", "description": "Whether GPU setup completed"},
+            "driver_version": {"type": "string", "description": "NVIDIA driver version"},
+            "cuda_version": {"type": "string", "description": "CUDA version"},
+            "gpu_count": {"type": "integer", "minimum": 0, "description": "Number of GPUs"},
+            "gpu_model": {"type": "string", "description": "GPU model name"},
+        },
+        "additionalProperties": True,
+    },
+    "teardown": {
+        "type": "object",
+        "required": ["success", "platform"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "resources_deleted": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "List of resources that were deleted",
+            },
+            "resources_failed": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "List of resources that failed to delete",
+            },
+            "message": {"type": "string", "description": "Teardown status message"},
+            "duration_seconds": {"type": "number", "minimum": 0, "description": "Teardown duration"},
+        },
+        "additionalProperties": True,
+    },
+    # =========================================================================
+    # ISO/Image Import Schemas (provider-agnostic)
+    # =========================================================================
+    "iso_import": {
+        "type": "object",
+        "required": ["success", "platform", "image_id"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "image_id": {"type": "string", "description": "Imported image identifier (AMI, Azure Image, GCP Image)"},
+            "image_name": {"type": "string", "description": "Human-readable image name"},
+            "storage_bucket": {"type": "string", "description": "Storage bucket/container used for import"},
+            "storage_path": {"type": "string", "description": "Object key/path in storage"},
+            "disk_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Disk/snapshot IDs created during import",
+            },
+            "image_format": {
+                "type": "string",
+                "enum": ["vmdk", "vhd", "vhdx", "ova", "raw", "qcow2"],
+                "description": "Source image format",
+            },
+            "region": {"type": "string", "description": "Cloud region"},
+            "image_state": {"type": "string", "description": "Image state (available, pending, etc.)"},
+        },
+        "additionalProperties": True,
+    },
+    # =========================================================================
+    # Control Plane Schemas (provider-agnostic)
+    # =========================================================================
+    "api_health": {
+        "type": "object",
+        "required": ["success", "platform"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "account_id": {"type": "string", "description": "Cloud account/project identifier"},
+            "region": {"type": "string", "description": "Cloud region"},
+            "tests": {
+                "type": "object",
+                "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                        "passed": {"type": "boolean"},
+                        "message": {"type": "string"},
+                        "latency_ms": {"type": "number"},
+                    },
+                },
+                "description": "Individual API health test results",
+            },
+        },
+        "additionalProperties": True,
+    },
+    "access_key": {
+        "type": "object",
+        "required": ["success", "platform", "access_key_id"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "access_key_id": {"type": "string", "description": "Access key identifier"},
+            "secret_access_key": {"type": "string", "description": "Secret key (only on create)"},
+            "username": {"type": "string", "description": "User the key belongs to"},
+            "user_id": {"type": "string", "description": "User unique identifier"},
+        },
+        "additionalProperties": True,
+    },
+    "auth_result": {
+        "type": "object",
+        "required": ["success", "platform", "authenticated"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "authenticated": {"type": "boolean", "description": "Authentication succeeded"},
+            "identity_id": {"type": "string", "description": "Authenticated identity identifier"},
+            "account_id": {"type": "string", "description": "Account identifier"},
+            "error": {"type": "string", "description": "Error message if failed"},
+        },
+        "additionalProperties": True,
+    },
+    "access_key_status": {
+        "type": "object",
+        "required": ["success", "platform", "status"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "access_key_id": {"type": "string", "description": "Access key identifier"},
+            "status": {
+                "type": "string",
+                "enum": ["Active", "Inactive"],
+                "description": "Key status",
+            },
+        },
+        "additionalProperties": True,
+    },
+    "auth_rejection": {
+        "type": "object",
+        "required": ["success", "platform", "rejected"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "rejected": {"type": "boolean", "description": "Auth was correctly rejected"},
+            "error_code": {"type": "string", "description": "Error code from rejection"},
+        },
+        "additionalProperties": True,
+    },
+    "tenant": {
+        "type": "object",
+        "required": ["success", "platform", "tenant_name"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "tenant_name": {"type": "string", "description": "Tenant name"},
+            "tenant_id": {"type": "string", "description": "Tenant unique identifier"},
+            "description": {"type": "string", "description": "Tenant description"},
+            "tags": {
+                "type": "object",
+                "additionalProperties": {"type": "string"},
+                "description": "Tenant tags/labels",
+            },
+        },
+        "additionalProperties": True,
+    },
+    "tenant_list": {
+        "type": "object",
+        "required": ["success", "platform"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "tenants": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "tenant_name": {"type": "string"},
+                        "tenant_id": {"type": "string"},
+                    },
+                },
+                "description": "List of tenants",
+            },
+            "count": {"type": "integer", "description": "Number of tenants"},
+            "found_target": {"type": "boolean", "description": "Target tenant was found"},
+            "target_tenant": {"type": "string", "description": "Target tenant name searched for"},
+        },
+        "additionalProperties": True,
+    },
+    "iam_user": {
+        "type": "object",
+        "required": ["success", "platform", "username"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "username": {"type": "string", "description": "User name"},
+            "user_id": {"type": "string", "description": "User unique identifier"},
+        },
+        "additionalProperties": True,
+    },
+    # =========================================================================
+    # Network Test Schemas
+    # =========================================================================
+    "vpc_crud": {
+        "type": "object",
+        "required": ["success", "platform"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "tests": {
+                "type": "object",
+                "properties": {
+                    "create_vpc": {"type": "object"},
+                    "read_vpc": {"type": "object"},
+                    "update_tags": {"type": "object"},
+                    "update_dns": {"type": "object"},
+                    "delete_vpc": {"type": "object"},
+                },
+                "description": "Individual CRUD test results",
+            },
+            "network_id": {"type": "string", "description": "VPC ID (if created)"},
+            "vpc_name": {"type": "string", "description": "VPC name"},
+        },
+        "additionalProperties": True,
+    },
+    "subnet_config": {
+        "type": "object",
+        "required": ["success", "platform"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "tests": {
+                "type": "object",
+                "properties": {
+                    "create_vpc": {"type": "object"},
+                    "create_subnets": {"type": "object"},
+                    "az_distribution": {"type": "object"},
+                    "subnets_available": {"type": "object"},
+                    "route_table_exists": {"type": "object"},
+                },
+                "description": "Subnet configuration test results",
+            },
+            "subnets": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "subnet_id": {"type": "string"},
+                        "cidr": {"type": "string"},
+                        "az": {"type": "string"},
+                    },
+                },
+                "description": "Created subnets",
+            },
+            "network_id": {"type": "string", "description": "VPC ID"},
+        },
+        "additionalProperties": True,
+    },
+    "vpc_isolation": {
+        "type": "object",
+        "required": ["success", "platform"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "tests": {
+                "type": "object",
+                "properties": {
+                    "create_vpc_a": {"type": "object"},
+                    "create_vpc_b": {"type": "object"},
+                    "no_peering": {"type": "object"},
+                    "no_cross_routes_a": {"type": "object"},
+                    "no_cross_routes_b": {"type": "object"},
+                    "sg_isolation_a": {"type": "object"},
+                    "sg_isolation_b": {"type": "object"},
+                },
+                "description": "VPC isolation test results",
+            },
+            "vpc_a": {
+                "type": "object",
+                "properties": {"id": {"type": "string"}, "cidr": {"type": "string"}},
+            },
+            "vpc_b": {
+                "type": "object",
+                "properties": {"id": {"type": "string"}, "cidr": {"type": "string"}},
+            },
+        },
+        "additionalProperties": True,
+    },
+    "security_blocking": {
+        "type": "object",
+        "required": ["success", "platform"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "tests": {
+                "type": "object",
+                "properties": {
+                    "create_vpc": {"type": "object"},
+                    "sg_default_deny_inbound": {"type": "object"},
+                    "sg_allows_specific_ssh": {"type": "object"},
+                    "sg_denies_vpc_icmp": {"type": "object"},
+                    "nacl_explicit_deny": {"type": "object"},
+                    "default_nacl_allows_inbound": {"type": "object"},
+                    "sg_restricted_egress": {"type": "object"},
+                },
+                "description": "Security blocking test results",
+            },
+            "network_id": {"type": "string", "description": "VPC ID"},
+        },
+        "additionalProperties": True,
+    },
+    "traffic_flow": {
+        "type": "object",
+        "required": ["success", "platform"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "tests": {
+                "type": "object",
+                "properties": {
+                    "create_vpc": {"type": "object"},
+                    "create_igw": {"type": "object"},
+                    "network_setup": {"type": "object"},
+                    "create_iam": {"type": "object"},
+                    "create_security_groups": {"type": "object"},
+                    "launch_instances": {"type": "object"},
+                    "instances_running": {"type": "object"},
+                    "ssm_ready": {"type": "object"},
+                    "traffic_allowed": {"type": "object"},
+                    "traffic_blocked": {"type": "object"},
+                    "internet_icmp": {"type": "object"},
+                    "internet_http": {"type": "object"},
+                },
+                "description": "Traffic flow test results",
+            },
+            "network_id": {"type": "string", "description": "VPC ID"},
+        },
+        "additionalProperties": True,
+    },
+    "connectivity_result": {
+        "type": "object",
+        "required": ["success", "platform"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "tests": {
+                "type": "object",
+                "additionalProperties": True,
+                "description": "Connectivity test results",
+            },
+            "instances": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": "Instance information",
+            },
+            "network_id": {"type": "string", "description": "VPC/Network ID"},
+        },
+        "additionalProperties": True,
+    },
+    "instance_launch": {
+        "type": "object",
+        "required": ["success", "platform"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "instances": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "instance_id": {"type": "string"},
+                        "private_ip": {"type": "string"},
+                        "public_ip": {"type": "string"},
+                        "state": {"type": "string"},
+                    },
+                },
+                "description": "Launched instances",
+            },
+        },
+        "additionalProperties": True,
+    },
+    "generic": {
+        "type": "object",
+        "required": ["success", "platform"],
+        "properties": COMMON_PROPERTIES,
+        "additionalProperties": True,
+        "description": "Generic schema for unrecognized step names",
+    },
+}
+
+
+def get_schema_for_step(step_name: str) -> str | None:
+    """Auto-detect schema name from step name.
+
+    Uses a three-tier matching strategy:
+    1. Exact match: step_name == key
+    2. Partial match: key in step_name
+    3. Fallback: returns "generic"
+
+    Args:
+        step_name: The name of the step to look up
+
+    Returns:
+        Schema name for validation
+
+    Examples:
+        >>> get_schema_for_step("provision_cluster")
+        "cluster"
+        >>> get_schema_for_step("my_custom_cluster_setup")
+        "cluster"  # Partial match - contains "cluster"
+        >>> get_schema_for_step("teardown")
+        "teardown"  # Validates teardown success
+        >>> get_schema_for_step("unknown_step")
+        "generic"  # Fallback
+    """
+    # Exact match first
+    if step_name in STEP_SCHEMA_MAPPING:
+        return STEP_SCHEMA_MAPPING[step_name]
+
+    # Partial match - check if any key is contained in step_name
+    for key, schema in STEP_SCHEMA_MAPPING.items():
+        if key in step_name:
+            return schema
+
+    # Fallback to generic schema
+    return "generic"
+
+
+def get_schema(schema_name: str) -> dict[str, Any] | None:
+    """Get a schema by name.
+
+    Args:
+        schema_name: Name of the schema to retrieve
+
+    Returns:
+        Schema dictionary if found, None otherwise
+    """
+    return OUTPUT_SCHEMAS.get(schema_name)
+
+
+def validate_output(output: dict[str, Any], schema_name: str) -> tuple[bool, list[str]]:
+    """Validate command output against a schema.
+
+    Args:
+        output: The JSON output to validate
+        schema_name: Name of the schema to validate against
+
+    Returns:
+        Tuple of (is_valid, error_messages)
+
+    Raises:
+        ValueError: If schema_name is not registered
+    """
+    schema = OUTPUT_SCHEMAS.get(schema_name)
+    if schema is None:
+        raise ValueError(f"Unknown schema: {schema_name}")
+
+    errors: list[str] = []
+    try:
+        jsonschema.validate(instance=output, schema=schema)
+        return True, []
+    except jsonschema.ValidationError as e:
+        errors.append(f"Validation error at {e.json_path}: {e.message}")
+        return False, errors
+    except jsonschema.SchemaError as e:
+        errors.append(f"Schema error: {e.message}")
+        return False, errors
+
+
+def register_step_mapping(step_name: str, schema_name: str | None) -> None:
+    """Register a custom step name → schema mapping.
+
+    ISVs can use this to map their custom step names to schemas.
+
+    Args:
+        step_name: The step name to register
+        schema_name: The schema name to map to, or None for no validation
+
+    Example:
+        >>> register_step_mapping("my_custom_provision", "cluster")
+        >>> register_step_mapping("my_cleanup", None)  # No validation
+    """
+    STEP_SCHEMA_MAPPING[step_name] = schema_name
+
+
+def register_schema(name: str, schema: dict[str, Any]) -> None:
+    """Register a custom output schema.
+
+    ISVs can use this to add schemas for their custom output formats.
+
+    Args:
+        name: Schema name
+        schema: JSON Schema dictionary
+
+    Example:
+        >>> register_schema("custom_output", {
+        ...     "type": "object",
+        ...     "required": ["my_field"],
+        ...     "properties": {"my_field": {"type": "string"}}
+        ... })
+    """
+    OUTPUT_SCHEMAS[name] = schema
+
+
+def list_schemas() -> list[str]:
+    """List all registered schema names.
+
+    Returns:
+        List of schema names
+    """
+    return list(OUTPUT_SCHEMAS.keys())
+
+
+def list_step_mappings() -> dict[str, str | None]:
+    """List all step name → schema mappings.
+
+    Returns:
+        Dictionary of step_name → schema_name mappings
+    """
+    return dict(STEP_SCHEMA_MAPPING)

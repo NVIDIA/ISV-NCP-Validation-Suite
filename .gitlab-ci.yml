@@ -1,0 +1,232 @@
+include:
+  - project: cds/cds-components
+    file: includes/runners.yml
+    ref: main
+
+  - project: cds/cicd-pipelines
+    file: templates/pipeline.yml
+    ref: "1.42.0"
+
+variables:
+  UV_LINK_MODE: "copy" # uv: configure to use copy mode instead of hardlinks
+  FF_SCRIPT_SECTIONS: "true" # Gitlab: display the complete command when it spans multiple lines
+  # NGC configuration for wheel publishing
+  NGC_ORG: "fcypcg1knhby"
+  NGC_TEAM: "isv-labs-dev"
+  NGC_REGISTRY_VAULT_KEY: $CI_PROJECT_NAME # nv-isv-tools
+  NEED_SEMANTIC_RELEASE: "true"
+
+# ==============================================================================================================
+.isv-lab-scripts:
+  uv-sync:
+    - uv sync --frozen
+
+# ==============================================================================================================
+# stage: init
+check-precommit:
+  stage: init
+  extends: .cds-runner
+  script:
+    - make pre-commit
+  rules:
+    - !reference [.rules-push-or-mr, rules]
+
+check-schema-sync:
+  stage: init
+  extends: .cds-runner
+  before_script:
+    - !reference [.isv-lab-scripts, uv-sync]
+  script:
+    - uv --directory=isvctl run python scripts/check_schemas.py
+  rules:
+    - !reference [.rules-push-or-mr, rules]
+
+compute-next-release-version:
+  extends:
+    - .compute-next-release-version
+
+# ==============================================================================================================
+# Test stage to run unit tests (for library code, not reported to ISV Lab endpoint)
+unit-tests:isvctl:
+  stage: test
+  extends: .cds-runner
+  before_script:
+    - !reference [.isv-lab-scripts, uv-sync]
+  script:
+    - uv --directory=isvctl run pytest -v --cov=isvctl --cov-report=term-missing --cov-report=xml:coverage.xml
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: isvctl/coverage.xml
+      junit: isvctl/junit.xml
+    paths:
+      - isvctl/.coverage
+  rules:
+    - !reference [.rules-push-or-mr, rules]
+
+unit-tests:isvtest:
+  stage: test
+  extends: .cds-runner
+  before_script:
+    - !reference [.isv-lab-scripts, uv-sync]
+  script:
+    - uv --directory=isvtest run pytest -m unit --cov=isvtest --cov-report=term-missing --cov-report=xml:coverage.xml
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: isvtest/coverage.xml
+      junit: isvtest/junit.xml
+    paths:
+      - isvtest/.coverage
+  rules:
+    - !reference [.rules-push-or-mr, rules]
+
+unit-tests:isvreporter:
+  stage: test
+  extends: .cds-runner
+  before_script:
+    - !reference [.isv-lab-scripts, uv-sync]
+  script:
+    - uv --directory=isvreporter run pytest -v --cov=isvreporter --cov-report=term-missing --cov-report=xml:coverage.xml
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: isvreporter/coverage.xml
+      junit: isvreporter/junit.xml
+    paths:
+      - isvreporter/.coverage
+  rules:
+    - !reference [.rules-push-or-mr, rules]
+
+coverage-report-combined:
+  stage: test
+  extends: .cds-runner
+  needs:
+    - unit-tests:isvctl
+    - unit-tests:isvtest
+    - unit-tests:isvreporter
+  before_script:
+    - !reference [.isv-lab-scripts, uv-sync]
+  script:
+    # Combine coverage from all packages
+    - uv run coverage combine isvctl/.coverage isvtest/.coverage isvreporter/.coverage
+    - uv run coverage xml -o coverage-combined.xml
+    - uv run coverage report
+  coverage: /TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage-combined.xml
+  rules:
+    - !reference [.rules-push-or-mr, rules]
+
+# ==============================================================================================================
+# stage: build
+build-wheels:
+  stage: build
+  extends: .cds-runner
+  needs:
+    - compute-next-release-version
+  script:
+    # Bake version into packages (read by isvctl at runtime for isv_test_version)
+    # For semver releases (X.Y.Z), use as-is; for dev builds (SHA), add dev- prefix
+    - |
+      if [[ "$NEXT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+        VERSION="$NEXT_VERSION"
+      else
+        VERSION="dev-$NEXT_VERSION"
+      fi
+      echo "Baking _version.py into packages with version: $VERSION"
+      echo "__version__ = \"$VERSION\"" > isvctl/src/isvctl/_version.py
+      echo "__version__ = \"$VERSION\"" > isvtest/src/isvtest/_version.py
+      echo "__version__ = \"$VERSION\"" > isvreporter/src/isvreporter/_version.py
+    - make build
+  artifacts:
+    paths:
+      - dist/*.whl
+    expire_in: 1 week
+  rules:
+    - !reference [.rules-push-or-mr, rules]
+
+# =================================================================================================
+# stage: publish
+semantic-release:
+  extends:
+    - .semantic-release
+
+wheels-push-ngc:
+  stage: publish
+  extends:
+    - .cds-runner
+    - .vault-settings
+  needs:
+    - build-wheels
+    - compute-next-release-version
+  variables:
+    SECRETS_TO_RETRIEVE_IN_JSON: >
+      [
+        {
+          "path": "kv/gitlab/ngc-registry-auth/$NGC_REGISTRY_VAULT_KEY",
+          "key": "NGC_REGISTRY_TOKEN",
+          "env_var": "NGC_API_KEY"
+        }
+      ]
+  before_script:
+    - !reference [.vault-before-script, before_script]
+  script:
+    - ./tools/ci/publish_resources.sh
+  rules:
+    - !reference [.rules-push-or-mr-manual, rules]
+
+# ==============================================================================================================
+.platform-tests-base:
+  stage: integration-test
+  extends:
+    - .cds-runner
+    - .vault-settings
+  needs: [] # temp
+  allow_failure: true
+  variables:
+    ISV_TEST_TARGET_TYPE: "SLURM"
+    ISV_CLIENT_ID: $STG_ISV_CLIENT_ID
+    ISV_CLIENT_SECRET: $STG_ISV_CLIENT_SECRET
+    VAULT_ADDR: "https://stg.vault.nvidia.com"
+    VAULT_NAMESPACE: "gfn-cds"
+    VAULT_JWT_ROLE: "namespace-writer"
+    VAULT_MOUNT_PATH: "auth/jwt/gitlab"
+    SECRETS_TO_RETRIEVE_IN_JSON: >
+      [
+        {
+          "path": "ssa/app/ncp-isv-lab-service/test-client/issue/creds",
+          "key": "secret",
+          "env_var": "ISV_CLIENT_SECRET"
+        }
+      ]
+  before_script:
+    - !reference [.isv-lab-scripts, uv-sync]
+    # TODO: fix vault login/role
+    # - !reference [.vault-before-script, before_script]
+    # TODO: install nvinit on the image
+    - nvinit ssh
+  artifacts:
+    reports:
+      junit: junit-validation.xml
+    paths:
+      - pytest-output.log
+  when: manual
+
+k8s-tests:
+  extends:
+    - .platform-tests-base
+  script:
+    - uv run isvctl deploy run 7.243.33.191 -j 202.56.94.106:2260 -u ubuntu -f isvctl/configs/k8s.yaml -- -v -s
+
+slurm-tests:
+  extends:
+    - .platform-tests-base
+  script:
+    - uv run isvctl deploy run 7.243.33.227 -j 202.56.94.106:2260 -u ubuntu -f isvctl/configs/slurm.yaml -- -v -s

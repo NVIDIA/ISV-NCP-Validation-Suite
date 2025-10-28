@@ -1,0 +1,428 @@
+"""Test subcommand for isvctl.
+
+Handles the test lifecycle: setup cluster, run tests, teardown.
+"""
+
+import json
+import logging
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Annotated, TextIO
+
+import typer
+
+from isvctl.cli import setup_logging
+from isvctl.config.merger import merge_yaml_files
+from isvctl.config.schema import RunConfig
+from isvctl.orchestrator.loop import Orchestrator, Phase
+from isvctl.reporting import check_upload_credentials, create_test_run, update_test_run
+
+logger = logging.getLogger(__name__)
+
+
+class TeeWriter:
+    """Writes to multiple streams simultaneously (like Unix `tee`)."""
+
+    def __init__(self, terminal: TextIO, file: TextIO) -> None:
+        self._terminal = terminal
+        self._file = file
+
+    def write(self, s: str) -> int:
+        self._terminal.write(s)
+        self._file.write(s)
+        return len(s)
+
+    def writelines(self, lines: list[str]) -> None:
+        for line in lines:
+            self.write(line)
+
+    def flush(self) -> None:
+        self._terminal.flush()
+        self._file.flush()
+
+    def isatty(self) -> bool:
+        return self._terminal.isatty()
+
+
+app = typer.Typer(
+    name="test",
+    help="Run validation tests with cluster lifecycle management",
+    no_args_is_help=True,
+)
+
+
+@app.command("run", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def run(
+    ctx: typer.Context,
+    config_files: Annotated[
+        list[Path],
+        typer.Option(
+            "--config",
+            "-f",
+            help="YAML configuration file(s) to merge. Later files override earlier ones.",
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            readable=True,
+        ),
+    ],
+    set_values: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--set",
+            help="Set values on the command line (e.g., --set context.node_count=8)",
+        ),
+    ] = None,
+    phase: Annotated[
+        Phase,
+        typer.Option(
+            "--phase",
+            "-p",
+            help="Run only a specific phase of the test lifecycle",
+        ),
+    ] = Phase.ALL,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Validate configuration and show what would be executed without running",
+        ),
+    ] = False,
+    working_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--working-dir",
+            "-C",
+            help="Working directory for command execution",
+        ),
+    ] = None,
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "--verbose",
+            "-v",
+            help="Enable verbose logging",
+        ),
+    ] = False,
+    junitxml: Annotated[
+        Path,
+        typer.Option(
+            "--junitxml",
+            help="Path to write JUnit XML test report",
+        ),
+    ] = Path("junit-validation.xml"),
+    color: Annotated[
+        str | None,
+        typer.Option(
+            "--color",
+            help="Color output: yes, no, auto",
+        ),
+    ] = None,
+    # ISV Lab Service result upload options
+    no_upload: Annotated[
+        bool,
+        typer.Option(
+            "--no-upload",
+            help="Disable uploading results to ISV Lab Service",
+        ),
+    ] = False,
+    lab_id: Annotated[
+        int | None,
+        typer.Option(
+            "--lab-id",
+            "-l",
+            help="ISV Lab ID for result upload (required if uploading)",
+        ),
+    ] = None,
+    tags: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--tag",
+            "-t",
+            help="Tags for the test run (can be repeated)",
+        ),
+    ] = None,
+    isv_software_version: Annotated[
+        str | None,
+        typer.Option(
+            "--isv-software-version",
+            help="ISV software stack version (opaque string provided by ISV, e.g., 'nemo-2.1.0-rc3')",
+        ),
+    ] = None,
+) -> None:
+    """Run the full test lifecycle: setup cluster, run tests, teardown.
+
+    Merges multiple YAML configuration files and executes the test pipeline.
+    The setup command output is validated and used as inventory for tests.
+
+    Use -- to pass additional arguments to pytest/isvtest.
+
+    Examples:
+        isvctl test run -f lab.yaml -f commands.yaml -f tests/k8s.yaml
+        isvctl test run -f config.yaml --set context.node_count=8
+        isvctl test run -f config.yaml --phase setup
+        isvctl test run -f config.yaml -- -v -s -k "test_name"
+    """
+    setup_logging(verbose)
+
+    # Validate at least one config file is provided
+    if not config_files:
+        typer.echo("Error: At least one --config/-f config file is required.", err=True)
+        raise typer.Exit(code=1)
+
+    # Collect extra pytest args from context (after --)
+    extra_pytest_args = list(ctx.args)
+    if color:
+        extra_pytest_args.extend([f"--color={color}"])
+
+    # Merge all YAML files
+    typer.echo(f"Merging {len(config_files)} configuration file(s)...")
+    try:
+        merged_config = merge_yaml_files([str(p) for p in config_files], set_values or [])
+    except Exception as e:
+        typer.echo(f"Failed to merge configuration files: {e}", err=True)
+        raise typer.Exit(code=1)
+
+    # Validate against schema
+    typer.echo("Validating configuration...")
+    try:
+        config = RunConfig.model_validate(merged_config)
+    except Exception as e:
+        typer.echo(f"Configuration validation failed: {e}", err=True)
+        raise typer.Exit(code=1)
+
+    if dry_run:
+        typer.echo("\n--- Dry Run: Configuration ---")
+        typer.echo(config.model_dump_json(indent=2))
+        if extra_pytest_args:
+            typer.echo(f"\n--- Extra pytest args ---\n{extra_pytest_args}")
+        return
+
+    # Determine which phases to run
+    if phase == Phase.ALL:
+        phases = [Phase.SETUP, Phase.TEST, Phase.TEARDOWN]
+    else:
+        phases = [phase]
+
+    typer.echo(f"\nRunning phases: {[p.value for p in phases]}")
+
+    # Default working directory to first config file's parent (for relative paths in config)
+    effective_working_dir = working_dir or config_files[0].parent
+    logger.debug(f"Working directory: {effective_working_dir}")
+
+    # Check if we should upload results to ISV Lab Service
+    upload_results = not no_upload
+    test_run_id: str | None = None
+    start_time = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    if upload_results:
+        can_upload, _, _ = check_upload_credentials()
+        if not can_upload:
+            typer.echo(
+                typer.style("Warning:", fg=typer.colors.YELLOW) + " ISV_CLIENT_ID and/or ISV_CLIENT_SECRET not set"
+            )
+            typer.echo(
+                typer.style("Warning:", fg=typer.colors.YELLOW)
+                + " Test results will not be uploaded to ISV Lab Service"
+            )
+            upload_results = False
+        elif not lab_id:
+            typer.echo(
+                typer.style("Warning:", fg=typer.colors.YELLOW) + " --lab-id not specified, skipping result upload"
+            )
+            upload_results = False
+
+    # Create test run before running tests
+    if upload_results and lab_id:
+        typer.echo("Creating test run in ISV Lab Service...")
+        platform = config.tests.platform if config.tests and config.tests.platform else "kubernetes"
+        test_run_id = create_test_run(
+            lab_id=lab_id,
+            platform=platform,
+            tags=tags or ["validation-test", "isvctl"],
+            start_time=start_time,
+            isv_software_version=isv_software_version,
+        )
+        if not test_run_id:
+            typer.echo(
+                typer.style("Warning:", fg=typer.colors.YELLOW)
+                + " Failed to create test run, continuing without upload"
+            )
+            upload_results = False
+
+    # Run orchestration with log file capture (like deploy run uses `tee pytest-output.log`)
+    orchestrator = Orchestrator(config, working_dir=effective_working_dir)
+    log_file_path = effective_working_dir / "pytest-output.log"
+
+    if upload_results:
+        # Capture output to log file while still displaying (like `tee`)
+        with open(log_file_path, "w") as log_file:
+            original_stdout, original_stderr = sys.stdout, sys.stderr
+            sys.stdout = TeeWriter(terminal=original_stdout, file=log_file)  # type: ignore[assignment]
+            sys.stderr = TeeWriter(terminal=original_stderr, file=log_file)  # type: ignore[assignment]
+            try:
+                result = orchestrator.run(
+                    phases=phases,
+                    extra_pytest_args=extra_pytest_args,
+                    verbose=verbose,
+                    junitxml=str(junitxml),
+                )
+            finally:
+                sys.stdout, sys.stderr = original_stdout, original_stderr
+    else:
+        result = orchestrator.run(
+            phases=phases,
+            extra_pytest_args=extra_pytest_args,
+            verbose=verbose,
+            junitxml=str(junitxml),
+        )
+
+    # Update test run after tests complete
+    if upload_results and test_run_id and lab_id:
+        typer.echo("Uploading test results to ISV Lab Service...")
+        # Look for junit XML in current directory or working directory
+        junit_path = Path("junit-validation.xml")
+        if not junit_path.exists():
+            junit_path = effective_working_dir / "junit-validation.xml"
+
+        if update_test_run(
+            lab_id=lab_id,
+            test_run_id=test_run_id,
+            success=result.success,
+            start_time=start_time,
+            junit_xml=junit_path if junit_path.exists() else None,
+            log_file=log_file_path if log_file_path.exists() else None,
+            isv_software_version=isv_software_version,
+        ):
+            typer.echo(typer.style("[OK]", fg=typer.colors.GREEN) + " Test results uploaded successfully")
+        else:
+            typer.echo(typer.style("Warning:", fg=typer.colors.YELLOW) + " Failed to upload test results")
+
+    # Display results
+    typer.echo("\n" + "=" * 60)
+    typer.echo("ORCHESTRATION RESULTS")
+    typer.echo("=" * 60)
+
+    for phase_result in result.phases:
+        if phase_result.message.startswith("SKIPPED:"):
+            status = typer.style("[SKIP]", fg=typer.colors.YELLOW)
+        elif phase_result.success:
+            status = typer.style("[PASS]", fg=typer.colors.GREEN)
+        else:
+            status = typer.style("[FAIL]", fg=typer.colors.RED)
+        phase_name = phase_result.phase.value.upper().ljust(8)
+        typer.echo(f"{status} {phase_name}: {phase_result.message}")
+
+        # Display step details (schema validation, errors)
+        if phase_result.details and "steps" in phase_result.details:
+            for step in phase_result.details["steps"]:
+                step_name = step.get("name", "unknown")
+                step_success = step.get("success", False)
+                schema_valid = step.get("schema_valid", True)
+                schema_errors = step.get("schema_errors", [])
+                schema_name = step.get("schema_name")
+
+                # Show schema validation result (only failures by default, all with -v)
+                if schema_name and schema_name != "generic":
+                    if not schema_valid:
+                        # Always show schema failures
+                        schema_status = typer.style("FAILED", fg=typer.colors.RED)
+                        typer.echo(f"  [{step_name}] Schema({schema_name}): {schema_status}")
+                        for err in schema_errors:
+                            typer.echo(f"    - {err}")
+                    elif verbose:
+                        # Only show schema success with -v flag
+                        schema_status = typer.style("PASSED", fg=typer.colors.GREEN)
+                        typer.echo(f"  [{step_name}] Schema({schema_name}): {schema_status}")
+
+                # Show error if step failed
+                if not step_success:
+                    error = step.get("error", "Unknown error")
+                    typer.echo(f"  [{step_name}] " + typer.style(f"ERROR: {error}", fg=typer.colors.RED))
+                    # Show output if available (helpful for debugging)
+                    output = step.get("output")
+                    if output and verbose:
+                        typer.echo(f"    Output: {json.dumps(output, indent=2)[:500]}")
+
+        # Display centralized validation results
+        if phase_result.details and "validations" in phase_result.details:
+            validations = phase_result.details["validations"]
+            if validations:
+                for vr in validations:
+                    vr_name = vr.get("name", "unknown")
+                    # Handle case where name might be a dict (extract class name)
+                    if isinstance(vr_name, dict):
+                        vr_name = next(iter(vr_name.keys()), "unknown")
+                    vr_passed = vr.get("passed", False)
+                    vr_message = vr.get("message", "")
+                    vr_category = vr.get("category", "")
+                    if vr_passed:
+                        vr_status = typer.style("PASSED", fg=typer.colors.GREEN)
+                    else:
+                        vr_status = typer.style("FAILED", fg=typer.colors.RED)
+                    category_prefix = f"[{vr_category}] " if vr_category else ""
+                    typer.echo(f"  {category_prefix}{vr_name}: {vr_status} - {vr_message}")
+
+    typer.echo("-" * 60)
+    if result.success:
+        status = typer.style("[PASS]", fg=typer.colors.GREEN)
+        typer.echo(f"{status} All phases completed successfully")
+    else:
+        status = typer.style("[FAIL]", fg=typer.colors.RED)
+        typer.echo(f"{status} Orchestration failed")
+        raise typer.Exit(code=1)
+
+
+@app.command("validate")
+def validate(
+    config_files: Annotated[
+        list[Path],
+        typer.Option(
+            "--config",
+            "-f",
+            help="YAML configuration file(s) to merge and validate.",
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            readable=True,
+        ),
+    ],
+    set_values: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--set",
+            help="Set values on the command line",
+        ),
+    ] = None,
+) -> None:
+    """Validate merged configuration without running.
+
+    Useful for checking configuration syntax and schema compliance
+    before executing a test run.
+    """
+    # Validate at least one config file is provided
+    if not config_files:
+        typer.echo("Error: At least one --config/-f config file is required.", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo(f"Validating {len(config_files)} configuration file(s)...")
+    try:
+        merged_config = merge_yaml_files([str(p) for p in config_files], set_values or [])
+    except Exception as e:
+        typer.echo(f"Failed to merge configuration files: {e}", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        run_config = RunConfig.model_validate(merged_config)
+        ok_status = typer.style("[OK]", fg=typer.colors.GREEN)
+        typer.echo(f"{ok_status} Configuration is valid")
+        typer.echo(f"\nPlatform: {run_config.tests.platform if run_config.tests else 'not specified'}")
+        if run_config.commands:
+            typer.echo(f"Commands defined: {list(run_config.commands.keys())}")
+        if run_config.context:
+            typer.echo(f"Context variables: {list(run_config.context.keys())}")
+    except Exception as e:
+        err_status = typer.style("[ERROR]", fg=typer.colors.RED)
+        typer.echo(f"{err_status} Validation failed: {e}", err=True)
+        raise typer.Exit(code=1)

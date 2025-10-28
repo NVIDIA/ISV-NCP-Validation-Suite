@@ -1,0 +1,81 @@
+# AWS EKS GPU Cluster - Example Configuration
+# Copy this file to terraform.tfvars and customize as needed.
+#
+# Usage:
+#   cp terraform.tfvars.example terraform.tfvars
+#   # Edit terraform.tfvars
+#   terraform init
+#   terraform plan
+#   terraform apply
+
+# -----------------------------------------------------------------------------
+# General Configuration
+# -----------------------------------------------------------------------------
+
+region              = "us-west-2"
+environment         = "dev"
+cluster_name_prefix = "isv-lab"
+
+# -----------------------------------------------------------------------------
+# VPC Configuration
+# -----------------------------------------------------------------------------
+
+vpc_cidr           = "10.0.0.0/16"
+single_nat_gateway = true  # Set to false for production (HA NAT)
+
+# -----------------------------------------------------------------------------
+# EKS Configuration
+# -----------------------------------------------------------------------------
+
+kubernetes_version = "1.32"
+
+# IP allowlist for EKS API server access
+# REQUIRED: Set to your IP address(es) to access the EKS API
+# Get your IP: curl -s ifconfig.me
+# Default is non-routable (203.0.113.0/24) - you MUST override this
+cluster_endpoint_public_access_cidrs = ["YOUR.IP.ADDRESS/32"]
+
+# -----------------------------------------------------------------------------
+# System Node Group (non-GPU control plane workloads)
+# -----------------------------------------------------------------------------
+
+system_node_instance_types = ["m5.large"]
+system_node_min_size       = 1
+system_node_max_size       = 3
+system_node_desired_size   = 2
+
+# -----------------------------------------------------------------------------
+# GPU Node Group
+# -----------------------------------------------------------------------------
+
+# Development configuration (1 small GPU node)
+gpu_node_instance_types = ["g5.xlarge"]  # 1x A10G, 24GB
+gpu_node_min_size       = 0
+gpu_node_max_size       = 2
+gpu_node_desired_size   = 1
+gpu_node_volume_size    = 200
+gpu_node_taints         = false  # Set true to isolate GPU workloads
+
+# -----------------------------------------------------------------------------
+# Production configuration example (4x p4d.24xlarge with 8 A100s each)
+# Uncomment and modify as needed:
+# -----------------------------------------------------------------------------
+# gpu_node_instance_types = ["p4d.24xlarge"]
+# gpu_node_min_size       = 0
+# gpu_node_max_size       = 8
+# gpu_node_desired_size   = 4
+# gpu_node_volume_size    = 500
+# gpu_node_taints         = true
+
+# -----------------------------------------------------------------------------
+# GPU Operator
+# -----------------------------------------------------------------------------
+
+install_gpu_operator = true
+gpu_operator_version = "v24.9.0"
+
+# -----------------------------------------------------------------------------
+# Storage (EFS for ReadWriteMany - required for NIM model cache)
+# -----------------------------------------------------------------------------
+
+enable_efs = true

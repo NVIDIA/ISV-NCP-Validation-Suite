@@ -1,0 +1,52 @@
+[project]
+name = "isvreporter"
+version = "0.1.0"
+description = "ISV Lab test results reporter - report validation test results to ISV Lab Service"
+readme = "README.md"
+license = "BSD-3-Clause"
+authors = [{ name = "Alexandre Begnoche", email = "abegnoche@nvidia.com" }]
+requires-python = ">=3.12"
+dependencies = [
+    "pyyaml>=6.0.2,<7.0.0",
+    "typer>=0.21.1,<1.0.0",
+]
+
+[project.scripts]
+isvreporter = "isvreporter.main:app"
+
+[build-system]
+requires = ["uv_build"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I", "A", "UP", "RUF"]
+ignore = ["E501"]
+
+[tool.uv]
+package = true
+default-groups = ["dev"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = ["unit: Unit tests for isvreporter"]
+addopts = "-v --junitxml=junit.xml"
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4",
+    "pytest-cov>=6.0.0",
+]

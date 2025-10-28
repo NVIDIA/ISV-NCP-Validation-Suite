@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "en-US"
+early_access: false
+reviews:
+  # Other option is "assertive" which is very nit-picky.
+  profile: "chill"
+  # Code review must consider the other threads, not just the CodeRabbit ones.
+  request_changes_workflow: false
+  # Very useful for larger MRs.
+  high_level_summary: true
+  # This feature is cute at first but quickly becomes annoying.
+  poem: false
+  # Post review details on each review.
+  review_status: true
+  # Setting this to false prevents CodeRabbit from overriding the success status of the main pipeline.
+  commit_status: false
+  auto_review:
+    # Turn on auto-review for MRs in all specified branches.
+    enabled: true
+    # Do not review WIP by default. You can still do it with "@coderabbitai full review".
+    drafts: false
+    # Include the release branches in the reviews as well as the default (main) branch.
+    base_branches:
+      - release/*
+chat:
+  # Shortens the chat messages by not requiring the @coderabbitai prefix.
+  auto_reply: true

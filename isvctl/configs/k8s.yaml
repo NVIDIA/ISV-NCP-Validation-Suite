@@ -1,0 +1,138 @@
+# Kubernetes Cluster Validation Configuration
+# This unified config contains all settings for validating a K8s cluster
+# K8S_PROVIDER is auto-detected (microk8s vs kubectl)
+#
+# Usage:
+#   isvctl test run -f isvctl/configs/k8s.yaml
+#   isvctl test run -f isvctl/configs/k8s.yaml --phase test  # Skip setup/teardown
+#   isvctl test run -f isvctl/configs/k8s.yaml -- -v -s -k "K8sNodeCountCheck"
+
+version: "1.0"
+
+# =============================================================================
+# Lifecycle Commands
+# =============================================================================
+# Stubs that query the cluster and return inventory JSON
+commands:
+  kubernetes:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: setup
+        phase: setup
+        command: "./stubs/k8s/setup.sh"
+        timeout: 120
+      - name: teardown
+        phase: teardown
+        command: "./stubs/k8s/teardown.sh"
+        timeout: 30
+
+  slurm:
+    skip: true
+
+# =============================================================================
+# Test Configuration
+# =============================================================================
+tests:
+  cluster_name: "{{steps.setup.cluster_name}}"
+  description: "Kubernetes cluster validation"
+  platform: kubernetes
+
+  settings:
+    show_skipped_tests: false
+
+  validations:
+    kubernetes:
+      checks:
+        - K8sNodeCountCheck:
+            count: "{{ steps.setup.kubernetes.node_count | default(4, true) }}"
+        - K8sNodeReadyCheck:
+            require_all_ready: true
+        - K8sNvidiaSmiCheck:
+            runtime_class: "{{ steps.setup.kubernetes.runtime_class | default('nvidia') }}"
+        - K8sDriverVersionCheck:
+            driver_version: "{{ steps.setup.kubernetes.driver_version | default('580.82.07') }}"
+            runtime_class: "{{ steps.setup.kubernetes.runtime_class | default('nvidia') }}"
+        - K8sGpuPodAccessCheck:
+            # Note: This check runs nvidia-smi in a pod that requests 1 GPU,
+            # so it can only verify 1 GPU is visible per node (K8s isolation).
+            # Use gpu_node_count here (not total_gpus) since each pod only sees its allocated GPU.
+            gpu_count: 1
+            total_gpu_count: "{{ steps.setup.kubernetes.gpu_node_count | default(4, true) }}"
+            runtime_class: "{{ steps.setup.kubernetes.runtime_class | default('nvidia') }}"
+        - K8sGpuCapacityCheck:
+            # This queries node capacity directly - shows real GPU count
+            resource_name: "{{ steps.setup.kubernetes.gpu_resource_name | default('nvidia.com/gpu') }}"
+            expected_per_node: "{{ steps.setup.kubernetes.gpu_per_node | default(4, true) }}"
+            expected_total: "{{ steps.setup.kubernetes.total_gpus | default(16, true) }}"
+        - K8sGpuOperatorNamespaceCheck:
+            namespace: "{{ steps.setup.kubernetes.gpu_operator_namespace | default('nvidia-gpu-operator') }}"
+        - K8sGpuOperatorPodsCheck:
+            namespace: "{{ steps.setup.kubernetes.gpu_operator_namespace | default('nvidia-gpu-operator') }}"
+        - K8sGpuLabelsCheck:
+            label_selector: "nvidia.com/gpu.present=true"
+        - K8sPodHealthCheck:
+            ignore_phases: ["Pending"]
+        - K8sNoPendingPodsCheck: {}
+        - K8sNoErrorPodsCheck:
+            error_states: ["Error", "CrashLoopBackOff"]
+        - K8sMigConfigCheck:
+            require_mig: false
+            expected_labels:
+              "nvidia.com/mig.capable": "true"
+              "nvidia.com/mig.strategy": "single"
+
+    k8s_workloads:
+      checks:
+        - K8sNcclWorkload: {}
+        - K8sGpuStressWorkload:
+            memory_gb: 1
+            runtime: 30
+        - K8sNimInferenceWorkload:
+            timeout: 900
+        - K8sNimHelmWorkload-1b:
+            model: "meta/llama-3.2-1b-instruct"
+            model_tag: "latest"
+            gpu_count: 1
+            timeout: 900
+            genai_perf_requests: 100
+            genai_perf_concurrency: 4
+        - K8sNimHelmWorkload-3b:
+            model: "meta/llama-3.2-3b-instruct"
+            model_tag: "latest"
+            gpu_count: "{{ steps.setup.kubernetes.total_gpus | default(4, true) }}"
+            timeout: 1800
+            genai_perf_requests: 200
+            genai_perf_concurrency: 8
+
+    # L2 Tests: Extended platform validation using k8s-platform-validator
+    # These tests run the Go-based e2e tests from k8s-platform-validator as K8s Jobs.
+    # Prerequisites: Install k8s-platform-validator Helm chart and NGC pull secret.
+    #   1. export NGC_API_KEY=nvapi-*** # key needs access to nv-ngc-devops org
+    #   2. helm fetch https://helm.ngc.nvidia.com/nv-ngc-devops/charts/k8s-platform-validator-1.1.0.tgz --username='$oauthtoken' --password=${NGC_API_KEY}
+    #   3. helm install k8s-platform-validator ./k8s-platform-validator-1.1.0.tgz
+    #   4. kubectl create secret docker-registry nvidia-ngcuser-pull-secret \
+    #       --docker-server=nvcr.io \
+    #       --docker-username='$oauthtoken' \
+    #       --docker-password=${NGC_API_KEY} \
+    #       -n dgxc-validation
+    k8s_l2:
+      checks:
+        - K8sPlatformValidatorFunctional:
+            cloud_provider: "{{ steps.setup.kubernetes.cloud_provider | default('aws') }}"
+            namespace: "{{ steps.setup.kubernetes.validator_namespace | default('dgxc-validation') }}"
+            # Skip EFA tests by default; remove or override for EFA-capable clusters
+            skip_tests: "TestEFA"
+            timeout: 300
+        - K8sPlatformValidatorPerformance:
+            cloud_provider: "{{ steps.setup.kubernetes.cloud_provider | default('aws') }}"
+            namespace: "{{ steps.setup.kubernetes.validator_namespace | default('dgxc-validation') }}"
+            # Skip tests requiring DGX Cloud infrastructure (ComputeDomain CRD, NVLink, etc.)
+            skip_tests: "NVLink|Nemotron|Nemo"
+            timeout: 300
+
+  exclude:
+    markers:
+      - slow
+      - slurm
+      - workload
+      - l2

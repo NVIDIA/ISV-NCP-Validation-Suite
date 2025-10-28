@@ -1,0 +1,34 @@
+# Slurm Configuration Overrides
+#
+# Usage:
+#   isvctl deploy run <host> -f isvctl/configs/slurm.yaml -f isvctl/configs/slurm-overrides.yaml
+#
+# This file is merged on top of the base config (isvctl/configs/slurm.yaml).
+# Uncomment and modify sections you need to customize.
+
+# Override the setup/teardown commands
+# Note: 'command' is the executable, 'args' is a list of arguments
+# commands:
+#   slurm:
+#     setup:
+#       command: "./my-setup.sh"       # Executable path or name
+#       args:                          # Arguments passed to command
+#         - "--partition"
+#         - "gpu"
+#       timeout: 300                   # Max execution time (seconds)
+#       env:                           # Additional environment variables
+#         MY_VAR: "value"
+#     teardown:
+#       command: "echo"                # Example: simple echo command
+#       args:
+#         - "Teardown complete"
+#       # Or skip teardown entirely:
+#       # skip: true
+
+# Exclude specific tests
+# tests:
+#   exclude:
+#     markers:
+#       - slow
+#     tests:
+#       - SlurmPartitionCheck

@@ -1,0 +1,309 @@
+#!/bin/bash
+# AWS EKS Setup Stub - Provisions AWS EKS cluster using Terraform
+#
+# This stub provisions an EKS GPU cluster using Terraform and outputs
+# the cluster inventory JSON for ISV Lab validation testing.
+#
+# Requirements:
+#   - terraform >= 1.5.0
+#   - AWS CLI configured with appropriate credentials
+#   - kubectl
+#   - jq
+#
+# Environment Variables:
+#   - TF_VAR_*: Terraform variables (e.g., TF_VAR_region, TF_VAR_gpu_node_instance_types)
+#   - TF_AUTO_APPROVE: Set to "true" to skip Terraform approval prompt (default: false)
+#   - SKIP_PREFLIGHT: Set to "true" to skip infrastructure validation (default: false)
+#
+# Output: JSON inventory conforming to isvctl schema
+
+set -eo pipefail
+
+# Get script directory for relative paths
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TERRAFORM_DIR="${SCRIPT_DIR}/terraform"
+
+# -----------------------------------------------------------------------------
+# Dependency Checks
+# -----------------------------------------------------------------------------
+
+echo "Checking dependencies..." >&2
+
+if ! command -v terraform &> /dev/null; then
+    echo "Error: terraform not found - install from https://terraform.io" >&2
+    exit 1
+fi
+
+if ! command -v aws &> /dev/null; then
+    echo "Error: AWS CLI not found" >&2
+    exit 1
+fi
+
+if ! command -v kubectl &> /dev/null; then
+    echo "Error: kubectl not found" >&2
+    exit 1
+fi
+
+if ! command -v jq &> /dev/null; then
+    echo "Error: jq not found" >&2
+    exit 1
+fi
+
+if [ ! -d "$TERRAFORM_DIR" ]; then
+    echo "Error: Terraform directory not found: $TERRAFORM_DIR" >&2
+    exit 1
+fi
+
+if ! aws sts get-caller-identity &> /dev/null 2>&1; then
+    echo "Error: AWS credentials not configured" >&2
+    exit 1
+fi
+
+# -----------------------------------------------------------------------------
+# Terraform Provisioning
+# -----------------------------------------------------------------------------
+
+echo "" >&2
+echo "========================================" >&2
+echo "Provisioning AWS EKS GPU Cluster" >&2
+echo "========================================" >&2
+echo "" >&2
+
+cd "$TERRAFORM_DIR"
+
+# Initialize Terraform
+echo "Initializing Terraform..." >&2
+terraform init -upgrade >&2
+
+# Get expected cluster name from Terraform vars
+TF_CLUSTER_PREFIX="${TF_VAR_cluster_name_prefix:-isv-gpu}"
+TF_ENVIRONMENT="${TF_VAR_environment:-dev}"
+EXPECTED_CLUSTER="${TF_CLUSTER_PREFIX}-${TF_ENVIRONMENT}"
+TF_REGION="${TF_VAR_region:-$(aws configure get region 2>/dev/null || echo "us-west-2")}"
+
+# Check if cluster already exists in AWS
+EXISTING_CLUSTER=$(aws eks describe-cluster --name "$EXPECTED_CLUSTER" --region "$TF_REGION" 2>/dev/null && echo "exists" || echo "")
+
+# Check if state already has resources
+STATE_RESOURCES=$(terraform state list 2>/dev/null | wc -l || echo "0")
+
+if [ "$STATE_RESOURCES" -gt 0 ]; then
+    echo "Terraform state exists with $STATE_RESOURCES resources" >&2
+    echo "Running terraform refresh to sync state..." >&2
+    terraform refresh >&2
+elif [ -n "$EXISTING_CLUSTER" ]; then
+    # Cluster exists but not in Terraform state - just use it
+    echo "" >&2
+    echo "Cluster '$EXPECTED_CLUSTER' already exists in AWS" >&2
+    echo "Skipping Terraform provisioning - using existing cluster" >&2
+    echo "" >&2
+    AWS_REGION="$TF_REGION"
+    EKS_CLUSTER_NAME="$EXPECTED_CLUSTER"
+else
+    # No state and no existing cluster - create new
+    echo "" >&2
+    echo "Provisioning new cluster..." >&2
+
+    TF_AUTO_APPROVE="${TF_AUTO_APPROVE:-false}"
+    if [ "$TF_AUTO_APPROVE" = "true" ]; then
+        echo "Applying Terraform (auto-approved)..." >&2
+        terraform apply -auto-approve >&2
+    else
+        echo "Applying Terraform..." >&2
+        terraform apply >&2
+    fi
+fi
+
+# Get outputs from Terraform (if available)
+TF_REGION_OUTPUT=$(terraform output -raw region 2>/dev/null || echo "")
+TF_CLUSTER_OUTPUT=$(terraform output -raw cluster_name 2>/dev/null || echo "")
+
+cd - > /dev/null
+
+# Use Terraform outputs if available, otherwise use detected values
+if [ -n "$TF_REGION_OUTPUT" ]; then
+    AWS_REGION="$TF_REGION_OUTPUT"
+elif [ -z "$AWS_REGION" ]; then
+    AWS_REGION="$TF_REGION"
+fi
+
+if [ -n "$TF_CLUSTER_OUTPUT" ]; then
+    EKS_CLUSTER_NAME="$TF_CLUSTER_OUTPUT"
+elif [ -z "$EKS_CLUSTER_NAME" ]; then
+    EKS_CLUSTER_NAME="$EXPECTED_CLUSTER"
+fi
+
+if [ -z "$EKS_CLUSTER_NAME" ]; then
+    echo "Error: Could not determine EKS cluster name" >&2
+    exit 1
+fi
+
+echo "" >&2
+echo "Cluster ready!" >&2
+echo "  Region: $AWS_REGION" >&2
+echo "  Cluster: $EKS_CLUSTER_NAME" >&2
+
+# -----------------------------------------------------------------------------
+# Configure kubectl
+# -----------------------------------------------------------------------------
+
+echo "" >&2
+echo "Configuring kubectl..." >&2
+aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION" >&2
+
+if ! kubectl cluster-info &> /dev/null 2>&1; then
+    echo "Error: Cannot connect to EKS cluster" >&2
+    exit 1
+fi
+
+# -----------------------------------------------------------------------------
+# Preflight Checks
+# -----------------------------------------------------------------------------
+
+SKIP_PREFLIGHT="${SKIP_PREFLIGHT:-false}"
+
+if [ "$SKIP_PREFLIGHT" != "true" ]; then
+    echo "" >&2
+    echo "Running preflight checks..." >&2
+
+    # Wait for GPU nodes to be ready (GPU operator takes time)
+    echo "  Waiting for GPU nodes..." >&2
+    for i in {1..30}; do
+        GPU_NODES=$(kubectl get nodes -l nvidia.com/gpu.present=true -o name 2>/dev/null | wc -l || echo "0")
+        if [ "$GPU_NODES" -gt 0 ]; then
+            echo "    Found $GPU_NODES GPU node(s)" >&2
+            break
+        fi
+        echo "    Waiting for GPU operator to label nodes... ($i/30)" >&2
+        sleep 10
+    done
+
+    # Fail if no GPU nodes were detected after waiting
+    if [ "$GPU_NODES" -eq 0 ]; then
+        echo "" >&2
+        echo "Error: No GPU nodes detected after waiting 5 minutes." >&2
+        echo "Ensure GPU node group is running and GPU Operator is installed." >&2
+        echo "Check node status: kubectl get nodes -l nvidia.com/gpu.present=true" >&2
+        echo "Check GPU Operator: kubectl get pods -n gpu-operator" >&2
+        exit 1
+    fi
+
+    # Check GPU Operator
+    GPU_OP_NS=""
+    for ns in gpu-operator nvidia-gpu-operator; do
+        if kubectl get namespace "$ns" &> /dev/null 2>&1; then
+            GPU_OP_NS="$ns"
+            break
+        fi
+    done
+    if [ -n "$GPU_OP_NS" ]; then
+        echo "  GPU Operator namespace: $GPU_OP_NS" >&2
+    else
+        echo "  Warning: GPU Operator namespace not found" >&2
+    fi
+
+    # Check NGC credentials
+    if [ -z "${NGC_NIM_API_KEY:-}" ]; then
+        echo "  Warning: NGC_NIM_API_KEY not set (required for NIM workloads)" >&2
+    else
+        echo "  NGC_NIM_API_KEY: set" >&2
+    fi
+
+    echo "" >&2
+fi
+
+# -----------------------------------------------------------------------------
+# Gather Cluster Information
+# -----------------------------------------------------------------------------
+
+EKS_INFO=$(aws eks describe-cluster --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION" --output json)
+CLUSTER_ENDPOINT=$(echo "$EKS_INFO" | jq -r '.cluster.endpoint // empty')
+K8S_VERSION=$(echo "$EKS_INFO" | jq -r '.cluster.version // empty')
+VPC_ID=$(echo "$EKS_INFO" | jq -r '.cluster.resourcesVpcConfig.vpcId // empty')
+
+NODE_COUNT=$(kubectl get nodes --no-headers 2>/dev/null | wc -l)
+
+NODES=$(kubectl get nodes -o json 2>/dev/null | jq '[.items[] | {
+    name: .metadata.name,
+    ip: (if .status.addresses then (.status.addresses | map(select(.type == "InternalIP")) | .[0].address) else null end),
+    gpus: (if .status.capacity["nvidia.com/gpu"] then (.status.capacity["nvidia.com/gpu"] | tonumber) else 0 end)
+}]')
+
+GPU_NODE_COUNT=$(kubectl get nodes -l nvidia.com/gpu.present=true -o name 2>/dev/null | wc -l || echo "0")
+
+GPU_PER_NODE=$(kubectl get nodes -l nvidia.com/gpu.present=true -o jsonpath='{.items[0].status.capacity.nvidia\.com/gpu}' 2>/dev/null || echo "0")
+[ -z "$GPU_PER_NODE" ] || [ "$GPU_PER_NODE" = "null" ] && GPU_PER_NODE=0
+
+TOTAL_GPUS=$((GPU_NODE_COUNT * GPU_PER_NODE))
+
+# GPU Operator namespace
+GPU_OPERATOR_NS=""
+for ns in gpu-operator nvidia-gpu-operator gpu-operator-resources; do
+    if kubectl get namespace "$ns" &> /dev/null 2>&1; then
+        GPU_OPERATOR_NS="$ns"
+        break
+    fi
+done
+GPU_OPERATOR_NS="${GPU_OPERATOR_NS:-gpu-operator}"
+
+# Driver version
+DRIVER_MAJOR=$(kubectl get nodes -l nvidia.com/gpu.present=true -o jsonpath='{.items[0].metadata.labels.nvidia\.com/cuda\.driver\.major}' 2>/dev/null || echo "")
+DRIVER_MINOR=$(kubectl get nodes -l nvidia.com/gpu.present=true -o jsonpath='{.items[0].metadata.labels.nvidia\.com/cuda\.driver\.minor}' 2>/dev/null || echo "")
+DRIVER_REV=$(kubectl get nodes -l nvidia.com/gpu.present=true -o jsonpath='{.items[0].metadata.labels.nvidia\.com/cuda\.driver\.rev}' 2>/dev/null || echo "")
+
+if [ -n "$DRIVER_MAJOR" ] && [ -n "$DRIVER_MINOR" ] && [ -n "$DRIVER_REV" ]; then
+    DRIVER_VERSION="${DRIVER_MAJOR}.${DRIVER_MINOR}.${DRIVER_REV}"
+elif [ -n "$DRIVER_MAJOR" ] && [ -n "$DRIVER_MINOR" ]; then
+    DRIVER_VERSION="${DRIVER_MAJOR}.${DRIVER_MINOR}"
+else
+    DRIVER_VERSION="unknown"
+fi
+
+# Runtime class
+RUNTIME_CLASS=""
+kubectl get runtimeclass nvidia &> /dev/null 2>&1 && RUNTIME_CLASS="nvidia"
+
+# AWS-specific info
+GPU_INSTANCE_TYPES=$(kubectl get nodes -l nvidia.com/gpu.present=true -o jsonpath='{.items[*].metadata.labels.node\.kubernetes\.io/instance-type}' 2>/dev/null | tr ' ' ',' || echo "")
+GPU_PRODUCT=$(kubectl get nodes -l nvidia.com/gpu.present=true -o jsonpath='{.items[0].metadata.labels.nvidia\.com/gpu\.product}' 2>/dev/null || echo "")
+
+KUBECONFIG_PATH="${KUBECONFIG:-$HOME/.kube/config}"
+
+# -----------------------------------------------------------------------------
+# Output JSON Inventory
+# -----------------------------------------------------------------------------
+
+cat << EOF
+{
+  "success": true,
+  "platform": "kubernetes",
+  "cluster_name": "${EKS_CLUSTER_NAME}",
+  "node_count": ${NODE_COUNT},
+  "endpoint": "${CLUSTER_ENDPOINT}",
+  "gpu_count": ${TOTAL_GPUS},
+  "gpu_per_node": ${GPU_PER_NODE},
+  "driver_version": "${DRIVER_VERSION}",
+  "kubeconfig_path": "${KUBECONFIG_PATH}",
+  "kubernetes": {
+    "driver_version": "${DRIVER_VERSION}",
+    "node_count": ${NODE_COUNT},
+    "nodes": ${NODES},
+    "gpu_node_count": ${GPU_NODE_COUNT},
+    "gpu_per_node": ${GPU_PER_NODE},
+    "total_gpus": ${TOTAL_GPUS},
+    "control_plane_address": "${CLUSTER_ENDPOINT}",
+    "kubeconfig_path": "${KUBECONFIG_PATH}",
+    "gpu_operator_namespace": "${GPU_OPERATOR_NS}",
+    "runtime_class": "${RUNTIME_CLASS}",
+    "gpu_resource_name": "nvidia.com/gpu"
+  },
+  "aws": {
+    "region": "${AWS_REGION}",
+    "vpc_id": "${VPC_ID}",
+    "eks_cluster_name": "${EKS_CLUSTER_NAME}",
+    "kubernetes_version": "${K8S_VERSION}",
+    "gpu_instance_types": "${GPU_INSTANCE_TYPES}",
+    "gpu_product": "${GPU_PRODUCT}"
+  }
+}
+EOF

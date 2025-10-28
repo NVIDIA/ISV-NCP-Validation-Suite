@@ -1,0 +1,264 @@
+"""CLI entry point for isvreporter - ISV Lab test results reporting tool."""
+
+import os
+from pathlib import Path
+from typing import Annotated
+
+import typer
+
+from isvreporter import get_default_endpoint, get_default_ssa_issuer
+from isvreporter.auth import get_jwt_token
+from isvreporter.client import (
+    calculate_duration,
+    create_test_run,
+    load_test_run_id,
+    report_test_results,
+    update_test_run,
+)
+from isvreporter.platform import get_platform_from_config, is_valid_platform, normalize_platform
+
+app = typer.Typer(
+    name="report",
+    help="Report ISV Lab test results to the ISV Lab Service API",
+    no_args_is_help=True,
+)
+
+
+def _get_credentials() -> tuple[str, str, str, str]:
+    """Get ISV Lab Service credentials from environment.
+
+    Returns:
+        Tuple of (endpoint, ssa_issuer, client_id, client_secret)
+
+    Raises:
+        typer.Exit: If required credentials are missing
+    """
+    endpoint = os.environ.get("ISV_LAB_SERVICE_ENDPOINT", get_default_endpoint())
+    ssa_issuer = os.environ.get("ISV_SSA_ISSUER", get_default_ssa_issuer())
+    client_id = os.environ.get("ISV_CLIENT_ID")
+    client_secret = os.environ.get("ISV_CLIENT_SECRET")
+
+    if not client_id or not client_secret:
+        typer.echo("ERROR: Missing required environment variables:", err=True)
+        typer.echo("  ISV_CLIENT_ID", err=True)
+        typer.echo("  ISV_CLIENT_SECRET", err=True)
+        raise typer.Exit(code=1)
+
+    return endpoint, ssa_issuer, client_id, client_secret
+
+
+@app.command("create")
+def create(
+    lab_id: Annotated[
+        int,
+        typer.Option("--lab-id", "-l", help="Lab ID"),
+    ],
+    tags: Annotated[
+        list[str],
+        typer.Option("--tag", "-t", help="Tags for the test run (can be repeated)"),
+    ],
+    executed_by: Annotated[
+        str,
+        typer.Option("--executed-by", "-e", help="Who/what executed the test run"),
+    ],
+    ci_reference: Annotated[
+        str,
+        typer.Option("--ci-reference", "-c", help="CI job URL or reference"),
+    ],
+    start_time: Annotated[
+        str,
+        typer.Option("--start-time", "-s", help="Test run start time (ISO 8601 format)"),
+    ],
+    platform: Annotated[
+        str | None,
+        typer.Option(
+            "--platform",
+            "-p",
+            help="Platform type (kubernetes, slurm, bare_metal). Auto-detected from --config if not provided.",
+        ),
+    ] = None,
+    config: Annotated[
+        Path | None,
+        typer.Option(
+            "--config",
+            "-f",
+            help="Path to isvctl config YAML file (auto-detects platform from 'tests.platform')",
+            exists=True,
+        ),
+    ] = None,
+    isv_software_version: Annotated[
+        str | None,
+        typer.Option(
+            "--isv-software-version",
+            help="ISV software stack version (opaque string provided by ISV)",
+        ),
+    ] = None,
+    isv_test_version: Annotated[
+        str | None,
+        typer.Option(
+            "--isv-test-version",
+            help="ISV test tool version (e.g., '1.12.3')",
+        ),
+    ] = None,
+) -> None:
+    """Create a new test run in ISV Lab Service.
+
+    Examples:
+        isvctl report create --lab-id 3 --tag validation --executed-by gitlab-ci \\
+            --ci-reference "$CI_JOB_URL" --start-time "$CI_JOB_STARTED_AT"
+    """
+    endpoint, ssa_issuer, client_id, client_secret = _get_credentials()
+
+    # Determine platform: explicit arg > config file > default (kubernetes)
+    if platform and is_valid_platform(platform):
+        detected_platform = normalize_platform(platform)
+    elif config:
+        detected_platform = get_platform_from_config(config)
+    else:
+        detected_platform = "kubernetes"
+
+    typer.echo(f"Using platform: {detected_platform}")
+
+    # Get JWT token and create test run
+    jwt_token = get_jwt_token(ssa_issuer, client_id, client_secret)
+    create_test_run(
+        endpoint=endpoint,
+        lab_id=lab_id,
+        jwt_token=jwt_token,
+        test_target_type=detected_platform.upper(),
+        tags=list(tags),
+        executed_by=executed_by,
+        ci_reference=ci_reference,
+        start_time=start_time,
+        isv_software_version=isv_software_version,
+        isv_test_version=isv_test_version,
+    )
+
+
+@app.command("update")
+def update(
+    lab_id: Annotated[
+        int,
+        typer.Option("--lab-id", "-l", help="Lab ID"),
+    ],
+    status: Annotated[
+        str,
+        typer.Option("--status", "-s", help="Test run status (SUCCESS, FAILED, etc.)"),
+    ],
+    test_run_id: Annotated[
+        str | None,
+        typer.Option(
+            "--test-run-id",
+            "-r",
+            help="Test run ID (reads from _output/testrun_id.txt if not provided)",
+        ),
+    ] = None,
+    duration_seconds: Annotated[
+        int | None,
+        typer.Option("--duration-seconds", "-d", help="Test duration in seconds"),
+    ] = None,
+    complete_time: Annotated[
+        str | None,
+        typer.Option("--complete-time", help="Test completion time (ISO 8601 format, defaults to now)"),
+    ] = None,
+    calculate_duration_from: Annotated[
+        str | None,
+        typer.Option("--calculate-duration-from", help="Calculate duration from this start time (ISO 8601 format)"),
+    ] = None,
+    log_file: Annotated[
+        Path | None,
+        typer.Option("--log-file", help="Path to log file to include in the update"),
+    ] = None,
+    junit_xml: Annotated[
+        Path | None,
+        typer.Option("--junit-xml", help="Path to JUnit XML file to upload test results"),
+    ] = None,
+    isv_software_version: Annotated[
+        str | None,
+        typer.Option(
+            "--isv-software-version",
+            help="ISV software stack version (opaque string provided by ISV)",
+        ),
+    ] = None,
+    isv_test_version: Annotated[
+        str | None,
+        typer.Option(
+            "--isv-test-version",
+            help="ISV test tool version (e.g., '1.12.3')",
+        ),
+    ] = None,
+) -> None:
+    """Update an existing test run with completion status.
+
+    Examples:
+        isvctl report update --lab-id 3 --status SUCCESS \\
+            --calculate-duration-from "$CI_JOB_STARTED_AT"
+
+        isvctl report update --lab-id 3 --status FAILED \\
+            --log-file pytest-output.log --junit-xml junit-validation.xml
+    """
+    endpoint, ssa_issuer, client_id, client_secret = _get_credentials()
+
+    # Get test run ID
+    run_id = test_run_id or load_test_run_id()
+    if run_id is None:
+        typer.echo(
+            "ERROR: No test run ID available. Provide --test-run-id or ensure the test run was created successfully.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    # Calculate duration if needed
+    final_duration = duration_seconds
+    if calculate_duration_from:
+        final_duration = calculate_duration(calculate_duration_from)
+
+    # Read log file if provided
+    log_output = None
+    if log_file:
+        try:
+            log_output = log_file.read_text()
+            typer.echo(f"Read log file: {log_file} ({len(log_output)} characters)")
+        except FileNotFoundError:
+            typer.echo(f"Warning: Log file not found: {log_file}", err=True)
+        except Exception as e:
+            typer.echo(f"Warning: Failed to read log file: {e}", err=True)
+
+    # Get JWT token
+    jwt_token = get_jwt_token(ssa_issuer, client_id, client_secret)
+
+    # Upload JUnit XML test results first (if provided)
+    if junit_xml:
+        try:
+            typer.echo(f"Reading JUnit XML: {junit_xml}")
+            junit_content = junit_xml.read_text()
+
+            report_test_results(
+                endpoint=endpoint,
+                lab_id=lab_id,
+                test_run_id=run_id,
+                jwt_token=jwt_token,
+                junit_xml=junit_content,
+            )
+        except FileNotFoundError:
+            typer.echo(f"Warning: JUnit XML file not found: {junit_xml}", err=True)
+        except Exception as e:
+            typer.echo(f"Warning: Failed to upload JUnit XML: {e}", err=True)
+
+    # Update test run with status and log
+    update_test_run(
+        endpoint=endpoint,
+        lab_id=lab_id,
+        test_run_id=run_id,
+        jwt_token=jwt_token,
+        status=status,
+        duration_seconds=final_duration,
+        complete_time=complete_time,
+        log_output=log_output,
+        isv_software_version=isv_software_version,
+        isv_test_version=isv_test_version,
+    )
+
+
+if __name__ == "__main__":
+    app()

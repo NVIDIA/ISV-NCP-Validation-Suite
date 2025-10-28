@@ -1,0 +1,49 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${JOB_NAME}
+  namespace: ${NAMESPACE}
+  labels:
+    app: k8s-platform-validator
+    test-suite: ${TEST_SUITE}
+    managed-by: isvtest
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: ${ACTIVE_DEADLINE_SECONDS}
+  template:
+    metadata:
+      labels:
+        app: k8s-platform-validator
+        test-suite: ${TEST_SUITE}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: ${SERVICE_ACCOUNT}
+      imagePullSecrets:
+        - name: ${PULL_SECRET}
+      containers:
+        - name: test-runner
+          image: ${IMAGE}
+          imagePullPolicy: Always
+          args: ${TEST_ARGS}
+          env:
+            - name: TEST_SUITE
+              value: "${TEST_SUITE}"
+            - name: CLOUD_PROVIDER
+              value: "${CLOUD_PROVIDER}"
+            - name: TEST_RESULTS_DIR
+              value: "/test-results"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "4Gi"
+              cpu: "2000m"
+          volumeMounts:
+            - name: test-results
+              mountPath: /test-results
+      volumes:
+        - name: test-results
+          emptyDir: {}
+      securityContext:
+        fsGroup: 65532

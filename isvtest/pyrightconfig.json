@@ -1,0 +1,10 @@
+{
+  "include": ["src"],
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": true,
+  "reportMissingTypeStubs": false,
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": ["src"]
+}

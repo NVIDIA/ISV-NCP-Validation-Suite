@@ -1,0 +1,30 @@
+[project]
+name = "nv-isv-tools"
+version = "0.1.0"
+description = "NVIDIA ISV Lab Tools"
+readme = "README.md"
+license = "BSD-3-Clause"
+authors = [
+    { name = "Alexandre Begnoche", email = "abegnoche@nvidia.com" },
+    { name = "Pedro Marques da Luz", email = "daluz@nvidia.com" },
+]
+requires-python = ">=3.12"
+dependencies = ["isvctl", "isvtest", "isvreporter"]
+
+[project.scripts]
+isvctl = "isvctl.main:app"
+isvtest = "isvtest.main:main"
+isvreporter = "isvreporter.main:main"
+
+[tool.uv.sources]
+isvctl = { workspace = true }
+isvtest = { workspace = true }
+isvreporter = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "coverage>=7.0.0",
+]
+
+[tool.uv.workspace]
+members = ["isvctl", "isvtest", "isvreporter"]

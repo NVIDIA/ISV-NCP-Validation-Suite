@@ -1,0 +1,679 @@
+{
+  "$defs": {
+    "BareMetalOutput": {
+      "additionalProperties": true,
+      "description": "Schema for bare metal server setup output.\n\nThis is the JSON schema that ISV setup-bare-metal stubs must return.\nUsed for standalone servers without orchestration (no K8s, no Slurm).",
+      "properties": {
+        "hostname": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Server hostname",
+          "title": "Hostname"
+        },
+        "gpu_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Number of GPUs",
+          "title": "Gpu Count"
+        },
+        "driver_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "NVIDIA driver version",
+          "title": "Driver Version"
+        },
+        "cuda_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "CUDA version",
+          "title": "Cuda Version"
+        }
+      },
+      "title": "BareMetalOutput",
+      "type": "object"
+    },
+    "IamOutput": {
+      "additionalProperties": true,
+      "description": "Schema for IAM (Identity and Access Management) system setup output.\n\nThis is the JSON schema that ISV IAM stubs must return.\nUsed for validating IAM implementations (user CRUD, authentication, roles).",
+      "properties": {
+        "provider": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IAM provider (e.g., 'aws-iam', 'okta', 'custom')",
+          "title": "Provider"
+        },
+        "api_endpoint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IAM API endpoint URL",
+          "title": "Api Endpoint"
+        },
+        "user_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Number of existing users",
+          "title": "User Count"
+        },
+        "roles": {
+          "description": "Available roles",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/IamRoleOutput"
+              }
+            ]
+          },
+          "title": "Roles",
+          "type": "array"
+        },
+        "supports_mfa": {
+          "default": false,
+          "description": "Whether MFA is supported",
+          "title": "Supports Mfa",
+          "type": "boolean"
+        },
+        "supports_service_accounts": {
+          "default": false,
+          "description": "Whether service accounts are supported",
+          "title": "Supports Service Accounts",
+          "type": "boolean"
+        },
+        "auth_methods": {
+          "description": "Supported auth methods (e.g., 'password', 'oauth', 'saml')",
+          "items": {
+            "type": "string"
+          },
+          "title": "Auth Methods",
+          "type": "array"
+        }
+      },
+      "title": "IamOutput",
+      "type": "object"
+    },
+    "IamRoleOutput": {
+      "description": "Schema for a role in the IAM system.",
+      "properties": {
+        "name": {
+          "description": "Role name",
+          "title": "Name",
+          "type": "string"
+        },
+        "permissions": {
+          "description": "List of permissions",
+          "items": {
+            "type": "string"
+          },
+          "title": "Permissions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "IamRoleOutput",
+      "type": "object"
+    },
+    "IsoOutput": {
+      "additionalProperties": true,
+      "description": "Schema for ISO import setup output.\n\nThis is the JSON schema for ISO import validation tests.\nTests are self-contained and create their own S3 buckets, AMIs, etc.",
+      "properties": {
+        "provider": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Import provider (e.g., 'aws_vm_import')",
+          "title": "Provider"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "AWS region",
+          "title": "Region"
+        },
+        "account_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "AWS account ID",
+          "title": "Account Id"
+        },
+        "default_image_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Default image URL to download",
+          "title": "Default Image Url"
+        },
+        "supported_formats": {
+          "description": "Supported image formats (vmdk, vhd, ova, raw)",
+          "items": {
+            "type": "string"
+          },
+          "title": "Supported Formats",
+          "type": "array"
+        },
+        "gpu_instance_types": {
+          "description": "Supported GPU instance types",
+          "items": {
+            "type": "string"
+          },
+          "title": "Gpu Instance Types",
+          "type": "array"
+        }
+      },
+      "title": "IsoOutput",
+      "type": "object"
+    },
+    "KubernetesNodeOutput": {
+      "description": "Schema for a single Kubernetes node in command output.",
+      "properties": {
+        "name": {
+          "description": "Node name",
+          "title": "Name",
+          "type": "string"
+        },
+        "ip": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Node IP address",
+          "title": "Ip"
+        },
+        "gpus": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Number of GPUs on this node",
+          "title": "Gpus"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "KubernetesNodeOutput",
+      "type": "object"
+    },
+    "KubernetesOutput": {
+      "additionalProperties": true,
+      "description": "Schema for Kubernetes cluster setup output.\n\nThis is the JSON schema that ISV setup-kubernetes-cluster stubs must return.\nIt maps directly to the inventory format used by isvtest.",
+      "properties": {
+        "driver_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "NVIDIA driver version",
+          "title": "Driver Version"
+        },
+        "node_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Total number of nodes",
+          "title": "Node Count"
+        },
+        "nodes": {
+          "description": "List of node names or node objects",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/KubernetesNodeOutput"
+              }
+            ]
+          },
+          "title": "Nodes",
+          "type": "array"
+        },
+        "gpu_node_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Number of GPU nodes",
+          "title": "Gpu Node Count"
+        },
+        "gpu_per_node": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "GPUs per node",
+          "title": "Gpu Per Node"
+        },
+        "total_gpus": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Total GPUs in cluster",
+          "title": "Total Gpus"
+        },
+        "control_plane_address": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Control plane IP/hostname",
+          "title": "Control Plane Address"
+        },
+        "kubeconfig_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Path to kubeconfig file",
+          "title": "Kubeconfig Path"
+        },
+        "gpu_operator_namespace": {
+          "default": "nvidia-gpu-operator",
+          "description": "GPU operator namespace",
+          "title": "Gpu Operator Namespace",
+          "type": "string"
+        },
+        "runtime_class": {
+          "default": "nvidia",
+          "description": "Kubernetes RuntimeClass for GPU pods",
+          "title": "Runtime Class",
+          "type": "string"
+        },
+        "gpu_resource_name": {
+          "default": "nvidia.com/gpu",
+          "description": "GPU resource name",
+          "title": "Gpu Resource Name",
+          "type": "string"
+        }
+      },
+      "title": "KubernetesOutput",
+      "type": "object"
+    },
+    "NetworkOutput": {
+      "additionalProperties": true,
+      "description": "Schema for network-only setup output.\n\nThis is the JSON schema for network-only validation tests (VPC, subnets, etc.).\nThese tests typically don't require pre-provisioned infrastructure.",
+      "properties": {
+        "region": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "AWS region",
+          "title": "Region"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Network test description",
+          "title": "Description"
+        }
+      },
+      "title": "NetworkOutput",
+      "type": "object"
+    },
+    "SlurmOutput": {
+      "additionalProperties": true,
+      "description": "Schema for Slurm cluster setup output.\n\nThis is the JSON schema that ISV setup-slurm-cluster stubs must return.",
+      "properties": {
+        "partitions": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SlurmPartitionOutput"
+          },
+          "description": "Partition configurations",
+          "title": "Partitions",
+          "type": "object"
+        },
+        "cuda_arch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "CUDA compute capability",
+          "title": "Cuda Arch"
+        },
+        "storage_path": {
+          "default": "/tmp",
+          "description": "Scratch storage path",
+          "title": "Storage Path",
+          "type": "string"
+        },
+        "default_partition": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Default partition name",
+          "title": "Default Partition"
+        }
+      },
+      "title": "SlurmOutput",
+      "type": "object"
+    },
+    "SlurmPartitionOutput": {
+      "description": "Schema for a Slurm partition in command output.",
+      "properties": {
+        "nodes": {
+          "description": "Node names in partition",
+          "items": {
+            "type": "string"
+          },
+          "title": "Nodes",
+          "type": "array"
+        },
+        "node_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Number of nodes",
+          "title": "Node Count"
+        }
+      },
+      "title": "SlurmPartitionOutput",
+      "type": "object"
+    },
+    "VmOutput": {
+      "additionalProperties": true,
+      "description": "Schema for VM setup output.\n\nThis is the JSON schema for EC2/VM-based validation tests.\nTests are self-contained and create their own infrastructure.",
+      "properties": {
+        "region": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "AWS region",
+          "title": "Region"
+        },
+        "account_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "AWS account ID",
+          "title": "Account Id"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "VM test description",
+          "title": "Description"
+        }
+      },
+      "title": "VmOutput",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "description": "Schema for setup command JSON output.\n\nThis is validated when an ISV's setup stub returns. The output becomes\nthe inventory that is passed to test validations.",
+  "properties": {
+    "platform": {
+      "description": "Platform type: 'kubernetes', 'slurm', 'bare_metal', 'network', 'vm', 'iam', or 'iso'",
+      "title": "Platform",
+      "type": "string"
+    },
+    "cluster_name": {
+      "description": "Name of the cluster/server/service",
+      "title": "Cluster Name",
+      "type": "string"
+    },
+    "kubernetes": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/KubernetesOutput"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Kubernetes-specific output"
+    },
+    "slurm": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SlurmOutput"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Slurm-specific output"
+    },
+    "bare_metal": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BareMetalOutput"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Bare metal-specific output"
+    },
+    "network": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/NetworkOutput"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Network-only output"
+    },
+    "vm": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/VmOutput"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "VM output"
+    },
+    "iam": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/IamOutput"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "IAM-specific output"
+    },
+    "iso": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/IsoOutput"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "ISO import output"
+    }
+  },
+  "required": [
+    "platform",
+    "cluster_name"
+  ],
+  "title": "CommandOutput",
+  "type": "object"
+}

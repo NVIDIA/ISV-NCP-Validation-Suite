@@ -1,0 +1,168 @@
+# AWS VM (EC2) Validation Configuration
+#
+# Architecture:
+#   - Scripts (AWS-specific): launch_instance.py, reboot_instance.py, teardown.py (use boto3)
+#   - Validations (platform-agnostic): Defined in tests.validations
+#
+# Steps:
+#   1. launch_instance - boto3: Provisions EC2, outputs IP/key
+#   2. reboot_instance - boto3: Reboots EC2, validates recovery
+#   3. teardown - boto3: Terminates EC2
+#
+# Validations (in tests.validations):
+#   - InstanceStateCheck - verifies instance running
+#   - InstanceRebootCheck - verifies reboot succeeded (uptime, SSH, state)
+#   - SshConnectivityCheck - paramiko: test SSH
+#   - SshGpuCheck - paramiko + nvidia-smi: test GPU
+#   - SshVcpuPinningCheck - paramiko: verify vCPU pinning and NUMA affinity
+#   - SshPciBusCheck - paramiko: verify PCI bus config for GPUs
+#   - SshHostSoftwareCheck - paramiko: verify kernel, libvirt, SBIOS, NVIDIA drivers
+#
+# Validation timing is inferred from step's phase.
+#
+# Usage:
+#   uv run isvctl test run -f isvctl/configs/aws-vm.yaml
+
+version: "1.0"
+
+commands:
+  vm:
+    phases: ["setup", "teardown"]
+    steps:
+      # AWS-specific: Launch instance (boto3)
+      - name: launch_instance
+        phase: setup
+        command: "python3 ./stubs/aws/vm/launch_instance.py"
+        args:
+          - "--name"
+          - "isv-test-gpu"
+          - "--instance-type"
+          - "{{instance_type}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 600
+
+      # AWS-specific: Reboot instance and validate recovery (boto3)
+      - name: reboot_instance
+        phase: setup
+        command: "python3 ./stubs/aws/vm/reboot_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+          - "--public-ip"
+          - "{{steps.launch_instance.public_ip}}"
+        timeout: 600
+
+      # AWS-specific: Teardown (boto3)
+      - name: teardown
+        phase: teardown
+        command: "python3 ./stubs/aws/vm/teardown.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+          - "--delete-key-pair"
+          - "--delete-security-group"
+        timeout: 600
+
+  kubernetes:
+    skip: true
+  slurm:
+    skip: true
+  network:
+    skip: true
+
+tests:
+  platform: vm
+  cluster_name: "aws-vm-validation"
+  description: "AWS VM (EC2) validation tests"
+
+  settings:
+    region: "us-west-2"
+    instance_type: "g5.xlarge"
+
+  # Validations - timing inferred from step's phase
+  validations:
+    setup_checks:
+      step: launch_instance
+      checks:
+        - InstanceStateCheck:
+            expected_state: "running"
+
+    ssh:
+      step: launch_instance
+      checks:
+        - SshConnectivityCheck: {}
+        - SshOsCheck:
+            expected_os: "ubuntu"
+
+    gpu:
+      step: launch_instance
+      checks:
+        - SshGpuCheck:
+            expected_gpus: 1
+
+    host_os:
+      step: launch_instance
+      checks:
+        - SshVcpuPinningCheck: {}
+        - SshPciBusCheck:
+            expected_gpus: 1
+        - SshHostSoftwareCheck: {}
+
+    gpu_workload:
+      step: launch_instance
+      checks:
+        - SshGpuStressCheck:
+            duration: 60
+
+    # --- Reboot validations ---
+    reboot_checks:
+      step: reboot_instance
+      checks:
+        - InstanceRebootCheck:
+            max_uptime: 600
+
+    reboot_state:
+      step: reboot_instance
+      checks:
+        - InstanceStateCheck:
+            expected_state: "running"
+
+    reboot_ssh:
+      step: reboot_instance
+      checks:
+        - SshConnectivityCheck: {}
+        - SshOsCheck:
+            expected_os: "ubuntu"
+
+    reboot_gpu:
+      step: reboot_instance
+      checks:
+        - SshGpuCheck:
+            expected_gpus: 1
+
+    reboot_host_os:
+      step: reboot_instance
+      checks:
+        - SshVcpuPinningCheck: {}
+        - SshPciBusCheck:
+            expected_gpus: 1
+        - SshHostSoftwareCheck: {}
+
+    teardown_checks:
+      step: teardown
+      checks:
+        - StepSuccessCheck: {}
+
+  exclude:
+    markers:
+      - kubernetes
+      - slurm
+      - network
+      - workload # Exclude stress test by default

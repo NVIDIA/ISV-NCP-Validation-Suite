@@ -1,0 +1,252 @@
+from __future__ import annotations
+
+import logging
+import time
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Any, ClassVar
+
+from isvtest.core.logger import setup_logger
+from isvtest.core.runners import CommandResult, LocalRunner, Runner
+
+if TYPE_CHECKING:
+    from isvtest.testing.subtests import SubTests
+
+_logger = logging.getLogger(__name__)
+
+# Cache of discovered validation classes
+_validation_class_cache: dict[str, type[BaseValidation]] | None = None
+
+
+class BaseValidation(ABC):
+    """Base class for all ISV validation tests."""
+
+    # Optional metadata
+    description: ClassVar[str] = ""
+    timeout: ClassVar[int] = 60
+    markers: ClassVar[list[str]] = []
+
+    def __init__(self, runner: Runner | None = None, config: dict[str, Any] | None = None):
+        self.config = config or {}
+        self.name = self.__class__.__name__
+        self.runner = runner or LocalRunner()
+        self._passed = False
+        self._output = ""
+        self._error = ""
+        self._results: list[CommandResult] = []
+        self._subtests: SubTests | None = None  # Injected by test framework
+        self._subtest_results: list[dict[str, Any]] = []  # Track subtest outcomes
+        self.log = setup_logger(self.name)
+
+    @abstractmethod
+    def run(self) -> None:
+        """Implement the validation logic here.
+
+        Use self.run_command() to execute commands.
+        Use self.set_passed() or self.set_failed() to set the result.
+        """
+        pass
+
+    def run_command(self, cmd: str, timeout: int | None = None, display_cmd: str | None = None) -> CommandResult:
+        """Run a command using the configured runner.
+
+        Args:
+            cmd: The actual command to execute.
+            timeout: Command timeout in seconds (defaults to self.timeout).
+            display_cmd: Optional human-readable version for logging. Useful when
+                        the actual command contains encoded/obfuscated content.
+        """
+        if timeout is None:
+            timeout = self.timeout
+
+        self.log.info(f"Running command: {display_cmd or cmd}")
+        result = self.runner.run(cmd, timeout=timeout)
+        self._results.append(result)
+        self.log.debug(f"Command result: {result}")
+        return result
+
+    def set_passed(self, message: str = "") -> None:
+        """Mark the validation as passed.
+
+        Call this method from your ``run()`` implementation when the validation
+        succeeds.
+
+        Args:
+            message: Optional success message describing what was validated.
+                This will be included in the test output.
+
+        Example:
+            >>> self.set_passed("Found 8 GPUs across 2 nodes")
+        """
+        self._passed = True
+        if message:
+            self._output = message
+
+    def set_failed(self, error: str, output: str = "") -> None:
+        """Mark the validation as failed.
+
+        Call this method from your ``run()`` implementation when the validation
+        fails.
+
+        Args:
+            error: Error message describing why the validation failed.
+                This should be actionable and help users understand the issue.
+            output: Optional additional output (e.g., command output, logs)
+                that provides context for debugging.
+
+        Example:
+            >>> self.set_failed("Expected 8 GPUs but found 4", output=nvidia_smi_output)
+        """
+        self._passed = False
+        self._error = error
+        if output:
+            self._output = output
+
+    def report_subtest(
+        self,
+        name: str,
+        passed: bool,
+        message: str = "",
+        *,
+        skipped: bool = False,
+        duration: float | None = None,
+    ) -> None:
+        """Report a subtest result.
+
+        If subtests fixture is available (via _subtests), the subtest will be
+        reported to pytest. Otherwise, results are stored for summary.
+
+        Args:
+            name: Name of the subtest (e.g., "TestGPUAccess")
+            passed: True if subtest passed, False if failed
+            message: Optional message describing the result
+            skipped: If True, mark as skipped instead of pass/fail
+            duration: Optional duration in seconds
+
+        Example:
+            >>> self.report_subtest("TestGPUAccess", True, "GPU accessible")
+            >>> self.report_subtest("TestNCCL", False, "NCCL test failed: timeout")
+            >>> self.report_subtest("TestEFA", True, skipped=True)
+        """
+        import pytest
+
+        # Normalize: skipped tests are never considered "passed"
+        effective_passed = False if skipped else passed
+
+        result = {
+            "name": name,
+            "passed": effective_passed,
+            "skipped": skipped,
+            "message": message,
+            "duration": duration,
+        }
+        self._subtest_results.append(result)
+
+        # Report via subtests fixture if available
+        if self._subtests is not None:
+            # Use skipped=skipped parameter to avoid pytest.skip() adding markers to parent
+            with self._subtests.test(msg=name, duration=duration, skipped=skipped):
+                if not skipped and not passed:
+                    pytest.fail(message or f"Subtest {name} failed")
+                # If passed or skipped, just exit the context successfully
+
+    def execute(self) -> dict[str, Any]:
+        """Execute the validation and return results.
+
+        This method is called by the test framework to run the validation.
+        It wraps the ``run()`` method with timing and exception handling.
+
+        Returns:
+            Dictionary containing:
+                - name: Validation class name
+                - passed: True if validation succeeded
+                - output: Success message or additional output
+                - error: Error message if validation failed
+                - duration: Execution time in seconds
+                - description: Validation description from class metadata
+                - subtests: List of subtest results (if any)
+        """
+        start_time = time.time()
+        try:
+            self.run()
+        except Exception as e:
+            self.set_failed(f"Validation raised exception: {e}")
+            self.log.exception("Validation execution failed")
+
+        duration = time.time() - start_time
+
+        return {
+            "name": self.name,
+            "passed": self._passed,
+            "output": self._output,
+            "error": self._error,
+            "duration": duration,
+            "description": self.description,
+            "subtests": self._subtest_results,
+        }
+
+    @property
+    def passed(self) -> bool:
+        """Return whether the validation passed."""
+        return self._passed
+
+    @property
+    def message(self) -> str:
+        """Return the result message (output or error)."""
+        return self._output if self._passed else self._error
+
+
+def _discover_validation_classes() -> dict[str, type[BaseValidation]]:
+    """Discover all validation classes and cache them.
+
+    Returns:
+        Dictionary mapping class names to classes
+    """
+    global _validation_class_cache
+    if _validation_class_cache is not None:
+        return _validation_class_cache
+
+    _validation_class_cache = {}
+
+    # Import validations package
+    try:
+        from pathlib import Path
+
+        import isvtest.validations as validations_pkg
+        from isvtest.core.discovery import discover_tests
+
+        pkg_path = Path(validations_pkg.__file__).parent
+
+        for cls in discover_tests(pkg_path, "isvtest.validations"):
+            _validation_class_cache[cls.__name__] = cls
+            _logger.debug(f"Discovered validation: {cls.__name__}")
+
+    except Exception as e:
+        _logger.warning(f"Failed to discover validations: {e}")
+
+    return _validation_class_cache
+
+
+def get_validation_class(name: str) -> type[BaseValidation] | None:
+    """Get a validation class by name.
+
+    Args:
+        name: Class name (e.g., "NodeCountCheck")
+
+    Returns:
+        Validation class if found, None otherwise
+    """
+    cache = _discover_validation_classes()
+    return cache.get(name)
+
+
+def register_validation_class(cls: type[BaseValidation]) -> None:
+    """Register a validation class for discovery.
+
+    This allows dynamically adding validation classes that can be
+    referenced by name in step configurations.
+
+    Args:
+        cls: Validation class to register
+    """
+    cache = _discover_validation_classes()
+    cache[cls.__name__] = cls

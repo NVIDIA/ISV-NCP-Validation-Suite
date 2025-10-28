@@ -1,0 +1,211 @@
+# AWS Network Validation Configuration
+#
+# Comprehensive network testing with 6 test suites:
+#   1. VPC CRUD - Create, Read, Update, Delete VPC lifecycle
+#   2. Subnet Configuration - Multi-AZ subnet distribution
+#   3. VPC Isolation - Security boundaries between VPCs
+#   4. Security Blocking - SG/NACL blocking rules (negative tests)
+#   5. Connectivity - Instance network assignment
+#   6. Traffic Validation - Real ping tests via SSM
+#
+# Architecture:
+#   - Scripts: Platform-specific (boto3) - do all AWS work
+#   - Validations: Platform-agnostic - defined in tests.validations
+#
+# Validation timing is inferred from step's phase.
+#
+# Usage:
+#   uv run isvctl test run -f isvctl/configs/aws-network.yaml
+#
+# Run specific tests:
+#   uv run isvctl test run -f isvctl/configs/aws-network.yaml -- -k "vpc_crud"
+#   uv run isvctl test run -f isvctl/configs/aws-network.yaml -- -k "isolation"
+#
+# Estimated runtime: ~10-12 minutes for all tests
+
+version: "1.0"
+
+commands:
+  network:
+    phases: ["setup", "teardown"]
+    steps:
+      # =====================================================================
+      # Setup: Create shared VPC for connectivity tests
+      # Must run FIRST since connectivity_test depends on it
+      # =====================================================================
+      - name: create_network
+        phase: setup
+        command: "python3 ./stubs/aws/network/create_vpc.py"
+        args:
+          - "--name"
+          - "isv-shared-vpc"
+          - "--region"
+          - "{{region}}"
+          - "--cidr"
+          - "10.0.0.0/16"
+        timeout: 300
+
+      # =====================================================================
+      # Test 1: VPC CRUD Operations (~30s)
+      # Creates VPC, reads attributes, updates tags/DNS, deletes VPC
+      # Self-contained - creates and cleans up its own VPC
+      # =====================================================================
+      - name: vpc_crud
+        phase: setup
+        command: "python3 ./stubs/aws/network/vpc_crud_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--cidr"
+          - "10.99.0.0/16"
+        timeout: 120
+        output_schema: vpc_crud
+
+      # =====================================================================
+      # Test 2: Subnet Configuration (~30s)
+      # Creates VPC with multiple subnets across AZs, verifies route tables
+      # Self-contained - creates and cleans up its own VPC
+      # =====================================================================
+      - name: subnet_config
+        phase: setup
+        command: "python3 ./stubs/aws/network/subnet_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--cidr"
+          - "10.98.0.0/16"
+          - "--subnet-count"
+          - "4"
+        timeout: 120
+        output_schema: subnet_config
+
+      # =====================================================================
+      # Test 3: VPC Isolation (~30s)
+      # Creates two VPCs, verifies no peering, no cross-routes, SG isolation
+      # Self-contained - creates and cleans up its own VPCs
+      # =====================================================================
+      - name: vpc_isolation
+        phase: setup
+        command: "python3 ./stubs/aws/network/isolation_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--cidr-a"
+          - "10.97.0.0/16"
+          - "--cidr-b"
+          - "10.96.0.0/16"
+        timeout: 120
+        output_schema: vpc_isolation
+
+      # =====================================================================
+      # Test 4: Security Blocking (~30s)
+      # Tests SG/NACL blocking rules - default deny, specific allow, egress
+      # Self-contained - creates and cleans up its own VPC
+      # =====================================================================
+      - name: security_blocking
+        phase: setup
+        command: "python3 ./stubs/aws/network/security_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--cidr"
+          - "10.94.0.0/16"
+        timeout: 120
+        output_schema: security_blocking
+
+      # =====================================================================
+      # Test 5: Connectivity Test (~3 min)
+      # Uses the shared VPC from create_network step
+      # Tests network connectivity via SSM
+      # =====================================================================
+      - name: connectivity_test
+        phase: setup
+        command: "python3 ./stubs/aws/network/test_connectivity.py"
+        args:
+          - "--vpc-id"
+          - "{{steps.create_network.network_id}}"
+          - "--subnet-ids"
+          - "{{steps.create_network.subnets | map(attribute='subnet_id') | join(',')}}"
+          - "--sg-id"
+          - "{{steps.create_network.security_group_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 600
+        output_schema: connectivity_result
+
+      # =====================================================================
+      # Test 6: Traffic Validation (~5-7 min)
+      # Real traffic tests - ping allowed/blocked, internet connectivity
+      # Self-contained - creates and cleans up its own VPC
+      # =====================================================================
+      - name: traffic_validation
+        phase: setup
+        command: "python3 ./stubs/aws/network/traffic_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--cidr"
+          - "10.93.0.0/16"
+        timeout: 900
+        output_schema: traffic_flow
+
+      # =====================================================================
+      # Teardown: Clean up shared VPC from create_network
+      # =====================================================================
+      - name: teardown
+        phase: teardown
+        command: "python3 ./stubs/aws/network/teardown.py"
+        args:
+          - "--vpc-id"
+          - "{{steps.create_network.network_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 300
+        output_schema: teardown
+
+  kubernetes:
+    skip: true
+  slurm:
+    skip: true
+
+tests:
+  cluster_name: "aws-network-validation"
+  description: "Comprehensive AWS VPC and network validation tests"
+  platform: network
+
+  settings:
+    region: "us-west-2"
+
+  # Validations - timing inferred from step's phase
+  validations:
+    setup_checks:
+      step: create_network
+      checks:
+        - NetworkProvisionedCheck:
+            require_subnets: true
+            min_subnets: 2
+
+    network:
+      checks:
+        - VpcCrudCheck:
+            step: vpc_crud
+        - SubnetConfigCheck:
+            step: subnet_config
+            min_subnets: 4
+            require_multi_az: true
+        - VpcIsolationCheck:
+            step: vpc_isolation
+        - SecurityBlockingCheck:
+            step: security_blocking
+        - NetworkConnectivityCheck:
+            step: connectivity_test
+        - TrafficFlowCheck:
+            step: traffic_validation
+
+    teardown_checks:
+      step: teardown
+      checks:
+        - StepSuccessCheck: {}
+
+  exclude:
+    markers: []

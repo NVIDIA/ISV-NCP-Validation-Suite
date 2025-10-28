@@ -1,0 +1,319 @@
+{
+  "$defs": {
+    "LabConfig": {
+      "additionalProperties": true,
+      "description": "Lab/environment metadata.\n\nContains information about the ISV lab environment being tested.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Lab identifier",
+          "title": "Id"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable lab name",
+          "title": "Name"
+        },
+        "bastion_host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Bastion host IP or hostname",
+          "title": "Bastion Host"
+        },
+        "total_nodes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Total number of nodes in the lab",
+          "title": "Total Nodes"
+        }
+      },
+      "title": "LabConfig",
+      "type": "object"
+    },
+    "PlatformCommands": {
+      "additionalProperties": true,
+      "description": "Lifecycle commands for a specific platform.\n\nGroups commands for a platform (kubernetes, slurm, bare_metal, network, vm, iam, iso).\nSupports skip at both platform level (skips all phases) and phase level.\n\nThe `phases` field defines the execution order. Steps are grouped by their `phase`\nfield and executed in the order defined by `phases`. Validations run after each phase.\n\nExample:\n   ```yaml\n   network:\n     phases: [\"setup\", \"teardown\"]  # Defines execution order\n     steps:\n       - name: create_vpc\n         phase: setup\n         command: \"./create_vpc.py\"\n       - name: cleanup\n         phase: teardown\n         command: \"./teardown.py\"\n   ```\n\nIf a step's phase is not in the phases list, an error is raised.\n\nSupports skip at both platform level (skips all phases) and step level.",
+      "properties": {
+        "skip": {
+          "default": false,
+          "description": "Skip all commands for this platform",
+          "title": "Skip",
+          "type": "boolean"
+        },
+        "phases": {
+          "description": "Ordered list of phases to execute. Steps are grouped by phase and run in this order.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Phases",
+          "type": "array"
+        },
+        "steps": {
+          "description": "Sequential command steps grouped by phase",
+          "items": {
+            "$ref": "#/$defs/StepConfig"
+          },
+          "title": "Steps",
+          "type": "array"
+        }
+      },
+      "title": "PlatformCommands",
+      "type": "object"
+    },
+    "StepConfig": {
+      "additionalProperties": true,
+      "description": "Configuration for a single step in a command sequence.\n\nSteps execute sequentially, with each step:\n- Producing JSON output that is validated against an explicit or auto-detected schema\n- Passing output to subsequent steps via Jinja2 templating\n\nValidations are defined separately in tests.validations, not inline with steps.\nUse the `phase` field in validation config to control when validations run.\n\nOutput schema resolution order:\n1. Explicit `output_schema` field (if provided)\n2. Auto-detect from step name (e.g., 'launch_instance' -> 'instance')\n3. Fallback to 'generic' schema",
+      "properties": {
+        "name": {
+          "description": "Unique identifier for this step",
+          "title": "Name",
+          "type": "string"
+        },
+        "command": {
+          "description": "Command to execute",
+          "title": "Command",
+          "type": "string"
+        },
+        "args": {
+          "description": "Command arguments (supports Jinja2 templating with {{ steps.prev_step.field }})",
+          "items": {
+            "type": "string"
+          },
+          "title": "Args",
+          "type": "array"
+        },
+        "timeout": {
+          "default": 300,
+          "description": "Timeout in seconds",
+          "title": "Timeout",
+          "type": "integer"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Additional environment variables",
+          "title": "Env",
+          "type": "object"
+        },
+        "working_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Working directory for command execution",
+          "title": "Working Dir"
+        },
+        "skip": {
+          "default": false,
+          "description": "Skip this step",
+          "title": "Skip",
+          "type": "boolean"
+        },
+        "continue_on_failure": {
+          "default": false,
+          "description": "Continue to next step even if this step fails",
+          "title": "Continue On Failure",
+          "type": "boolean"
+        },
+        "phase": {
+          "default": "setup",
+          "description": "Phase this step belongs to: 'setup', 'test', or 'teardown'",
+          "title": "Phase",
+          "type": "string"
+        },
+        "output_schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Schema name to validate output against. If not set, auto-detected from step name.",
+          "title": "Output Schema"
+        },
+        "sensitive_args": {
+          "description": "Additional argument patterns to mask in logs (e.g., ['--my-secret'])",
+          "items": {
+            "type": "string"
+          },
+          "title": "Sensitive Args",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "command"
+      ],
+      "title": "StepConfig",
+      "type": "object"
+    },
+    "ValidationConfig": {
+      "additionalProperties": true,
+      "description": "Test configuration section.\n\nValidations are grouped by meaningful category names (e.g., 'network', 'ssh', 'gpu').\nEach validation can have a `phase` field to control execution timing:\n\n- No `phase`: Runs after setup steps complete (default)\n- `phase: teardown`: Runs after teardown steps complete\n- `phase: test`: Runs after test steps (if any exist)\n\nTwo formats are supported:\n\n1. List format (each validation specifies its own step/phase):\n    validations:\n      network:\n        - VpcCrudCheck:\n            step: vpc_crud\n        - NetworkProvisionedCheck:\n            step: create_network\n\n2. Group defaults format (step/phase apply to all checks):\n    validations:\n      credentials:\n        step: test_credentials\n        phase: test\n        checks:\n          - StepSuccessCheck: {}\n          - FieldExistsCheck:\n              field: \"account_id\"",
+      "properties": {
+        "cluster_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Cluster name for test run",
+          "title": "Cluster Name"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Test run description",
+          "title": "Description"
+        },
+        "platform": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Platform: kubernetes, slurm, bare_metal, network, vm, iam, iso",
+          "title": "Platform"
+        },
+        "settings": {
+          "additionalProperties": true,
+          "description": "Test settings",
+          "title": "Settings",
+          "type": "object"
+        },
+        "validations": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            ]
+          },
+          "description": "Validation checks by category. Supports list format or group defaults with 'checks' key.",
+          "title": "Validations",
+          "type": "object"
+        },
+        "exclude": {
+          "additionalProperties": true,
+          "description": "Exclusion rules",
+          "title": "Exclude",
+          "type": "object"
+        }
+      },
+      "title": "ValidationConfig",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "description": "Unified configuration schema for a complete test run.\n\nThis is the merged result of all YAML config files (from -f/--config). It contains:\n- lab: Lab/environment metadata\n- commands: ISV-provided lifecycle commands grouped by platform\n- context: Variables for Jinja2 templating\n- tests: Test configuration (validations to run)",
+  "properties": {
+    "version": {
+      "default": "1.0",
+      "description": "Schema version",
+      "title": "Version",
+      "type": "string"
+    },
+    "lab": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LabConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Lab configuration"
+    },
+    "commands": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PlatformCommands"
+      },
+      "description": "Lifecycle commands by platform (kubernetes, slurm, bare_metal, network, vm, iam, iso)",
+      "title": "Commands",
+      "type": "object"
+    },
+    "context": {
+      "additionalProperties": true,
+      "description": "Context variables for templating",
+      "title": "Context",
+      "type": "object"
+    },
+    "tests": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ValidationConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Test configuration"
+    }
+  },
+  "title": "RunConfig",
+  "type": "object"
+}

@@ -1,0 +1,25 @@
+{
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": true,
+  "reportMissingTypeStubs": false,
+  "venvPath": ".",
+  "venv": ".venv",
+  "executionEnvironments": [
+    {
+      "root": "isvctl",
+      "pythonVersion": "3.12",
+      "extraPaths": ["isvctl/src"]
+    },
+    {
+      "root": "isvtest",
+      "pythonVersion": "3.12",
+      "extraPaths": ["isvtest/src"]
+    },
+    {
+      "root": "isvreporter",
+      "pythonVersion": "3.12",
+      "extraPaths": ["isvreporter/src"]
+    }
+  ]
+}

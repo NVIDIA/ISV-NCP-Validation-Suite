@@ -1,0 +1,242 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nim-llama-3b-inference-test
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: nim-inference-test
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: ngc-image-secret
+
+      # Init container to prepare cache directory with correct permissions
+      initContainers:
+        - name: prepare-cache
+          image: busybox:latest
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo "Preparing NIM cache directory..."
+              mkdir -p /opt/nim/.cache
+              chmod 777 /opt/nim/.cache
+              echo "Cache directory ready"
+          volumeMounts:
+            - name: nim-cache
+              mountPath: /opt/nim/.cache
+          securityContext:
+            runAsUser: 0 # Run as root to set permissions
+
+      containers:
+        # NIM Server Container
+        - name: nim-server
+          image: nvcr.io/nim/meta/llama-3.2-3b-instruct:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              echo "[INFO] Starting NIM server..."
+
+              # Start server in background
+              /opt/nim/start_server.sh &
+              SERVER_PID=$!
+              echo "[INFO] NIM server started with PID $SERVER_PID"
+
+              # Monitor for completion marker
+              while kill -0 $SERVER_PID 2>/dev/null; do
+                if [ -f "/shared/.test_complete" ]; then
+                  echo "[INFO] Test complete marker found, stopping server..."
+                  pkill -9 python 2>/dev/null || true
+                  kill -9 $SERVER_PID 2>/dev/null || true
+                  echo "[INFO] Server stopped"
+                  exit 0
+                fi
+                sleep 5
+              done
+
+              echo "[INFO] Server exited on its own"
+              exit 0
+          env:
+            - name: NGC_NIM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ngc-api-secret
+                  key: apikey
+            - name: NIM_SERVER_PORT
+              value: "8000"
+            - name: NIM_CACHE_PATH
+              value: "/opt/nim/.cache"
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          resources:
+            limits:
+              nvidia.com/gpu: "1"
+              memory: "32Gi"
+            requests:
+              nvidia.com/gpu: "1"
+              memory: "16Gi"
+          volumeMounts:
+            - name: nim-cache
+              mountPath: /opt/nim/.cache
+            - name: dev-shm
+              mountPath: /dev/shm
+            - name: shared
+              mountPath: /shared
+          readinessProbe:
+            httpGet:
+              path: /v1/health/ready
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 60 # 10 minutes max for model loading
+
+        # Inference Test Container
+        - name: inference-test
+          image: nvcr.io/nvidia/cuda:13.0.0-base-ubuntu24.04
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -e
+
+              TS=$(date +%Y%m%dT%H%M%S)
+              LOG_FILE="/shared/nim-inference-test_${TS}.log"
+
+              echo "========================================" | tee "$LOG_FILE"
+              echo "NIM Inference Validation Test" | tee -a "$LOG_FILE"
+              echo "Model: Llama 3.2 3B Instruct" | tee -a "$LOG_FILE"
+              echo "Started: $(date)" | tee -a "$LOG_FILE"
+              echo "========================================" | tee -a "$LOG_FILE"
+              echo "" | tee -a "$LOG_FILE"
+
+              # Install curl for API calls
+              apt-get update -qq && apt-get install -y -qq curl jq > /dev/null 2>&1
+
+              # Wait for NIM server to be ready
+              echo "[INFO] Waiting for NIM server to be ready..." | tee -a "$LOG_FILE"
+              MAX_WAIT=1200  # 20 minutes (first run includes model download ~10-15 min)
+              ELAPSED=0
+              while [ $ELAPSED -lt $MAX_WAIT ]; do
+                if curl -s http://localhost:8000/v1/health/ready > /dev/null 2>&1; then
+                  echo "[INFO] NIM server is ready!" | tee -a "$LOG_FILE"
+                  break
+                fi
+                echo "  Waiting... (${ELAPSED}s/${MAX_WAIT}s)" | tee -a "$LOG_FILE"
+                sleep 30
+                ELAPSED=$((ELAPSED + 30))
+              done
+
+              if [ $ELAPSED -ge $MAX_WAIT ]; then
+                echo "[ERROR] NIM server failed to become ready within ${MAX_WAIT}s" | tee -a "$LOG_FILE"
+                exit 1
+              fi
+
+              echo "" | tee -a "$LOG_FILE"
+              echo "========================================" | tee -a "$LOG_FILE"
+              echo "Running Inference Test" | tee -a "$LOG_FILE"
+              echo "========================================" | tee -a "$LOG_FILE"
+              echo "" | tee -a "$LOG_FILE"
+
+              # Test 1: Simple completion request
+              echo "[TEST 1] Simple completion request..." | tee -a "$LOG_FILE"
+              RESPONSE=$(curl -s -X POST http://localhost:8000/v1/completions \
+                -H "Content-Type: application/json" \
+                -d '{
+                  "model": "meta/llama-3.2-3b-instruct",
+                  "prompt": "What is 2+2?",
+                  "max_tokens": 10,
+                  "temperature": 0.1
+                }')
+
+              if echo "$RESPONSE" | jq -e '.choices[0].text' > /dev/null 2>&1; then
+                TEXT=$(echo "$RESPONSE" | jq -r '.choices[0].text')
+                echo "  Inference successful" | tee -a "$LOG_FILE"
+                echo "  Response: $TEXT" | tee -a "$LOG_FILE"
+              else
+                echo "  Inference failed" | tee -a "$LOG_FILE"
+                echo "  Response: $RESPONSE" | tee -a "$LOG_FILE"
+                exit 1
+              fi
+
+              echo "" | tee -a "$LOG_FILE"
+
+              # Test 2: Chat completion request
+              echo "[TEST 2] Chat completion request..." | tee -a "$LOG_FILE"
+              CHAT_RESPONSE=$(curl -s -X POST http://localhost:8000/v1/chat/completions \
+                -H "Content-Type: application/json" \
+                -d '{
+                  "model": "meta/llama-3.2-3b-instruct",
+                  "messages": [{"role": "user", "content": "Hello, how are you?"}],
+                  "max_tokens": 20,
+                  "temperature": 0.1
+                }')
+
+              if echo "$CHAT_RESPONSE" | jq -e '.choices[0].message.content' > /dev/null 2>&1; then
+                CHAT_TEXT=$(echo "$CHAT_RESPONSE" | jq -r '.choices[0].message.content')
+                echo "  Chat inference successful" | tee -a "$LOG_FILE"
+                echo "  Response: $CHAT_TEXT" | tee -a "$LOG_FILE"
+              else
+                echo "  Chat inference failed" | tee -a "$LOG_FILE"
+                echo "  Response: $CHAT_RESPONSE" | tee -a "$LOG_FILE"
+                exit 1
+              fi
+
+              echo "" | tee -a "$LOG_FILE"
+
+              # Test 3: Model info endpoint
+              echo "[TEST 3] Model info endpoint..." | tee -a "$LOG_FILE"
+              MODEL_INFO=$(curl -s http://localhost:8000/v1/models)
+
+              if echo "$MODEL_INFO" | jq -e '.data[0].id' > /dev/null 2>&1; then
+                MODEL_ID=$(echo "$MODEL_INFO" | jq -r '.data[0].id')
+                echo "  Model info retrieved" | tee -a "$LOG_FILE"
+                echo "  Model ID: $MODEL_ID" | tee -a "$LOG_FILE"
+              else
+                echo "  Failed to get model info" | tee -a "$LOG_FILE"
+                exit 1
+              fi
+
+              echo "" | tee -a "$LOG_FILE"
+              echo "========================================" | tee -a "$LOG_FILE"
+              echo "[SUCCESS] All NIM inference tests passed!" | tee -a "$LOG_FILE"
+              echo "Finished: $(date)" | tee -a "$LOG_FILE"
+              echo "========================================" | tee -a "$LOG_FILE"
+
+              # Signal NIM server to stop
+              touch /shared/.test_complete
+
+              # Give server time to shutdown
+              sleep 10
+
+              exit 0
+          resources:
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+          volumeMounts:
+            - name: shared
+              mountPath: /shared
+
+      # Node selection - schedule on GPU nodes
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+
+      volumes:
+        - name: nim-cache
+          persistentVolumeClaim:
+            claimName: nim-model-cache
+        - name: dev-shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Gi
+        - name: shared
+          emptyDir: {}

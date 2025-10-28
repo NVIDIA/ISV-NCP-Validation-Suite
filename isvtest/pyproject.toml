@@ -1,0 +1,64 @@
+[project]
+name = "isvtest"
+version = "0.1.0"
+description = "NV ISV Lab tests"
+readme = "README.md"
+license = "BSD-3-Clause"
+authors = [{ name = "Alexandre Begnoche", email = "abegnoche@nvidia.com" }]
+requires-python = ">=3.12"
+dependencies = [
+    "attrs>=25.4.0,<26.0.0",
+    "boto3>=1.35.0",
+    "cupy-cuda12x>=13.6.0; sys_platform == 'linux'",
+    "isvreporter",
+    "jinja2>=3.1.6,<4.0.0",
+    "kubernetes>=30.1.0",
+    "paramiko>=3.0.0",
+    "pytest>=8.3.4,<9.0.0",
+    "pyyaml>=6.0.2,<7.0.0",
+    "reframe-hpc>=4.8.4",
+    "urllib3>=2.6.0,<3.0.0",
+]
+
+[project.scripts]
+isvtest = "isvtest.main:main"
+
+[build-system]
+requires = ["uv_build"]
+build-backend = "uv_build"
+
+[tool.uv]
+package = true
+default-groups = ["dev"]
+
+[tool.uv.sources]
+isvreporter = { workspace = true }
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I", "A", "UP", "RUF"] # "B", "N"
+ignore = ["E501", "RUF005"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/isvtest/tests/**/*.py" = [
+    "RUF012", # ReFrame uses mutable class attributes by design
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests", "src/isvtest/tests"]
+addopts = "-v --junitxml=junit.xml"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.0.0",
+    "pytest-cov>=6.0.0",
+]

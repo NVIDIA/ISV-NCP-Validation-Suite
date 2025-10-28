@@ -1,0 +1,51 @@
+---
+description:
+globs: *.py
+alwaysApply: false
+---
+# Python Development Standards
+
+## Python Version
+
+- All development must use Python 3.12
+- Ensure compatibility with Python 3.12 features and syntax
+
+## Code Style and Type Annotations
+
+- All Python files must use type annotations following PEP 585
+  - Use built-in collection types with generic parameters (e.g., `dict[str, Any]`, `list[int]`, `set[str]`)
+  - Do NOT import collection types from typing (e.g., avoid `from typing import Dict, List, Set`)
+  - Only import special types from typing (e.g., `Any`, `Union`, `TypeVar`, `Protocol`)
+- Every function and class must have docstrings following PEP 257
+- Return types must be explicitly specified for all functions
+- Maintain existing comments when modifying files
+
+## Testing Requirements
+
+- Use pytest exclusively (no unittest)
+- All tests must be in `tests/` directory
+- Tests must include type annotations
+
+## Configuration and Environment
+
+- Use environment variables for configuration
+- Implement robust error handling and logging
+
+## Dependencies and Tools
+
+- Use uv package manager for dependency management (<https://github.com/astral-sh/uv>)
+- Use Ruff for code style consistency
+- Follow GitLab CI/CD practices
+
+## Development Commands
+
+- **Run the application**: `uv run -m <module_name> <command>`
+- **Run tests**: `uv run pytest -v`
+- **Lint and format code**: `uvx pre-commit run -a`
+- **Install dependencies**: `uv sync`
+
+## Documentation
+
+- Maintain clear and concise docstrings
+- Keep README files up to date
+- Document all major components and APIs

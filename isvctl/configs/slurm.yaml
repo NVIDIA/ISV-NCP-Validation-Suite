@@ -1,0 +1,126 @@
+# Slurm Cluster Validation Configuration
+# For HPC clusters with Slurm workload manager
+#
+# Usage:
+#   isvctl test run -f isvctl/configs/slurm.yaml
+#   isvctl test run -f isvctl/configs/slurm.yaml -- -v -s
+
+version: "1.0"
+
+# =============================================================================
+# Lifecycle Commands
+# =============================================================================
+commands:
+  slurm:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: setup
+        phase: setup
+        command: "./stubs/slurm/setup.sh"
+        timeout: 120
+      - name: teardown
+        phase: teardown
+        command: "./stubs/slurm/teardown.sh"
+        timeout: 30
+
+  kubernetes:
+    skip: true
+
+# =============================================================================
+# Test Configuration
+# =============================================================================
+tests:
+  cluster_name: "{{steps.setup.cluster_name}}"
+  description: "Slurm cluster validation"
+  platform: slurm
+
+  settings:
+    show_skipped_tests: false
+
+  validations:
+    slurm:
+      checks:
+        - SlurmInfoAvailable:
+            min_partitions: 1
+        - SlurmPartition-cpu:
+            partition_name: "cpu"
+            expected_nodes: "{{ steps.setup.slurm.partitions.cpu.nodes | default([]) | length }}"
+            required_nodes: '{{ steps.setup.slurm.partitions.cpu.nodes | default([]) | tojson }}'
+            require_available: true
+        - SlurmPartition-gpu:
+            partition_name: "gpu"
+            expected_nodes: "{{ steps.setup.slurm.partitions.gpu.nodes | default([]) | length }}"
+            required_nodes: '{{ steps.setup.slurm.partitions.gpu.nodes | default([]) | tojson }}'
+            require_available: true
+        - SlurmJobSubmission: {}
+        - SlurmGpuAllocation-1gpu:
+            num_gpus: 1
+        - SlurmGpuAllocation-2gpu:
+            num_gpus: 2
+        - SlurmNodeJobExecution-cpu:
+            partition_name: "cpu"
+            storage_path: "{{ steps.setup.slurm.storage_path | default('/tmp') }}"
+        - SlurmNodeJobExecution-gpu:
+            partition_name: "gpu"
+            storage_path: "{{ steps.setup.slurm.storage_path | default('/tmp') }}"
+
+    # Slurm workloads - longer running GPU stress tests
+    slurm_workloads:
+      checks:
+        - SlurmGpuStressWorkload:
+            script_mode: "inline"
+            partition: "{{ steps.setup.slurm.default_partition | default('gpu') }}"
+            runtime: 30
+            memory_gb: 16
+            timeout: 90
+            cuda_arch: "{{ steps.setup.slurm.cuda_arch | default('100') }}"
+
+        # Multi-node NCCL test - validates GPU communication across nodes
+        - SlurmNcclMultiNodeWorkload:
+            partition: "{{ steps.setup.slurm.default_partition | default('gpu') }}"
+            nodes: 2
+            # gpus_per_node: auto-detected from partition GRES if not specified
+            min_bus_bw_gbps: 100 # Set to expected bandwidth to enforce threshold
+            quick_mode: true
+            timeout: 900
+
+        # Run GPU job from manifest file with variable substitution
+        - SlurmSbatchWorkload-gpu:
+            script: "example_gpu_job.sh"
+            variables:
+              JOB_NAME: "demo-gpu-test"
+              PARTITION: "gpu"
+              NODES: "{{ steps.setup.slurm.partitions.gpu.nodes | default([]) | length }}"
+              GPUS_PER_NODE: 4
+              TIME_LIMIT: "00:10:00"
+            timeout: 600
+            cleanup: false
+
+        # Run CPU job from manifest file
+        - SlurmSbatchWorkload-cpu:
+            script: "example_cpu_job.sh"
+            variables:
+              JOB_NAME: "demo-cpu-test"
+              PARTITION: "cpu"
+              NODES: "{{ steps.setup.slurm.partitions.cpu.nodes | default([]) | length }}"
+              CPUS_PER_TASK: 4
+              TIME_LIMIT: "00:01:00"
+            timeout: 60
+
+        # Inline script (no manifest file needed)
+        - SlurmSbatchWorkload-inline:
+            script_content: |
+              #!/bin/bash
+              #SBATCH --job-name=inline-test
+              #SBATCH --partition=gpu
+              #SBATCH --gres=gpu:1
+              #SBATCH --nodes=1
+              #SBATCH --time=00:01:00
+              echo "Hello from inline script"
+              nvidia-smi
+            timeout: 60
+
+  exclude:
+    markers:
+      - bare_metal
+      - kubernetes

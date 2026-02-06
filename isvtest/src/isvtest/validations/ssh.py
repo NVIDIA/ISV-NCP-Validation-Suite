@@ -14,145 +14,18 @@ Requires paramiko: pip install paramiko
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import ClassVar
 
 import pytest
 
 from isvtest.core.validation import BaseValidation
-
-if TYPE_CHECKING:
-    import paramiko
-
-
-def _get_failed_subtests(results: list[dict[str, Any]]) -> list[str]:
-    """Return names of failed (non-skipped) subtests.
-
-    Args:
-        results: List of subtest result dicts from BaseValidation._subtest_results
-
-    Returns:
-        List of failed subtest names
-    """
-    return [r["name"] for r in results if not r["passed"] and not r.get("skipped", False)]
-
-
-def get_ssh_client(
-    host: str,
-    user: str,
-    key_path: str,
-    timeout: int = 30,
-) -> paramiko.SSHClient:
-    """Create SSH client connection using paramiko.
-
-    Args:
-        host: Hostname or IP address to connect to
-        user: SSH username
-        key_path: Path to SSH private key file
-        timeout: Connection timeout in seconds
-
-    Returns:
-        Connected paramiko SSHClient instance
-    """
-    import paramiko
-
-    ssh_client = paramiko.SSHClient()
-    ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
-    private_key = paramiko.RSAKey.from_private_key_file(key_path)
-    ssh_client.connect(
-        hostname=host,
-        username=user,
-        pkey=private_key,
-        timeout=timeout,
-        allow_agent=False,
-        look_for_keys=False,
-    )
-    return ssh_client
-
-
-def run_ssh_command(ssh: paramiko.SSHClient, command: str) -> tuple[int, str, str]:
-    """Run command via SSH and return exit_code, stdout, stderr.
-
-    Args:
-        ssh: Connected SSH client
-        command: Command to execute
-
-    Returns:
-        Tuple of (exit_code, stdout, stderr)
-    """
-    _, stdout, stderr = ssh.exec_command(command)
-    exit_code = stdout.channel.recv_exit_status()
-    return exit_code, stdout.read().decode(), stderr.read().decode()
-
-
-def get_ssh_config(config: dict[str, Any], inventory: dict[str, Any]) -> dict[str, Any]:
-    """Extract SSH configuration from config and inventory.
-
-    Supports multiple sources:
-    - Direct config values (host, key_file, user)
-    - Step output references (step_output.public_ip, etc.)
-    - Inventory structures (ssh.*, vm.*)
-
-    Args:
-        config: Test configuration dictionary
-        inventory: Inventory data dictionary
-
-    Returns:
-        Dictionary with ssh_host, ssh_user, ssh_key_path, and optional metadata
-    """
-    # Check step_output first (from Jinja2 references)
-    step_output = config.get("step_output", {})
-
-    # Try different inventory structures
-    ssh_inv = inventory.get("ssh", {})
-    vmaas_inv = inventory.get("vmaas", {})
-
-    # Determine host (check multiple sources)
-    host = (
-        config.get("host")
-        or config.get("ssh_host")
-        or step_output.get("public_ip")
-        or step_output.get("private_ip")
-        or step_output.get("host")
-        or ssh_inv.get("host")
-        or ssh_inv.get("public_ip")
-        or vmaas_inv.get("public_ip")
-        or vmaas_inv.get("private_ip")
-    )
-
-    # Determine user
-    user = (
-        config.get("user")
-        or config.get("ssh_user")
-        or step_output.get("ssh_user")
-        or ssh_inv.get("user")
-        or vmaas_inv.get("ssh_user")
-        or "ubuntu"
-    )
-
-    # Determine key path
-    key_path = (
-        config.get("key_file")
-        or config.get("key_path")
-        or config.get("ssh_key_path")
-        or step_output.get("key_file")
-        or step_output.get("key_path")
-        or step_output.get("ssh_key_path")
-        or ssh_inv.get("key_path")
-        or vmaas_inv.get("ssh_key_path")
-    )
-
-    return {
-        "ssh_host": host,
-        "ssh_user": user,
-        "ssh_key_path": key_path,
-        # Optional metadata
-        "gpu_count": config.get("expected_gpus") or vmaas_inv.get("gpu_count") or ssh_inv.get("gpu_count") or 0,
-        "gpu_name": vmaas_inv.get("gpu_name") or ssh_inv.get("gpu_name"),
-        "instance_type": vmaas_inv.get("instance_type") or ssh_inv.get("instance_type"),
-        "ami_id": vmaas_inv.get("ami_id") or ssh_inv.get("ami_id"),
-    }
-
+from isvtest.validations.ssh_helpers import (
+    get_failed_subtests,
+    get_ssh_client,
+    get_ssh_config,
+    parse_cpu_range_count,
+    run_ssh_command,
+)
 
 # =============================================================================
 # Connectivity Validations
@@ -223,7 +96,7 @@ class SshConnectivityCheck(BaseValidation):
 
             ssh.close()
 
-            failed = _get_failed_subtests(self._subtest_results)
+            failed = get_failed_subtests(self._subtest_results)
             if failed:
                 self.set_failed(f"SSH subtests failed: {', '.join(failed)}")
             else:
@@ -297,7 +170,7 @@ class SshOsCheck(BaseValidation):
 
             ssh.close()
 
-            failed = _get_failed_subtests(self._subtest_results)
+            failed = get_failed_subtests(self._subtest_results)
             if failed:
                 self.set_failed(f"OS subtests failed: {', '.join(failed)}")
             elif expected_os and expected_os not in os_name:
@@ -365,7 +238,7 @@ class SshCpuInfoCheck(BaseValidation):
 
             ssh.close()
 
-            failed = _get_failed_subtests(self._subtest_results)
+            failed = get_failed_subtests(self._subtest_results)
             if failed:
                 self.set_failed(f"CPU/PCI subtests failed: {', '.join(failed)}")
             else:
@@ -443,7 +316,7 @@ class SshVcpuPinningCheck(BaseValidation):
             if exit_code == 0:
                 online_range = stdout.strip()
                 # Parse range like "0-3" to count
-                online_count = _parse_cpu_range_count(online_range)
+                online_count = parse_cpu_range_count(online_range)
                 all_online = online_count == vcpu_count
                 self.report_subtest(
                     "vcpu_online",
@@ -478,7 +351,7 @@ class SshVcpuPinningCheck(BaseValidation):
                     if len(parts) == 2:
                         node_name = parts[0].strip().replace("NUMA ", "").replace(" CPU(s)", "")
                         cpus = parts[1].strip()
-                        cpu_cnt = _parse_cpu_range_count(cpus) if cpus else 0
+                        cpu_cnt = parse_cpu_range_count(cpus) if cpus else 0
                         self.report_subtest(
                             f"numa_{node_name}",
                             cpu_cnt > 0,
@@ -517,7 +390,7 @@ class SshVcpuPinningCheck(BaseValidation):
             ssh.close()
 
             # Determine overall pass/fail
-            failed = _get_failed_subtests(self._subtest_results)
+            failed = get_failed_subtests(self._subtest_results)
             if failed:
                 self.set_failed(f"vCPU pinning subtests failed: {', '.join(failed)}")
             elif expected_vcpus and vcpu_count != expected_vcpus:
@@ -694,7 +567,7 @@ class SshPciBusCheck(BaseValidation):
 
             ssh.close()
 
-            failed = _get_failed_subtests(self._subtest_results)
+            failed = get_failed_subtests(self._subtest_results)
             if failed:
                 self.set_failed(f"PCI bus subtests failed: {', '.join(failed)}")
             elif not count_ok:
@@ -704,29 +577,6 @@ class SshPciBusCheck(BaseValidation):
 
         except Exception as e:
             self.set_failed(f"PCI bus check failed: {e}")
-
-
-def _parse_cpu_range_count(cpu_range: str) -> int:
-    """Parse a CPU range string like '0-3,5,7-9' and return total CPU count.
-
-    Args:
-        cpu_range: Comma-separated ranges (e.g., "0-3", "0-3,5,7-9")
-
-    Returns:
-        Total number of CPUs in the range
-    """
-    total = 0
-    for part in cpu_range.split(","):
-        part = part.strip()
-        if "-" in part:
-            bounds = part.split("-")
-            try:
-                total += int(bounds[1]) - int(bounds[0]) + 1
-            except (ValueError, IndexError):
-                pass
-        elif part.isdigit():
-            total += 1
-    return total
 
 
 # =============================================================================
@@ -1070,7 +920,7 @@ class SshGpuCheck(BaseValidation):
 
             ssh.close()
 
-            failed = _get_failed_subtests(self._subtest_results)
+            failed = get_failed_subtests(self._subtest_results)
             if failed:
                 self.set_failed(f"GPU subtests failed: {', '.join(failed)}")
             else:
@@ -1147,7 +997,7 @@ class SshDriverCheck(BaseValidation):
 
             ssh.close()
 
-            failed = _get_failed_subtests(self._subtest_results)
+            failed = get_failed_subtests(self._subtest_results)
             if failed:
                 self.set_failed(f"Driver subtests failed: {', '.join(failed)}")
             elif driver_found:

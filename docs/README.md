@@ -19,8 +19,7 @@ Welcome to the documentation for NVIDIA ISV Lab Tools - a collection of validati
 - [Configuration](guides/configuration.md) - Configuration file format and options
 - [External Validation Guide](guides/external-validation-guide.md) - Create custom validations without modifying the repo
 - [Remote Deployment](guides/remote-deployment.md) - Deploy and run tests on remote machines
-- [Workloads](guides/workloads.md) - Workload-based validation tests
-- [Local Development with MicroK8s](guides/local-development.md) - Running K8s tests locally
+- [Local Development](guides/local-development.md) - MicroK8s setup for local testing
 
 ### Contributing
 

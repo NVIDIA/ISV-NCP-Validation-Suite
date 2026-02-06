@@ -46,21 +46,16 @@ from isvtest.validations.network import (
 )
 
 __all__ = [
-    # IAM
     "AccessKeyAuthenticatedCheck",
     "AccessKeyCreatedCheck",
     "AccessKeyDisabledCheck",
     "AccessKeyRejectedCheck",
-    # Cluster
     "ClusterHealthCheck",
-    # Generic
     "FieldExistsCheck",
     "FieldValueCheck",
     "GpuOperatorInstalledCheck",
-    # Instance
     "InstanceCreatedCheck",
     "InstanceStateCheck",
-    # Network
     "NetworkConnectivityCheck",
     "NetworkProvisionedCheck",
     "NodeCountCheck",

@@ -29,7 +29,8 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
 
 import boto3
 from botocore.exceptions import ClientError
-from errors import handle_aws_errors
+from common.errors import handle_aws_errors
+from common.vpc import cleanup_vpc_resources, create_test_vpc
 
 
 def get_availability_zones(ec2: Any, count: int) -> list[str]:
@@ -37,34 +38,6 @@ def get_availability_zones(ec2: Any, count: int) -> list[str]:
     response = ec2.describe_availability_zones(Filters=[{"Name": "state", "Values": ["available"]}])
     azs = [az["ZoneName"] for az in response["AvailabilityZones"]]
     return azs[:count]
-
-
-def create_test_vpc(ec2: Any, cidr: str, name: str) -> dict[str, Any]:
-    """Create test VPC."""
-    result = {"passed": False}
-    try:
-        vpc = ec2.create_vpc(CidrBlock=cidr)
-        vpc_id = vpc["Vpc"]["VpcId"]
-
-        ec2.create_tags(
-            Resources=[vpc_id],
-            Tags=[
-                {"Key": "Name", "Value": name},
-                {"Key": "CreatedBy", "Value": "isvtest"},
-            ],
-        )
-
-        # Wait for VPC to be available
-        waiter = ec2.get_waiter("vpc_available")
-        waiter.wait(VpcIds=[vpc_id])
-
-        result["passed"] = True
-        result["vpc_id"] = vpc_id
-        result["message"] = f"Created VPC {vpc_id}"
-    except ClientError as e:
-        result["error"] = str(e)
-
-    return result
 
 
 def test_create_subnets(ec2: Any, vpc_id: str, cidr_base: str, azs: list[str], count: int) -> dict[str, Any]:
@@ -174,22 +147,6 @@ def test_route_table_exists(ec2: Any, vpc_id: str) -> dict[str, Any]:
     return result
 
 
-def cleanup_vpc(ec2: Any, vpc_id: str, subnet_ids: list[str]) -> None:
-    """Clean up test resources."""
-    # Delete subnets
-    for subnet_id in subnet_ids:
-        try:
-            ec2.delete_subnet(SubnetId=subnet_id)
-        except ClientError:
-            pass
-
-    # Delete VPC
-    try:
-        ec2.delete_vpc(VpcId=vpc_id)
-    except ClientError:
-        pass
-
-
 @handle_aws_errors
 def main() -> int:
     """Run subnet configuration tests across availability zones.
@@ -265,7 +222,7 @@ def main() -> int:
     finally:
         # Cleanup
         if vpc_id:
-            cleanup_vpc(ec2, vpc_id, subnet_ids)
+            cleanup_vpc_resources(ec2, vpc_id, subnet_ids=subnet_ids)
 
     print(json.dumps(result, indent=2))
     return 0 if result["success"] else 1

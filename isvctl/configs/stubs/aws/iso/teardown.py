@@ -37,8 +37,11 @@ import sys
 import time
 from typing import Any
 
+sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
+
 import boto3
 from botocore.exceptions import ClientError
+from common.errors import handle_aws_errors
 
 
 def terminate_instance(ec2_client: Any, instance_id: str) -> bool:
@@ -230,6 +233,7 @@ def delete_instance_profile(iam_client: Any, profile_name: str) -> bool:
     return success
 
 
+@handle_aws_errors
 def main() -> int:
     parser = argparse.ArgumentParser(description="Teardown ISO validation resources")
     parser.add_argument("--instance-id", help="EC2 instance ID to terminate")

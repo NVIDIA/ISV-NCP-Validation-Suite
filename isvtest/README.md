@@ -19,5 +19,4 @@ See [docs/packages/isvtest.md](../docs/packages/isvtest.md) for full documentati
 
 ## Related
 
-- [Workloads Guide](../docs/guides/workloads.md)
 - [Local Development](../docs/guides/local-development.md)

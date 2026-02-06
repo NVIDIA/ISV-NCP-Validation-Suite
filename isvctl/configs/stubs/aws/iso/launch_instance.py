@@ -32,119 +32,15 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
+
 import boto3
 from botocore.exceptions import ClientError
-
-
-def get_supported_azs(ec2_client: Any, instance_type: str) -> list[str]:
-    """Get availability zones that support the given instance type.
-
-    Args:
-        ec2_client: Boto3 EC2 client.
-        instance_type: EC2 instance type to check (e.g., 'g4dn.xlarge').
-
-    Returns:
-        List of availability zone names, or empty list if the query fails.
-    """
-    try:
-        response = ec2_client.describe_instance_type_offerings(
-            LocationType="availability-zone",
-            Filters=[{"Name": "instance-type", "Values": [instance_type]}],
-        )
-        return [offering["Location"] for offering in response.get("InstanceTypeOfferings", [])]
-    except ClientError as e:
-        print(f"Warning: Could not get AZ offerings: {e}", file=sys.stderr)
-        return []
-
-
-def get_default_vpc_and_subnet(ec2_client: Any, instance_type: str) -> tuple[str | None, str | None]:
-    """Get default VPC and a subnet in an AZ that supports the instance type."""
-    try:
-        # Get default VPC
-        vpcs = ec2_client.describe_vpcs(Filters=[{"Name": "is-default", "Values": ["true"]}])
-        if not vpcs["Vpcs"]:
-            print("No default VPC found", file=sys.stderr)
-            return None, None
-        vpc_id = vpcs["Vpcs"][0]["VpcId"]
-
-        # Get supported AZs for instance type
-        supported_azs = get_supported_azs(ec2_client, instance_type)
-        print(f"Supported AZs for {instance_type}: {supported_azs}", file=sys.stderr)
-
-        # Get subnets
-        subnets = ec2_client.describe_subnets(Filters=[{"Name": "vpc-id", "Values": [vpc_id]}])
-        if not subnets["Subnets"]:
-            print("No subnets in default VPC", file=sys.stderr)
-            return vpc_id, None
-
-        # Prefer subnets in supported AZs
-        for subnet in subnets["Subnets"]:
-            if not supported_azs or subnet["AvailabilityZone"] in supported_azs:
-                return vpc_id, subnet["SubnetId"]
-
-        # Fallback to first subnet
-        return vpc_id, subnets["Subnets"][0]["SubnetId"]
-
-    except ClientError as e:
-        print(f"Error getting VPC/subnet: {e}", file=sys.stderr)
-        return None, None
-
-
-def create_key_pair(ec2_client: Any, key_name: str, key_dir: Path, _retry: int = 0) -> Path | None:
-    """Create EC2 key pair and save to file."""
-    try:
-        response = ec2_client.create_key_pair(KeyName=key_name)
-        key_path = key_dir / f"{key_name}.pem"
-        key_path.write_text(response["KeyMaterial"])
-        key_path.chmod(0o600)
-        print(f"Created key pair: {key_name}", file=sys.stderr)
-        return key_path
-    except ClientError as e:
-        if e.response["Error"]["Code"] == "InvalidKeyPair.Duplicate":
-            if _retry >= 1:
-                print(f"Key pair {key_name} still exists after delete", file=sys.stderr)
-                return None
-            print(f"Key pair {key_name} already exists, deleting and recreating", file=sys.stderr)
-            ec2_client.delete_key_pair(KeyName=key_name)
-            return create_key_pair(ec2_client, key_name, key_dir, _retry + 1)
-        print(f"Failed to create key pair: {e}", file=sys.stderr)
-        return None
-
-
-def create_security_group(ec2_client: Any, vpc_id: str, name: str) -> str | None:
-    """Create security group allowing SSH."""
-    try:
-        response = ec2_client.create_security_group(
-            GroupName=name,
-            Description="ISV ISO validation security group",
-            VpcId=vpc_id,
-        )
-        sg_id = response["GroupId"]
-
-        # Allow SSH from anywhere (for testing)
-        ec2_client.authorize_security_group_ingress(
-            GroupId=sg_id,
-            IpPermissions=[
-                {
-                    "IpProtocol": "tcp",
-                    "FromPort": 22,
-                    "ToPort": 22,
-                    "IpRanges": [{"CidrIp": "0.0.0.0/0", "Description": "SSH"}],
-                }
-            ],
-        )
-        print(f"Created security group: {sg_id}", file=sys.stderr)
-        return sg_id
-    except ClientError as e:
-        if e.response["Error"]["Code"] == "InvalidGroup.Duplicate":
-            # Get existing group
-            response = ec2_client.describe_security_groups(
-                Filters=[{"Name": "group-name", "Values": [name]}, {"Name": "vpc-id", "Values": [vpc_id]}]
-            )
-            if response["SecurityGroups"]:
-                return response["SecurityGroups"][0]["GroupId"]
-        print(f"Failed to create security group: {e}", file=sys.stderr)
-        return None
+from common.ec2 import (
+    create_key_pair,
+    create_security_group,
+    get_default_vpc_and_subnets,
+)
 
 
 def create_instance_profile(iam_client: Any, name: str) -> str | None:
@@ -289,23 +185,26 @@ def main() -> int:
     profile_name = f"{args.name_prefix}-profile-{unique_id}"
 
     # Get VPC and subnet
-    vpc_id, subnet_id = get_default_vpc_and_subnet(ec2_client, args.instance_type)
-    if not vpc_id or not subnet_id:
-        result = {"success": False, "error": "Failed to get VPC/subnet"}
+    try:
+        vpc_id, subnet_list = get_default_vpc_and_subnets(ec2_client, args.instance_type)
+    except RuntimeError as e:
+        result = {"success": False, "error": str(e)}
         print(json.dumps(result))
         return 1
+    subnet_id = subnet_list[0]
 
     # Create key pair
     key_dir = Path.home() / ".ssh"
     key_dir.mkdir(exist_ok=True)
-    key_path = create_key_pair(ec2_client, key_name, key_dir)
-    if not key_path:
-        result = {"success": False, "error": "Failed to create key pair"}
+    try:
+        key_path = create_key_pair(ec2_client, key_name, key_dir)
+    except RuntimeError as e:
+        result = {"success": False, "error": str(e)}
         print(json.dumps(result))
         return 1
 
     # Create security group
-    sg_id = create_security_group(ec2_client, vpc_id, sg_name)
+    sg_id = create_security_group(ec2_client, vpc_id, sg_name, description="ISV ISO validation security group")
     if not sg_id:
         result = {"success": False, "error": "Failed to create security group"}
         print(json.dumps(result))

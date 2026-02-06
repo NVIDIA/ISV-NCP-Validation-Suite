@@ -116,10 +116,6 @@ commands:
       command: "./isvctl/stubs/k8s/teardown.sh"
       timeout: 30
 
-  # Skip Slurm for K8s-only validation (platform-level skip)
-  slurm:
-    skip: true
-
 # Test configuration
 tests:
   platform: kubernetes

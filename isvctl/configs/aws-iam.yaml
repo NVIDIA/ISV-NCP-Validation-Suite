@@ -51,11 +51,6 @@ commands:
           - "{{teardown_flag}}"
         timeout: 120
 
-  kubernetes:
-    skip: true
-  slurm:
-    skip: true
-
 tests:
   cluster_name: "aws-iam-validation"
   description: "AWS IAM user lifecycle validation"

@@ -24,43 +24,16 @@ import os
 import sys
 from typing import Any
 
+sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
+
 import boto3
 from botocore.exceptions import ClientError
-
-
-def get_architecture_for_instance_type(instance_type: str) -> str:
-    """Detect CPU architecture from instance type.
-
-    Args:
-        instance_type: EC2 instance type (e.g., "g5.xlarge", "g5g.xlarge")
-
-    Returns:
-        "arm64" for Graviton instances, "x86_64" otherwise
-    """
-    # Extract instance family (e.g., "g5g" from "g5g.xlarge")
-    family = instance_type.split(".")[0] if "." in instance_type else instance_type
-
-    # Graviton (ARM64) GPU instance families end with 'g' after the generation number
-    # Examples: g5g (Graviton2 + T4G GPU), c7g, m7g, r7g (non-GPU Graviton)
-    # Non-Graviton GPU: g4dn, g5, p3, p4, p5, p4d, p5
-    arm64_patterns = [
-        "g5g",  # Graviton2 with NVIDIA T4G
-        # Add more Graviton GPU families as they become available
-    ]
-
-    # Also check for general Graviton patterns (family ends with 'g' after number)
-    # e.g., c7g, m7g, r7g, t4g, but NOT g4dn, g5 (these are x86 GPU instances)
-    if family in arm64_patterns:
-        return "arm64"
-
-    # General Graviton detection: ends with 'g' and has a number before it
-    # This catches c7g, m7g, r7g, t4g, etc. but not g4dn, g5, p4d
-    if len(family) >= 2 and family[-1] == "g" and family[-2].isdigit():
-        # But exclude GPU families that start with 'g' or 'p' (those are x86 GPU)
-        if not family.startswith(("g", "p")):
-            return "arm64"
-
-    return "x86_64"
+from common.ec2 import (
+    create_key_pair,
+    create_security_group,
+    get_architecture_for_instance_type,
+    get_default_vpc_and_subnets,
+)
 
 
 def get_gpu_ami(ec2: Any, instance_type: str) -> str | None:
@@ -79,7 +52,6 @@ def get_gpu_ami(ec2: Any, instance_type: str) -> str | None:
 
     # AMI search patterns by architecture
     if architecture == "arm64":
-        # ARM64/Graviton GPU AMIs
         ami_patterns = [
             "Deep Learning Base OSS Nvidia Driver GPU AMI (Ubuntu 22.04)*",
             "Deep Learning AMI Graviton GPU PyTorch*Ubuntu 22.04*",
@@ -87,7 +59,6 @@ def get_gpu_ami(ec2: Any, instance_type: str) -> str | None:
         ]
         fallback_pattern = "ubuntu/images/hvm-ssd-gp3/ubuntu-jammy-22.04-arm64-server-*"
     else:
-        # x86_64 GPU AMIs (Intel/AMD)
         ami_patterns = [
             "Deep Learning Base OSS Nvidia Driver GPU AMI (Ubuntu 22.04)*",
             "Deep Learning Base GPU AMI (Ubuntu 22.04)*",
@@ -121,112 +92,6 @@ def get_gpu_ami(ec2: Any, instance_type: str) -> str | None:
     )
     images = sorted(response["Images"], key=lambda x: x["CreationDate"], reverse=True)
     return images[0]["ImageId"] if images else None
-
-
-def create_key_pair(ec2: Any, key_name: str) -> str | None:
-    """Create EC2 key pair and return path to key file."""
-    key_file = f"/tmp/{key_name}.pem"
-
-    # Check if key already exists
-    try:
-        ec2.describe_key_pairs(KeyNames=[key_name])
-        # Key exists, check if we have the file
-        if os.path.exists(key_file):
-            return key_file
-        # Key exists but no file - delete and recreate
-        ec2.delete_key_pair(KeyName=key_name)
-    except ClientError as e:
-        if e.response["Error"]["Code"] != "InvalidKeyPair.NotFound":
-            raise
-
-    # Create new key pair
-    response = ec2.create_key_pair(KeyName=key_name)
-    key_material = response["KeyMaterial"]
-
-    with open(key_file, "w") as f:
-        f.write(key_material)
-    os.chmod(key_file, 0o400)
-
-    return key_file
-
-
-def create_security_group(ec2: Any, vpc_id: str, name: str) -> str:
-    """Create security group allowing SSH."""
-    try:
-        response = ec2.create_security_group(
-            GroupName=name,
-            Description="ISV Test VM Security Group",
-            VpcId=vpc_id,
-        )
-        sg_id = response["GroupId"]
-
-        # Allow SSH from anywhere
-        ec2.authorize_security_group_ingress(
-            GroupId=sg_id,
-            IpPermissions=[
-                {
-                    "IpProtocol": "tcp",
-                    "FromPort": 22,
-                    "ToPort": 22,
-                    "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
-                }
-            ],
-        )
-        return sg_id
-    except ClientError as e:
-        if e.response["Error"]["Code"] == "InvalidGroup.Duplicate":
-            # Get existing group
-            sgs = ec2.describe_security_groups(
-                Filters=[
-                    {"Name": "group-name", "Values": [name]},
-                    {"Name": "vpc-id", "Values": [vpc_id]},
-                ]
-            )
-            return sgs["SecurityGroups"][0]["GroupId"]
-        raise
-
-
-def get_supported_azs(ec2: Any, instance_type: str) -> set[str]:
-    """Get availability zones that support the instance type."""
-    try:
-        response = ec2.describe_instance_type_offerings(
-            LocationType="availability-zone",
-            Filters=[{"Name": "instance-type", "Values": [instance_type]}],
-        )
-        return {offering["Location"] for offering in response["InstanceTypeOfferings"]}
-    except ClientError:
-        return set()  # If check fails, try all AZs
-
-
-def get_default_vpc_and_subnets(ec2: Any, instance_type: str) -> tuple[str, list[str]]:
-    """Get default VPC and subnets in AZs that support the instance type."""
-    vpcs = ec2.describe_vpcs(Filters=[{"Name": "is-default", "Values": ["true"]}])
-    if not vpcs["Vpcs"]:
-        raise RuntimeError("No default VPC found. Please specify --vpc-id and --subnet-id")
-
-    vpc_id = vpcs["Vpcs"][0]["VpcId"]
-
-    # Get AZs that support the instance type
-    supported_azs = get_supported_azs(ec2, instance_type)
-
-    subnets = ec2.describe_subnets(Filters=[{"Name": "vpc-id", "Values": [vpc_id]}])
-    if not subnets["Subnets"]:
-        raise RuntimeError("No subnets found in default VPC")
-
-    # Filter subnets to supported AZs, prioritizing them
-    subnet_list = []
-    for subnet in subnets["Subnets"]:
-        az = subnet["AvailabilityZone"]
-        subnet_id = subnet["SubnetId"]
-        if not supported_azs or az in supported_azs:
-            subnet_list.insert(0, subnet_id)  # Prioritize supported AZs
-        else:
-            subnet_list.append(subnet_id)  # Add unsupported at end as fallback
-
-    if not subnet_list:
-        raise RuntimeError("No subnets found in default VPC")
-
-    return vpc_id, subnet_list
 
 
 def main() -> int:

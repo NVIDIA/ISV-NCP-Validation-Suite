@@ -23,7 +23,7 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
 
 import boto3
 from botocore.exceptions import ClientError
-from errors import handle_aws_errors
+from common.errors import handle_aws_errors
 
 
 @handle_aws_errors

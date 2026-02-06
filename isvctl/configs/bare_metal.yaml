@@ -23,12 +23,6 @@ commands:
         command: "./stubs/bare_metal/teardown.sh"
         timeout: 30
 
-  kubernetes:
-    skip: true
-
-  slurm:
-    skip: true
-
 # =============================================================================
 # Test Configuration
 # =============================================================================

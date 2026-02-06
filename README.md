@@ -42,19 +42,19 @@ curl -fsSL -H "Authorization: Bearer ${NGC_API_KEY}" \
 See [docs/](docs/) for full documentation:
 
 - [Getting Started](docs/getting-started.md) - Installation and first steps
-- [Configuration Guide](docs/guides/configuration.md) - Config file format and options
+
+### Guides
+
+- [Configuration](docs/guides/configuration.md) - Config file format and options
+- [External Validation](docs/guides/external-validation-guide.md) - Create custom validations without modifying the repo
 - [Remote Deployment](docs/guides/remote-deployment.md) - Deploy and run tests remotely
+- [Local Development](docs/guides/local-development.md) - MicroK8s setup for local testing
 
 ### Package Reference
 
 - [isvctl](docs/packages/isvctl.md) - Controller documentation
 - [isvtest](docs/packages/isvtest.md) - Validation framework
 - [isvreporter](docs/packages/isvreporter.md) - Reporter documentation
-
-### Guides
-
-- [Workloads](docs/guides/workloads.md) - Workload-based validation tests
-- [Local Development](docs/guides/local-development.md) - MicroK8s setup for local testing
 
 ## Development
 

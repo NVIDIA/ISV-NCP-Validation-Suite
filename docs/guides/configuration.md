@@ -119,12 +119,6 @@ commands:
           - "{{steps.create_network.network_id}}"
         timeout: 300
 
-  # Skip other platforms
-  kubernetes:
-    skip: true
-  slurm:
-    skip: true
-
 tests:
   platform: network
   cluster_name: "aws-network-test"
@@ -336,6 +330,7 @@ steps:
 ```
 
 **Exit codes:**
+
 - `0` = Success
 - Non-zero = Failure
 
@@ -479,4 +474,3 @@ Available markers: `bare_metal`, `kubernetes`, `slurm`, `gpu`, `network`, `hardw
 
 - [Getting Started](../getting-started.md) - Installation and first steps
 - [Local Development](local-development.md) - Running tests locally
-- [Workloads Guide](workloads.md) - Workload-based tests

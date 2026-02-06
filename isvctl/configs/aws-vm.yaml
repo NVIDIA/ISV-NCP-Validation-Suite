@@ -70,13 +70,6 @@ commands:
           - "--delete-security-group"
         timeout: 600
 
-  kubernetes:
-    skip: true
-  slurm:
-    skip: true
-  network:
-    skip: true
-
 tests:
   platform: vm
   cluster_name: "aws-vm-validation"

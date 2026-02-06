@@ -163,11 +163,6 @@ commands:
         timeout: 300
         output_schema: teardown
 
-  kubernetes:
-    skip: true
-  slurm:
-    skip: true
-
 tests:
   cluster_name: "aws-network-validation"
   description: "Comprehensive AWS VPC and network validation tests"

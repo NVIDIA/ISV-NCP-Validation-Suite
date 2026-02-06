@@ -30,7 +30,7 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
 
 import boto3
 from botocore.exceptions import ClientError
-from errors import handle_aws_errors
+from common.errors import handle_aws_errors
 
 
 def test_create_vpc(ec2: Any, cidr: str, name: str) -> dict[str, Any]:

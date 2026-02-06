@@ -51,13 +51,6 @@ commands:
           AWS_TEARDOWN_ENABLED: "false"
           TF_AUTO_APPROVE: "true"
 
-  slurm:
-    skip: true
-  vm:
-    skip: true
-  network:
-    skip: true
-
 # =============================================================================
 # Test Configuration
 # =============================================================================

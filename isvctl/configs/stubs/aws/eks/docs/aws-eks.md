@@ -460,5 +460,4 @@ For running AWS VPC network validation tests (`-m network`), additional permissi
 
 - [Terraform Module README](../terraform/README.md) - Detailed Terraform configuration
 - [Configuration Guide](../../../../../../docs/guides/configuration.md) - Config file options
-- [Workloads Guide](../../../../../../docs/guides/workloads.md) - GPU workload tests
 - [Remote Deployment](../../../../../../docs/guides/remote-deployment.md) - Deploy to remote clusters

@@ -36,7 +36,8 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
 
 import boto3
 from botocore.exceptions import ClientError
-from errors import handle_aws_errors
+from common.errors import handle_aws_errors
+from common.vpc import create_test_vpc
 
 SSM_ROLE_TRUST_POLICY = """{
     "Version": "2012-10-17",
@@ -48,37 +49,6 @@ SSM_ROLE_TRUST_POLICY = """{
         }
     ]
 }"""
-
-
-def create_test_vpc(ec2: Any, cidr: str, name: str) -> dict[str, Any]:
-    """Create test VPC with DNS enabled."""
-    result = {"passed": False}
-    try:
-        vpc = ec2.create_vpc(CidrBlock=cidr)
-        vpc_id = vpc["Vpc"]["VpcId"]
-
-        ec2.create_tags(
-            Resources=[vpc_id],
-            Tags=[
-                {"Key": "Name", "Value": name},
-                {"Key": "CreatedBy", "Value": "isvtest"},
-            ],
-        )
-
-        waiter = ec2.get_waiter("vpc_available")
-        waiter.wait(VpcIds=[vpc_id])
-
-        # Enable DNS
-        ec2.modify_vpc_attribute(VpcId=vpc_id, EnableDnsSupport={"Value": True})
-        ec2.modify_vpc_attribute(VpcId=vpc_id, EnableDnsHostnames={"Value": True})
-
-        result["passed"] = True
-        result["vpc_id"] = vpc_id
-        result["message"] = f"Created VPC {vpc_id}"
-    except ClientError as e:
-        result["error"] = str(e)
-
-    return result
 
 
 def create_igw(ec2: Any, vpc_id: str) -> dict[str, Any]:
@@ -518,8 +488,8 @@ def main() -> int:
     role_name = profile_name = None
 
     try:
-        # Create VPC
-        vpc_result = create_test_vpc(ec2, args.cidr, f"isv-traffic-test-{suffix}")
+        # Create VPC (with DNS enabled for SSM)
+        vpc_result = create_test_vpc(ec2, args.cidr, f"isv-traffic-test-{suffix}", enable_dns=True)
         result["tests"]["create_vpc"] = vpc_result
         if not vpc_result["passed"]:
             raise RuntimeError("Failed to create VPC")

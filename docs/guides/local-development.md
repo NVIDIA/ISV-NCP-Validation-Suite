@@ -110,11 +110,6 @@ commands:
         command: "python ./cleanup.py"
         timeout: 60
 
-  kubernetes:
-    skip: true
-  slurm:
-    skip: true
-
 tests:
   platform: network
   cluster_name: "local-test"
@@ -206,5 +201,4 @@ uvx pre-commit run -a
 ## Related Documentation
 
 - [Configuration Guide](configuration.md) - Config file format and options
-- [Workloads Guide](workloads.md) - Workload-based validation tests
 - [Getting Started](../getting-started.md) - Installation guide

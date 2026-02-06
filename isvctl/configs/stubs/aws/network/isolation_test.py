@@ -31,35 +31,8 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
 
 import boto3
 from botocore.exceptions import ClientError
-from errors import handle_aws_errors
-
-
-def create_test_vpc(ec2: Any, cidr: str, name: str) -> dict[str, Any]:
-    """Create a test VPC."""
-    result = {"passed": False}
-    try:
-        vpc = ec2.create_vpc(CidrBlock=cidr)
-        vpc_id = vpc["Vpc"]["VpcId"]
-
-        ec2.create_tags(
-            Resources=[vpc_id],
-            Tags=[
-                {"Key": "Name", "Value": name},
-                {"Key": "CreatedBy", "Value": "isvtest"},
-            ],
-        )
-
-        waiter = ec2.get_waiter("vpc_available")
-        waiter.wait(VpcIds=[vpc_id])
-
-        result["passed"] = True
-        result["vpc_id"] = vpc_id
-        result["cidr"] = cidr
-        result["message"] = f"Created VPC {vpc_id}"
-    except ClientError as e:
-        result["error"] = str(e)
-
-    return result
+from common.errors import handle_aws_errors
+from common.vpc import create_test_vpc, delete_vpc
 
 
 def test_no_peering(ec2: Any, vpc_a: str, vpc_b: str) -> dict[str, Any]:
@@ -174,14 +147,6 @@ def test_sg_isolation(ec2: Any, vpc_id: str, other_cidr: str) -> dict[str, Any]:
     return result
 
 
-def cleanup_vpc(ec2: Any, vpc_id: str) -> None:
-    """Clean up test VPC."""
-    try:
-        ec2.delete_vpc(VpcId=vpc_id)
-    except ClientError:
-        pass
-
-
 @handle_aws_errors
 def main() -> int:
     parser = argparse.ArgumentParser(description="Test VPC isolation")
@@ -258,9 +223,9 @@ def main() -> int:
     finally:
         # Cleanup
         if vpc_a_id:
-            cleanup_vpc(ec2, vpc_a_id)
+            delete_vpc(ec2, vpc_a_id)
         if vpc_b_id:
-            cleanup_vpc(ec2, vpc_b_id)
+            delete_vpc(ec2, vpc_b_id)
 
     print(json.dumps(result, indent=2))
     return 0 if result["success"] else 1

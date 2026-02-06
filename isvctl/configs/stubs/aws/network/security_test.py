@@ -31,34 +31,8 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
 
 import boto3
 from botocore.exceptions import ClientError
-from errors import handle_aws_errors
-
-
-def create_test_vpc(ec2: Any, cidr: str, name: str) -> dict[str, Any]:
-    """Create test VPC."""
-    result = {"passed": False}
-    try:
-        vpc = ec2.create_vpc(CidrBlock=cidr)
-        vpc_id = vpc["Vpc"]["VpcId"]
-
-        ec2.create_tags(
-            Resources=[vpc_id],
-            Tags=[
-                {"Key": "Name", "Value": name},
-                {"Key": "CreatedBy", "Value": "isvtest"},
-            ],
-        )
-
-        waiter = ec2.get_waiter("vpc_available")
-        waiter.wait(VpcIds=[vpc_id])
-
-        result["passed"] = True
-        result["vpc_id"] = vpc_id
-        result["message"] = f"Created VPC {vpc_id}"
-    except ClientError as e:
-        result["error"] = str(e)
-
-    return result
+from common.errors import handle_aws_errors
+from common.vpc import cleanup_vpc_resources, create_test_vpc
 
 
 def test_sg_default_deny_inbound(ec2: Any, vpc_id: str) -> dict[str, Any]:
@@ -345,26 +319,6 @@ def test_sg_restricted_egress(ec2: Any, vpc_id: str) -> dict[str, Any]:
     return result
 
 
-def cleanup(ec2: Any, vpc_id: str, sg_ids: list[str], nacl_ids: list[str]) -> None:
-    """Clean up test resources."""
-    for sg_id in sg_ids:
-        try:
-            ec2.delete_security_group(GroupId=sg_id)
-        except ClientError:
-            pass
-
-    for nacl_id in nacl_ids:
-        try:
-            ec2.delete_network_acl(NetworkAclId=nacl_id)
-        except ClientError:
-            pass
-
-    try:
-        ec2.delete_vpc(VpcId=vpc_id)
-    except ClientError:
-        pass
-
-
 @handle_aws_errors
 def main() -> int:
     parser = argparse.ArgumentParser(description="Test security blocking rules")
@@ -444,7 +398,7 @@ def main() -> int:
     finally:
         # Cleanup
         if vpc_id:
-            cleanup(ec2, vpc_id, sg_ids, nacl_ids)
+            cleanup_vpc_resources(ec2, vpc_id, sg_ids=sg_ids, nacl_ids=nacl_ids)
 
     print(json.dumps(result, indent=2))
     return 0 if result["success"] else 1

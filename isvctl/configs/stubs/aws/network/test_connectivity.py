@@ -32,7 +32,7 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
 
 import boto3
 from botocore.exceptions import ClientError
-from errors import handle_aws_errors
+from common.errors import handle_aws_errors
 
 SSM_ROLE_TRUST_POLICY = """{
     "Version": "2012-10-17",

@@ -90,7 +90,7 @@ isvtest/src/isvtest/
 | `K8sNimHelmWorkload` | NIM Helm deployment + GenAI-Perf KPIs |
 | `K8sNimInferenceWorkload` | NIM inference validation |
 
-See [Workloads Guide](../guides/workloads.md) for detailed workload documentation.
+Each workload class has detailed docstrings covering config options, environment variables, and troubleshooting.
 
 ### L2 Tests - Extended Platform Validation (`workloads/k8s_platform_validator.py`)
 
@@ -207,7 +207,6 @@ uvx pre-commit run -a
 
 ## Related Documentation
 
-- [Workloads Guide](../guides/workloads.md) - Workload-based validation tests
 - [Local Development with MicroK8s](../guides/local-development.md) - Running K8s tests locally
 
 ## License

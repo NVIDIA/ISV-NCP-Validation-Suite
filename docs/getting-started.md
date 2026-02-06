@@ -131,4 +131,3 @@ See [Remote Deployment Guide](guides/remote-deployment.md) for details.
 - [Configuration Guide](guides/configuration.md) - Learn about configuration options
 - [Local Development](guides/local-development.md) - Running tests locally
 - [isvctl Reference](packages/isvctl.md) - Full isvctl documentation
-- [Workloads Guide](guides/workloads.md) - Workload-based validation tests

@@ -104,7 +104,7 @@ Config (YAML) → Script (any language) → JSON output → Validations (asserti
   - `context.py` - Jinja2 templating context for config variables and step outputs
 - `config/` - Configuration schema and validation
   - `schema.py` - Pydantic models for config structure (including StepConfig)
-  - `output_schemas.py` - JSON schema definitions for step outputs
+  - `output_schemas.py` - JSON schema definitions for step outputs (auto-detection + validation)
   - `merger.py` - Config file merging logic (supports `-f file1.yaml -f file2.yaml`)
 - `remote/` - Remote deployment functionality
   - `ssh.py` - SSH connection management with jumphost support
@@ -114,15 +114,15 @@ Config (YAML) → Script (any language) → JSON output → Validations (asserti
 
 **Configuration Files**: Located in `isvctl/configs/`
 
-- Configs define step-based commands or legacy setup/teardown
-- Support Jinja2 templating: `"{{steps.create_network.vpc_id}}"`, `"{{inventory.field}}"`
+- Configs define step-based commands with phases and validations
+- Support Jinja2 templating: `"{{steps.create_network.vpc_id}}"`, `"{{region}}"`
 - Multiple configs can be merged with later files overriding earlier ones
-- Scripts located in `isvctl/configs/scripts/`
 
-**Scripts**: Located in `isvctl/configs/scripts/`
+**Stubs (ISV Scripts)**: Located in `isvctl/configs/stubs/`
 
-- Python scripts that perform cloud operations and output JSON
-- Organized by cloud provider: `aws/eks/`, `aws/network/`, `aws/vm/`, etc.
+- Platform setup/teardown shell scripts: `stubs/k8s/setup.sh`, `stubs/slurm/setup.sh`, etc.
+- AWS Python scripts organized by domain: `stubs/aws/network/`, `stubs/aws/vm/`, `stubs/aws/iam/`, etc.
+- Shared AWS utilities: `stubs/aws/common/` (error handling, EC2 helpers, VPC helpers)
 - Each script is self-contained and can be run manually for debugging
 
 ### isvtest - Validation Framework
@@ -148,23 +148,31 @@ Config (YAML) → Script (any language) → JSON output → Validations (asserti
 
 **Validation Tests**: Located in `isvtest/src/isvtest/validations/`
 
-- Each test is a class inheriting from `BaseValidation`
-- Must implement `run()` method that calls `self.set_passed()` or `self.set_failed()`
-- Uses pytest markers for filtering: `@pytest.mark.kubernetes`, `@pytest.mark.workload`, etc.
-- Dynamically discovered by isvtest's discovery system
+Organized by category:
 
-**Step Assertions**: Located in `isvtest/src/isvtest/validations/step_assertions.py`
+- `generic.py` - `StepSuccessCheck`, `FieldExistsCheck`, `FieldValueCheck`, `SchemaValidation`
+- `cluster.py` - `ClusterHealthCheck`, `NodeCountCheck`, `GpuOperatorInstalledCheck`, `PerformanceCheck`
+- `instance.py` - `InstanceStateCheck`, `InstanceCreatedCheck`, `InstanceRebootCheck`
+- `network.py` - `NetworkProvisionedCheck`, `VpcCrudCheck`, `SubnetConfigCheck`, `SecurityBlockingCheck`, etc.
+- `iam.py` - `AccessKeyCreatedCheck`, `TenantCreatedCheck`, etc.
+- `ssh.py` - SSH-based validations (connectivity, OS, CPU, GPU, drivers, containers)
+- `ssh_helpers.py` - SSH connection and utility helpers (used by `ssh.py`)
+- `k8s_*.py` - Kubernetes-specific validations (nodes, GPU operator, scheduling, MIG)
+- `slurm_*.py` - Slurm-specific validations (partitions, jobs, GPU allocation)
+- `bm_*.py` - Bare metal validations (CUDA, driver, GPU)
 
-- Simple assertion-based validations for step outputs
-- Check JSON fields: `FieldExistsCheck`, `FieldValueCheck`
-- Check success: `StepSuccessCheck` (auto-detects teardown by output fields)
-- Platform-specific: `ClusterHealthCheck`, `NodeCountCheck`, `InstanceStateCheck`
+Each validation class:
+- Inherits from `BaseValidation`
+- Implements `run()` method that calls `self.set_passed()` or `self.set_failed()`
+- Uses pytest markers for filtering: `@pytest.mark.kubernetes`, `@pytest.mark.ssh`, etc.
+- Is dynamically discovered by isvtest's discovery system
 
 **Workloads**: Located in `isvtest/src/isvtest/workloads/`
 
 - Long-running validation tests (NIM inference, NCCL benchmarks, stress tests)
 - Includes Kubernetes manifests and helper scripts
 - Marked with `@pytest.mark.workload` and `@pytest.mark.slow`
+- Each workload class has detailed docstrings covering config options and troubleshooting
 
 **Test Configuration**:
 
@@ -257,12 +265,12 @@ def main() -> int:
     parser.add_argument("--region", default="us-west-2")
     args = parser.parse_args()
 
-    result = {"success": False}
+    result = {"success": False, "platform": "network"}
 
     try:
         ec2 = boto3.client("ec2", region_name=args.region)
         vpc = ec2.create_vpc(CidrBlock="10.0.0.0/16")
-        result["vpc_id"] = vpc["Vpc"]["VpcId"]
+        result["network_id"] = vpc["Vpc"]["VpcId"]
         result["success"] = True
     except Exception as e:
         result["error"] = str(e)
@@ -281,24 +289,31 @@ version: "1.0"
 
 commands:
   network:
+    phases: ["setup", "teardown"]
     steps:
       - name: create_network
-        command: "python ./scripts/aws/network/create_vpc.py"
+        phase: setup
+        command: "python ./stubs/aws/network/create_vpc.py"
         args: ["--name", "test-vpc", "--region", "{{region}}"]
         timeout: 300
-        validations:
-          - NetworkProvisionedCheck: {}
 
       - name: teardown
-        command: "python ./scripts/aws/network/teardown.py"
-        args: ["--vpc-id", "{{steps.create_network.vpc_id}}"]
-        validations:
-          - StepSuccessCheck: {}
+        phase: teardown
+        command: "python ./stubs/aws/network/teardown.py"
+        args: ["--vpc-id", "{{steps.create_network.network_id}}"]
 
 tests:
   platform: network
+  cluster_name: "network-test"
   settings:
     region: "us-west-2"
+
+  validations:
+    network:
+      - NetworkProvisionedCheck:
+          step: create_network
+      - StepSuccessCheck:
+          step: teardown
 ```
 
 ### Remote Deployment Flow
@@ -335,6 +350,7 @@ tests:
 - Workspace root `pyproject.toml` defines workspace members
 - Each package has its own `pyproject.toml` with dependencies
 - All source code in `src/` subdirectory per package
-- Config examples in `isvctl/configs/`
-- Scripts in `isvctl/configs/scripts/`
+- Config files in `isvctl/configs/`
+- ISV stubs (scripts) in `isvctl/configs/stubs/`
+- Shared AWS utilities in `isvctl/configs/stubs/aws/common/`
 - Schemas in `isvctl/schemas/` (JSON Schema files)

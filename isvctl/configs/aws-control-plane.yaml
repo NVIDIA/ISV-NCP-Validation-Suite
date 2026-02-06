@@ -145,11 +145,6 @@ commands:
         timeout: 60
         output_schema: teardown
 
-  kubernetes:
-    skip: true
-  slurm:
-    skip: true
-
 tests:
   platform: control_plane
   cluster_name: "aws-control-plane-validation"

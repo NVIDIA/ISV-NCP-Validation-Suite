@@ -16,14 +16,14 @@ from __future__ import annotations
 import os
 from typing import ClassVar
 
-from isvtest.core.validation import BaseValidation
-from isvtest.validations.ssh_helpers import (
+from isvtest.core.ssh import (
     get_failed_subtests,
     get_ssh_client,
     get_ssh_config,
     parse_cpu_range_count,
     run_ssh_command,
 )
+from isvtest.core.validation import BaseValidation
 
 # =============================================================================
 # Connectivity Validations

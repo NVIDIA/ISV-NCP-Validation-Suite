@@ -32,6 +32,9 @@ class TestTarArchive:
             ".ruff_cache",
             "*.pyc",
             ".git",
+            ".terraform",
+            "*.tfstate",
+            "*.tfstate.backup",
         ]
         assert DEFAULT_EXCLUDES == expected
 

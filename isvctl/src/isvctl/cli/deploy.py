@@ -23,6 +23,7 @@ from isvreporter.platform import get_platform_from_config
 from isvctl.cli import setup_logging
 from isvctl.orchestrator.loop import Phase
 from isvctl.remote import SCPTransfer, SSHClient, TarArchive
+from isvctl.remote.archive import DEFAULT_EXCLUDES as DEFAULT_ARCHIVE_EXCLUDES
 from isvctl.remote.archive import ArchiveError
 from isvctl.remote.transfer import SCPTransferError
 from isvctl.reporting import check_upload_credentials, create_test_run, update_test_run
@@ -38,16 +39,6 @@ DEFAULT_ARCHIVE_PATHS = [
     "pyproject.toml",
     "uv.lock",
 ]
-
-# Default patterns to exclude from archive
-DEFAULT_ARCHIVE_EXCLUDES = [
-    ".venv",
-    "__pycache__",
-    ".pytest_cache",
-    ".ruff_cache",
-    "*.pyc",
-]
-
 
 app = typer.Typer(
     name="deploy",

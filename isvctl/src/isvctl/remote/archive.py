@@ -18,6 +18,9 @@ DEFAULT_EXCLUDES: list[str] = [
     ".ruff_cache",
     "*.pyc",
     ".git",
+    ".terraform",
+    "*.tfstate",
+    "*.tfstate.backup",
 ]
 
 

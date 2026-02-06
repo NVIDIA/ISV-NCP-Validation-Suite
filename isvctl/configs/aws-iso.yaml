@@ -161,8 +161,4 @@ tests:
 
   exclude:
     markers:
-      - kubernetes
-      - slurm
-      - network
-      - vm
-      - workload # Exclude stress test by default
+      - workload

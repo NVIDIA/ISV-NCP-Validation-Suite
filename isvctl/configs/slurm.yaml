@@ -118,6 +118,4 @@ tests:
             timeout: 60
 
   exclude:
-    markers:
-      - bare_metal
-      - kubernetes
+    markers: []

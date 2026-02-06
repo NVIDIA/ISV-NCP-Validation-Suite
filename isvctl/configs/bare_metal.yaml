@@ -48,6 +48,4 @@ tests:
             expected_compute_capability: "8.0"
 
   exclude:
-    markers:
-      - kubernetes
-      - slurm
+    markers: []

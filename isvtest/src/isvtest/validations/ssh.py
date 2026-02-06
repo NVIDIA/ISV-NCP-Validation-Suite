@@ -16,8 +16,6 @@ from __future__ import annotations
 import os
 from typing import ClassVar
 
-import pytest
-
 from isvtest.core.validation import BaseValidation
 from isvtest.validations.ssh_helpers import (
     get_failed_subtests,
@@ -32,7 +30,6 @@ from isvtest.validations.ssh_helpers import (
 # =============================================================================
 
 
-@pytest.mark.ssh
 class SshConnectivityCheck(BaseValidation):
     """Test SSH connectivity to remote host.
 
@@ -111,7 +108,6 @@ class SshConnectivityCheck(BaseValidation):
 # =============================================================================
 
 
-@pytest.mark.ssh
 class SshOsCheck(BaseValidation):
     """Check OS details via SSH.
 
@@ -182,7 +178,6 @@ class SshOsCheck(BaseValidation):
             self.set_failed(f"OS check failed: {e}")
 
 
-@pytest.mark.ssh
 class SshCpuInfoCheck(BaseValidation):
     """Check CPU and system configuration via SSH.
 
@@ -253,7 +248,6 @@ class SshCpuInfoCheck(BaseValidation):
 # =============================================================================
 
 
-@pytest.mark.ssh
 class SshVcpuPinningCheck(BaseValidation):
     """Validate vCPU pinning and NUMA affinity on the host.
 
@@ -402,8 +396,6 @@ class SshVcpuPinningCheck(BaseValidation):
             self.set_failed(f"vCPU pinning check failed: {e}")
 
 
-@pytest.mark.ssh
-@pytest.mark.gpu
 class SshPciBusCheck(BaseValidation):
     """Validate PCI bus configuration for GPU devices.
 
@@ -584,7 +576,6 @@ class SshPciBusCheck(BaseValidation):
 # =============================================================================
 
 
-@pytest.mark.ssh
 class SshHostSoftwareCheck(BaseValidation):
     """Validate that the correct host software stack is installed.
 
@@ -841,8 +832,6 @@ class SshHostSoftwareCheck(BaseValidation):
 # =============================================================================
 
 
-@pytest.mark.ssh
-@pytest.mark.gpu
 class SshGpuCheck(BaseValidation):
     """Test GPU visibility via SSH.
 
@@ -930,8 +919,6 @@ class SshGpuCheck(BaseValidation):
             self.set_failed(f"GPU check failed: {e}")
 
 
-@pytest.mark.ssh
-@pytest.mark.gpu
 class SshDriverCheck(BaseValidation):
     """Check kernel and NVIDIA drivers via SSH.
 
@@ -1015,9 +1002,6 @@ class SshDriverCheck(BaseValidation):
 
 
 # FIXME: The test is a placeholder, we should have better approach.
-@pytest.mark.ssh
-@pytest.mark.gpu
-@pytest.mark.workload
 class SshGpuStressCheck(BaseValidation):
     """Run GPU stress test via SSH.
 
@@ -1036,10 +1020,6 @@ class SshGpuStressCheck(BaseValidation):
         self.set_passed("GPU stress completed (placeholder)")
 
 
-@pytest.mark.ssh
-@pytest.mark.gpu
-@pytest.mark.workload
-@pytest.mark.slow
 class SshContainerRuntimeCheck(BaseValidation):
     """Container runtime and NVIDIA Docker check.
 

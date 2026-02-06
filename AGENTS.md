@@ -85,6 +85,7 @@ Config (YAML) → Script (any language) → JSON output → Validations (asserti
 ```
 
 **Benefits:**
+
 - Language-agnostic: Scripts can be Python, Bash, Go, etc.
 - Simple validations: Just check JSON fields, no cloud SDK code
 - Reusable: Same script works across configs
@@ -130,6 +131,7 @@ Config (YAML) → Script (any language) → JSON output → Validations (asserti
 **Entry Point**: `isvtest/src/isvtest/main.py` - Pytest integration layer
 
 **Key Functions**:
+
 - `run_validations_via_pytest()` - Bridge for isvctl to run validations via native pytest
   - Transforms validation configs to pytest-compatible format
   - Captures detailed results in-memory (no temp files)
@@ -162,16 +164,17 @@ Organized by category:
 - `bm_*.py` - Bare metal validations (CUDA, driver, GPU)
 
 Each validation class:
+
 - Inherits from `BaseValidation`
 - Implements `run()` method that calls `self.set_passed()` or `self.set_failed()`
-- Uses pytest markers for filtering: `@pytest.mark.kubernetes`, `@pytest.mark.ssh`, etc.
+- Uses `markers: ClassVar[list[str]]` for filtering (e.g., `["kubernetes"]`, `["ssh", "gpu"]`)
 - Is dynamically discovered by isvtest's discovery system
 
 **Workloads**: Located in `isvtest/src/isvtest/workloads/`
 
 - Long-running validation tests (NIM inference, NCCL benchmarks, stress tests)
 - Includes Kubernetes manifests and helper scripts
-- Marked with `@pytest.mark.workload` and `@pytest.mark.slow`
+- Use `markers: ClassVar[list[str]] = ["workload", "slow"]` for filtering
 - Each workload class has detailed docstrings covering config options and troubleshooting
 
 **Test Configuration**:
@@ -221,7 +224,7 @@ Each validation class:
 
 1. Create a new file in `isvtest/src/isvtest/validations/`
 2. Inherit from `BaseValidation` and implement `run()` method
-3. Add pytest markers for filtering (e.g., `@pytest.mark.kubernetes`)
+3. Set `markers: ClassVar[list[str]]` for filtering (e.g., `["kubernetes"]`)
 4. Use `self.run_command()` to execute commands
 5. Call `self.set_passed()` or `self.set_failed()` to set test result
 
@@ -231,12 +234,12 @@ Example:
 from isvtest.core.validation import BaseValidation
 import pytest
 
-@pytest.mark.kubernetes
 class K8sMyCheck(BaseValidation):
     """Check something in Kubernetes."""
 
-    description = "Validates my Kubernetes component"
-    timeout = 60
+    description: ClassVar[str] = "Validates my Kubernetes component"
+    timeout: ClassVar[int] = 60
+    markers: ClassVar[list[str]] = ["kubernetes"]
 
     def run(self) -> None:
         result = self.run_command("kubectl get nodes")

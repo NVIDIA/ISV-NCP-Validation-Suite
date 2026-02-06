@@ -82,6 +82,4 @@ tests:
         - StepSuccessCheck: {}
 
   exclude:
-    markers:
-      - kubernetes
-      - slurm
+    markers: []

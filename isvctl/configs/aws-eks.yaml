@@ -133,6 +133,5 @@ tests:
   exclude:
     markers:
       - slow
-      - slurm
       - workload
       - l2

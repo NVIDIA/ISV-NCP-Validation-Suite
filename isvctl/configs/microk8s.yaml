@@ -146,7 +146,6 @@ tests:
   exclude:
     markers:
       - slow
-      - slurm
       - workload
       - reframe
       - l2

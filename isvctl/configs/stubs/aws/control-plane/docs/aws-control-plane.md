@@ -14,39 +14,39 @@ The control plane validation tests verify:
 
 - **Scripts**: Platform-specific (boto3) - perform CRUD operations, output JSON
 - **Validations**: Platform-agnostic - check JSON output against schemas
-- **Phases**: Setup → Test → Teardown
+- **Phases**: Setup -> Test -> Teardown
 
 ## Architecture
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    AWS Control Plane Validation                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  SETUP PHASE                                                            │
-│  ┌────────────────┐  ┌─────────────────────┐  ┌───────────────────┐     │
-│  │ check_api.py   │  │ create_access_key.py│  │ create_tenant.py  │     │
-│  │ → api_health   │  │ → access_key schema │  │ → tenant schema   │     │
-│  └────────────────┘  └─────────────────────┘  └───────────────────┘     │
-│                                                                         │
-│  TEST PHASE                                                             │
-│  ┌─────────────────────┐  ┌──────────────────────┐  ┌─────────────────┐ │
-│  │ test_access_key.py  │  │ disable_access_key.py│  │ verify_key_     │ │
-│  │ → auth_result       │  │ → access_key_status  │  │ rejected.py     │ │
-│  └─────────────────────┘  └──────────────────────┘  │ → auth_rejection│ │
-│                                                     └─────────────────┘ │
-│  ┌─────────────────────┐  ┌─────────────────────┐                       │
-│  │ list_tenants.py     │  │ get_tenant.py       │                       │
-│  │ → tenant_list       │  │ → tenant schema     │                       │
-│  └─────────────────────┘  └─────────────────────┘                       │
-│                                                                         │
-│  TEARDOWN PHASE                                                         │
-│  ┌──────────────────────┐  ┌─────────────────────┐                      │
-│  │ delete_access_key.py │  │ delete_tenant.py    │                      │
-│  │ → teardown schema    │  │ → teardown schema   │                      │
-│  └──────────────────────┘  └─────────────────────┘                      │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    AWS Control Plane Validation                          │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  SETUP PHASE                                                             │
+│  ┌────────────────┐  ┌─────────────────────┐  ┌───────────────────┐      │
+│  │ check_api.py   │  │ create_access_key.py│  │ create_tenant.py  │      │
+│  │ -> api_health  │  │ -> access_key schema│  │ -> tenant schema  │      │
+│  └────────────────┘  └─────────────────────┘  └───────────────────┘      │
+│                                                                          │
+│  TEST PHASE                                                              │
+│  ┌─────────────────────┐  ┌──────────────────────┐  ┌──────────────────┐ │
+│  │ test_access_key.py  │  │ disable_access_key.py│  │ verify_key_      │ │
+│  │ -> auth_result      │  │ -> access_key_status │  │ rejected.py      │ │
+│  └─────────────────────┘  └──────────────────────┘  │ -> auth_rejection│ │
+│                                                     └──────────────────┘ │
+│  ┌─────────────────────┐  ┌─────────────────────┐                        │
+│  │ list_tenants.py     │  │ get_tenant.py       │                        │
+│  │ -> tenant_list      │  │ -> tenant schema    │                        │
+│  └─────────────────────┘  └─────────────────────┘                        │
+│                                                                          │
+│  TEARDOWN PHASE                                                          │
+│  ┌──────────────────────┐  ┌─────────────────────┐                       │
+│  │ delete_access_key.py │  │ delete_tenant.py    │                       │
+│  │ -> teardown schema   │  │ -> teardown schema  │                       │
+│  └──────────────────────┘  └─────────────────────┘                       │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Scripts

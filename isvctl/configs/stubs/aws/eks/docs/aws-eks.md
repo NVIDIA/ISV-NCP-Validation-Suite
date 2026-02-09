@@ -79,7 +79,7 @@ git clone <repository-url>
 cd nv-isv-tools
 uv sync
 
-# Run full validation (setup → test → teardown)
+# Run full validation (setup -> test -> teardown)
 # This runs all three phases: setup provisions/queries cluster, test runs validations
 NGC_NIM_API_KEY=nvapi-XXXXX \
   uv run isvctl test run -f isvctl/configs/aws-eks.yaml
@@ -190,7 +190,7 @@ The test phase runs validation checks and workloads.
 #### Run All Phases (Recommended)
 
 ```bash
-# Runs: setup → test → teardown
+# Runs: setup -> test -> teardown
 # Teardown is disabled by default, so resources are preserved
 uv run isvctl test run -f isvctl/configs/aws-eks.yaml
 ```
@@ -327,10 +327,10 @@ export TF_VAR_region=us-west-2
 export TF_VAR_gpu_node_instance_types='["g5.xlarge"]'
 export TF_VAR_gpu_node_desired_size=1
 
-# Run all phases: setup → test → teardown
+# Run all phases: setup -> test -> teardown
 # Setup detects existing cluster and skips provisioning if it exists
 # Teardown is disabled by default (AWS_TEARDOWN_ENABLED=false)
-echo "=== RUNNING VALIDATION (setup → test → teardown) ==="
+echo "=== RUNNING VALIDATION (setup -> test -> teardown) ==="
 uv run isvctl test run -f isvctl/configs/aws-eks.yaml
 
 # Phase 3: Cleanup (optional - uncomment to destroy)

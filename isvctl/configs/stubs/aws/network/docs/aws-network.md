@@ -58,15 +58,15 @@ The most comprehensive test actually sends real network traffic:
 ┌─────────────────────────────────────────────────────────────────┐
 │                          Test VPC                               │
 │                                                                 │
-│  ┌─────────────┐     ping ✓      ┌────────────────────────────┐ │
+│  ┌─────────────┐   ping (ok)     ┌────────────────────────────┐ │
 │  │   Source    │ ───────────────▶│ Target (SG allows ICMP)    │ │
 │  │ (SSM agent) │                 └────────────────────────────┘ │
-│  │             │     ping ✗      ┌────────────────────────────┐ │
+│  │             │  ping (blocked) ┌────────────────────────────┐ │
 │  │             │ ───────────────▶│ Target (SG blocks ICMP)    │ │
 │  │             │                 └────────────────────────────┘ │
 │  │             │                                                │
-│  │             │ ──── ping 8.8.8.8 ────▶ Internet (ICMP) ✓      │
-│  │             │ ── curl amazonaws ────▶ Internet (HTTPS) ✓     │
+│  │             │ ──── ping 8.8.8.8 ────▶ Internet (ICMP) (ok)   │
+│  │             │ ── curl amazonaws ────▶ Internet (HTTPS) (ok)  │
 │  └─────────────┘                                                │
 │         │                                                       │
 │         ▼                                                       │

@@ -395,6 +395,6 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
             f"  Out of Bounds: {result.out_of_bounds} (OK)"
         )
         if min_bus_bw > 0:
-            msg += f"\n  Minimum Required: {min_bus_bw} GB/s ✓"
+            msg += f"\n  Minimum Required: {min_bus_bw} GB/s"
 
         self.set_passed(msg)

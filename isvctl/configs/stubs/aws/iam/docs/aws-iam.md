@@ -105,7 +105,18 @@ Note: The resource restriction (`isv-test-*`) limits operations to test users on
 
 ## For Other Providers
 
-To implement IAM validation for a different provider (Azure AD, Okta, etc.):
+To implement IAM validation for a different provider,
+**start with the template**: [`configs/templates/`](../../../../templates/README.md) contains
+a provider-agnostic `iam.yaml` and skeleton stub scripts you can copy and fill in.
+
+```bash
+# Quickest path: copy the template, implement the stubs
+cp -r isvctl/configs/templates/ isvctl/configs/my-isv/
+# Edit: my-isv/stubs/iam/create_user.py, test_credentials.py, delete_user.py
+uv run isvctl test run -f isvctl/configs/my-isv/iam.yaml
+```
+
+For more advanced integration, see the options below:
 
 ### Option A: YAML Configuration (zero code)
 

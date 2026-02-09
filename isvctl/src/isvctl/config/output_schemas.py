@@ -1,7 +1,7 @@
 """Output schema registry for step-based command execution.
 
 This module provides:
-1. Step name → Schema mapping for auto-detection
+1. Step name -> Schema mapping for auto-detection
 2. Built-in JSON schemas for validating command output
 3. Registration API for custom schemas and mappings
 
@@ -22,33 +22,33 @@ from typing import Any
 
 import jsonschema
 
-# Step name → Schema mapping for auto-detection
+# Step name -> Schema mapping for auto-detection
 # The step name determines which schema is used for validation
 STEP_SCHEMA_MAPPING: dict[str, str | None] = {
-    # Cluster operations → "cluster" schema
+    # Cluster operations -> "cluster" schema
     "provision_cluster": "cluster",
     "create_cluster": "cluster",
     "setup_cluster": "cluster",
-    # Network operations → "network" schema
+    # Network operations -> "network" schema
     "create_network": "network",
     "provision_network": "network",
     "create_vpc": "network",
     "setup_network": "network",
-    # Instance/VM operations → "instance" schema
+    # Instance/VM operations -> "instance" schema
     "launch_instance": "instance",
     "create_instance": "instance",
     "provision_vm": "instance",
     "create_vm": "instance",
-    # GPU setup → "gpu_setup" schema
+    # GPU setup -> "gpu_setup" schema
     "install_gpu_operator": "gpu_setup",
     "setup_gpu": "gpu_setup",
     "install_drivers": "gpu_setup",
-    # Workload execution → "workload_result" schema
+    # Workload execution -> "workload_result" schema
     "run_workload": "workload_result",
     "run_test": "workload_result",
     "run_benchmark": "workload_result",
     "execute_workload": "workload_result",
-    # Teardown operations → "teardown" schema
+    # Teardown operations -> "teardown" schema
     "teardown": "teardown",
     "cleanup": "teardown",
     "destroy": "teardown",
@@ -628,7 +628,7 @@ def validate_output(output: dict[str, Any], schema_name: str) -> tuple[bool, lis
 
 
 def register_step_mapping(step_name: str, schema_name: str | None) -> None:
-    """Register a custom step name → schema mapping.
+    """Register a custom step name -> schema mapping.
 
     ISVs can use this to map their custom step names to schemas.
 
@@ -672,9 +672,9 @@ def list_schemas() -> list[str]:
 
 
 def list_step_mappings() -> dict[str, str | None]:
-    """List all step name → schema mappings.
+    """List all step name -> schema mappings.
 
     Returns:
-        Dictionary of step_name → schema_name mappings
+        Dictionary of step_name -> schema_name mappings
     """
     return dict(STEP_SCHEMA_MAPPING)

@@ -17,8 +17,8 @@ def get_k8s_provider() -> str:
 
     Detection order:
     1. Use K8S_PROVIDER environment variable if set
-    2. Check if 'kubectl' command exists → use kubectl
-    3. Check if 'microk8s kubectl' command exists → use microk8s
+    2. Check if 'kubectl' command exists -> use kubectl
+    3. Check if 'microk8s kubectl' command exists -> use microk8s
     4. Default to kubectl
 
     This function caches the result to avoid repeated detection.

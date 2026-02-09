@@ -6,7 +6,7 @@ This file provides guidance to AI coding assistants when working with code in th
 
 NVIDIA ISV Lab Tools - Validation and management tools for NVIDIA ISV Lab GPU cluster environments. A monorepo containing three Python packages managed as a uv workspace:
 
-- **isvctl** - Unified CLI controller for cluster lifecycle orchestration (setup → test → teardown)
+- **isvctl** - Unified CLI controller for cluster lifecycle orchestration (setup -> test -> teardown)
 - **isvtest** - Internal validation framework engine (pytest-based with custom discovery)
 - **isvreporter** - Test results reporter for ISV Lab Service API
 
@@ -81,7 +81,7 @@ The framework uses a **step-based execution model** where:
 3. **Validations check JSON** - Simple assertions verify the JSON output
 
 ```
-Config (YAML) → Script (any language) → JSON output → Validations (assertions)
+Config (YAML) -> Script (any language) -> JSON output -> Validations (assertions)
 ```
 
 **Benefits:**
@@ -99,7 +99,7 @@ Config (YAML) → Script (any language) → JSON output → Validations (asserti
 
 - `cli/` - Subcommand implementations (test, deploy, clean, docs, report)
 - `orchestrator/` - Lifecycle orchestration engine
-  - `loop.py` - Main orchestration loop (setup → test → teardown phases)
+  - `loop.py` - Main orchestration loop (setup -> test -> teardown phases)
   - `step_executor.py` - Step execution and validation orchestration (delegates to pytest)
   - `commands.py` - Command execution with timeout handling
   - `context.py` - Jinja2 templating context for config variables and step outputs

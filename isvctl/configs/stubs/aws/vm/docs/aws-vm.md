@@ -60,7 +60,7 @@ The AWS VM validation tests verify:
                                    │
                                    ▼
 ┌────────────────────────────────────────────────────────────────────┐
-│  1️⃣ launch_instance (SETUP phase)                                  │
+│  1. launch_instance (SETUP phase)                                  │
 │  ┌─────────────────────────────────────────────────────────────┐   │
 │  │ Find GPU AMI ─▶ Create Key Pair ─▶ Create SG ─▶ Launch EC2  │   │
 │  │                                                             │   │
@@ -74,7 +74,7 @@ The AWS VM validation tests verify:
                                    │
                                    ▼
 ┌────────────────────────────────────────────────────────────────────┐
-│  2️⃣ reboot_instance (SETUP phase)                                  │
+│  2. reboot_instance (SETUP phase)                                  │
 │  ┌─────────────────────────────────────────────────────────────┐   │
 │  │ Verify Running ─▶ Reboot EC2 API ─▶ Wait Status OK ─▶ SSH   │   │
 │  │                                                             │   │
@@ -90,7 +90,7 @@ The AWS VM validation tests verify:
                                    │
                                    ▼
 ┌────────────────────────────────────────────────────────────────────┐
-│  3️⃣ teardown (TEARDOWN phase)                                      │
+│  3. teardown (TEARDOWN phase)                                      │
 │  ┌─────────────────────────────────────────────────────────────┐   │
 │  │ Terminate Instance ─▶ Delete Key Pair ─▶ Delete SG          │   │
 │  │                                                             │   │

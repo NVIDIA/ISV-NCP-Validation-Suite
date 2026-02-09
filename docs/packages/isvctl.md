@@ -65,7 +65,7 @@ isvctl/
 ### Run Validation
 
 ```bash
-# Full lifecycle: setup (query inventory) → test → teardown
+# Full lifecycle: setup (query inventory) -> test -> teardown
 isvctl test run -f isvctl/configs/k8s.yaml
 
 # Run only the test phase (skip inventory query)

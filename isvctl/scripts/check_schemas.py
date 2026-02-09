@@ -50,16 +50,16 @@ def check_schemas() -> bool:
     for filename, expected_content in generated.items():
         schema_path = schema_dir / filename
         if not schema_path.exists():
-            print(f"❌ {filename} does not exist")
+            print(f"FAIL: {filename} does not exist")
             all_in_sync = False
             continue
 
         actual_content = schema_path.read_text()
         if actual_content != expected_content:
-            print(f"❌ {filename} is out of sync")
+            print(f"FAIL: {filename} is out of sync")
             all_in_sync = False
         else:
-            print(f"✅ {filename} is in sync")
+            print(f"OK: {filename} is in sync")
 
     if not all_in_sync:
         print("\nTo regenerate schemas, run:")
@@ -76,7 +76,7 @@ def write_schemas() -> None:
     for filename, content in generated.items():
         schema_path = schema_dir / filename
         schema_path.write_text(content)
-        print(f"✅ Generated {filename}")
+        print(f"OK: Generated {filename}")
 
 
 def main() -> int:

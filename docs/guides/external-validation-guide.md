@@ -243,8 +243,27 @@ python ./scripts/provision.py --name test 2>/dev/null | jq .
 
 ---
 
+## Templates
+
+For common validation scenarios, **pre-built templates** are available in [`isvctl/configs/templates/`](../../isvctl/configs/templates/README.md). These provide a copy-and-customize starting point with skeleton scripts and documented JSON contracts.
+
+Currently available:
+
+| Template | What it tests |
+|----------|---------------|
+| `iam.yaml` | User create -> verify credentials -> delete |
+
+```bash
+# Copy the IAM template and implement for your platform
+cp -r isvctl/configs/templates/ isvctl/configs/my-isv/
+uv run isvctl test run -f isvctl/configs/my-isv/iam.yaml
+```
+
+---
+
 ## Related Documentation
 
 - [Configuration Guide](configuration.md) - Full config reference (steps, schemas, validations, templates)
+- [Validation Templates](../../isvctl/configs/templates/README.md) - Provider-agnostic templates for partner handoff
 - [isvctl Package](../packages/isvctl.md) - CLI documentation
 - [Local Development](local-development.md) - Development setup

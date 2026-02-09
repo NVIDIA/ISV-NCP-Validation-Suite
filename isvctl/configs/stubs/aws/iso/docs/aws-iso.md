@@ -55,7 +55,7 @@ The AWS ISO/VMDK import validation tests verify:
                                    │
                                    ▼
 ┌────────────────────────────────────────────────────────────────────┐
-│  1️⃣ upload_image (SETUP phase)                                     │
+│  1. upload_image (SETUP phase)                                     │
 │  ┌─────────────────────────────────────────────────────────────┐   │
 │  │ Download VMDK ─▶ Create S3 Bucket ─▶ Upload ─▶ Import AMI   │   │
 │  │ (or use local)   (isv-iso-xxx)       to S3    via VM Import │   │
@@ -68,7 +68,7 @@ The AWS ISO/VMDK import validation tests verify:
                                    │
                                    ▼
 ┌────────────────────────────────────────────────────────────────────┐
-│  2️⃣ launch_instance (SETUP phase)                                  │
+│  2. launch_instance (SETUP phase)                                  │
 │  ┌─────────────────────────────────────────────────────────────┐   │
 │  │ Create Key Pair ─▶ Create SG ─▶ Launch g4dn.xlarge          │   │
 │  │                                  from imported AMI          │   │
@@ -82,7 +82,7 @@ The AWS ISO/VMDK import validation tests verify:
                                    │
                                    ▼
 ┌────────────────────────────────────────────────────────────────────┐
-│  3️⃣ teardown (TEARDOWN phase)                                      │
+│  3. teardown (TEARDOWN phase)                                      │
 │  ┌─────────────────────────────────────────────────────────────┐   │
 │  │ Terminate Instance ─▶ Delete AMI ─▶ Delete Snapshots        │   │
 │  │ Delete Bucket ─▶ Delete Key Pair ─▶ Delete SG ─▶ Delete IAM │   │

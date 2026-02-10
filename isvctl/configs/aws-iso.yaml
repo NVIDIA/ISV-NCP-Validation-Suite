@@ -90,7 +90,7 @@ commands:
           - "--region"
           - "{{region}}"
           - "{{teardown_flag}}"
-        timeout: 300
+        timeout: 1800 # Covers full cleanup: instance termination (300s) + AMI/snapshot deletion + S3 cleanup + SG retries (50s) + IAM cleanup
 
 # =============================================================================
 # Test Configuration

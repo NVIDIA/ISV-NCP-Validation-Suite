@@ -3,7 +3,7 @@ name = "isvreporter"
 version = "0.1.0"
 description = "ISV Lab test results reporter - report validation test results to ISV Lab Service"
 readme = "README.md"
-license = "BSD-3-Clause"
+license = "Apache-2.0"
 authors = [{ name = "Alexandre Begnoche", email = "abegnoche@nvidia.com" }]
 requires-python = ">=3.12"
 dependencies = [

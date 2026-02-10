@@ -1,6 +1,6 @@
 # NVIDIA ISV Lab Tools
 
-[![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 Validation and management tools for NVIDIA ISV Lab environments.
 

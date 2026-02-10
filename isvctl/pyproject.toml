@@ -3,7 +3,7 @@ name = "isvctl"
 version = "0.1.0"
 description = "ISV Lab controller for cluster lifecycle orchestration"
 readme = "README.md"
-license = "BSD-3-Clause"
+license = "Apache-2.0"
 authors = [{ name = "Alexandre Begnoche", email = "abegnoche@nvidia.com" }]
 requires-python = ">=3.12"
 dependencies = [

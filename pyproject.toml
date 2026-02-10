@@ -3,7 +3,7 @@ name = "nv-isv-tools"
 version = "0.1.0"
 description = "NVIDIA ISV Lab Tools"
 readme = "README.md"
-license = "BSD-3-Clause"
+license = "Apache-2.0"
 authors = [
     { name = "Alexandre Begnoche", email = "abegnoche@nvidia.com" },
     { name = "Pedro Marques da Luz", email = "daluz@nvidia.com" },

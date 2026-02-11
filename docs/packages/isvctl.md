@@ -222,5 +222,5 @@ uv --directory=isvctl run pytest
 uvx pre-commit run -a
 
 # Regenerate JSON schemas from Pydantic models
-python -c "from isvctl.config.schema import RunConfig; print(RunConfig.model_json_schema())" > isvctl/schemas/config.schema.json
+uv --directory=isvctl run python scripts/check_schemas.py --generate
 ```

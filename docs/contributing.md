@@ -177,7 +177,7 @@ uv sync --no-dev
 To regenerate JSON schemas from Pydantic models:
 
 ```bash
-python -c "from isvctl.config.schema import RunConfig; print(RunConfig.model_json_schema())" > isvctl/schemas/config.schema.json
+uv --directory=isvctl run python scripts/check_schemas.py --generate
 ```
 
 ## Related Documentation

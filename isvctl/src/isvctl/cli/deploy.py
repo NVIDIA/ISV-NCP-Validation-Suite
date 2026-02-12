@@ -357,7 +357,7 @@ def run(
                         err=True,
                     )
                     typer.echo(
-                        "        (e.g., run 'nvinit ssh' for NVIDIA internal jumphosts)",
+                        "        (e.g., re-run your organization's SSH credential/bootstrap command)",
                         err=True,
                     )
                 else:

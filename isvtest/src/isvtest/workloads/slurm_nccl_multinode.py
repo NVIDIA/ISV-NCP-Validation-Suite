@@ -152,6 +152,8 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
             quick_mode=quick_mode,
         )
 
+        self.log.info("Generated sbatch script:\n%s", script)
+
         result = self._submit_and_wait(script, job_timeout)
 
         # Report results
@@ -214,14 +216,14 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
         nccl_params = f"{nccl_size_params} -g 1"
 
         if container_runtime == "pyxis":
-            container_opts = f"--container-image={image}"
-            nccl_cmd = f"all_reduce_perf {nccl_params}"
+            container_opts = f"--mpi=pmix --container-image={image}"
+            nccl_cmd = f"all_reduce_perf_mpi {nccl_params}"
         elif container_runtime == "enroot":
-            container_opts = f"--container-image={image}"
-            nccl_cmd = f"all_reduce_perf {nccl_params}"
+            container_opts = f"--mpi=pmix --container-image={image}"
+            nccl_cmd = f"all_reduce_perf_mpi {nccl_params}"
         else:  # singularity
-            container_opts = ""
-            nccl_cmd = f"singularity exec --nv docker://{image} all_reduce_perf {nccl_params}"
+            container_opts = "--mpi=pmix"
+            nccl_cmd = f"singularity exec --nv docker://{image} all_reduce_perf_mpi {nccl_params}"
 
         return self._load_template(
             "nccl_allreduce_mpi.sh",

@@ -10,7 +10,6 @@ the GPUs.
 import base64
 import os
 import re
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
@@ -22,7 +21,7 @@ from isvtest.config.settings import (
     get_gpu_stress_runtime,
     get_gpu_stress_timeout,
 )
-from isvtest.core.slurm import get_partition_nodes, is_gpu_partition
+from isvtest.core.slurm import detect_container_runtime, get_partition_nodes, is_gpu_partition
 from isvtest.core.workload import BaseWorkloadCheck
 
 SCRIPTS_DIR = Path(__file__).parent / "scripts"
@@ -42,16 +41,15 @@ class NodeStressResult:
 class SlurmGpuStressWorkload(BaseWorkloadCheck):
     """Run GPU stress test on all nodes in a Slurm partition.
 
-    Execution modes:
-    - **container** (default): Docker/Singularity
-    - **python**: System Python (requires PyTorch pre-installed)
-
     Config options:
         partition (str): Partition to test (default: "gpu")
         runtime (int): Stress test runtime in seconds (default: 30 via get_gpu_stress_runtime)
         memory_gb (int): Target GPU memory in GB (default: 32 via get_gpu_memory_gb)
         timeout (int): Per-node timeout in seconds (default: 420 via get_gpu_stress_timeout)
-        execution_mode (str): "container" | "python" | "auto" (default: "auto")
+        container_runtime (str): "pyxis" | "singularity" | "docker" | "python"
+            (default: auto-detect, pyxis > singularity > docker).
+            Set "python" to run directly with system Python (requires PyTorch
+            pre-installed on compute nodes).
         image (str): Container image (default: nvcr.io/nvidia/pytorch:25.04-py3)
         cuda_arch (str): CUDA compute capability (e.g., "100" for GB200)
         num_gpus (int): GPUs per node. None yields --gres=gpu (Slurm default, commonly
@@ -76,13 +74,9 @@ class SlurmGpuStressWorkload(BaseWorkloadCheck):
         cuda_arch_config = self.config.get("cuda_arch")
         cuda_arch = cuda_arch_config if cuda_arch_config is not None else get_gpu_cuda_arch()
         num_gpus = self.config.get("num_gpus")
-        execution_mode = self.config.get("execution_mode", "auto")
+        container_runtime = self.config.get("container_runtime")
 
-        exec_mode = self._resolve_execution_mode(execution_mode)
-        if exec_mode is None:
-            self.set_failed("No execution mode available. Install docker or singularity.")
-            return
-
+        exec_mode = self._resolve_execution_mode(container_runtime)
         self.log.info(f"Using execution mode: {exec_mode}")
 
         if not is_gpu_partition(self, partition):
@@ -102,47 +96,36 @@ class SlurmGpuStressWorkload(BaseWorkloadCheck):
         if cuda_arch:
             env_vars += f" CUPY_CUDA_ARCH_LIST={cuda_arch}"
 
-        exec_cmd, display_cmd = self._build_command(exec_mode, image, env_vars)
-        results = self._run_on_all_nodes(nodes, partition, num_gpus, node_timeout, exec_cmd, display_cmd)
+        exec_cmd, display_cmd, srun_extra = self._build_command(exec_mode, image, env_vars)
+        results = self._run_on_all_nodes(nodes, partition, num_gpus, node_timeout, exec_cmd, display_cmd, srun_extra)
         self._report_results(results)
 
-    def _resolve_execution_mode(self, requested: str) -> str | None:
-        """Resolve execution mode based on availability.
+    def _resolve_execution_mode(self, container_runtime: str | None = None) -> str:
+        """Resolve execution mode from ``container_runtime`` config value.
 
-        Note: Container runtime detection checks the local environment, but srun
-        executes on compute nodes. When running inside a container, docker may
-        not be in PATH locally but IS available on compute nodes. Default to
-        container:docker for reliability.
+        Args:
+            container_runtime: Explicit runtime ("enroot", "pyxis",
+                "singularity", "docker", or "python"). ``None`` triggers
+                auto-detection via ``detect_container_runtime()``
+                (enroot > singularity > docker).
+
+        Returns:
+            ``"python"`` or ``"container:<runtime>"``.
         """
-        if requested == "container":
-            rt = self._detect_container_runtime()
-            return f"container:{rt}" if rt else None
-        if requested == "python":
+        if container_runtime == "python":
             return "python"
-        # Auto: prefer container:docker (most reliable for Slurm GPU nodes)
-        # Local detection may fail when running from a container, but compute
-        # nodes typically have docker available
-        if rt := self._detect_container_runtime():
-            return f"container:{rt}"
-        # Default to docker even if not detected locally - it's likely available on compute nodes
-        self.log.info("Container runtime not detected locally, assuming docker available on compute nodes")
-        return "container:docker"
+        rt = container_runtime or detect_container_runtime(self)
+        return f"container:{rt}"
 
-    def _detect_container_runtime(self) -> str | None:
-        """Detect available container runtime."""
-        for rt in ["docker", "singularity"]:
-            if shutil.which(rt):
-                return rt
-        return None
-
-    def _build_command(self, exec_mode: str, image: str, env_vars: str) -> tuple[str, str]:
+    def _build_command(self, exec_mode: str, image: str, env_vars: str) -> tuple[str, str, str]:
         """Build the execution command.
 
         Uses base64 encoding to safely pass multiline Python scripts through shell.
 
         Returns:
-            Tuple of (actual_command, display_command) where display_command is
-            human-readable for logging.
+            Tuple of (actual_command, display_command, srun_extra_opts) where
+            display_command is human-readable for logging and srun_extra_opts
+            contains additional srun flags (e.g. ``--container-image`` for enroot/pyxis).
         """
         script_path = SCRIPTS_DIR / "gpu_stress_torch.py"
         script_content = script_path.read_text()
@@ -154,19 +137,24 @@ class SlurmGpuStressWorkload(BaseWorkloadCheck):
 
         if exec_mode.startswith("container:"):
             runtime = exec_mode.split(":", 1)[1]
-            if runtime == "docker":
+            if runtime in ("enroot", "pyxis"):
+                # Enroot (via pyxis): container is managed by srun via --container-image
+                actual = f"bash -c '{env_vars} {python_cmd}'"
+                display = f"{env_vars} {display_python_cmd}"
+                return actual, display, f"--container-image={image}"
+            elif runtime == "docker":
                 env_parts = " ".join(f"-e {v}" for v in env_vars.split())
                 actual = f"docker run --rm --gpus all {env_parts} {image} bash -c '{python_cmd}'"
                 display = f"docker run --rm --gpus all {env_parts} {image} {display_python_cmd}"
-                return actual, display
+                return actual, display, ""
             else:  # singularity
                 actual = f"{runtime} exec --nv docker://{image} bash -c '{env_vars} {python_cmd}'"
                 display = f"{runtime} exec --nv docker://{image} {env_vars} {display_python_cmd}"
-                return actual, display
+                return actual, display, ""
         else:  # python
             actual = f"bash -c '{env_vars} {python_cmd}'"
             display = f"{env_vars} {display_python_cmd}"
-            return actual, display
+            return actual, display, ""
 
     def _run_on_all_nodes(
         self,
@@ -176,6 +164,7 @@ class SlurmGpuStressWorkload(BaseWorkloadCheck):
         timeout: int,
         exec_cmd: str,
         display_cmd: str,
+        srun_extra: str = "",
     ) -> list[NodeStressResult]:
         """Run stress test on all nodes simultaneously."""
         gres_opt = f"--gres=gpu:{num_gpus}" if num_gpus else "--gres=gpu"
@@ -189,6 +178,8 @@ class SlurmGpuStressWorkload(BaseWorkloadCheck):
             f"--nodelist={nodelist} --ntasks={len(nodes)} --ntasks-per-node=1 {gres_opt} "
             f"--chdir=/tmp --label"
         )
+        if srun_extra:
+            srun_base = f"{srun_base} {srun_extra}"
 
         srun_cmd = f"{srun_base} {exec_cmd}"
         srun_display = f"{srun_base} {display_cmd}"

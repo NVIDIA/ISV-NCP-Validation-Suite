@@ -401,6 +401,52 @@ def is_gpu_partition(validator: "BaseValidation", partition_name: str) -> bool:
     return True
 
 
+def detect_container_runtime(validator: "BaseValidation") -> str:
+    """Detect the best available container runtime for Slurm workloads.
+
+    Probes the Slurm environment and falls back to local binary detection.
+    Prioritizes MPI-capable runtimes that integrate with srun for true
+    multi-node communication:
+
+    1. pyxis/enroot -- best Slurm integration (``--container-image`` via SPANK plugin)
+    2. singularity/apptainer -- native srun support
+    3. docker -- fallback (no native srun MPI integration)
+
+    Args:
+        validator: BaseValidation instance for running commands.
+
+    Returns:
+        Runtime name: ``"enroot"``, ``"singularity"``, or ``"docker"``.
+        Defaults to ``"docker"`` if nothing else is detected.
+    """
+    # 1. Check for enroot via pyxis SPANK plugin (provides --container-image to srun)
+    result = validator.run_command("srun --help 2>&1", timeout=10)
+    if result.exit_code == 0:
+        help_text = f"{result.stdout}\n{result.stderr}"
+        if "--container-image" in help_text:
+            validator.log.info("Detected enroot runtime (srun --container-image available via pyxis)")
+            return "enroot"
+
+    # 2. Check for singularity/apptainer
+    for name in ("singularity", "apptainer"):
+        result = validator.run_command(f"which {name} 2>/dev/null", timeout=5)
+        if result.exit_code == 0:
+            validator.log.info(f"Detected {name} container runtime")
+            return "singularity"
+
+    # 3. Check for docker
+    result = validator.run_command("which docker 2>/dev/null", timeout=5)
+    if result.exit_code == 0:
+        validator.log.info("Detected docker container runtime")
+        return "docker"
+
+    # 4. Default to docker (may be available on compute nodes even if not on login node)
+    validator.log.warning(
+        "No container runtime detected locally, defaulting to docker (may be available on compute nodes)"
+    )
+    return "docker"
+
+
 def get_partition_gpus_per_node(validator: "BaseValidation", partition_name: str) -> int | None:
     """Get the number of GPUs per node in a partition from GRES.
 

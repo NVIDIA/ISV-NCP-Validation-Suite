@@ -1,12 +1,36 @@
 """Tests for Slurm utility functions."""
 
+from unittest.mock import MagicMock
+
+from isvtest.core.runners import CommandResult
 from isvtest.core.slurm import (
+    detect_container_runtime,
     expand_nodelist,
     get_partition_names,
     parse_sbatch_job_id,
     parse_scontrol_job,
     parse_sinfo_output,
 )
+
+
+def _make_validator(commands: dict[str, CommandResult]) -> MagicMock:
+    """Create a mock validator that returns predefined results for commands.
+
+    Args:
+        commands: Mapping of command substring to CommandResult.
+            The first matching substring (checked in insertion order) wins.
+    """
+    validator = MagicMock()
+    validator.log = MagicMock()
+
+    def fake_run_command(cmd: str, **kwargs: object) -> CommandResult:
+        for pattern, result in commands.items():
+            if pattern in cmd:
+                return result
+        return CommandResult(exit_code=1, stdout="", stderr="command not found", duration=0.0)
+
+    validator.run_command = MagicMock(side_effect=fake_run_command)
+    return validator
 
 
 class TestExpandNodelist:
@@ -226,3 +250,114 @@ class TestParseSbatchJobId:
     def test_returns_none_for_invalid_format(self) -> None:
         """Test that None is returned for invalid format."""
         assert parse_sbatch_job_id("Submitted batch job abc") is None
+
+
+class TestDetectContainerRuntime:
+    """Tests for detect_container_runtime function."""
+
+    def test_detects_enroot(self) -> None:
+        """Test that enroot is detected when srun --help shows --container-image."""
+        validator = _make_validator(
+            {
+                "srun --help": CommandResult(
+                    exit_code=0,
+                    stdout="  --container-image=IMAGE   container image to use\n",
+                    stderr="",
+                    duration=0.1,
+                ),
+            }
+        )
+
+        assert detect_container_runtime(validator) == "enroot"
+        validator.log.info.assert_called()
+
+    def test_detects_singularity(self) -> None:
+        """Test that singularity is detected when srun has no enroot/pyxis but singularity is available."""
+        validator = _make_validator(
+            {
+                "srun --help": CommandResult(exit_code=0, stdout="usage: srun [OPTIONS]...\n", stderr="", duration=0.1),
+                "which singularity": CommandResult(
+                    exit_code=0, stdout="/usr/bin/singularity\n", stderr="", duration=0.1
+                ),
+            }
+        )
+
+        assert detect_container_runtime(validator) == "singularity"
+
+    def test_detects_apptainer_as_singularity(self) -> None:
+        """Test that apptainer is reported as singularity."""
+        validator = _make_validator(
+            {
+                "srun --help": CommandResult(exit_code=0, stdout="usage: srun [OPTIONS]...\n", stderr="", duration=0.1),
+                "which apptainer": CommandResult(exit_code=0, stdout="/usr/bin/apptainer\n", stderr="", duration=0.1),
+            }
+        )
+
+        assert detect_container_runtime(validator) == "singularity"
+
+    def test_detects_docker(self) -> None:
+        """Test that docker is detected as last resort."""
+        validator = _make_validator(
+            {
+                "srun --help": CommandResult(exit_code=0, stdout="usage: srun [OPTIONS]...\n", stderr="", duration=0.1),
+                "which docker": CommandResult(exit_code=0, stdout="/usr/bin/docker\n", stderr="", duration=0.1),
+            }
+        )
+
+        assert detect_container_runtime(validator) == "docker"
+
+    def test_defaults_to_docker_when_nothing_found(self) -> None:
+        """Test that docker is the default when no runtime is detected."""
+        validator = _make_validator(
+            {
+                "srun --help": CommandResult(exit_code=0, stdout="usage: srun [OPTIONS]...\n", stderr="", duration=0.1),
+            }
+        )
+
+        assert detect_container_runtime(validator) == "docker"
+        validator.log.warning.assert_called()
+
+    def test_enroot_takes_priority_over_singularity(self) -> None:
+        """Test that enroot is preferred when both enroot/pyxis and singularity are available."""
+        validator = _make_validator(
+            {
+                "srun --help": CommandResult(
+                    exit_code=0,
+                    stdout="  --container-image=IMAGE   container image to use\n",
+                    stderr="",
+                    duration=0.1,
+                ),
+                "which singularity": CommandResult(
+                    exit_code=0, stdout="/usr/bin/singularity\n", stderr="", duration=0.1
+                ),
+                "which docker": CommandResult(exit_code=0, stdout="/usr/bin/docker\n", stderr="", duration=0.1),
+            }
+        )
+
+        assert detect_container_runtime(validator) == "enroot"
+
+    def test_handles_srun_help_failure(self) -> None:
+        """Test graceful handling when srun --help fails."""
+        validator = _make_validator(
+            {
+                "srun --help": CommandResult(exit_code=1, stdout="", stderr="srun: error: ...", duration=0.1),
+                "which docker": CommandResult(exit_code=0, stdout="/usr/bin/docker\n", stderr="", duration=0.1),
+            }
+        )
+
+        assert detect_container_runtime(validator) == "docker"
+
+    def test_container_image_in_stderr(self) -> None:
+        """Test that enroot is detected even if --container-image appears in stderr."""
+        validator = _make_validator(
+            {
+                "srun --help": CommandResult(
+                    exit_code=0,
+                    stdout="",
+                    stderr="  --container-image=IMAGE   container image\n",
+                    duration=0.1,
+                ),
+            }
+        )
+
+        assert detect_container_runtime(validator) == "enroot"

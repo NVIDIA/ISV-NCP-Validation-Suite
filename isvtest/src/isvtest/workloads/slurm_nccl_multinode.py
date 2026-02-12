@@ -25,6 +25,7 @@ from isvtest.config.settings import (
 )
 from isvtest.core.slurm import (
     TERMINAL_STATES,
+    detect_container_runtime,
     get_job_output,
     get_job_state,
     get_partition_gpus_per_node,
@@ -68,7 +69,7 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
         min_bus_bw_gbps (float): Minimum expected bus bandwidth in GB/s (default: 0 = no check)
         timeout (int): Job timeout in seconds (default: 900 via env)
         image (str): Container image (default: nvcr.io/nvidia/hpc-benchmarks:25.04)
-        container_runtime (str): "docker" | "singularity" | "pyxis" | "enroot" (default: "docker")
+        container_runtime (str): "docker" | "singularity" | "enroot" | "pyxis" (default: auto-detect)
         quick_mode (bool): Use reduced message sizes for faster execution (default: True)
             - True: 1M-256M range, ~30 seconds (CI/dev validation)
             - False: 8B-4G range, 2-5 minutes (full performance test)
@@ -91,7 +92,9 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
         job_timeout = int(timeout_config) if timeout_config is not None else get_nccl_multinode_timeout()
 
         image = self.config.get("image") or get_nccl_hpc_image()
-        container_runtime = self.config.get("container_runtime", "docker")
+        container_runtime = self.config.get("container_runtime")
+        if not container_runtime:
+            container_runtime = detect_container_runtime(self)
         quick_mode = self.config.get("quick_mode", True)
 
         # Validate partition is GPU-enabled
@@ -137,7 +140,10 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
             f"Starting NCCL test ({mode_str} mode): {nodes} nodes x {gpus_per_node} GPUs = {total_gpus} total GPUs"
         )
         if container_runtime == "docker":
-            self.log.info("Docker mode: Running intra-node multi-GPU NCCL test on each node")
+            self.log.warning(
+                "Docker mode: intra-node multi-GPU NCCL test only (no inter-node communication). "
+                "Install pyxis/enroot or singularity for true multi-node NCCL validation."
+            )
         else:
             self.log.info(f"{container_runtime} mode: True multi-node NCCL test")
         self.log.info(f"Image: {image}, Min BW: {min_bus_bw} GB/s, Timeout: {job_timeout}s")
@@ -215,10 +221,7 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
         total_tasks = nodes * gpus_per_node
         nccl_params = f"{nccl_size_params} -g 1"
 
-        if container_runtime == "pyxis":
-            container_opts = f"--mpi=pmix --container-image={image}"
-            nccl_cmd = f"all_reduce_perf_mpi {nccl_params}"
-        elif container_runtime == "enroot":
+        if container_runtime in ("pyxis", "enroot"):
             container_opts = f"--mpi=pmix --container-image={image}"
             nccl_cmd = f"all_reduce_perf_mpi {nccl_params}"
         else:  # singularity

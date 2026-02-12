@@ -4,10 +4,10 @@ This test uses the NVIDIA HPC Benchmarks container from NGC:
 https://catalog.ngc.nvidia.com/orgs/nvidia/containers/hpc-benchmarks?version=25.04
 
 The container includes:
-- NVIDIA HPL 25.09
-- NVIDIA HPL-MxP 25.09
-- NVIDIA HPCG 25.09
-- NVIDIA STREAM 25.09
+- NVIDIA HPL 25.04
+- NVIDIA HPL-MxP 25.04
+- NVIDIA HPCG 25.04
+- NVIDIA STREAM 25.04
 - NVIDIA NVSHMEM 3.4.5
 - NVIDIA NVPL 25.1
 

@@ -23,7 +23,7 @@ jobs:
       image: ghcr.io/nvidia/dsx-cds-tools:latest
       credentials:
         username: ${{ github.actor }}
-        password: ${{ github.token }}
+        password: ${{ secrets.GHCR_READ_TOKEN }}
 
     steps:
       - name: Checkout code

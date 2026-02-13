@@ -13,8 +13,6 @@ on:
     tags:
       # Matches semver: v1.2.3, v10.20.300, v1.2.3-rc1, v1.2.3-beta.1, etc.
       - "v[0-9]*.[0-9]*.[0-9]*"
-  # Triggers on PRs from internal branches (copy-pr-bot handles external/fork PRs via pull-request/* branches)
-  pull_request:
 
 jobs:
   pre-commit:

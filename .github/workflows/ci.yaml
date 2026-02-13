@@ -16,6 +16,14 @@ jobs:
   pre-commit:
     name: Pre-commit Checks
     runs-on: linux-amd64-cpu4
+    permissions:
+      contents: read
+      packages: read
+    container:
+      image: ghcr.io/nvidia/dsx-cds-tools:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
 
     steps:
       - name: Checkout code
@@ -34,3 +42,6 @@ jobs:
 
       - name: Run pre-commit
         run: make pre-commit
+
+      - name: dummy step
+        run: echo "dummy step"

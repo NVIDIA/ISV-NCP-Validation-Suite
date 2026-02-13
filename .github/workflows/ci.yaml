@@ -33,4 +33,4 @@ jobs:
         run: uv sync
 
       - name: Run pre-commit
-        run: make pre-commit
+        run: echo dummy

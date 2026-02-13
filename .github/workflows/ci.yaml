@@ -34,3 +34,6 @@ jobs:
 
       - name: Run pre-commit
         run: make pre-commit
+
+      - name: dummy step
+        run: echo "dummy step"

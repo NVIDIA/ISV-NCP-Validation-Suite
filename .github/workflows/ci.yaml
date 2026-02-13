@@ -22,7 +22,7 @@ jobs:
     container:
       image: ghcr.io/nvidia/dsx-cds-tools:latest
       credentials:
-        username: ${{ github.actor }}
+        username: ${{ secrets.GHCR_READ_USER }}
         password: ${{ secrets.GHCR_READ_TOKEN }}
 
     steps:

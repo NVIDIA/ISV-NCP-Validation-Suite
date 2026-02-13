@@ -8,14 +8,16 @@ This guide helps ISV Lab partners diagnose and fix test runs that never reach a 
 
 The update is sent when:
 
-1. **Single-command flow (recommended)**  
+1. **Single-command flow (recommended)**
    You run:
+
    ```bash
    isvctl test run -f configs/k8s.yaml --lab-id ${ISV_LAB_ID}
    ```
+
    The same process that creates the test run (STARTED) later calls the API again to set SUCCESS or FAILED after all phases (setup → test → teardown) finish. If this process exits normally, the run is updated.
 
-2. **Split flow (create + script + update)**  
+2. **Split flow (create + script + update)**
    You use a CI/CD or script that:
    - Creates the run (e.g. `isvreporter create` or a step that calls the create API), then
    - Runs tests in a **separate** step/container/job, then
@@ -33,7 +35,7 @@ If the step that is supposed to call **update** never runs, the run stays STARTE
 | Wrong working directory | Test run ID is saved to `_output/testrun_id.txt` in the CWD of the process that created the run. If the process that should call `update` runs in a different directory or container and doesn’t pass `--test-run-id`, it can’t find the ID and may skip update. | STARTED |
 | after_script not run | In CI, if the main script is cancelled, times out, or fails in a way that skips `after_script`, the update step never runs. | STARTED |
 
-Runs that show **Executed by: isvctl** and reach SUCCESS/FAILED are using the single-command flow where the same process both creates and updates the run. Runs that show a user email (e.g. **Executed by: user@partner.com**) and stay STARTED are often using a split or custom flow where the update step is missing or never executed.
+Runs that show **Executed by: isvctl** and reach SUCCESS/FAILED are using the single-command flow where the same process both creates and updates the run. Runs that show a user email (e.g. **Executed by: <user@partner.com>**) and stay STARTED are often using a split or custom flow where the update step is missing or never executed.
 
 ## Recommended fix: single-command flow
 
@@ -68,33 +70,38 @@ If the process is killed or hangs before step 3, the run will still stay STARTED
 Ensure the step that runs **after** the tests **always** calls update, even when the test step fails or is cancelled:
 
 1. **Pass the test run ID explicitly** if the update runs in a different working directory or container:
+
    ```bash
    isvctl report update --lab-id ${ISV_LAB_ID} --test-run-id <ID> --status FAILED
    ```
+
    Get `<ID>` from the create step output or from `_output/testrun_id.txt` in the create step and pass it (e.g. artifact or variable) to the update step.
 
 2. **Use a trap so update runs on exit** (e.g. in a shell wrapper):
+
    ```bash
    TRAP_TEST_RUN_ID=""
    trap 'if [ -n "$TRAP_TEST_RUN_ID" ]; then isvctl report update --lab-id $ISV_LAB_ID --test-run-id "$TRAP_TEST_RUN_ID" --status FAILED; fi' EXIT
    # create run, set TRAP_TEST_RUN_ID, run tests, then update with real status in the normal path
    ```
+
    Then in the normal path (when tests finish) call update with SUCCESS or FAILED; on EXIT (cancel, timeout, crash) the trap can at least send FAILED so the run doesn’t stay STARTED.
 
 3. **CI: Prefer a single job** that runs `isvctl test run ... --lab-id ...` so create and update are in one process. If you use separate jobs, the second job must receive the test run ID and call update in a block that runs even on failure (e.g. `after_script` that always runs, or a dedicated “report status” job that gets the ID from the first job).
 
 ## If the process hangs or is killed
 
-- **Timeouts**  
+- **Timeouts**
   Increase job/container timeout so that the full suite (including setup/teardown) can finish. Long-running workload tests (e.g. NIM) can take 15–30+ minutes.
 
-- **Hangs**  
+- **Hangs**
   Check which phase hangs (setup, test, or teardown) from logs. Common causes: waiting on a cluster resource, Slurm job that never completes, or a validation that blocks. Fix the stub or validation, or exclude slow tests during initial runs:
+
   ```bash
   isvctl test run -f configs/k8s.yaml --lab-id ${ISV_LAB_ID} -- -m "not workload"
   ```
 
-- **OOM / kill**  
+- **OOM / kill**
   Ensure the runner has enough memory and that no step leaks memory. Once the process is stable and completes, the same single-command flow will send the update.
 
 ## Cleaning up already-STARTED runs (optional)

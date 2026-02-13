@@ -1,0 +1,32 @@
+#
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - release/*
+      - "pull-request/[0-9]+"
+    tags:
+      # Matches semver: v1.2.3, v10.20.300, v1.2.3-rc1, v1.2.3-beta.1, etc.
+      - "v[0-9]*.[0-9]*.[0-9]*"
+
+jobs:
+  pre-commit:
+    name: Pre-commit Checks
+    runs-on: linux-amd64-cpu4
+    container:
+      image: ghcr.io/nvidia/dsx-github-actions/cds-tools:latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run pre-commit
+        run: make pre-commit

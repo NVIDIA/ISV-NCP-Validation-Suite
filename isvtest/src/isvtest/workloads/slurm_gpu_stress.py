@@ -46,8 +46,8 @@ class SlurmGpuStressWorkload(BaseWorkloadCheck):
         runtime (int): Stress test runtime in seconds (default: 30 via get_gpu_stress_runtime)
         memory_gb (int): Target GPU memory in GB (default: 32 via get_gpu_memory_gb)
         timeout (int): Per-node timeout in seconds (default: 420 via get_gpu_stress_timeout)
-        container_runtime (str): "pyxis" | "singularity" | "docker" | "python"
-            (default: auto-detect, pyxis > singularity > docker).
+        container_runtime (str): "enroot" | "pyxis" | "singularity" | "docker" | "python"
+            (default: auto-detect, enroot > singularity > docker).
             Set "python" to run directly with system Python (requires PyTorch
             pre-installed on compute nodes).
         image (str): Container image (default: nvcr.io/nvidia/pytorch:25.04-py3)

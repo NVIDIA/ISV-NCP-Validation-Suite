@@ -69,7 +69,8 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
         min_bus_bw_gbps (float): Minimum expected bus bandwidth in GB/s (default: 0 = no check)
         timeout (int): Job timeout in seconds (default: 900 via env)
         image (str): Container image (default: nvcr.io/nvidia/hpc-benchmarks:25.04)
-        container_runtime (str): "docker" | "singularity" | "enroot" | "pyxis" (default: auto-detect)
+        container_runtime (str): "enroot" | "pyxis" | "singularity" | "docker"
+            (default: auto-detect, enroot > singularity > docker)
         quick_mode (bool): Use reduced message sizes for faster execution (default: True)
             - True: 1M-256M range, ~30 seconds (CI/dev validation)
             - False: 8B-4G range, 2-5 minutes (full performance test)

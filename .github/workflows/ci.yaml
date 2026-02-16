@@ -16,9 +16,6 @@ jobs:
   pre-commit:
     name: Pre-commit Checks
     runs-on: linux-amd64-cpu4
-    permissions:
-      contents: read
-      packages: read
     container:
       image: ghcr.io/nvidia/dsx-cds-tools:latest
 

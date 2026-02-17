@@ -76,15 +76,12 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
             - False: 8B-4G range, 2-5 minutes (full performance test)
         env (dict[str, str]): Extra environment variables exported in the sbatch
             script before srun. Use this to configure UCX, NCCL transports, and
-            fabric tuning for your cluster. Example for GB200 with broken IB::
+            fabric tuning for your cluster. Example:
 
                 env:
+                  NCCL_DEBUG: "INFO"
+                  NCCL_SOCKET_IFNAME: "eth0"
                   UCX_TLS: "tcp,sm,cuda_copy,cuda_ipc"
-                  NCCL_NET: "Socket"
-                  NCCL_SOCKET_IFNAME: "enP6p3s0np0"
-                  NCCL_CUMEM_ENABLE: "0"
-                  NCCL_MNNVL_ENABLE: "0"
-                  NCCL_NVLS_ENABLE: "0"
     """
 
     description: ClassVar[str] = "Run NCCL AllReduce test across multiple Slurm nodes"

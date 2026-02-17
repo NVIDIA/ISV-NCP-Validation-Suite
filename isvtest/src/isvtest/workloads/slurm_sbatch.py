@@ -33,7 +33,7 @@ class SlurmSbatchWorkload(BaseWorkloadCheck):
     the manifests/slurm/ directory.
 
     Config options:
-        script (str): Name of script file in manifests/slurm/ (e.g., "example_gpu_job.sh")
+        script (str): Name of script file in manifests/slurm/ (e.g., "example_gpu_job.sbatch")
         script_content (str): Inline script content (alternative to script file)
         variables (dict): Variables to substitute in the script using {{VAR_NAME}} syntax
         timeout (int): Maximum time to wait for job completion in seconds (default: 600)
@@ -56,7 +56,7 @@ class SlurmSbatchWorkload(BaseWorkloadCheck):
 
     Example config:
         - SlurmSbatchWorkload:
-            script: "example_gpu_job.sh"
+            script: "example_gpu_job.sbatch"
             variables:
               PARTITION: "gpu"
               NODES: 2

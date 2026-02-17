@@ -65,11 +65,10 @@ tests:
     slurm_workloads:
       checks:
         - SlurmGpuStressWorkload:
-            script_mode: "inline"
             partition: "{{ steps.setup.slurm.default_partition | default('gpu') }}"
             runtime: 30
             memory_gb: 16
-            timeout: 90
+            timeout: 600
             cuda_arch: "{{ steps.setup.slurm.cuda_arch | default('100') }}"
 
         # Multi-node NCCL test - validates GPU communication across nodes
@@ -83,7 +82,7 @@ tests:
 
         # Run GPU job from manifest file with variable substitution
         - SlurmSbatchWorkload-gpu:
-            script: "example_gpu_job.sh"
+            script: "example_gpu_job.sbatch"
             variables:
               JOB_NAME: "demo-gpu-test"
               PARTITION: "gpu"
@@ -95,7 +94,7 @@ tests:
 
         # Run CPU job from manifest file
         - SlurmSbatchWorkload-cpu:
-            script: "example_cpu_job.sh"
+            script: "example_cpu_job.sbatch"
             variables:
               JOB_NAME: "demo-cpu-test"
               PARTITION: "cpu"

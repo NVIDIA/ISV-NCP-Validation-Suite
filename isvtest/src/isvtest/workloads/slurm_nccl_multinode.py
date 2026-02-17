@@ -25,6 +25,7 @@ from isvtest.config.settings import (
 )
 from isvtest.core.slurm import (
     TERMINAL_STATES,
+    detect_container_runtime,
     get_job_output,
     get_job_state,
     get_partition_gpus_per_node,
@@ -68,10 +69,19 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
         min_bus_bw_gbps (float): Minimum expected bus bandwidth in GB/s (default: 0 = no check)
         timeout (int): Job timeout in seconds (default: 900 via env)
         image (str): Container image (default: nvcr.io/nvidia/hpc-benchmarks:25.04)
-        container_runtime (str): "docker" | "singularity" | "pyxis" | "enroot" (default: "docker")
+        container_runtime (str): "enroot" | "pyxis" | "singularity" | "docker"
+            (default: auto-detect, enroot > singularity > docker)
         quick_mode (bool): Use reduced message sizes for faster execution (default: True)
             - True: 1M-256M range, ~30 seconds (CI/dev validation)
             - False: 8B-4G range, 2-5 minutes (full performance test)
+        env (dict[str, str]): Extra environment variables exported in the sbatch
+            script before srun. Use this to configure UCX, NCCL transports, and
+            fabric tuning for your cluster. Example:
+
+                env:
+                  NCCL_DEBUG: "INFO"
+                  NCCL_SOCKET_IFNAME: "eth0"
+                  UCX_TLS: "tcp,sm,cuda_copy,cuda_ipc"
     """
 
     description: ClassVar[str] = "Run NCCL AllReduce test across multiple Slurm nodes"
@@ -91,8 +101,11 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
         job_timeout = int(timeout_config) if timeout_config is not None else get_nccl_multinode_timeout()
 
         image = self.config.get("image") or get_nccl_hpc_image()
-        container_runtime = self.config.get("container_runtime", "docker")
+        container_runtime = self.config.get("container_runtime")
+        if not container_runtime:
+            container_runtime = detect_container_runtime(self)
         quick_mode = self.config.get("quick_mode", True)
+        extra_env: dict[str, str] = self.config.get("env", {})
 
         # Validate partition is GPU-enabled
         if not is_gpu_partition(self, partition):
@@ -137,10 +150,16 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
             f"Starting NCCL test ({mode_str} mode): {nodes} nodes x {gpus_per_node} GPUs = {total_gpus} total GPUs"
         )
         if container_runtime == "docker":
-            self.log.info("Docker mode: Running intra-node multi-GPU NCCL test on each node")
+            self.log.warning(
+                "Docker mode: intra-node multi-GPU NCCL test only (no inter-node communication). "
+                "Install pyxis/enroot or singularity for true multi-node NCCL validation."
+            )
         else:
             self.log.info(f"{container_runtime} mode: True multi-node NCCL test")
         self.log.info(f"Image: {image}, Min BW: {min_bus_bw} GB/s, Timeout: {job_timeout}s")
+
+        if extra_env:
+            self.log.info(f"Extra env vars: {extra_env}")
 
         # Generate and submit the job
         script = self._generate_sbatch_script(
@@ -150,7 +169,10 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
             image=image,
             container_runtime=container_runtime,
             quick_mode=quick_mode,
+            extra_env=extra_env,
         )
+
+        self.log.info("Generated sbatch script:\n%s", script)
 
         result = self._submit_and_wait(script, job_timeout)
 
@@ -183,10 +205,16 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
         image: str,
         container_runtime: str,
         quick_mode: bool = True,
+        extra_env: dict[str, str] | None = None,
     ) -> str:
         """Generate sbatch script for multi-node NCCL test."""
         total_gpus = nodes * gpus_per_node
         job_name = f"isvtest-nccl-{os.getpid()}"
+
+        # Build extra environment variable exports
+        env_lines = ""
+        if extra_env:
+            env_lines = "\n".join(f"export {k}={v}" for k, v in extra_env.items())
 
         # NCCL test parameters based on mode
         if quick_mode:
@@ -197,7 +225,7 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
         # For Docker: Run one container per node with all GPUs
         if container_runtime == "docker":
             return self._load_template(
-                "nccl_allreduce_docker.sh",
+                "nccl_allreduce_docker.sbatch",
                 {
                     "JOB_NAME": job_name,
                     "PARTITION": partition,
@@ -213,18 +241,15 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
         total_tasks = nodes * gpus_per_node
         nccl_params = f"{nccl_size_params} -g 1"
 
-        if container_runtime == "pyxis":
-            container_opts = f"--container-image={image}"
-            nccl_cmd = f"all_reduce_perf {nccl_params}"
-        elif container_runtime == "enroot":
-            container_opts = f"--container-image={image}"
-            nccl_cmd = f"all_reduce_perf {nccl_params}"
+        if container_runtime in ("pyxis", "enroot"):
+            container_opts = f"--mpi=pmix --container-image={image}"
+            nccl_cmd = f"all_reduce_perf_mpi {nccl_params}"
         else:  # singularity
-            container_opts = ""
-            nccl_cmd = f"singularity exec --nv docker://{image} all_reduce_perf {nccl_params}"
+            container_opts = "--mpi=pmix"
+            nccl_cmd = f"singularity exec --nv docker://{image} all_reduce_perf_mpi {nccl_params}"
 
         return self._load_template(
-            "nccl_allreduce_mpi.sh",
+            "nccl_allreduce_mpi.sbatch",
             {
                 "JOB_NAME": job_name,
                 "PARTITION": partition,
@@ -235,6 +260,7 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
                 "CONTAINER_RUNTIME": container_runtime,
                 "CONTAINER_OPTS": container_opts,
                 "NCCL_CMD": nccl_cmd,
+                "EXTRA_ENV": env_lines,
             },
         )
 

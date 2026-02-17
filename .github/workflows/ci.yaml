@@ -58,3 +58,19 @@ jobs:
           echo "## Coverage Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           uv run coverage report --format=markdown >> $GITHUB_STEP_SUMMARY
+
+  # Gate job: aggregates all job results into a single required status check.
+  # Add this job's name ("CI") to branch protection rules instead of individual jobs.
+  # Note: When adding new jobs, append them to the 'needs' list below.
+  ci:
+    name: CI
+    runs-on: linux-amd64-cpu4
+    if: always()
+    needs: [pre-commit, test]
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "One or more jobs failed"
+            exit 1
+          fi

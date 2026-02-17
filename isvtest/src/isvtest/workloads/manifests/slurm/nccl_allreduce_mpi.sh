@@ -31,6 +31,9 @@
 export NCCL_DEBUG=INFO
 export NCCL_DEBUG_SUBSYS=INIT
 
+# Additional environment variables (UCX, NCCL tuning, etc.)
+{{EXTRA_ENV}}
+
 # Print job info
 echo "=========================================="
 echo "NCCL Multi-Node AllReduce Test"

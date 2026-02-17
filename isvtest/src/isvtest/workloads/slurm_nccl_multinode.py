@@ -74,6 +74,17 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
         quick_mode (bool): Use reduced message sizes for faster execution (default: True)
             - True: 1M-256M range, ~30 seconds (CI/dev validation)
             - False: 8B-4G range, 2-5 minutes (full performance test)
+        env (dict[str, str]): Extra environment variables exported in the sbatch
+            script before srun. Use this to configure UCX, NCCL transports, and
+            fabric tuning for your cluster. Example for GB200 with broken IB::
+
+                env:
+                  UCX_TLS: "tcp,sm,cuda_copy,cuda_ipc"
+                  NCCL_NET: "Socket"
+                  NCCL_SOCKET_IFNAME: "enP6p3s0np0"
+                  NCCL_CUMEM_ENABLE: "0"
+                  NCCL_MNNVL_ENABLE: "0"
+                  NCCL_NVLS_ENABLE: "0"
     """
 
     description: ClassVar[str] = "Run NCCL AllReduce test across multiple Slurm nodes"
@@ -97,6 +108,7 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
         if not container_runtime:
             container_runtime = detect_container_runtime(self)
         quick_mode = self.config.get("quick_mode", True)
+        extra_env: dict[str, str] = self.config.get("env", {})
 
         # Validate partition is GPU-enabled
         if not is_gpu_partition(self, partition):
@@ -149,6 +161,9 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
             self.log.info(f"{container_runtime} mode: True multi-node NCCL test")
         self.log.info(f"Image: {image}, Min BW: {min_bus_bw} GB/s, Timeout: {job_timeout}s")
 
+        if extra_env:
+            self.log.info(f"Extra env vars: {extra_env}")
+
         # Generate and submit the job
         script = self._generate_sbatch_script(
             partition=partition,
@@ -157,6 +172,7 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
             image=image,
             container_runtime=container_runtime,
             quick_mode=quick_mode,
+            extra_env=extra_env,
         )
 
         self.log.info("Generated sbatch script:\n%s", script)
@@ -192,10 +208,16 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
         image: str,
         container_runtime: str,
         quick_mode: bool = True,
+        extra_env: dict[str, str] | None = None,
     ) -> str:
         """Generate sbatch script for multi-node NCCL test."""
         total_gpus = nodes * gpus_per_node
         job_name = f"isvtest-nccl-{os.getpid()}"
+
+        # Build extra environment variable exports
+        env_lines = ""
+        if extra_env:
+            env_lines = "\n".join(f"export {k}={v}" for k, v in extra_env.items())
 
         # NCCL test parameters based on mode
         if quick_mode:
@@ -241,6 +263,7 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
                 "CONTAINER_RUNTIME": container_runtime,
                 "CONTAINER_OPTS": container_opts,
                 "NCCL_CMD": nccl_cmd,
+                "EXTRA_ENV": env_lines,
             },
         )
 

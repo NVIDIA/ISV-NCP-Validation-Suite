@@ -228,7 +228,7 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
         # For Docker: Run one container per node with all GPUs
         if container_runtime == "docker":
             return self._load_template(
-                "nccl_allreduce_docker.sh",
+                "nccl_allreduce_docker.sbatch",
                 {
                     "JOB_NAME": job_name,
                     "PARTITION": partition,
@@ -252,7 +252,7 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
             nccl_cmd = f"singularity exec --nv docker://{image} all_reduce_perf_mpi {nccl_params}"
 
         return self._load_template(
-            "nccl_allreduce_mpi.sh",
+            "nccl_allreduce_mpi.sbatch",
             {
                 "JOB_NAME": job_name,
                 "PARTITION": partition,

@@ -83,7 +83,7 @@ tests:
 
         # Run GPU job from manifest file with variable substitution
         - SlurmSbatchWorkload-gpu:
-            script: "example_gpu_job.sh"
+            script: "example_gpu_job.sbatch"
             variables:
               JOB_NAME: "demo-gpu-test"
               PARTITION: "gpu"
@@ -95,7 +95,7 @@ tests:
 
         # Run CPU job from manifest file
         - SlurmSbatchWorkload-cpu:
-            script: "example_cpu_job.sh"
+            script: "example_cpu_job.sbatch"
             variables:
               JOB_NAME: "demo-cpu-test"
               PARTITION: "cpu"

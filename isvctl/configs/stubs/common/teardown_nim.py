@@ -66,31 +66,35 @@ def main() -> int:
         "container_name": args.container_name,
     }
 
+    ssh = None
     try:
         ssh = ssh_connect(args.host, args.user, args.key_file)
 
-        # Get image name before removing container (for optional image removal)
-        image_name = None
-        if args.remove_image:
-            exit_code, stdout, _ = run_cmd(
-                ssh, f"docker inspect -f '{{{{.Config.Image}}}}' {args.container_name} 2>/dev/null"
-            )
-            if exit_code == 0:
-                image_name = stdout.strip()
+        try:
+            # Get image name before removing container (for optional image removal)
+            image_name = None
+            if args.remove_image:
+                exit_code, stdout, _ = run_cmd(
+                    ssh, f"docker inspect -f '{{{{.Config.Image}}}}' {args.container_name} 2>/dev/null"
+                )
+                if exit_code == 0:
+                    image_name = stdout.strip()
 
-        # Stop and remove container
-        print(f"Stopping container: {args.container_name}", file=sys.stderr)
-        exit_code, _, stderr_out = run_cmd(ssh, f"docker rm -f {args.container_name} 2>&1")
-        result["container_removed"] = exit_code == 0 or "No such container" in stderr_out
+            # Stop and remove container
+            print(f"Stopping container: {args.container_name}", file=sys.stderr)
+            exit_code, _, stderr_out = run_cmd(ssh, f"docker rm -f {args.container_name} 2>&1")
+            result["container_removed"] = exit_code == 0 or "No such container" in stderr_out
 
-        # Optionally remove image
-        if args.remove_image and image_name:
-            print(f"Removing image: {image_name}", file=sys.stderr)
-            exit_code, _, _ = run_cmd(ssh, f"docker rmi {image_name} 2>&1", timeout=120)
-            result["image_removed"] = exit_code == 0
+            # Optionally remove image
+            if args.remove_image and image_name:
+                print(f"Removing image: {image_name}", file=sys.stderr)
+                exit_code, _, _ = run_cmd(ssh, f"docker rmi {image_name} 2>&1", timeout=120)
+                result["image_removed"] = exit_code == 0
 
-        result["success"] = result["container_removed"]
-        ssh.close()
+            result["success"] = result["container_removed"]
+        finally:
+            if ssh is not None and hasattr(ssh, "close"):
+                ssh.close()
 
     except Exception as e:
         result["error"] = str(e)

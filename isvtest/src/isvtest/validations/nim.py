@@ -16,6 +16,7 @@ Requires paramiko: pip install paramiko
 from __future__ import annotations
 
 import json
+import shlex
 from typing import ClassVar
 
 import pytest
@@ -175,7 +176,7 @@ class SshNimInferenceCheck(BaseValidation):
             curl_cmd = (
                 f"curl -sf -X POST http://localhost:{port}/v1/chat/completions"
                 f" -H 'Content-Type: application/json'"
-                f" -d '{payload}'"
+                f" -d {shlex.quote(payload)}"
             )
             exit_code, stdout, stderr = run_ssh_command(ssh, curl_cmd)
 

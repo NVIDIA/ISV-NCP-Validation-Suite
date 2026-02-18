@@ -108,22 +108,20 @@ def main() -> int:
         print(json.dumps(result, indent=2))
         return 0
 
+    ssh = None
     try:
         ssh = ssh_connect(args.host, args.user, args.key_file)
 
         # Log in to NGC registry
-        if args.ngc_api_key:
-            print("Logging in to NGC registry...", file=sys.stderr)
-            exit_code, _, stderr_out = run_cmd(
-                ssh,
-                f"echo '{args.ngc_api_key}' | docker login nvcr.io -u '$oauthtoken' --password-stdin 2>&1",
-            )
-            if exit_code != 0:
-                result["error"] = f"NGC login failed: {stderr_out}"
-                print(json.dumps(result, indent=2))
-                return 1
-        else:
-            print("Warning: NGC_NIM_API_KEY not set, skipping registry login", file=sys.stderr)
+        print("Logging in to NGC registry...", file=sys.stderr)
+        exit_code, _, stderr_out = run_cmd(
+            ssh,
+            f"echo '{args.ngc_api_key}' | docker login nvcr.io -u '$oauthtoken' --password-stdin 2>&1",
+        )
+        if exit_code != 0:
+            result["error"] = f"NGC login failed: {stderr_out}"
+            print(json.dumps(result, indent=2))
+            return 1
 
         # Clean up previous containers/images to free disk space
         run_cmd(ssh, f"docker rm -f {args.container_name} 2>/dev/null || true")
@@ -176,10 +174,12 @@ def main() -> int:
             return 1
 
         result["success"] = True
-        ssh.close()
 
     except Exception as e:
         result["error"] = str(e)
+    finally:
+        if ssh:
+            ssh.close()
 
     print(json.dumps(result, indent=2))
     return 0 if result["success"] else 1

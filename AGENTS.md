@@ -292,7 +292,7 @@ version: "1.0"
 
 commands:
   network:
-    phases: ["setup", "teardown"]
+    phases: ["setup", "test", "teardown"]
     steps:
       - name: create_network
         phase: setup

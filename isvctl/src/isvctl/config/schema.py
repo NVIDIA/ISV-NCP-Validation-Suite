@@ -98,7 +98,7 @@ class PlatformCommands(BaseModel):
     Example:
        ```yaml
        network:
-         phases: ["setup", "teardown"]  # Defines execution order
+         phases: ["setup", "test", "teardown"]  # Defines execution order
          steps:
            - name: create_vpc
              phase: setup

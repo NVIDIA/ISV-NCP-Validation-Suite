@@ -111,7 +111,7 @@ version: "1.0"
 
 commands:
   myplatform:
-    phases: ["setup", "teardown"]
+    phases: ["setup", "test", "teardown"]
     steps:
       - name: launch_instance
         phase: setup

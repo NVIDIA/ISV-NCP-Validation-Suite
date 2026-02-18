@@ -97,10 +97,10 @@ version: "1.0"
 
 commands:
   network:
-    phases: ["setup", "teardown"]
+    phases: ["setup", "test", "teardown"]
     steps:
       - name: my_test
-        phase: setup
+        phase: test
         command: "python ./my_script.py"
         args: ["--region", "{{region}}"]
         timeout: 300

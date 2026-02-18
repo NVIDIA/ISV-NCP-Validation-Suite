@@ -87,7 +87,7 @@ version: "1.0"
 commands:
   network:
     # Phases execute in this order
-    phases: ["setup", "teardown"]
+    phases: ["setup", "test", "teardown"]
 
     steps:
       # Step 1: Create VPC (setup phase)
@@ -101,9 +101,9 @@ commands:
           - "{{region}}"
         timeout: 300
 
-      # Step 2: Run tests (setup phase)
+      # Step 2: Run tests (test phase)
       - name: test_connectivity
-        phase: setup
+        phase: test
         command: "python ./scripts/test_connectivity.py"
         args:
           - "--vpc-id"
@@ -147,13 +147,13 @@ Each platform defines phases and steps:
 ```yaml
 commands:
   network:
-    phases: ["setup", "teardown"]    # Execution order
-    steps: [...]                      # Steps grouped by phase
+    phases: ["setup", "test", "teardown"]    # Execution order
+    steps: [...]                              # Steps grouped by phase
 ```
 
 | Field | Required | Description |
 | ----- | -------- | ----------- |
-| `phases` | No | Ordered list of phases (default: `["setup", "teardown"]`) |
+| `phases` | No | Ordered list of phases (default: `["setup", "test", "teardown"]`) |
 | `steps` | Yes | List of step configurations |
 | `skip` | No | Skip this entire platform |
 

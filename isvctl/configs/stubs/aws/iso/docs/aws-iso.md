@@ -220,7 +220,7 @@ version: "1.0"
 
 commands:
   iso:
-    phases: ["setup", "teardown"]
+    phases: ["setup", "test", "teardown"]
     steps:
       # Step 1: Upload VMDK and import as AMI
       - name: upload_image
@@ -237,7 +237,7 @@ commands:
 
       # Step 2: Launch GPU instance from imported AMI
       - name: launch_instance
-        phase: setup
+        phase: test
         command: "python3 ./stubs/aws/iso/launch_instance.py"
         args:
           - "--ami-id"

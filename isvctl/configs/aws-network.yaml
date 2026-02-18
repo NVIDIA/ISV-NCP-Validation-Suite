@@ -27,7 +27,7 @@ version: "1.0"
 
 commands:
   network:
-    phases: ["setup", "teardown"]
+    phases: ["setup", "test", "teardown"]
     steps:
       # =====================================================================
       # Setup: Create shared VPC for connectivity tests
@@ -51,7 +51,7 @@ commands:
       # Self-contained - creates and cleans up its own VPC
       # =====================================================================
       - name: vpc_crud
-        phase: setup
+        phase: test
         command: "python3 ./stubs/aws/network/vpc_crud_test.py"
         args:
           - "--region"
@@ -67,7 +67,7 @@ commands:
       # Self-contained - creates and cleans up its own VPC
       # =====================================================================
       - name: subnet_config
-        phase: setup
+        phase: test
         command: "python3 ./stubs/aws/network/subnet_test.py"
         args:
           - "--region"
@@ -85,7 +85,7 @@ commands:
       # Self-contained - creates and cleans up its own VPCs
       # =====================================================================
       - name: vpc_isolation
-        phase: setup
+        phase: test
         command: "python3 ./stubs/aws/network/isolation_test.py"
         args:
           - "--region"
@@ -103,7 +103,7 @@ commands:
       # Self-contained - creates and cleans up its own VPC
       # =====================================================================
       - name: security_blocking
-        phase: setup
+        phase: test
         command: "python3 ./stubs/aws/network/security_test.py"
         args:
           - "--region"
@@ -119,7 +119,7 @@ commands:
       # Tests network connectivity via SSM
       # =====================================================================
       - name: connectivity_test
-        phase: setup
+        phase: test
         command: "python3 ./stubs/aws/network/test_connectivity.py"
         args:
           - "--vpc-id"
@@ -139,7 +139,7 @@ commands:
       # Self-contained - creates and cleans up its own VPC
       # =====================================================================
       - name: traffic_validation
-        phase: setup
+        phase: test
         command: "python3 ./stubs/aws/network/traffic_test.py"
         args:
           - "--region"

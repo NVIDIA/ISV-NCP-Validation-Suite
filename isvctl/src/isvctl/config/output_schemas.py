@@ -50,6 +50,10 @@ STEP_SCHEMA_MAPPING: dict[str, str | None] = {
     "run_test": "workload_result",
     "run_benchmark": "workload_result",
     "execute_workload": "workload_result",
+    # NIM deployment -> "nim_deploy" schema
+    "deploy_nim": "nim_deploy",
+    # NIM teardown -> "teardown" schema
+    "teardown_nim": "teardown",
     # Teardown operations -> "teardown" schema
     "teardown": "teardown",
     "cleanup": "teardown",
@@ -189,6 +193,24 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
             "count": {"type": "integer", "description": "Number of instances"},
             "found_target": {"type": "boolean", "description": "Target instance was found"},
             "target_instance": {"type": "string", "description": "Target instance ID searched for"},
+        },
+        "additionalProperties": True,
+    },
+    "nim_deploy": {
+        "type": "object",
+        "required": ["success", "platform"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "container_id": {"type": ["string", "null"], "description": "Docker container ID"},
+            "container_name": {"type": "string", "description": "Docker container name"},
+            "model": {"type": "string", "description": "NIM model name"},
+            "image": {"type": "string", "description": "Container image used"},
+            "endpoint": {"type": "string", "description": "NIM endpoint URL"},
+            "port": {"type": "integer", "description": "Host port NIM is exposed on"},
+            "health_ready": {"type": "boolean", "description": "Whether health check passed"},
+            "host": {"type": "string", "description": "Remote host IP"},
+            "key_file": {"type": "string", "description": "SSH key file path"},
+            "ssh_user": {"type": "string", "description": "SSH username"},
         },
         "additionalProperties": True,
     },

@@ -45,6 +45,11 @@ from isvtest.validations.network import (
     VpcCrudCheck,
     VpcIsolationCheck,
 )
+from isvtest.validations.nim import (
+    SshNimHealthCheck,
+    SshNimInferenceCheck,
+    SshNimModelCheck,
+)
 
 __all__ = [
     "AccessKeyAuthenticatedCheck",
@@ -64,6 +69,9 @@ __all__ = [
     "PerformanceCheck",
     "SchemaValidation",
     "SecurityBlockingCheck",
+    "SshNimHealthCheck",
+    "SshNimInferenceCheck",
+    "SshNimModelCheck",
     "StepSuccessCheck",
     "SubnetConfigCheck",
     "TenantCreatedCheck",

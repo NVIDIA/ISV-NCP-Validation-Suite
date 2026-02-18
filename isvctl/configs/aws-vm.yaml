@@ -6,17 +6,24 @@
 #
 # Steps:
 #   1. launch_instance - boto3: Provisions EC2, outputs IP/key
-#   2. reboot_instance - boto3: Reboots EC2, validates recovery
-#   3. teardown - boto3: Terminates EC2
+#   2. list_instances - boto3: Lists instances in VPC
+#   3. reboot_instance - boto3: Reboots EC2, validates recovery
+#   4. deploy_nim - paramiko: Deploys NIM container via SSH
+#   5. teardown_nim - paramiko: Stops NIM container via SSH
+#   6. teardown - boto3: Terminates EC2
 #
 # Validations (in tests.validations):
 #   - InstanceStateCheck - verifies instance running
+#   - InstanceListCheck - verifies instances in VPC
 #   - InstanceRebootCheck - verifies reboot succeeded (uptime, SSH, state)
 #   - SshConnectivityCheck - paramiko: test SSH
 #   - SshGpuCheck - paramiko + nvidia-smi: test GPU
 #   - SshVcpuPinningCheck - paramiko: verify vCPU pinning and NUMA affinity
 #   - SshPciBusCheck - paramiko: verify PCI bus config for GPUs
 #   - SshHostSoftwareCheck - paramiko: verify kernel, libvirt, SBIOS, NVIDIA drivers
+#   - SshNimHealthCheck - paramiko + curl: verify NIM health endpoint
+#   - SshNimInferenceCheck - paramiko + curl: verify NIM inference
+#   - SshNimModelCheck - paramiko + curl: verify NIM model listing
 #
 # Validation timing is inferred from step's phase.
 #
@@ -27,7 +34,7 @@ version: "1.0"
 
 commands:
   vm:
-    phases: ["setup", "teardown"]
+    phases: ["setup", "test", "teardown"]
     steps:
       # AWS-specific: Launch instance (boto3)
       - name: launch_instance
@@ -44,7 +51,7 @@ commands:
 
       # AWS-specific: List instances in VPC (boto3)
       - name: list_instances
-        phase: setup
+        phase: test
         command: "python3 ./stubs/aws/vm/list_instances.py"
         args:
           - "--vpc-id"
@@ -57,7 +64,7 @@ commands:
 
       # AWS-specific: Reboot instance and validate recovery (boto3)
       - name: reboot_instance
-        phase: setup
+        phase: test
         command: "python3 ./stubs/aws/vm/reboot_instance.py"
         args:
           - "--instance-id"
@@ -69,6 +76,28 @@ commands:
           - "--public-ip"
           - "{{steps.launch_instance.public_ip}}"
         timeout: 600
+
+      # Shared: Deploy NIM container via SSH (paramiko)
+      - name: deploy_nim
+        phase: test
+        command: "python3 ./stubs/common/deploy_nim.py"
+        args:
+          - "--host"
+          - "{{steps.launch_instance.public_ip}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+        timeout: 1800
+
+      # Shared: Teardown NIM container via SSH (paramiko)
+      - name: teardown_nim
+        phase: teardown
+        command: "python3 ./stubs/common/teardown_nim.py"
+        args:
+          - "--host"
+          - "{{steps.launch_instance.public_ip}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+        timeout: 120
 
       # AWS-specific: Teardown (boto3)
       - name: teardown
@@ -166,6 +195,29 @@ tests:
         - SshPciBusCheck:
             expected_gpus: 1
         - SshHostSoftwareCheck: {}
+
+    # --- NIM validations ---
+    nim_health:
+      step: deploy_nim
+      checks:
+        - SshNimHealthCheck: {}
+
+    nim_models:
+      step: deploy_nim
+      checks:
+        - SshNimModelCheck: {}
+
+    nim_inference:
+      step: deploy_nim
+      checks:
+        - SshNimInferenceCheck:
+            prompt: "What is CUDA?"
+            max_tokens: 50
+
+    nim_teardown:
+      step: teardown_nim
+      checks:
+        - StepSuccessCheck: {}
 
     teardown_checks:
       step: teardown

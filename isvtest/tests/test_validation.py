@@ -1,10 +1,12 @@
 """Tests for validation module."""
 
-from unittest.mock import MagicMock
+import json
+from unittest.mock import MagicMock, patch
 
 from isvtest.core.runners import CommandResult
 from isvtest.core.validation import BaseValidation
 from isvtest.validations.instance import InstanceListCheck
+from isvtest.validations.nim import SshNimHealthCheck, SshNimInferenceCheck, SshNimModelCheck
 
 
 class ConcreteValidation(BaseValidation):
@@ -309,3 +311,264 @@ class TestInstanceListCheck:
         )
         result = v.execute()
         assert result["passed"] is True
+
+
+def _mock_ssh_run(responses: dict[str, tuple[int, str, str]]):
+    """Create a mock run_ssh_command that returns canned responses by substring match."""
+
+    def _run(ssh: MagicMock, command: str) -> tuple[int, str, str]:
+        for pattern, response in responses.items():
+            if pattern in command:
+                return response
+        return (1, "", "unknown command")
+
+    return _run
+
+
+def _nim_config(extra: dict | None = None) -> dict:
+    """Build a minimal NIM validation config with SSH details."""
+    cfg: dict = {
+        "step_output": {
+            "success": True,
+            "host": "10.0.0.1",
+            "key_file": "/tmp/test.pem",
+            "ssh_user": "ubuntu",
+            "port": 8000,
+        },
+    }
+    if extra:
+        cfg.update(extra)
+    return cfg
+
+
+class TestSshNimHealthCheck:
+    """Tests for SshNimHealthCheck validation."""
+
+    def test_skipped_when_nim_not_deployed(self) -> None:
+        """Test skip when deploy_nim was skipped."""
+        import pytest
+
+        v = SshNimHealthCheck(
+            config={
+                "step_output": {
+                    "skipped": True,
+                    "skip_reason": "NGC_NIM_API_KEY not set",
+                },
+            }
+        )
+        with pytest.raises(pytest.skip.Exception, match="NGC_NIM_API_KEY"):
+            v.execute()
+
+    @patch("isvtest.validations.nim.get_ssh_client")
+    @patch("isvtest.validations.nim.run_ssh_command")
+    def test_healthy(self, mock_run: MagicMock, mock_ssh: MagicMock) -> None:
+        """Test passing when health endpoint returns OK."""
+        mock_ssh.return_value = MagicMock()
+        mock_run.return_value = (0, "\n0", "")
+
+        v = SshNimHealthCheck(config=_nim_config())
+        result = v.execute()
+        assert result["passed"] is True
+        assert "health check passed" in result["output"]
+
+    @patch("isvtest.validations.nim.get_ssh_client")
+    @patch("isvtest.validations.nim.run_ssh_command")
+    def test_unhealthy(self, mock_run: MagicMock, mock_ssh: MagicMock) -> None:
+        """Test failure when health endpoint is not ready."""
+        mock_ssh.return_value = MagicMock()
+        mock_run.return_value = (1, "1", "")
+
+        v = SshNimHealthCheck(config=_nim_config())
+        result = v.execute()
+        assert result["passed"] is False
+        assert "not ready" in result["error"]
+
+    def test_missing_host(self) -> None:
+        """Test failure when host is missing but step succeeded."""
+        v = SshNimHealthCheck(config={"step_output": {"success": True}})
+        result = v.execute()
+        assert result["passed"] is False
+        assert "Missing host" in result["error"]
+
+    def test_skipped_when_step_failed(self) -> None:
+        """Test skip when deploy_nim step output is empty (timed out)."""
+        import pytest
+
+        v = SshNimHealthCheck(config={"step_output": {}})
+        with pytest.raises(pytest.skip.Exception, match="did not succeed"):
+            v.execute()
+
+
+class TestSshNimInferenceCheck:
+    """Tests for SshNimInferenceCheck validation."""
+
+    @patch("isvtest.validations.nim.get_ssh_client")
+    @patch("isvtest.validations.nim.run_ssh_command")
+    def test_successful_inference(self, mock_run: MagicMock, mock_ssh: MagicMock) -> None:
+        """Test passing with valid inference response."""
+        mock_ssh.return_value = MagicMock()
+
+        models_response = json.dumps({"data": [{"id": "meta/llama-3.2-3b-instruct"}]})
+        inference_response = json.dumps(
+            {
+                "choices": [{"message": {"content": "CUDA is a platform..."}, "finish_reason": "stop"}],
+                "usage": {"completion_tokens": 10, "prompt_tokens": 5, "total_tokens": 15},
+            }
+        )
+
+        mock_run.side_effect = _mock_ssh_run(
+            {
+                "/v1/models": (0, models_response, ""),
+                "/v1/chat/completions": (0, inference_response, ""),
+            }
+        )
+
+        v = SshNimInferenceCheck(config=_nim_config())
+        result = v.execute()
+        assert result["passed"] is True
+        assert "inference OK" in result["output"]
+
+    @patch("isvtest.validations.nim.get_ssh_client")
+    @patch("isvtest.validations.nim.run_ssh_command")
+    def test_empty_choices(self, mock_run: MagicMock, mock_ssh: MagicMock) -> None:
+        """Test failure when response has no choices."""
+        mock_ssh.return_value = MagicMock()
+
+        mock_run.side_effect = _mock_ssh_run(
+            {
+                "/v1/models": (0, json.dumps({"data": [{"id": "test-model"}]}), ""),
+                "/v1/chat/completions": (0, json.dumps({"choices": []}), ""),
+            }
+        )
+
+        v = SshNimInferenceCheck(config=_nim_config())
+        result = v.execute()
+        assert result["passed"] is False
+        assert "No choices" in result["error"]
+
+    @patch("isvtest.validations.nim.get_ssh_client")
+    @patch("isvtest.validations.nim.run_ssh_command")
+    def test_no_model_detected(self, mock_run: MagicMock, mock_ssh: MagicMock) -> None:
+        """Test failure when no model can be detected."""
+        mock_ssh.return_value = MagicMock()
+        mock_run.return_value = (1, "", "error")
+
+        v = SshNimInferenceCheck(config=_nim_config())
+        result = v.execute()
+        assert result["passed"] is False
+        assert "Could not determine model" in result["error"]
+
+    @patch("isvtest.validations.nim.get_ssh_client")
+    @patch("isvtest.validations.nim.run_ssh_command")
+    def test_model_from_config(self, mock_run: MagicMock, mock_ssh: MagicMock) -> None:
+        """Test that model can be specified directly in config."""
+        mock_ssh.return_value = MagicMock()
+
+        inference_response = json.dumps(
+            {
+                "choices": [{"message": {"content": "response"}, "finish_reason": "stop"}],
+            }
+        )
+
+        mock_run.side_effect = _mock_ssh_run(
+            {
+                "/v1/chat/completions": (0, inference_response, ""),
+            }
+        )
+
+        v = SshNimInferenceCheck(config=_nim_config({"model": "my-model"}))
+        result = v.execute()
+        assert result["passed"] is True
+
+    @patch("isvtest.validations.nim.get_ssh_client")
+    @patch("isvtest.validations.nim.run_ssh_command")
+    def test_invalid_json_response(self, mock_run: MagicMock, mock_ssh: MagicMock) -> None:
+        """Test failure when inference returns invalid JSON."""
+        mock_ssh.return_value = MagicMock()
+
+        mock_run.side_effect = _mock_ssh_run(
+            {
+                "/v1/models": (0, json.dumps({"data": [{"id": "test-model"}]}), ""),
+                "/v1/chat/completions": (0, "not json", ""),
+            }
+        )
+
+        v = SshNimInferenceCheck(config=_nim_config())
+        result = v.execute()
+        assert result["passed"] is False
+        assert "Invalid JSON" in result["error"]
+
+
+class TestSshNimModelCheck:
+    """Tests for SshNimModelCheck validation."""
+
+    @patch("isvtest.validations.nim.get_ssh_client")
+    @patch("isvtest.validations.nim.run_ssh_command")
+    def test_models_returned(self, mock_run: MagicMock, mock_ssh: MagicMock) -> None:
+        """Test passing when models are returned."""
+        mock_ssh.return_value = MagicMock()
+        mock_run.return_value = (
+            0,
+            json.dumps({"data": [{"id": "meta/llama-3.2-3b-instruct"}]}),
+            "",
+        )
+
+        v = SshNimModelCheck(config=_nim_config())
+        result = v.execute()
+        assert result["passed"] is True
+        assert "llama" in result["output"]
+
+    @patch("isvtest.validations.nim.get_ssh_client")
+    @patch("isvtest.validations.nim.run_ssh_command")
+    def test_no_models(self, mock_run: MagicMock, mock_ssh: MagicMock) -> None:
+        """Test failure when no models are returned."""
+        mock_ssh.return_value = MagicMock()
+        mock_run.return_value = (0, json.dumps({"data": []}), "")
+
+        v = SshNimModelCheck(config=_nim_config())
+        result = v.execute()
+        assert result["passed"] is False
+        assert "No models" in result["error"]
+
+    @patch("isvtest.validations.nim.get_ssh_client")
+    @patch("isvtest.validations.nim.run_ssh_command")
+    def test_expected_model_found(self, mock_run: MagicMock, mock_ssh: MagicMock) -> None:
+        """Test passing when expected model is found."""
+        mock_ssh.return_value = MagicMock()
+        mock_run.return_value = (
+            0,
+            json.dumps({"data": [{"id": "meta/llama-3.2-3b-instruct"}]}),
+            "",
+        )
+
+        v = SshNimModelCheck(config=_nim_config({"expected_model": "llama"}))
+        result = v.execute()
+        assert result["passed"] is True
+
+    @patch("isvtest.validations.nim.get_ssh_client")
+    @patch("isvtest.validations.nim.run_ssh_command")
+    def test_expected_model_not_found(self, mock_run: MagicMock, mock_ssh: MagicMock) -> None:
+        """Test failure when expected model is not found."""
+        mock_ssh.return_value = MagicMock()
+        mock_run.return_value = (
+            0,
+            json.dumps({"data": [{"id": "meta/llama-3.2-3b-instruct"}]}),
+            "",
+        )
+
+        v = SshNimModelCheck(config=_nim_config({"expected_model": "mistral"}))
+        result = v.execute()
+        assert result["passed"] is False
+        assert "expected_model" in result["error"]
+
+    @patch("isvtest.validations.nim.get_ssh_client")
+    @patch("isvtest.validations.nim.run_ssh_command")
+    def test_request_failed(self, mock_run: MagicMock, mock_ssh: MagicMock) -> None:
+        """Test failure when models endpoint is unreachable."""
+        mock_ssh.return_value = MagicMock()
+        mock_run.return_value = (1, "", "connection refused")
+
+        v = SshNimModelCheck(config=_nim_config())
+        result = v.execute()
+        assert result["passed"] is False
+        assert "failed" in result["error"]

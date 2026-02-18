@@ -221,20 +221,31 @@ def test_validation(
     # Inject subtests fixture for nested test reporting
     validation._subtests = subtests
 
-    # Run the validation
-    result = validation.execute()
-
-    # Store result in memory for isvctl to retrieve after pytest completes
-    # Get category from validation_config (set by run_validations_via_pytest)
+    # Run the validation, capturing skips so they appear in the orchestration summary
     category = validation_config.get("_category", "")
+    try:
+        result = validation.execute()
+    except pytest.skip.Exception as exc:
+        skip_reason = str(exc)
+        _validation_results.append(
+            {
+                "name": validation_name,
+                "passed": True,
+                "skipped": True,
+                "message": skip_reason,
+                "category": category,
+            }
+        )
+        raise
+
     _validation_results.append(
         {
             "name": validation_name,
             "passed": result["passed"],
+            "skipped": False,
             "message": result["output"] if result["passed"] else result["error"],
             "category": category,
         }
     )
 
-    # Assert success
     assert result["passed"], f"Validation failed: {result['error']}\nOutput: {result['output']}"

@@ -367,14 +367,15 @@ def run(
                     # Handle case where name might be a dict (extract class name)
                     if isinstance(vr_name, dict):
                         vr_name = next(iter(vr_name.keys()), "unknown")
-                    vr_passed = vr.get("passed", False)
                     vr_message = vr.get("message", "")
                     vr_category = vr.get("category", "")
-                    if vr_passed:
+                    category_prefix = f"[{vr_category}] " if vr_category else ""
+                    if vr.get("skipped"):
+                        vr_status = typer.style("SKIPPED", fg=typer.colors.YELLOW)
+                    elif vr.get("passed", False):
                         vr_status = typer.style("PASSED", fg=typer.colors.GREEN)
                     else:
                         vr_status = typer.style("FAILED", fg=typer.colors.RED)
-                    category_prefix = f"[{vr_category}] " if vr_category else ""
                     typer.echo(f"  {category_prefix}{vr_name}: {vr_status} - {vr_message}")
 
     typer.echo("-" * 60)

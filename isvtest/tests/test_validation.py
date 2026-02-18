@@ -3,8 +3,17 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from isvtest.core.runners import CommandResult
 from isvtest.core.validation import BaseValidation
+from isvtest.tests.test_validations import (
+    _validation_results,
+    clear_validation_results,
+)
+from isvtest.tests.test_validations import (
+    test_validation as run_validation_entry_point,
+)
 from isvtest.validations.instance import InstanceListCheck
 from isvtest.validations.nim import SshNimHealthCheck, SshNimInferenceCheck, SshNimModelCheck
 
@@ -572,3 +581,61 @@ class TestSshNimModelCheck:
         result = v.execute()
         assert result["passed"] is False
         assert "failed" in result["error"]
+
+
+class TestValidationResultCapture:
+    """Tests that test_validation() captures results in _validation_results.
+
+    Exercises the orchestration integration path: skipped, passed, and failed
+    validations must all appear in the in-memory results list so the
+    ORCHESTRATION RESULTS summary can display them.
+    """
+
+    def setup_method(self) -> None:
+        clear_validation_results()
+
+    def test_skipped_validation_captured(self) -> None:
+        """Skipped validations must appear in _validation_results with skipped=True."""
+        config = {
+            "step_output": {"skipped": True, "skip_reason": "NGC_NIM_API_KEY not set"},
+            "_category": "nim",
+        }
+        subtests = MagicMock()
+
+        with pytest.raises(pytest.skip.Exception):
+            run_validation_entry_point(SshNimHealthCheck, config, "SshNimHealthCheck", subtests)
+
+        assert len(_validation_results) == 1
+        r = _validation_results[0]
+        assert r["name"] == "SshNimHealthCheck"
+        assert r["skipped"] is True
+        assert r["passed"] is True
+        assert r["category"] == "nim"
+        assert "NGC_NIM_API_KEY" in r["message"]
+
+    def test_passed_validation_captured(self) -> None:
+        """Passed validations must appear with skipped=False."""
+        config = {"_category": "test_cat"}
+        subtests = MagicMock()
+
+        run_validation_entry_point(ConcreteValidation, config, "ConcreteValidation", subtests)
+
+        assert len(_validation_results) == 1
+        r = _validation_results[0]
+        assert r["name"] == "ConcreteValidation"
+        assert r["skipped"] is False
+        assert r["passed"] is True
+
+    def test_failed_validation_captured(self) -> None:
+        """Failed validations must appear with passed=False."""
+        config = {"_category": "test_cat"}
+        subtests = MagicMock()
+
+        with pytest.raises(AssertionError):
+            run_validation_entry_point(FailingValidation, config, "FailingValidation", subtests)
+
+        assert len(_validation_results) == 1
+        r = _validation_results[0]
+        assert r["name"] == "FailingValidation"
+        assert r["skipped"] is False
+        assert r["passed"] is False

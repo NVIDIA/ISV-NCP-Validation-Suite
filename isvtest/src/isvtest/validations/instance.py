@@ -144,3 +144,62 @@ class InstanceCreatedCheck(BaseValidation):
         self.set_passed(
             f"Instance {instance_id} created: type={instance_type}, public={public_ip}, private={private_ip}"
         )
+
+
+class InstanceListCheck(BaseValidation):
+    """Validate instance list from a VPC.
+
+    Checks that the instances list exists, is non-empty (or meets min_count),
+    validates required fields on each instance, and optionally verifies that
+    a target instance appears in the list.
+
+    Config:
+        step_output: The step output to check
+        min_count: Minimum number of instances expected (default: 1)
+
+    Step output:
+        instances: List of instance dicts
+        count: Number of instances
+        found_target: Whether target instance was found
+        target_instance: Target instance ID searched for
+    """
+
+    description: ClassVar[str] = "Check instance list from VPC"
+    markers: ClassVar[list[str]] = ["vm"]
+
+    REQUIRED_FIELDS = ("instance_id", "state", "vpc_id")
+
+    def run(self) -> None:
+        step_output = self.config.get("step_output", {})
+        min_count = self.config.get("min_count", 1)
+
+        instances = step_output.get("instances")
+        if instances is None:
+            self.set_failed("No 'instances' key in step output")
+            return
+
+        if len(instances) < min_count:
+            self.set_failed(f"Expected at least {min_count} instance(s), got {len(instances)}")
+            return
+
+        # Validate required fields on each instance
+        for i, inst in enumerate(instances):
+            for field in self.REQUIRED_FIELDS:
+                if not inst.get(field):
+                    self.set_failed(f"Instance at index {i} missing required field '{field}'")
+                    return
+
+        # Check target instance if specified
+        found_target = step_output.get("found_target")
+        target = step_output.get("target_instance")
+
+        if found_target is not None and target:
+            if not found_target:
+                self.set_failed(f"Target instance '{target}' not found in list")
+                return
+
+        count = step_output.get("count", len(instances))
+        msg = f"Listed {count} instance(s)"
+        if target and found_target:
+            msg += f", target '{target}' found"
+        self.set_passed(msg)

@@ -33,6 +33,7 @@ from isvtest.validations.iam import (
 )
 from isvtest.validations.instance import (
     InstanceCreatedCheck,
+    InstanceListCheck,
     InstanceStateCheck,
 )
 from isvtest.validations.network import (
@@ -55,6 +56,7 @@ __all__ = [
     "FieldValueCheck",
     "GpuOperatorInstalledCheck",
     "InstanceCreatedCheck",
+    "InstanceListCheck",
     "InstanceStateCheck",
     "NetworkConnectivityCheck",
     "NetworkProvisionedCheck",

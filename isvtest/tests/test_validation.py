@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 from isvtest.core.runners import CommandResult
 from isvtest.core.validation import BaseValidation
+from isvtest.validations.instance import InstanceListCheck
 
 
 class ConcreteValidation(BaseValidation):
@@ -170,3 +171,141 @@ class TestBaseValidation:
         validation = ConcreteValidation()
         assert validation.log is not None
         assert validation.log.name == "ConcreteValidation"
+
+
+class TestInstanceListCheck:
+    """Tests for InstanceListCheck validation."""
+
+    def _make_instance(
+        self,
+        instance_id: str = "i-abc123",
+        state: str = "running",
+        vpc_id: str = "vpc-111",
+    ) -> dict:
+        return {
+            "instance_id": instance_id,
+            "instance_type": "g5.xlarge",
+            "state": state,
+            "public_ip": "54.0.0.1",
+            "private_ip": "10.0.0.1",
+            "vpc_id": vpc_id,
+        }
+
+    def test_valid_list(self) -> None:
+        """Test passing with a valid instance list."""
+        v = InstanceListCheck(
+            config={
+                "step_output": {
+                    "instances": [self._make_instance()],
+                    "count": 1,
+                },
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is True
+        assert "Listed 1 instance(s)" in result["output"]
+
+    def test_found_target(self) -> None:
+        """Test passing when target instance is found."""
+        v = InstanceListCheck(
+            config={
+                "step_output": {
+                    "instances": [self._make_instance(instance_id="i-target")],
+                    "count": 1,
+                    "found_target": True,
+                    "target_instance": "i-target",
+                },
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is True
+        assert "i-target" in result["output"]
+        assert "found" in result["output"]
+
+    def test_empty_list(self) -> None:
+        """Test failure with an empty instance list."""
+        v = InstanceListCheck(
+            config={
+                "step_output": {
+                    "instances": [],
+                    "count": 0,
+                },
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is False
+        assert "at least 1" in result["error"]
+
+    def test_missing_instances_key(self) -> None:
+        """Test failure when instances key is missing."""
+        v = InstanceListCheck(
+            config={
+                "step_output": {
+                    "count": 0,
+                },
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is False
+        assert "No 'instances' key" in result["error"]
+
+    def test_target_not_found(self) -> None:
+        """Test failure when target instance is not in the list."""
+        v = InstanceListCheck(
+            config={
+                "step_output": {
+                    "instances": [self._make_instance(instance_id="i-other")],
+                    "count": 1,
+                    "found_target": False,
+                    "target_instance": "i-target",
+                },
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is False
+        assert "i-target" in result["error"]
+        assert "not found" in result["error"]
+
+    def test_missing_required_fields(self) -> None:
+        """Test failure when an instance is missing required fields."""
+        v = InstanceListCheck(
+            config={
+                "step_output": {
+                    "instances": [{"instance_type": "g5.xlarge"}],
+                    "count": 1,
+                },
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is False
+        assert "missing required field" in result["error"]
+
+    def test_custom_min_count(self) -> None:
+        """Test failure when instance count is below custom min_count."""
+        v = InstanceListCheck(
+            config={
+                "step_output": {
+                    "instances": [self._make_instance()],
+                    "count": 1,
+                },
+                "min_count": 3,
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is False
+        assert "at least 3" in result["error"]
+
+    def test_custom_min_count_satisfied(self) -> None:
+        """Test passing when custom min_count is satisfied."""
+        instances = [self._make_instance(instance_id=f"i-{i}") for i in range(3)]
+        v = InstanceListCheck(
+            config={
+                "step_output": {
+                    "instances": instances,
+                    "count": 3,
+                },
+                "min_count": 3,
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is True

@@ -42,6 +42,19 @@ commands:
           - "{{region}}"
         timeout: 600
 
+      # AWS-specific: List instances in VPC (boto3)
+      - name: list_instances
+        phase: setup
+        command: "python3 ./stubs/aws/vm/list_instances.py"
+        args:
+          - "--vpc-id"
+          - "{{steps.launch_instance.vpc_id}}"
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 120
+
       # AWS-specific: Reboot instance and validate recovery (boto3)
       - name: reboot_instance
         phase: setup
@@ -86,6 +99,12 @@ tests:
       checks:
         - InstanceStateCheck:
             expected_state: "running"
+
+    list_instances:
+      step: list_instances
+      checks:
+        - InstanceListCheck:
+            min_count: 1
 
     ssh:
       step: launch_instance

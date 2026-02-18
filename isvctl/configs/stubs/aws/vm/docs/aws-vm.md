@@ -40,14 +40,14 @@ The AWS VM validation tests verify:
 │  Validations (Platform-Agnostic)                                                   │
 │                                                                                    │
 │  Instance          SSH / OS           GPU                Host OS                   │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌───────────────────────┐   │
-│  │ InstanceState │  │SshConnectiv. │  │ SshGpuCheck  │  │ SshVcpuPinningCheck   │   │
-│  │    Check      │  │    Check     │  │              │  │ SshPciBusCheck        │   │
-│  │ InstanceReboot│  │ SshOsCheck   │  │SshGpuStress  │  │ SshHostSoftwareCheck  │   │
-│  │    Check      │  │              │  │    Check     │  │  (kernel, libvirt,    │   │
-│  │ StepSuccess   │  │              │  │              │  │   SBIOS, drivers)     │   │
-│  │    Check      │  │              │  │              │  │                       │   │
-│  └──────────────┘  └──────────────┘  └──────────────┘  └───────────────────────┘   │
+│  ┌───────────────┐  ┌──────────────┐  ┌──────────────┐  ┌───────────────────────┐  │
+│  │ InstanceState │  │SshConnectiv. │  │ SshGpuCheck  │  │ SshVcpuPinningCheck   │  │
+│  │    Check      │  │    Check     │  │              │  │ SshPciBusCheck        │  │
+│  │ InstanceReboot│  │ SshOsCheck   │  │ SshGpuStress │  │ SshHostSoftwareCheck  │  │
+│  │    Check      │  │              │  │    Check     │  │  (kernel, libvirt,    │  │
+│  │ StepSuccess   │  │              │  │              │  │   SBIOS, drivers)     │  │
+│  │    Check      │  │              │  │              │  │                       │  │
+│  └───────────────┘  └──────────────┘  └──────────────┘  └───────────────────────┘  │
 └────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -79,7 +79,7 @@ The AWS VM validation tests verify:
 │  │ Verify Running ─▶ Reboot EC2 API ─▶ Wait Status OK ─▶ SSH   │   │
 │  │                                                             │   │
 │  │ Output: {instance_id, state, ssh_ready, uptime_seconds,     │   │
-│  │          reboot_confirmed, ...}                              │   │
+│  │          reboot_confirmed, ...}                             │   │
 │  └─────────────────────────────────────────────────────────────┘   │
 │                                                                    │
 │  Validations: InstanceRebootCheck, InstanceStateCheck,             │

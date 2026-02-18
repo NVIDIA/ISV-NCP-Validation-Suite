@@ -39,6 +39,8 @@ STEP_SCHEMA_MAPPING: dict[str, str | None] = {
     "create_instance": "instance",
     "provision_vm": "instance",
     "create_vm": "instance",
+    # Instance list operations -> "instance_list" schema
+    "list_instances": "instance_list",
     # GPU setup -> "gpu_setup" schema
     "install_gpu_operator": "gpu_setup",
     "setup_gpu": "gpu_setup",
@@ -161,6 +163,32 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
             "instance_type": {"type": "string", "description": "Instance type/size"},
             "ssh_user": {"type": "string", "description": "SSH username"},
             "ssh_key_path": {"type": "string", "description": "Path to SSH private key"},
+        },
+        "additionalProperties": True,
+    },
+    "instance_list": {
+        "type": "object",
+        "required": ["success", "platform"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "instances": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "instance_id": {"type": "string"},
+                        "instance_type": {"type": "string"},
+                        "state": {"type": "string"},
+                        "public_ip": {"type": ["string", "null"]},
+                        "private_ip": {"type": ["string", "null"]},
+                        "vpc_id": {"type": "string"},
+                    },
+                },
+                "description": "List of instances in the VPC",
+            },
+            "count": {"type": "integer", "description": "Number of instances"},
+            "found_target": {"type": "boolean", "description": "Target instance was found"},
+            "target_instance": {"type": "string", "description": "Target instance ID searched for"},
         },
         "additionalProperties": True,
     },

@@ -33,6 +33,13 @@ The AWS VM validation tests verify:
 │  │ - Output JSON            │ │ - Confirm uptime reset   │ │                    │  │
 │  │                          │ │ - Output JSON            │ │                    │  │
 │  └──────────────────────────┘ └──────────────────────────┘ └────────────────────┘  │
+│  ┌──────────────────────────┐                                                      │
+│  │   list_instances.py      │                                                      │
+│  │                          │                                                      │
+│  │ - Filter by VPC ID       │                                                      │
+│  │ - Verify target instance │                                                      │
+│  │ - Output JSON            │                                                      │
+│  └──────────────────────────┘                                                      │
 └────────────────────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
@@ -45,7 +52,9 @@ The AWS VM validation tests verify:
 │  │    Check      │  │    Check     │  │              │  │ SshPciBusCheck        │  │
 │  │ InstanceReboot│  │ SshOsCheck   │  │ SshGpuStress │  │ SshHostSoftwareCheck  │  │
 │  │    Check      │  │              │  │    Check     │  │  (kernel, libvirt,    │  │
-│  │ StepSuccess   │  │              │  │              │  │   SBIOS, drivers)     │  │
+│  │ InstanceList  │  │              │  │              │  │   SBIOS, drivers)     │  │
+│  │    Check      │  │              │  │              │  │                       │  │
+│  │ StepSuccess   │  │              │  │              │  │                       │  │
 │  │    Check      │  │              │  │              │  │                       │  │
 │  └───────────────┘  └──────────────┘  └──────────────┘  └───────────────────────┘  │
 └────────────────────────────────────────────────────────────────────────────────────┘
@@ -74,7 +83,19 @@ The AWS VM validation tests verify:
                                    │
                                    ▼
 ┌────────────────────────────────────────────────────────────────────┐
-│  2. reboot_instance (SETUP phase)                                  │
+│  2. list_instances (SETUP phase)                                   │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │ Filter by VPC ID ─▶ Verify target instance in list          │   │
+│  │                                                             │   │
+│  │ Output: {instances, count, found_target, target_instance}   │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│                                                                    │
+│  Validations: InstanceListCheck                                    │
+└────────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌────────────────────────────────────────────────────────────────────┐
+│  3. reboot_instance (SETUP phase)                                  │
 │  ┌─────────────────────────────────────────────────────────────┐   │
 │  │ Verify Running ─▶ Reboot EC2 API ─▶ Wait Status OK ─▶ SSH   │   │
 │  │                                                             │   │
@@ -90,7 +111,7 @@ The AWS VM validation tests verify:
                                    │
                                    ▼
 ┌────────────────────────────────────────────────────────────────────┐
-│  3. teardown (TEARDOWN phase)                                      │
+│  4. teardown (TEARDOWN phase)                                      │
 │  ┌─────────────────────────────────────────────────────────────┐   │
 │  │ Terminate Instance ─▶ Delete Key Pair ─▶ Delete SG          │   │
 │  │                                                             │   │
@@ -231,7 +252,20 @@ commands:
           - "{{region}}"
         timeout: 600
 
-      # Step 2: Reboot instance and validate recovery
+      # Step 2: List instances in VPC and verify target
+      - name: list_instances
+        phase: setup
+        command: "python3 ./stubs/aws/vm/list_instances.py"
+        args:
+          - "--vpc-id"
+          - "{{steps.launch_instance.vpc_id}}"
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 120
+
+      # Step 3: Reboot instance and validate recovery
       - name: reboot_instance
         phase: setup
         command: "python3 ./stubs/aws/vm/reboot_instance.py"
@@ -246,7 +280,7 @@ commands:
           - "{{steps.launch_instance.public_ip}}"
         timeout: 600
 
-      # Step 3: Teardown resources
+      # Step 4: Teardown resources
       - name: teardown
         phase: teardown
         command: "python3 ./stubs/aws/vm/teardown.py"
@@ -271,6 +305,12 @@ tests:
       checks:
         - InstanceStateCheck:
             expected_state: "running"
+
+    list_instances:
+      step: list_instances
+      checks:
+        - InstanceListCheck:
+            min_count: 1
 
     ssh:
       step: launch_instance
@@ -370,6 +410,7 @@ tests:
 | Validation | Category | Description |
 |------------|----------|-------------|
 | `InstanceStateCheck` | setup_checks, reboot_state | Verify instance is in expected state (running) |
+| `InstanceListCheck` | list_instances | Verify instances exist in VPC and target instance is present |
 | `SshConnectivityCheck` | ssh, reboot_ssh | Test SSH connectivity and command execution |
 | `SshOsCheck` | ssh, reboot_ssh | Verify OS type (ubuntu, etc.) |
 | `SshGpuCheck` | gpu, reboot_gpu | Verify GPU visibility via nvidia-smi |
@@ -666,6 +707,37 @@ uv run isvctl test run -f isvctl/configs/aws-vm.yaml -v -- -v -s
   "ssh_user": "ubuntu"
 }
 ```
+
+### list_instances.py Output
+
+```json
+{
+  "success": true,
+  "platform": "vm",
+  "instances": [
+    {
+      "instance_id": "i-0abc123def456",
+      "instance_type": "g5.xlarge",
+      "state": "running",
+      "public_ip": "54.1.2.3",
+      "private_ip": "172.31.1.5",
+      "vpc_id": "vpc-0abc123"
+    }
+  ],
+  "count": 1,
+  "found_target": true,
+  "target_instance": "i-0abc123def456"
+}
+```
+
+**Key fields for validations:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `instances` | array | List of non-terminated instances in the VPC |
+| `count` | int | Number of instances returned |
+| `found_target` | bool | Whether the target instance ID was found in the list |
+| `target_instance` | string | The instance ID that was searched for |
 
 ### reboot_instance.py Output
 

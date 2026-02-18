@@ -392,19 +392,6 @@ Increase timeout in config:
   timeout: 1200  # 20 minutes
 ```
 
-## Cost Considerations
-
-| Resource | Duration | Cost |
-|----------|----------|------|
-| VPC, Subnets, SGs, NACLs | Seconds | Free |
-| Internet Gateway | ~5-7 min | Free |
-| IAM Role/Profile | ~5-7 min | Free |
-| t3.micro instances | ~8-10 min | ~$0.03 |
-
-**Total estimated cost per full test run**: < $0.05
-
-All resources are automatically cleaned up after tests.
-
 ## Related Documentation
 
 - [Configuration Guide](../../../../../docs/guides/configuration.md)

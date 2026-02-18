@@ -315,10 +315,6 @@ Missing permissions. Ensure your credentials have the IAM permissions listed abo
 
 Access key operations may take 5-20 seconds to propagate. The scripts include retry logic with exponential backoff.
 
-## Cost Considerations
-
-**Estimated Cost**: ~$0 - All operations use free tier IAM and Resource Groups APIs.
-
 ## Related Documentation
 
 - [Configuration Guide](../../../../../docs/guides/configuration.md) - Step-based configuration reference

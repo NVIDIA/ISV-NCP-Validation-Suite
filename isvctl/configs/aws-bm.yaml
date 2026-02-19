@@ -10,9 +10,11 @@
 #   2. list_instances - Lists instances in VPC, verifies target exists (test)
 #   3. describe_instance - Describes instance state, passes SSH info (test)
 #   4. reboot_instance - Reboots instance, validates recovery (test)
-#   5. deploy_nim - Deploys NIM container via SSH (test)
-#   6. teardown_nim - Stops NIM container via SSH (teardown)
-#   7. teardown - Terminates bare-metal EC2 (teardown)
+#   5. reinstall_instance - Reinstalls OS from stock AMI (test) [DEFERRED: AMI snapshot rotation on metal]
+#   6. deploy_nim - Deploys NIM container via SSH (test)
+#   7. teardown_nim - Stops NIM container via SSH (teardown)
+#   8. teardown - Terminates bare-metal EC2 (teardown)
+#   9. verify_teardown - Confirms instance terminated, resources deleted (teardown)
 #
 # Validation timing is inferred from step's phase.
 # Test validations bind to test-phase steps so teardown always runs
@@ -96,7 +98,27 @@ commands:
           - "{{steps.launch_instance.public_ip}}"
         timeout: 1800
 
+      # DEFERRED: Reinstall instance from stock OS (stop + swap root volume + start)
+      # AWS metal instances don't support CreateReplaceRootVolumeTask, and AMI
+      # snapshots can be rotated by Amazon, causing CreateVolume to fail.
+      # Needs: use latest AMI snapshot instead of original, and don't delete
+      # old volume until new one is attached.
+      # - name: reinstall_instance
+      #   phase: test
+      #   command: "python3 ./stubs/aws/bm/reinstall_instance.py"
+      #   args:
+      #     - "--instance-id"
+      #     - "{{steps.launch_instance.instance_id}}"
+      #     - "--region"
+      #     - "{{region}}"
+      #     - "--key-file"
+      #     - "{{steps.launch_instance.key_file}}"
+      #     - "--public-ip"
+      #     - "{{steps.launch_instance.public_ip}}"
+      #   timeout: 3600
+
       # Deploy NIM container via SSH (shared script)
+      # Requires NGC_NIM_API_KEY env var
       - name: deploy_nim
         phase: test
         command: "python3 ./stubs/common/deploy_nim.py"
@@ -132,6 +154,21 @@ commands:
           - "--delete-security-group"
           - "{{teardown_flag}}"
         timeout: 1800
+
+      # Post-teardown sanitization: verify instance terminated and resources deleted
+      - name: verify_teardown
+        phase: teardown
+        command: "python3 ./stubs/aws/bm/verify_terminated.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+          - "--security-group-id"
+          - "{{steps.launch_instance.security_group_id}}"
+          - "--key-name"
+          - "{{steps.launch_instance.key_name}}"
+        timeout: 120
 
 tests:
   platform: bm
@@ -224,6 +261,26 @@ tests:
       checks:
         - SshHostSoftwareCheck: {}
 
+    # DEFERRED: reinstall validations
+    # reinstall_state:
+    #   step: reinstall_instance
+    #   checks:
+    #     - InstanceStateCheck:
+    #         expected_state: "running"
+    #
+    # reinstall_ssh:
+    #   step: reinstall_instance
+    #   checks:
+    #     - SshConnectivityCheck: {}
+    #     - SshOsCheck:
+    #         expected_os: "ubuntu"
+    #
+    # reinstall_gpu:
+    #   step: reinstall_instance
+    #   checks:
+    #     - SshGpuCheck:
+    #         expected_gpus: 8
+
     # Test phase: NIM inference validations
     nim_health:
       step: deploy_nim
@@ -251,6 +308,12 @@ tests:
     # Teardown phase: instance cleanup
     teardown_checks:
       step: teardown
+      checks:
+        - StepSuccessCheck: {}
+
+    # Teardown phase: sanitization - verify resources actually deleted
+    sanitization:
+      step: verify_teardown
       checks:
         - StepSuccessCheck: {}
 

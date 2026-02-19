@@ -315,6 +315,12 @@ Missing permissions. Ensure your credentials have the IAM permissions listed abo
 
 Access key operations may take 5-20 seconds to propagate. The scripts include retry logic with exponential backoff.
 
+## Cost & Cleanup
+
+> **Note**: Control plane tests primarily use read-only API calls (DescribeInstances,
+> ListBuckets, GetCallerIdentity, etc.) and do not create billable resources.
+> No manual cleanup is required.
+
 ## Related Documentation
 
 - [Configuration Guide](../../../../../docs/guides/configuration.md) - Step-based configuration reference

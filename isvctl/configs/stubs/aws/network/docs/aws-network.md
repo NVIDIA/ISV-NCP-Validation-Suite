@@ -392,6 +392,22 @@ Increase timeout in config:
   timeout: 1200  # 20 minutes
 ```
 
+## Cost & Cleanup
+
+> **Warning**: These tests create AWS resources (VPCs, subnets, security groups,
+> internet gateways, EC2 instances) that may incur costs. Resources are
+> automatically cleaned up during the teardown phase, but if teardown fails
+> or is skipped, you must manually delete them to avoid ongoing charges.
+
+```bash
+# Find VPCs tagged by isvtest
+aws ec2 describe-vpcs --filters "Name=tag:CreatedBy,Values=isvtest" \
+  --query 'Vpcs[*].[VpcId,Tags[?Key==`Name`].Value|[0],State]' --output table
+
+# Delete orphaned VPCs (delete dependent resources first)
+aws ec2 delete-vpc --vpc-id vpc-xxx
+```
+
 ## Related Documentation
 
 - [Configuration Guide](../../../../../docs/guides/configuration.md)

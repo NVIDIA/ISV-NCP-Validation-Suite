@@ -335,6 +335,30 @@ aws ec2 terminate-instances --instance-ids i-xxx
 
 ---
 
+## Cost & Cleanup
+
+> **Warning**: These tests create AWS resources (EC2 instances, security groups,
+> key pairs) that incur costs. Resources are automatically cleaned up during the
+> teardown phase, but if teardown fails or is skipped, you must manually delete
+> them to avoid ongoing charges.
+
+```bash
+# Find instances tagged by isvtest
+aws ec2 describe-instances \
+  --filters "Name=tag:CreatedBy,Values=isvtest" "Name=instance-state-name,Values=running,stopped" \
+  --query 'Reservations[*].Instances[*].[InstanceId,InstanceType,State.Name]' --output table
+
+# Terminate orphaned instances
+aws ec2 terminate-instances --instance-ids i-xxx
+
+# Find and delete orphaned security groups
+aws ec2 describe-security-groups --filters "Name=group-name,Values=isv-test-*" \
+  --query 'SecurityGroups[*].[GroupId,GroupName]' --output table
+
+# Delete orphaned key pairs
+aws ec2 delete-key-pair --key-name isv-test-key
+```
+
 ## Related Documentation
 
 - [AWS EKS Validation Guide](../../eks/docs/aws-eks.md) - Kubernetes cluster tests

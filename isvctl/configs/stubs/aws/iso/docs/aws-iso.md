@@ -387,7 +387,12 @@ uv run isvctl test run -f isvctl/configs/aws-iso.yaml -v
 
 ---
 
-## Cleanup
+## Cost & Cleanup
+
+> **Warning**: These tests create AWS resources (S3 buckets, EC2 instances, AMIs,
+> EBS snapshots, security groups) that incur costs. Resources are automatically
+> cleaned up during the teardown phase, but if teardown fails or is skipped,
+> you must manually delete them to avoid ongoing charges.
 
 Tests automatically clean up all resources, even on failure:
 

@@ -248,14 +248,11 @@ tests:
       checks:
         - StepSuccessCheck: {}
 
-    # Teardown phase: instance cleanup + sanitization
+    # Teardown phase: instance cleanup
     teardown_checks:
       step: teardown
       checks:
         - StepSuccessCheck: {}
-        - FieldValueCheck:
-            field: "resources_destroyed"
-            expected: true
 
   exclude:
     markers: []

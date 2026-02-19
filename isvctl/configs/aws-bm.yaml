@@ -1,0 +1,114 @@
+# AWS Bare Metal (BMaaS) Validation Configuration
+#
+# Architecture:
+#   - Scripts (AWS-specific): launch_instance.py, describe_instance.py, teardown.py (use boto3)
+#   - Validations (platform-agnostic): Defined in tests.validations
+#
+# Steps:
+#   1. launch_instance - boto3: Provisions bare-metal EC2, outputs IP/key (setup)
+#   2. describe_instance - boto3: Describes instance state, passes SSH info (test)
+#   3. teardown - boto3: Terminates bare-metal EC2 (teardown)
+#
+# Validation timing is inferred from step's phase.
+# Test validations bind to describe_instance (test phase) so teardown
+# always runs even if tests fail.
+#
+# Usage:
+#   uv run isvctl test run -f isvctl/configs/aws-bm.yaml
+
+version: "1.0"
+
+commands:
+  bm:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      # Launch bare-metal GPU instance (boto3)
+      - name: launch_instance
+        phase: setup
+        command: "python3 ./stubs/aws/bm/launch_instance.py"
+        args:
+          - "--name"
+          - "isv-bm-test-gpu"
+          - "--instance-type"
+          - "{{instance_type}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 1200
+
+      # Describe instance - test phase anchor for validations (boto3)
+      - name: describe_instance
+        phase: test
+        command: "python3 ./stubs/aws/bm/describe_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+        timeout: 120
+
+      # Teardown bare-metal instance (boto3)
+      - name: teardown
+        phase: teardown
+        command: "python3 ./stubs/aws/bm/teardown.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+          - "--delete-key-pair"
+          - "--delete-security-group"
+        timeout: 1800
+
+tests:
+  platform: bm
+  cluster_name: "aws-bm-validation"
+  description: "AWS Bare Metal (BMaaS) validation tests"
+
+  settings:
+    region: "us-west-2"
+    instance_type: "g4dn.metal"
+
+  validations:
+    # Setup phase - only check provisioning succeeded
+    setup_checks:
+      step: launch_instance
+      checks:
+        - InstanceStateCheck:
+            expected_state: "running"
+
+    # Test phase - all validations bind to describe_instance
+    instance_info:
+      step: describe_instance
+      checks:
+        - InstanceStateCheck:
+            expected_state: "running"
+
+    ssh:
+      step: describe_instance
+      checks:
+        - SshConnectivityCheck: {}
+        - SshOsCheck:
+            expected_os: "ubuntu"
+
+    gpu:
+      step: describe_instance
+      checks:
+        - SshGpuCheck:
+            expected_gpus: 8
+
+    host_os:
+      step: describe_instance
+      checks:
+        - SshHostSoftwareCheck: {}
+
+    # Teardown phase
+    teardown_checks:
+      step: teardown
+      checks:
+        - StepSuccessCheck: {}
+
+  exclude:
+    markers:
+      - workload

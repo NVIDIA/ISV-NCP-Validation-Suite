@@ -58,6 +58,17 @@ def main() -> int:
     if args.skip_destroy:
         result["success"] = True
         result["message"] = "Destroy skipped (--skip-destroy flag)"
+        print(
+            f"\n{'=' * 60}\n"
+            f"Teardown skipped. Instance {args.instance_id} is still running.\n\n"
+            f"To rerun tests without reprovisioning:\n"
+            f"  export AWS_BM_INSTANCE_ID={args.instance_id}\n"
+            f"  export AWS_BM_KEY_FILE=<key_file_from_launch>\n"
+            f"  export AWS_BM_SKIP_TEARDOWN=true\n\n"
+            f"To teardown later, unset AWS_BM_SKIP_TEARDOWN and rerun.\n"
+            f"{'=' * 60}\n",
+            file=sys.stderr,
+        )
         print(json.dumps(result, indent=2))
         return 0
 

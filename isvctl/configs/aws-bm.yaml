@@ -13,6 +13,18 @@
 # Test validations bind to describe_instance (test phase) so teardown
 # always runs even if tests fail.
 #
+# Dev workflow (reuse existing instance):
+#   # Run 1: launch + test, keep instance alive
+#   AWS_BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/aws-bm.yaml
+#
+#   # Run 2+: reuse instance, iterate on tests
+#   AWS_BM_INSTANCE_ID=i-xxx AWS_BM_KEY_FILE=/tmp/isv-bm-test-key.pem \
+#     AWS_BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/aws-bm.yaml
+#
+#   # Final: teardown
+#   AWS_BM_INSTANCE_ID=i-xxx AWS_BM_KEY_FILE=/tmp/isv-bm-test-key.pem \
+#     uv run isvctl test run -f isvctl/configs/aws-bm.yaml
+#
 # Usage:
 #   uv run isvctl test run -f isvctl/configs/aws-bm.yaml
 
@@ -23,6 +35,7 @@ commands:
     phases: ["setup", "test", "teardown"]
     steps:
       # Launch bare-metal GPU instance (boto3)
+      # Set AWS_BM_INSTANCE_ID + AWS_BM_KEY_FILE to reuse an existing instance
       - name: launch_instance
         phase: setup
         command: "python3 ./stubs/aws/bm/launch_instance.py"
@@ -49,6 +62,7 @@ commands:
         timeout: 120
 
       # Teardown bare-metal instance (boto3)
+      # Set AWS_BM_SKIP_TEARDOWN=true to keep the instance alive
       - name: teardown
         phase: teardown
         command: "python3 ./stubs/aws/bm/teardown.py"
@@ -59,6 +73,7 @@ commands:
           - "{{region}}"
           - "--delete-key-pair"
           - "--delete-security-group"
+          - "{{teardown_flag}}"
         timeout: 1800
 
 tests:
@@ -69,6 +84,7 @@ tests:
   settings:
     region: "us-west-2"
     instance_type: "g4dn.metal"
+    teardown_flag: "{{(env.AWS_BM_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"
 
   validations:
     # Setup phase - only check provisioning succeeded

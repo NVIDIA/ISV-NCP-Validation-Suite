@@ -5,13 +5,15 @@
 #   - Validations (platform-agnostic): Defined in tests.validations
 #
 # Steps:
-#   1. launch_instance - boto3: Provisions bare-metal EC2, outputs IP/key (setup)
-#   2. describe_instance - boto3: Describes instance state, passes SSH info (test)
-#   3. teardown - boto3: Terminates bare-metal EC2 (teardown)
+#   1. launch_instance - Provisions bare-metal EC2, outputs IP/key (setup)
+#   2. list_instances - Lists instances in VPC, verifies target exists (test)
+#   3. describe_instance - Describes instance state, passes SSH info (test)
+#   4. reboot_instance - Reboots instance, validates recovery (test)
+#   5. teardown - Terminates bare-metal EC2 (teardown)
 #
 # Validation timing is inferred from step's phase.
-# Test validations bind to describe_instance (test phase) so teardown
-# always runs even if tests fail.
+# Test validations bind to test-phase steps so teardown always runs
+# even if tests fail.
 #
 # Dev workflow (reuse existing instance):
 #   # Run 1: launch + test, keep instance alive
@@ -48,7 +50,21 @@ commands:
           - "{{region}}"
         timeout: 1200
 
-      # Describe instance - test phase anchor for validations (boto3)
+      # List instances in VPC - verifies instance is visible
+      # Reuses VM script (generic EC2 API)
+      - name: list_instances
+        phase: test
+        command: "python3 ./stubs/aws/vm/list_instances.py"
+        args:
+          - "--vpc-id"
+          - "{{steps.launch_instance.vpc_id}}"
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 120
+
+      # Describe instance - test phase anchor for SSH/GPU validations
       - name: describe_instance
         phase: test
         command: "python3 ./stubs/aws/bm/describe_instance.py"
@@ -60,6 +76,22 @@ commands:
           - "--key-file"
           - "{{steps.launch_instance.key_file}}"
         timeout: 120
+
+      # Reboot instance and validate recovery
+      # BM-specific: longer waits for hardware POST/BIOS/OS boot
+      - name: reboot_instance
+        phase: test
+        command: "python3 ./stubs/aws/bm/reboot_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+          - "--public-ip"
+          - "{{steps.launch_instance.public_ip}}"
+        timeout: 1800
 
       # Teardown bare-metal instance (boto3)
       # Set AWS_BM_SKIP_TEARDOWN=true to keep the instance alive
@@ -94,13 +126,21 @@ tests:
         - InstanceStateCheck:
             expected_state: "running"
 
-    # Test phase - all validations bind to describe_instance
+    # Test phase: list instances
+    list_instances:
+      step: list_instances
+      checks:
+        - InstanceListCheck:
+            min_count: 1
+
+    # Test phase: instance info
     instance_info:
       step: describe_instance
       checks:
         - InstanceStateCheck:
             expected_state: "running"
 
+    # Test phase: SSH access
     ssh:
       step: describe_instance
       checks:
@@ -108,14 +148,54 @@ tests:
         - SshOsCheck:
             expected_os: "ubuntu"
 
+    # Test phase: GPU hardware
     gpu:
       step: describe_instance
       checks:
         - SshGpuCheck:
             expected_gpus: 8
 
+    # Test phase: host software stack
     host_os:
       step: describe_instance
+      checks:
+        - SshHostSoftwareCheck: {}
+
+    # Test phase: GPU stress workload
+    gpu_workload:
+      step: describe_instance
+      checks:
+        - SshGpuStressCheck:
+            duration: 60
+
+    # Test phase: reboot validations
+    reboot_checks:
+      step: reboot_instance
+      checks:
+        - InstanceRebootCheck:
+            max_uptime: 600
+
+    reboot_state:
+      step: reboot_instance
+      checks:
+        - InstanceStateCheck:
+            expected_state: "running"
+
+    reboot_ssh:
+      step: reboot_instance
+      checks:
+        - SshConnectivityCheck: {}
+        - SshOsCheck:
+            expected_os: "ubuntu"
+
+    reboot_gpu:
+      step: reboot_instance
+      checks:
+        - SshGpuCheck:
+            expected_gpus: 8
+
+    reboot_host_os:
+      step: reboot_instance
       checks:
         - SshHostSoftwareCheck: {}
 

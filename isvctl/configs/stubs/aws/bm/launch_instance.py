@@ -38,9 +38,10 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 from typing import Any
 
-sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import boto3
 from botocore.exceptions import ClientError
@@ -297,16 +298,6 @@ def main() -> int:
         result["vpc_id"] = vpc_id
         result["availability_zone"] = instance.get("Placement", {}).get("AvailabilityZone")
         result["success"] = True
-
-        print(
-            f"\n{'=' * 60}\n"
-            f"To reuse this instance on subsequent runs:\n\n"
-            f"  export AWS_BM_INSTANCE_ID={instance_id}\n"
-            f"  export AWS_BM_KEY_FILE={result['key_file']}\n"
-            f"  export AWS_BM_SKIP_TEARDOWN=true\n"
-            f"{'=' * 60}\n",
-            file=sys.stderr,
-        )
 
     except Exception as e:
         result["error"] = str(e)

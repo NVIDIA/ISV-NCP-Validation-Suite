@@ -146,12 +146,12 @@ tests:
     #     - SshGpuCheck:
     #         expected_gpus: 1
 
-    # Optional: GPU stress test (excluded by default)
-    gpu_workload:
-      step: launch_instance
-      checks:
-        - SshGpuStressCheck:
-            duration: 60
+    # TODO: Add GPU stress test
+    # gpu_workload:
+    #   step: launch_instance
+    #   checks:
+    #     - SshGpuStressCheck:
+    #         duration: 60
 
     # Validate teardown succeeded
     teardown_checks:

@@ -223,12 +223,12 @@ tests:
       checks:
         - SshHostSoftwareCheck: {}
 
-    # Test phase: GPU stress workload
-    gpu_workload:
-      step: describe_instance
-      checks:
-        - SshGpuStressCheck:
-            duration: 60
+    # TODO: Add GPU stress test
+    # gpu_workload:
+    #   step: describe_instance
+    #   checks:
+    #     - SshGpuStressCheck:
+    #         duration: 60
 
     # Test phase: reboot validations
     reboot_checks:

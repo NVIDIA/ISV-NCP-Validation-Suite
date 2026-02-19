@@ -2,6 +2,7 @@
 #
 # Architecture:
 #   - Scripts (AWS-specific): launch_instance.py, describe_instance.py, teardown.py (use boto3)
+#   - Scripts (shared): deploy_nim.py, teardown_nim.py (paramiko)
 #   - Validations (platform-agnostic): Defined in tests.validations
 #
 # Steps:
@@ -9,7 +10,9 @@
 #   2. list_instances - Lists instances in VPC, verifies target exists (test)
 #   3. describe_instance - Describes instance state, passes SSH info (test)
 #   4. reboot_instance - Reboots instance, validates recovery (test)
-#   5. teardown - Terminates bare-metal EC2 (teardown)
+#   5. deploy_nim - Deploys NIM container via SSH (test)
+#   6. teardown_nim - Stops NIM container via SSH (teardown)
+#   7. teardown - Terminates bare-metal EC2 (teardown)
 #
 # Validation timing is inferred from step's phase.
 # Test validations bind to test-phase steps so teardown always runs
@@ -92,6 +95,28 @@ commands:
           - "--public-ip"
           - "{{steps.launch_instance.public_ip}}"
         timeout: 1800
+
+      # Deploy NIM container via SSH (shared script)
+      - name: deploy_nim
+        phase: test
+        command: "python3 ./stubs/common/deploy_nim.py"
+        args:
+          - "--host"
+          - "{{steps.launch_instance.public_ip}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+        timeout: 1800
+
+      # Teardown NIM container via SSH (shared script)
+      - name: teardown_nim
+        phase: teardown
+        command: "python3 ./stubs/common/teardown_nim.py"
+        args:
+          - "--host"
+          - "{{steps.launch_instance.public_ip}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+        timeout: 120
 
       # Teardown bare-metal instance (boto3)
       # Set AWS_BM_SKIP_TEARDOWN=true to keep the instance alive
@@ -199,12 +224,38 @@ tests:
       checks:
         - SshHostSoftwareCheck: {}
 
-    # Teardown phase
+    # Test phase: NIM inference validations
+    nim_health:
+      step: deploy_nim
+      checks:
+        - SshNimHealthCheck: {}
+
+    nim_models:
+      step: deploy_nim
+      checks:
+        - SshNimModelCheck: {}
+
+    nim_inference:
+      step: deploy_nim
+      checks:
+        - SshNimInferenceCheck:
+            prompt: "What is CUDA?"
+            max_tokens: 50
+
+    # Teardown phase: NIM cleanup
+    nim_teardown:
+      step: teardown_nim
+      checks:
+        - StepSuccessCheck: {}
+
+    # Teardown phase: instance cleanup + sanitization
     teardown_checks:
       step: teardown
       checks:
         - StepSuccessCheck: {}
+        - FieldValueCheck:
+            field: "resources_destroyed"
+            expected: true
 
   exclude:
-    markers:
-      - workload
+    markers: []

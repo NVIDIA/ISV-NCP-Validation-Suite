@@ -118,6 +118,4 @@ tests:
           genai_perf_concurrency: 8
 
   exclude:
-    markers:
-      - slow
-      - workload
+    markers: []

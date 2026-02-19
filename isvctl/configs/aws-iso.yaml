@@ -160,5 +160,4 @@ tests:
         - StepSuccessCheck: {}
 
   exclude:
-    markers:
-      - workload
+    markers: []

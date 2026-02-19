@@ -404,8 +404,42 @@ Increase timeout in config:
 aws ec2 describe-vpcs --filters "Name=tag:CreatedBy,Values=isvtest" \
   --query 'Vpcs[*].[VpcId,Tags[?Key==`Name`].Value|[0],State]' --output table
 
-# Delete orphaned VPCs (delete dependent resources first)
-aws ec2 delete-vpc --vpc-id vpc-xxx
+# Delete orphaned VPCs (must remove dependent resources first — see below)
+VPC_ID="vpc-xxx"
+```
+
+`delete-vpc` fails with `DependencyViolation` if any resources still reference
+the VPC. Remove dependencies in this order before deleting:
+
+1. Terminate EC2 instances, load balancers, RDS/EFS mount targets (`terminate-instances`)
+2. Delete NAT Gateways and VPC Endpoints (`delete-nat-gateway`, `delete-vpc-endpoints`)
+3. Detach & delete remaining ENIs and release Elastic IPs (`delete-network-interface`)
+4. Detach & delete Internet/VPN Gateways (`detach-internet-gateway`, `delete-internet-gateway`)
+5. Delete peering/VPN connections (`delete-vpc-peering-connection`)
+6. Disassociate & delete custom route tables (`disassociate-route-table`, `delete-route-table`)
+7. Delete subnets (`delete-subnet`)
+8. Delete non-default security groups and NACLs (`delete-security-group`, `delete-network-acl`)
+
+> **Key check:** there must be **zero ENIs** remaining before `delete-vpc` succeeds.
+> Verify with: `aws ec2 describe-network-interfaces --filters Name=vpc-id,Values=$VPC_ID`
+
+```bash
+# Quick manual cleanup example
+VPC_ID="vpc-xxx"
+aws ec2 terminate-instances --instance-ids $(aws ec2 describe-instances \
+  --filters "Name=vpc-id,Values=$VPC_ID" --query 'Reservations[*].Instances[*].InstanceId' --output text)
+aws ec2 detach-internet-gateway --internet-gateway-id igw-xxx --vpc-id $VPC_ID
+aws ec2 delete-internet-gateway --internet-gateway-id igw-xxx
+aws ec2 delete-subnet --subnet-id subnet-xxx
+aws ec2 delete-security-group --group-id sg-xxx
+aws ec2 delete-vpc --vpc-id $VPC_ID
+```
+
+For automated cleanup, use the suite's teardown phase which handles the full
+dependency sequence via [`teardown_vpc.py`](../teardown_vpc.py):
+
+```bash
+uv run isvctl test run -f isvctl/configs/aws-network.yaml --phase teardown
 ```
 
 ## Related Documentation

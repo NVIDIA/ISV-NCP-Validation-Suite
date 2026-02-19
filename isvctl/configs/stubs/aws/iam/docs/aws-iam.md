@@ -195,6 +195,21 @@ class AzureAdProvider:
 # Find orphaned test users
 aws iam list-users --query 'Users[?starts_with(UserName, `isv-test-`)].UserName' --output table
 
-# Delete orphaned user (detach policies and delete keys first)
+# Detach managed policies
+aws iam list-attached-user-policies --user-name isv-test-user \
+  --query 'AttachedPolicies[].PolicyArn' --output text | tr '\t' '\n' | \
+  xargs -I {} aws iam detach-user-policy --user-name isv-test-user --policy-arn {}
+
+# Remove inline policies
+aws iam list-user-policies --user-name isv-test-user \
+  --query 'PolicyNames[]' --output text | tr '\t' '\n' | \
+  xargs -I {} aws iam delete-user-policy --user-name isv-test-user --policy-name {}
+
+# Delete access keys
+aws iam list-access-keys --user-name isv-test-user \
+  --query 'AccessKeyMetadata[].AccessKeyId' --output text | tr '\t' '\n' | \
+  xargs -I {} aws iam delete-access-key --user-name isv-test-user --access-key-id {}
+
+# Delete orphaned user
 aws iam delete-user --user-name isv-test-user
 ```

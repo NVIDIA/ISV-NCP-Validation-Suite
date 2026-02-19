@@ -32,6 +32,8 @@ import sys
 import time
 from typing import Any
 
+import boto3
+
 
 def wait_for_ssh(
     host: str,
@@ -142,8 +144,6 @@ def main() -> int:
         help="Seconds to wait after reboot API call before checking (default: 120)",
     )
     args = parser.parse_args()
-
-    import boto3
 
     ec2 = boto3.client("ec2", region_name=args.region)
 

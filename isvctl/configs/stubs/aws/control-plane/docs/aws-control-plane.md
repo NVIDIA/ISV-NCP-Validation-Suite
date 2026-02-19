@@ -318,8 +318,13 @@ Access key operations may take 5-20 seconds to propagate. The scripts include re
 ## Cost & Cleanup
 
 > **Note**: Control plane tests primarily use read-only API calls (DescribeInstances,
-> ListBuckets, GetCallerIdentity, etc.) and do not create billable resources.
-> No manual cleanup is required.
+> ListBuckets, GetCallerIdentity, etc.). However, the Access Key Lifecycle and Tenant
+> Lifecycle tests create temporary resources—IAM users, access keys, and resource
+> groups—as part of their CRUD validations. These resources are free-tier/non-billable
+> and are automatically cleaned up during the teardown phase. If a test run is
+> interrupted before teardown completes, any leftover resources (prefixed with
+> `isv-access-key-test-` or `isv-tenant-test-`) can be safely deleted manually.
+> No long-lived billable resources are created.
 
 ## Related Documentation
 

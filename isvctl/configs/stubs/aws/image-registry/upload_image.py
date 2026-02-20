@@ -40,8 +40,10 @@ from botocore.exceptions import ClientError
 def download_image(url: str, image_format: str = "vmdk") -> Path | None:
     """Download image from URL."""
     print(f"Downloading image from {url}...", file=sys.stderr)
+    tmp_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(suffix=f".{image_format}", delete=False) as tmp:
+            tmp_path = Path(tmp.name)
             response = requests.get(url, stream=True, timeout=600)
             response.raise_for_status()
 
@@ -58,9 +60,11 @@ def download_image(url: str, image_format: str = "vmdk") -> Path | None:
                         print(f"Download progress: {progress}%", file=sys.stderr)
                         last_progress = progress
 
-            return Path(tmp.name)
+            return tmp_path
 
     except requests.RequestException as e:
+        if tmp_path is not None and tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)
         print(f"Download failed: {e}", file=sys.stderr)
         return None
 
@@ -269,58 +273,58 @@ def main() -> int:
             print(json.dumps(result))
             return 1
 
-    # Generate bucket name if not provided
-    bucket_name = args.bucket_name or f"isv-iso-import-{uuid.uuid4().hex[:8]}"
+    try:
+        # Generate bucket name if not provided
+        bucket_name = args.bucket_name or f"isv-iso-import-{uuid.uuid4().hex[:8]}"
 
-    # Create vmimport role
-    if not create_vmimport_role(iam_client):
-        result = {"success": False, "error": "Failed to create vmimport role"}
+        # Create vmimport role
+        if not create_vmimport_role(iam_client):
+            result = {"success": False, "error": "Failed to create vmimport role"}
+            print(json.dumps(result))
+            return 1
+
+        if not attach_vmimport_policy(iam_client, bucket_name):
+            result = {"success": False, "error": "Failed to attach vmimport policy"}
+            print(json.dumps(result))
+            return 1
+
+        # Upload to S3
+        object_key = upload_to_s3(s3_client, image_path, bucket_name)
+        if not object_key:
+            result = {"success": False, "error": "Failed to upload to S3"}
+            print(json.dumps(result))
+            return 1
+
+        # Import as AMI
+        ami_id, snapshot_ids = import_as_ami(ec2_client, bucket_name, object_key, args.image_format)
+        if not ami_id:
+            result = {"success": False, "error": "Failed to import as AMI"}
+            print(json.dumps(result))
+            return 1
+
+        result = {
+            "success": True,
+            "platform": "image_registry",
+            # Generic fields (provider-agnostic)
+            "image_id": ami_id,
+            "image_name": f"isv-imported-{ami_id}",
+            "storage_bucket": bucket_name,
+            "storage_path": object_key,
+            "disk_ids": snapshot_ids,
+            "image_format": args.image_format,
+            "region": args.region,
+            "image_state": "available",
+            # AWS-specific fields (for reference)
+            "ami_id": ami_id,
+            "bucket_name": bucket_name,
+            "object_key": object_key,
+            "snapshot_ids": snapshot_ids,
+        }
         print(json.dumps(result))
-        return 1
-
-    if not attach_vmimport_policy(iam_client, bucket_name):
-        result = {"success": False, "error": "Failed to attach vmimport policy"}
-        print(json.dumps(result))
-        return 1
-
-    # Upload to S3
-    object_key = upload_to_s3(s3_client, image_path, bucket_name)
-    if not object_key:
-        result = {"success": False, "error": "Failed to upload to S3"}
-        print(json.dumps(result))
-        return 1
-
-    # Import as AMI
-    ami_id, snapshot_ids = import_as_ami(ec2_client, bucket_name, object_key, args.image_format)
-    if not ami_id:
-        result = {"success": False, "error": "Failed to import as AMI"}
-        print(json.dumps(result))
-        return 1
-
-    # Clean up downloaded file
-    if not args.local_path and image_path.exists():
-        image_path.unlink()
-
-    result = {
-        "success": True,
-        "platform": "image_registry",
-        # Generic fields (provider-agnostic)
-        "image_id": ami_id,
-        "image_name": f"isv-imported-{ami_id}",
-        "storage_bucket": bucket_name,
-        "storage_path": object_key,
-        "disk_ids": snapshot_ids,
-        "image_format": args.image_format,
-        "region": args.region,
-        "image_state": "available",
-        # AWS-specific fields (for reference)
-        "ami_id": ami_id,
-        "bucket_name": bucket_name,
-        "object_key": object_key,
-        "snapshot_ids": snapshot_ids,
-    }
-    print(json.dumps(result))
-    return 0
+        return 0
+    finally:
+        if not args.local_path and image_path.exists():
+            image_path.unlink()
 
 
 if __name__ == "__main__":

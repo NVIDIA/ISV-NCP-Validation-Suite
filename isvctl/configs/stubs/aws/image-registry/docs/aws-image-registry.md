@@ -50,7 +50,7 @@ The AWS ISO/VMDK import validation tests verify:
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────┐
-│  uv run isvctl test run -f isvctl/configs/aws/image-registry.yaml              │
+│  uv run isvctl test run -f isvctl/configs/aws/image-registry.yaml   │
 └─────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼

@@ -328,7 +328,7 @@ ssh -i /tmp/isv-test-key.pem ubuntu@<ip> "curl -sf http://localhost:8000/v1/mode
 ### Cleanup Failed Resources
 
 ```bash
-aws ec2 describe-instances --filters "Name=tag:Purpose,Values=isv-validation" \
+aws ec2 describe-instances --filters "Name=tag:CreatedBy,Values=isvtest" \
   --query 'Reservations[*].Instances[*].[InstanceId,State.Name]'
 aws ec2 terminate-instances --instance-ids i-xxx
 ```

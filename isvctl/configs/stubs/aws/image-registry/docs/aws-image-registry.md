@@ -415,7 +415,7 @@ If cleanup fails, manually delete resources:
 
 ```bash
 # Find orphaned resources
-aws ec2 describe-instances --filters "Name=tag:Purpose,Values=isv-validation"
+aws ec2 describe-instances --filters "Name=tag:CreatedBy,Values=isvtest"
 aws ec2 describe-images --owners self
 aws s3 ls | grep isv-iso
 

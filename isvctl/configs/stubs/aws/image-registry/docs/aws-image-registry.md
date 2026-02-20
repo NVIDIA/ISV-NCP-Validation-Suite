@@ -50,7 +50,7 @@ The AWS ISO/VMDK import validation tests verify:
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────┐
-│  uv run isvctl test run -f isvctl/configs/aws/iso.yaml              │
+│  uv run isvctl test run -f isvctl/configs/aws/image-registry.yaml              │
 └─────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
@@ -194,7 +194,7 @@ cd ISV-NCP-Validation-Suite
 uv sync
 
 # Run AWS ISO import validation
-uv run isvctl test run -f isvctl/configs/aws/iso.yaml
+uv run isvctl test run -f isvctl/configs/aws/image-registry.yaml
 ```
 
 ### Test Duration Summary
@@ -213,19 +213,19 @@ uv run isvctl test run -f isvctl/configs/aws/iso.yaml
 
 ## Configuration
 
-### iso.yaml Structure
+### image-registry.yaml Structure
 
 ```yaml
 version: "1.0"
 
 commands:
-  iso:
+  image_registry:
     phases: ["setup", "test", "teardown"]
     steps:
       # Step 1: Upload VMDK and import as AMI
       - name: upload_image
         phase: setup
-        command: "python3 ./stubs/aws/iso/upload_image.py"
+        command: "python3 ./stubs/aws/image-registry/upload_image.py"
         args:
           - "--image-url"
           - "{{image_url}}"
@@ -238,7 +238,7 @@ commands:
       # Step 2: Launch GPU instance from imported AMI
       - name: launch_instance
         phase: test
-        command: "python3 ./stubs/aws/iso/launch_instance.py"
+        command: "python3 ./stubs/aws/image-registry/launch_instance.py"
         args:
           - "--ami-id"
           - "{{steps.upload_image.image_id}}"  # Use generic field name
@@ -251,7 +251,7 @@ commands:
       # Step 3: Cleanup all resources
       - name: teardown
         phase: teardown
-        command: "python3 ./stubs/aws/iso/teardown.py"
+        command: "python3 ./stubs/aws/image-registry/teardown.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -265,8 +265,8 @@ commands:
         timeout: 300
 
 tests:
-  platform: iso
-  cluster_name: "aws-iso-validation"
+  platform: image_registry
+  cluster_name: "aws-image-registry-validation"
 
   settings:
     region: "us-west-2"
@@ -334,33 +334,33 @@ tests:
 ### Run Full ISO Import Test
 
 ```bash
-uv run isvctl test run -f isvctl/configs/aws/iso.yaml
+uv run isvctl test run -f isvctl/configs/aws/image-registry.yaml
 ```
 
 ### Skip Teardown (for debugging)
 
 ```bash
-AWS_ISO_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/aws/iso.yaml
+AWS_ISO_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/aws/image-registry.yaml
 ```
 
 ### Run in Different Region
 
 ```bash
-uv run isvctl test run -f isvctl/configs/aws/iso.yaml \
+uv run isvctl test run -f isvctl/configs/aws/image-registry.yaml \
   --set tests.settings.region=us-east-1
 ```
 
 ### Use Different Instance Type
 
 ```bash
-uv run isvctl test run -f isvctl/configs/aws/iso.yaml \
+uv run isvctl test run -f isvctl/configs/aws/image-registry.yaml \
   --set tests.settings.instance_type=g5.xlarge
 ```
 
 ### Verbose Output
 
 ```bash
-uv run isvctl test run -f isvctl/configs/aws/iso.yaml -v
+uv run isvctl test run -f isvctl/configs/aws/image-registry.yaml -v
 ```
 
 ---
@@ -448,7 +448,7 @@ Common causes:
 No capacity for the instance type in the AZ. Try a different region or instance type:
 
 ```bash
-uv run isvctl test run -f isvctl/configs/aws/iso.yaml \
+uv run isvctl test run -f isvctl/configs/aws/image-registry.yaml \
   --set tests.settings.instance_type=g5.xlarge
 ```
 

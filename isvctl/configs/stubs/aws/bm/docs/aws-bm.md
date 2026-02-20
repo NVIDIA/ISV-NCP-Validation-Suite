@@ -132,7 +132,7 @@ aws ec2 delete-key-pair --key-name isv-bm-test-key
 ## Related Documentation
 
 - [AWS VM Validation Guide](../../vm/docs/aws-vm.md) - VM-as-a-Service tests
-- [AWS ISO Import Validation Guide](../../iso/docs/aws-iso.md) - VMDK/VHD import tests
+- [AWS Image Registry Validation Guide](../../image-registry/docs/aws-image-registry.md) - Image import tests
 - [AWS EKS Validation Guide](../../eks/docs/aws-eks.md) - Kubernetes cluster tests
 - [AWS Network Validation Guide](../../network/docs/aws-network.md) - VPC and network tests
 - [Configuration Guide](../../../../../docs/guides/configuration.md) - Config file options

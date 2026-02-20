@@ -8,7 +8,7 @@ Managed Images for Azure, etc.).
 Required JSON output:
 {
     "success":        bool      — true if image imported successfully,
-    "platform":       str       — "iso",
+    "platform":       str       — "image_registry",
     "image_id":       str       — ID of the imported machine image,
     "storage_bucket": str       — name of the storage bucket / container,
     "disk_ids":       list[str] — snapshot or disk IDs created during import,
@@ -19,7 +19,7 @@ Usage:
     python upload_image.py --image-url <url> --image-format vmdk --region us-west-2
 
 AWS reference implementation:
-    ../../../stubs/aws/iso/upload_image.py
+    ../../../stubs/aws/image-registry/upload_image.py
 """
 
 import argparse
@@ -40,7 +40,7 @@ def main() -> int:
 
     result: dict = {
         "success": False,
-        "platform": "iso",
+        "platform": "image_registry",
         "image_id": "",
         "storage_bucket": "",
         "disk_ids": [],

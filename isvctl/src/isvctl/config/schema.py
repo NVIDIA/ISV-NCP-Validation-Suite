@@ -89,7 +89,7 @@ class StepConfig(BaseModel):
 class PlatformCommands(BaseModel):
     """Lifecycle commands for a specific platform.
 
-    Groups commands for a platform (kubernetes, slurm, bare_metal, network, vm, iam, iso).
+    Groups commands for a platform (kubernetes, slurm, bare_metal, network, vm, iam, image_registry).
     Supports skip at both platform level (skips all phases) and phase level.
 
     The `phases` field defines the execution order. Steps are grouped by their `phase`
@@ -325,7 +325,7 @@ class ValidationConfig(BaseModel):
     cluster_name: str | None = Field(default=None, description="Cluster name for test run")
     description: str | None = Field(default=None, description="Test run description")
     platform: str | None = Field(
-        default=None, description="Platform: kubernetes, slurm, bare_metal, network, vm, iam, iso"
+        default=None, description="Platform: kubernetes, slurm, bare_metal, network, vm, iam, image_registry"
     )
     settings: dict[str, Any] = Field(default_factory=dict, description="Test settings")
     validations: dict[str, list[dict[str, Any]] | dict[str, Any]] = Field(
@@ -352,7 +352,7 @@ class RunConfig(BaseModel):
     lab: LabConfig | None = Field(default=None, description="Lab configuration")
     commands: dict[str, PlatformCommands] = Field(
         default_factory=dict,
-        description="Lifecycle commands by platform (kubernetes, slurm, bare_metal, network, vm, iam, iso)",
+        description="Lifecycle commands by platform (kubernetes, slurm, bare_metal, network, vm, iam, image_registry)",
     )
     context: dict[str, Any] = Field(default_factory=dict, description="Context variables for templating")
     tests: ValidationConfig | None = Field(default=None, description="Test configuration")

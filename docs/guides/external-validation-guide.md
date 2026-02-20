@@ -253,9 +253,9 @@ For common validation scenarios, **pre-built templates** are available in [`isvc
 | [`network.yaml`](../../isvctl/configs/templates/network.yaml) | VPC CRUD, subnets, isolation, security, connectivity, traffic | 8 scripts |
 | [`vm.yaml`](../../isvctl/configs/templates/vm.yaml) | Launch GPU VM → list → reboot → NIM deploy → teardown | 4 scripts + 2 shared |
 | [`bm.yaml`](../../isvctl/configs/templates/bm.yaml) | Launch bare-metal → describe → reboot → NIM → teardown → verify | 5 scripts + 2 shared |
-| [`eks.yaml`](../../isvctl/configs/templates/eks.yaml) | Provision K8s GPU cluster → validate nodes/GPU/workloads → teardown | 2 scripts |
+| [`kaas.yaml`](../../isvctl/configs/templates/kaas.yaml) | Provision K8s GPU cluster → validate nodes/GPU/workloads → teardown | 2 scripts |
 | [`control-plane.yaml`](../../isvctl/configs/templates/control-plane.yaml) | API health, access key lifecycle, tenant lifecycle | 10 scripts |
-| [`iso.yaml`](../../isvctl/configs/templates/iso.yaml) | Image upload/import → launch instance → teardown | 3 scripts |
+| [`image-registry.yaml`](../../isvctl/configs/templates/image-registry.yaml) | Image upload → VM launch → install config CRUD → BMaaS install → teardown | 6 scripts |
 
 ```bash
 # Copy the templates and implement for your platform

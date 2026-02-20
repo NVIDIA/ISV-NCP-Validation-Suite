@@ -8,7 +8,7 @@ partial cleanup succeeds even if some deletions fail.
 Required JSON output:
 {
     "success":           bool      — true if all resources deleted,
-    "platform":          str       — "iso",
+    "platform":          str       — "image_registry",
     "resources_deleted": list[str] — names/IDs of deleted resources,
     "message":           str       — human-readable summary,
     "error":             str       — (optional) error message, present when success is false
@@ -22,7 +22,7 @@ Usage:
     Pass --skip-destroy to skip actual deletion (dry-run).
 
 AWS reference implementation:
-    ../../../stubs/aws/iso/teardown.py
+    ../../../stubs/aws/image-registry/teardown.py
 """
 
 import argparse
@@ -45,7 +45,7 @@ def main() -> int:
 
     result: dict = {
         "success": False,
-        "platform": "iso",
+        "platform": "image_registry",
         "resources_deleted": [],
         "message": "",
     }

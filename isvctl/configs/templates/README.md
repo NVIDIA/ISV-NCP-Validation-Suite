@@ -27,7 +27,7 @@ Provider-agnostic templates for ISV Lab validation tests. Copy a template, imple
 | `bm.yaml` | Launch bare-metal → describe → reboot → NIM → teardown → verify | `stubs/bm/` (5 scripts) + `stubs/common/` (2) | `../stubs/aws/bm/` |
 | `kaas.yaml` | Provision K8s GPU cluster → validate nodes/GPU/workloads → teardown | `stubs/kaas/` (2 scripts) | `../stubs/aws/eks/` |
 | `control-plane.yaml` | API health, access key lifecycle, tenant lifecycle | `stubs/control-plane/` (10 scripts) | `../stubs/aws/control-plane/` |
-| `iso.yaml` | Image upload/import → launch instance → teardown | `stubs/iso/` (3 scripts) | `../stubs/aws/iso/` |
+| `image-registry.yaml` | Image upload → VM launch → install config CRUD → BMaaS install → teardown | `stubs/image-registry/` (6 scripts) | `../stubs/aws/image-registry/` |
 
 > **Note on Reference Implementations:** The `../stubs/aws/` paths in the "Reference Implementation" column point to NVIDIA's AWS example scripts that live _outside_ the `templates/` folder. These are optional examples provided as implementation guides — they are **not** copied when you duplicate `templates/` and are **not** required dependencies. The relative paths will not resolve once the templates folder is relocated. Refer to them in-place for inspiration, then implement your own scripts in the `stubs/` directories listed in the "Stubs" column.
 
@@ -128,15 +128,18 @@ API health, access key lifecycle, and tenant management.
 | `delete_access_key` | teardown | `stubs/control-plane/delete_access_key.py` | `resources_deleted` |
 | `delete_tenant` | teardown | `stubs/control-plane/delete_tenant.py` | `resources_deleted` |
 
-### ISO / Image Import (`iso.yaml`)
+### Image Registry (`image-registry.yaml`)
 
-Disk image import (VMDK/ISO) and instance launch validation.
+Image registry lifecycle: OS image upload/import, VM launch, install config CRUD, and BMaaS provisioning.
 
 | Step | Phase | Script | Key JSON Fields |
 |------|-------|--------|-----------------|
-| `upload_image` | setup | `stubs/iso/upload_image.py` | `image_id`, `storage_bucket`, `disk_ids` |
-| `launch_instance` | test | `stubs/iso/launch_instance.py` | `instance_id`, `public_ip`, `key_path` |
-| `teardown` | teardown | `stubs/iso/teardown.py` | `resources_deleted`, `message` |
+| `upload_image` | setup | `stubs/image-registry/upload_image.py` | `image_id`, `storage_bucket`, `disk_ids` |
+| `launch_instance` | test | `stubs/image-registry/launch_instance.py` | `instance_id`, `public_ip`, `key_path` |
+| `crud_install_config` | test | `stubs/image-registry/crud_install_config.py` | `config_id`, `config_name`, `operations` |
+| `install_image_bm` | test | `stubs/image-registry/install_image_bm.py` | `instance_id`, `image_id`, `instance_state` |
+| `install_config_bm` | test | `stubs/image-registry/install_config_bm.py` | `instance_id`, `config_id`, `instance_state` |
+| `teardown` | teardown | `stubs/image-registry/teardown.py` | `resources_deleted`, `message` |
 
 ## JSON Output Contract
 

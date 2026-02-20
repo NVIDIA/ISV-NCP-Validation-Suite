@@ -7,7 +7,7 @@ compute instance creation calls.
 Required JSON output:
 {
     "success":           bool — true if instance is running,
-    "platform":          str  — "iso",
+    "platform":          str  — "image_registry",
     "instance_id":       str  — unique instance identifier,
     "public_ip":         str  — public IP address for SSH,
     "key_path":          str  — local path to the SSH private key,
@@ -22,7 +22,7 @@ Usage:
     python launch_instance.py --image-id <image-id> --instance-type g4dn.xlarge --region us-west-2
 
 AWS reference implementation:
-    ../../../stubs/aws/iso/launch_instance.py
+    ../../../stubs/aws/image-registry/launch_instance.py
 """
 
 import argparse
@@ -39,7 +39,7 @@ def main() -> int:
 
     result: dict = {
         "success": False,
-        "platform": "iso",
+        "platform": "image_registry",
         "instance_id": "",
         "public_ip": "",
         "key_path": "",

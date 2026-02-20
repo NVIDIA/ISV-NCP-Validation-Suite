@@ -78,8 +78,8 @@ echo "" >&2
 
 cat << EOF
 {
-  "platform": "iso",
-  "cluster_name": "aws-iso-validation",
+  "platform": "image_registry",
+  "cluster_name": "aws-image-registry-validation",
   "iso": {
     "provider": "aws_vm_import",
     "region": "${AWS_REGION}",

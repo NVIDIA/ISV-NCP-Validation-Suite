@@ -11,7 +11,7 @@ Usage:
 Output (JSON):
     {
         "success": true,
-        "platform": "iso",
+        "platform": "image_registry",
         "ami_id": "ami-xxx",
         "bucket_name": "isv-iso-import-xxx",
         "object_key": "image.vmdk",
@@ -303,7 +303,7 @@ def main() -> int:
 
     result = {
         "success": True,
-        "platform": "iso",
+        "platform": "image_registry",
         # Generic fields (provider-agnostic)
         "image_id": ami_id,
         "image_name": f"isv-imported-{ami_id}",

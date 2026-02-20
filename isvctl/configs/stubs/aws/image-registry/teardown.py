@@ -15,7 +15,7 @@ Usage:
 Output (JSON):
     {
         "success": true,
-        "platform": "iso",
+        "platform": "image_registry",
         "deleted": {
             "instance": "i-xxx",
             "ami": "ami-xxx",
@@ -249,7 +249,7 @@ def main() -> int:
 
     if args.skip_destroy:
         print("Skipping teardown (--skip-destroy flag set)", file=sys.stderr)
-        result = {"success": True, "platform": "iso", "skipped": True, "deleted": {}}
+        result = {"success": True, "platform": "image_registry", "skipped": True, "deleted": {}}
         print(json.dumps(result))
         return 0
 
@@ -309,7 +309,7 @@ def main() -> int:
 
     result = {
         "success": len(errors) == 0,
-        "platform": "iso",
+        "platform": "image_registry",
         "deleted": deleted,
     }
     if errors:

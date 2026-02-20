@@ -10,7 +10,7 @@ Usage:
 Output (JSON):
     {
         "success": true,
-        "platform": "iso",
+        "platform": "image_registry",
         "instance_id": "i-xxx",
         "public_ip": "1.2.3.4",
         "private_ip": "10.0.0.1",
@@ -241,7 +241,7 @@ def main() -> int:
 
     result = {
         "success": True,
-        "platform": "iso",
+        "platform": "image_registry",
         # Generic instance fields (provider-agnostic)
         "instance_id": instance_info["instance_id"],
         "public_ip": instance_info.get("public_ip"),

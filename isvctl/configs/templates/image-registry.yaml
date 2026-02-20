@@ -1,0 +1,248 @@
+# Image Registry Validation - Template Configuration
+#
+# This is a PROVIDER-AGNOSTIC template for testing image registry lifecycle:
+#   - OS image management: upload, import, launch VM, teardown
+#   - OS install configuration CRUD (create, read, update, delete)
+#   - BMaaS provisioning from images and install configs
+#
+# Architecture:
+#   - Scripts: Platform-specific (YOU implement these) - handle cloud operations
+#   - Validations: Platform-agnostic (provided) - just check JSON output
+#   - Schema: Uses generic field names (image_id, config_id, instance_id)
+#
+# Contract:
+#   Each script MUST print a JSON object to stdout. The validations
+#   only inspect that JSON. As long as your scripts output the right
+#   fields, the validations pass regardless of which cloud you use.
+#
+# Steps:
+#   1. upload_image           (setup)    - Upload OS image to registry
+#   2. launch_instance        (test)     - Launch VM from imported image
+#   3. create_install_config  (test)     - CRUD an OS install configuration
+#   4. install_image_bm       (test)     - Install OS image on bare-metal
+#   5. install_config_bm      (test)     - Install OS config on bare-metal
+#   6. teardown               (teardown) - Clean up all resources
+#
+# Quick start:
+#   1. Copy this folder:  cp -r templates/ my-isv/
+#   2. Edit the stubs:    my-isv/stubs/image-registry/*.py
+#   3. Run:               uv run isvctl test run -f isvctl/configs/my-isv/image-registry.yaml
+#
+# See also:
+#   - AWS reference implementation: ../aws/image-registry.yaml + ../stubs/aws/image-registry/
+#   - JSON schemas: isvctl/src/isvctl/config/output_schemas.py
+
+version: "1.0"
+
+commands:
+  image_registry:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      # ─── Step 1: Upload Image ──────────────────────────────────────
+      # YOUR SCRIPT must output JSON with at minimum:
+      #   {
+      #     "success": true,
+      #     "platform": "image_registry",
+      #     "image_id": "<imported-image-id>",
+      #     "storage_bucket": "<bucket-or-storage-name>",
+      #     "disk_ids": ["<snapshot-or-disk-id>"]
+      #   }
+      - name: upload_image
+        phase: setup
+        command: "python3 ./stubs/image-registry/upload_image.py"
+        args:
+          - "--image-url"
+          - "{{image_url}}"
+          - "--image-format"
+          - "{{image_format}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 3600
+
+      # ─── Step 2: Launch Instance from Image ────────────────────────
+      # YOUR SCRIPT must output JSON with at minimum:
+      #   {
+      #     "success": true,
+      #     "platform": "image_registry",
+      #     "instance_id": "<unique-id>",
+      #     "public_ip": "<ip-address>",
+      #     "key_path": "<path-to-ssh-key>",
+      #     "instance_state": "running",
+      #     "key_name": "<key-pair-name>",
+      #     "security_group_id": "<sg-id>",
+      #     "instance_profile": "<profile-name>"
+      #   }
+      - name: launch_instance
+        phase: test
+        command: "python3 ./stubs/image-registry/launch_instance.py"
+        args:
+          - "--image-id"
+          - "{{steps.upload_image.image_id}}"
+          - "--instance-type"
+          - "{{instance_type}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 600
+
+      # ─── Step 3: CRUD OS Install Configuration ────────────────────
+      # YOUR SCRIPT must create, read, update, and delete an OS
+      # install configuration (e.g., iPXE config, Carbide profile).
+      #   {
+      #     "success": true,
+      #     "platform": "image_registry",
+      #     "config_id": "<config-id>",
+      #     "config_name": "<config-name>",
+      #     "operations": {
+      #       "create": {"passed": true},
+      #       "read":   {"passed": true},
+      #       "update": {"passed": true},
+      #       "delete": {"passed": true}
+      #     }
+      #   }
+      - name: crud_install_config
+        phase: test
+        command: "python3 ./stubs/image-registry/crud_install_config.py"
+        args:
+          - "--region"
+          - "{{region}}"
+        timeout: 300
+
+      # ─── Step 4: Install OS Image on Bare-Metal ──────────────────
+      # YOUR SCRIPT must provision a BM node from the uploaded OS image.
+      #   {
+      #     "success": true,
+      #     "platform": "image_registry",
+      #     "instance_id": "<bm-instance-id>",
+      #     "image_id": "<image-used>",
+      #     "instance_state": "running"
+      #   }
+      - name: install_image_bm
+        phase: test
+        command: "python3 ./stubs/image-registry/install_image_bm.py"
+        args:
+          - "--image-id"
+          - "{{steps.upload_image.image_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 1800
+
+      # ─── Step 5: Install OS Config on Bare-Metal ─────────────────
+      # YOUR SCRIPT must provision a BM node using an install config.
+      #   {
+      #     "success": true,
+      #     "platform": "image_registry",
+      #     "instance_id": "<bm-instance-id>",
+      #     "config_id": "<config-used>",
+      #     "instance_state": "running"
+      #   }
+      - name: install_config_bm
+        phase: test
+        command: "python3 ./stubs/image-registry/install_config_bm.py"
+        args:
+          - "--config-id"
+          - "{{steps.crud_install_config.config_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 1800
+
+      # ─── Step 6: Teardown ──────────────────────────────────────────
+      # YOUR SCRIPT must clean up all resources: instances, images,
+      # configs, storage, keys, security groups.
+      - name: teardown
+        phase: teardown
+        command: "python3 ./stubs/image-registry/teardown.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--image-id"
+          - "{{steps.upload_image.image_id}}"
+          - "--disk-ids"
+          - "{{steps.upload_image.disk_ids | join(',')}}"
+          - "--bucket-name"
+          - "{{steps.upload_image.storage_bucket}}"
+          - "--key-name"
+          - "{{steps.launch_instance.key_name}}"
+          - "--security-group-id"
+          - "{{steps.launch_instance.security_group_id}}"
+          - "--instance-profile"
+          - "{{steps.launch_instance.instance_profile}}"
+          - "--region"
+          - "{{region}}"
+          - "{{teardown_flag}}"
+        timeout: 1800
+
+tests:
+  cluster_name: "image-registry-validation"
+  description: "Image registry validation tests (template)"
+  platform: image_registry
+
+  settings:
+    region: "us-west-2"
+    image_url: "https://cloud-images.ubuntu.com/releases/noble/release/ubuntu-24.04-server-cloudimg-amd64.vmdk"
+    image_format: "vmdk"
+    instance_type: "g4dn.xlarge"
+    teardown_flag: "{{(env.IR_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"
+
+  # ─── Validations ─────────────────────────────────────────────────
+  # These are PROVIDER-AGNOSTIC. They only check JSON field names/values.
+  validations:
+    # --- OS Image Upload (ISVP-164) ---
+    image_upload:
+      step: upload_image
+      checks:
+        - StepSuccessCheck: {}
+        - FieldExistsCheck:
+            fields: ["image_id", "storage_bucket", "disk_ids"]
+
+    # --- VM Launch from Image (ISVP-169) ---
+    vm_from_image:
+      step: launch_instance
+      checks:
+        - StepSuccessCheck: {}
+        - FieldExistsCheck:
+            fields: ["instance_id", "public_ip", "key_path"]
+        - InstanceStateCheck:
+            expected_state: "running"
+
+    vm_ssh:
+      step: launch_instance
+      checks:
+        - SshConnectivityCheck: {}
+        - SshOsCheck:
+            expected_os: "ubuntu"
+
+    # --- OS Install Config CRUD (ISVP-165) ---
+    install_config_crud:
+      step: crud_install_config
+      checks:
+        - StepSuccessCheck: {}
+        - FieldExistsCheck:
+            fields: ["config_id", "config_name", "operations"]
+
+    # --- OS Image on BMaaS (ISVP-167) ---
+    bm_from_image:
+      step: install_image_bm
+      checks:
+        - StepSuccessCheck: {}
+        - FieldExistsCheck:
+            fields: ["instance_id", "image_id", "instance_state"]
+        - InstanceStateCheck:
+            expected_state: "running"
+
+    # --- OS Install Config on BMaaS (ISVP-168) ---
+    bm_from_config:
+      step: install_config_bm
+      checks:
+        - StepSuccessCheck: {}
+        - FieldExistsCheck:
+            fields: ["instance_id", "config_id", "instance_state"]
+        - InstanceStateCheck:
+            expected_state: "running"
+
+    teardown_checks:
+      step: teardown
+      checks:
+        - StepSuccessCheck: {}
+
+  exclude:
+    markers: []

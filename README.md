@@ -14,6 +14,20 @@ Validation and management tools for NVIDIA ISV Lab environments.
 - **isvtest** - Validation framework for Kubernetes, Slurm, and bare metal
 - **isvreporter** - Test results reporter for ISV Lab Service
 
+## Adding Your Platform
+
+Start from the **provider-agnostic templates** — copy, implement the stub scripts for your cloud/platform, and run:
+
+```bash
+cp -r isvctl/configs/templates/ isvctl/configs/my-isv/
+# Edit the stub scripts for your platform
+uv run isvctl test run -f isvctl/configs/my-isv/vm.yaml
+```
+
+Templates are available for: [IAM](isvctl/configs/templates/iam.yaml) | [Network](isvctl/configs/templates/network.yaml) | [VM](isvctl/configs/templates/vm.yaml) | [Bare Metal](isvctl/configs/templates/bm.yaml) | [Kubernetes](isvctl/configs/templates/eks.yaml) | [Control Plane](isvctl/configs/templates/control-plane.yaml) | [ISO/Image Import](isvctl/configs/templates/iso.yaml)
+
+See the [Templates README](isvctl/configs/templates/README.md) for the full guide, and the [AWS Reference Implementation](docs/references/aws.md) as a working example.
+
 ## Quick Start
 
 ```bash
@@ -40,6 +54,11 @@ See [docs/](docs/) for full documentation:
 - [External Validation](docs/guides/external-validation-guide.md) - Create custom validations without modifying the repo
 - [Remote Deployment](docs/guides/remote-deployment.md) - Deploy and run tests remotely
 - [Local Development](docs/guides/local-development.md) - MicroK8s setup for local testing
+
+### References
+
+- [Validation Templates](isvctl/configs/templates/README.md) - Provider-agnostic templates for adding your platform
+- [AWS Reference Implementation](docs/references/aws.md) - Working AWS examples for all validation domains
 
 ### Package Reference
 

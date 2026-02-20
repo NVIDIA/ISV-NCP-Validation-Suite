@@ -247,23 +247,31 @@ python ./scripts/provision.py --name test 2>/dev/null | jq .
 
 For common validation scenarios, **pre-built templates** are available in [`isvctl/configs/templates/`](../../isvctl/configs/templates/README.md). These provide a copy-and-customize starting point with skeleton scripts and documented JSON contracts.
 
-Currently available:
-
-| Template | What it tests |
-|----------|---------------|
-| `iam.yaml` | User create -> verify credentials -> delete |
+| Template | What it tests | Stubs |
+|----------|---------------|-------|
+| [`iam.yaml`](../../isvctl/configs/templates/iam.yaml) | User create → verify credentials → delete | 3 scripts |
+| [`network.yaml`](../../isvctl/configs/templates/network.yaml) | VPC CRUD, subnets, isolation, security, connectivity, traffic | 8 scripts |
+| [`vm.yaml`](../../isvctl/configs/templates/vm.yaml) | Launch GPU VM → list → reboot → NIM deploy → teardown | 4 scripts + 2 shared |
+| [`bm.yaml`](../../isvctl/configs/templates/bm.yaml) | Launch bare-metal → describe → reboot → NIM → teardown → verify | 5 scripts + 2 shared |
+| [`eks.yaml`](../../isvctl/configs/templates/eks.yaml) | Provision K8s GPU cluster → validate nodes/GPU/workloads → teardown | 2 scripts |
+| [`control-plane.yaml`](../../isvctl/configs/templates/control-plane.yaml) | API health, access key lifecycle, tenant lifecycle | 10 scripts |
+| [`iso.yaml`](../../isvctl/configs/templates/iso.yaml) | Image upload/import → launch instance → teardown | 3 scripts |
 
 ```bash
-# Copy the IAM template and implement for your platform
+# Copy the templates and implement for your platform
 cp -r isvctl/configs/templates/ isvctl/configs/my-isv/
-uv run isvctl test run -f isvctl/configs/my-isv/iam.yaml
+# Edit the stub scripts (each has a TODO block showing what to implement)
+uv run isvctl test run -f isvctl/configs/my-isv/vm.yaml
 ```
+
+Each template has a matching **AWS reference implementation** you can study as a working example. See the [AWS Reference Guide](../references/aws.md) for details.
 
 ---
 
 ## Related Documentation
 
 - [Configuration Guide](configuration.md) - Full config reference (steps, schemas, validations, templates)
-- [Validation Templates](../../isvctl/configs/templates/README.md) - Provider-agnostic templates for partner handoff
+- [Validation Templates](../../isvctl/configs/templates/README.md) - Provider-agnostic templates with full guide
+- [AWS Reference Implementation](../references/aws.md) - Working AWS examples for all templates
 - [isvctl Package](../packages/isvctl.md) - CLI documentation
 - [Local Development](local-development.md) - Development setup

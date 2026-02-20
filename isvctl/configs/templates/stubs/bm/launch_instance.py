@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""Launch bare-metal GPU instance - TEMPLATE (replace with your platform implementation).
+
+This script is called during the "setup" phase. It must:
+  1. Create an SSH key pair (or retrieve existing credentials)
+  2. Create a security group / firewall rule allowing SSH
+  3. Launch a bare-metal GPU instance
+  4. Wait for the instance to reach "running" state (bare-metal boot is
+     slower than VM: hardware POST, BIOS, OS boot without hypervisor)
+  5. Retrieve the public IP address
+  6. Print a JSON object to stdout
+
+Instance reuse (dev workflow):
+    Set BM_INSTANCE_ID and BM_KEY_FILE env vars to skip launching and
+    describe an existing instance instead. This allows fast iteration on
+    validations without reprovisioning.
+
+Required JSON output fields:
+  {
+    "success": true,                # boolean - did the operation succeed?
+    "platform": "bm",              # string  - always "bm"
+    "instance_id": "...",           # string  - unique instance identifier
+    "public_ip": "54.x.x.x",      # string  - public IP for SSH access
+    "key_file": "/tmp/key.pem",    # string  - path to SSH private key
+    "vpc_id": "vpc-xxx",           # string  - network/VPC identifier
+    "instance_state": "running",   # string  - must be "running"
+    "security_group_id": "sg-xxx", # string  - security group / firewall ID
+    "key_name": "my-key"           # string  - key pair name
+  }
+
+On failure, set "success": false and include an "error" field.
+
+Usage:
+    python launch_instance.py --name isv-bm-test-gpu --instance-type g4dn.metal --region us-west-2
+
+    # Reuse existing instance:
+    BM_INSTANCE_ID=i-xxx BM_KEY_FILE=/tmp/key.pem python launch_instance.py
+
+Reference implementation: ../../../stubs/aws/bm/launch_instance.py
+"""
+
+import argparse
+import json
+import os
+import sys
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Launch bare-metal GPU instance (template)")
+    parser.add_argument("--name", default="isv-bm-test-gpu", help="Instance name tag")
+    parser.add_argument("--instance-type", default="g4dn.metal", help="Bare-metal instance type")
+    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    _args = parser.parse_args()
+
+    result: dict = {
+        "success": False,
+        "platform": "bm",
+        "instance_id": None,
+        "public_ip": None,
+        "key_file": None,
+        "vpc_id": None,
+        "instance_state": None,
+        "security_group_id": None,
+        "key_name": None,
+    }
+
+    # ── Dev workflow: reuse existing instance ──────────────────────────
+    if os.environ.get("BM_INSTANCE_ID") and os.environ.get("BM_KEY_FILE"):
+        instance_id = os.environ["BM_INSTANCE_ID"]
+        _key_file = os.environ["BM_KEY_FILE"]
+        print(f"Reusing existing instance {instance_id}", file=sys.stderr)
+
+        # ╔══════════════════════════════════════════════════════════════╗
+        # ║  TODO: Describe existing instance and populate result        ║
+        # ║                                                              ║
+        # ║  Example (pseudocode):                                       ║
+        # ║    client = MyCloudClient(region=args.region)                ║
+        # ║    info = client.describe_instance(instance_id)              ║
+        # ║    result["instance_id"] = instance_id                       ║
+        # ║    result["public_ip"] = info.public_ip                      ║
+        # ║    result["key_file"] = key_file                             ║
+        # ║    result["vpc_id"] = info.vpc_id                            ║
+        # ║    result["instance_state"] = info.state                     ║
+        # ║    result["security_group_id"] = info.security_group_id      ║
+        # ║    result["key_name"] = info.key_name                        ║
+        # ║    result["success"] = info.state == "running"               ║
+        # ╚══════════════════════════════════════════════════════════════╝
+
+        result["error"] = "Not implemented - replace with your platform's instance describe logic"
+        print(json.dumps(result, indent=2))
+        return 0 if result["success"] else 1
+
+    # ── Normal launch flow ────────────────────────────────────────────
+
+    # ╔══════════════════════════════════════════════════════════════════╗
+    # ║  TODO: Replace this block with your platform's provisioning      ║
+    # ║                                                                  ║
+    # ║  Example (pseudocode):                                           ║
+    # ║    client = MyCloudClient(region=args.region)                    ║
+    # ║                                                                  ║
+    # ║    1. Create key pair:                                           ║
+    # ║       key = client.create_key_pair(f"{args.name}-key")           ║
+    # ║       key_file = f"/tmp/{args.name}-key.pem"                     ║
+    # ║       write key.private_key to key_file (mode 0o600)             ║
+    # ║       result["key_name"] = key.name                              ║
+    # ║       result["key_file"] = key_file                              ║
+    # ║                                                                  ║
+    # ║    2. Create security group (SSH access):                        ║
+    # ║       sg = client.create_security_group(                         ║
+    # ║           name=f"{args.name}-sg",                                ║
+    # ║           rules=[{"port": 22, "cidr": "0.0.0.0/0"}]              ║
+    # ║       )                                                          ║
+    # ║       result["security_group_id"] = sg.id                        ║
+    # ║                                                                  ║
+    # ║    3. Launch bare-metal GPU instance:                            ║
+    # ║       instance = client.launch_instance(                         ║
+    # ║           name=args.name,                                        ║
+    # ║           instance_type=args.instance_type,                      ║
+    # ║           key_name=key.name,                                     ║
+    # ║           security_group_ids=[sg.id],                            ║
+    # ║       )                                                          ║
+    # ║       result["instance_id"] = instance.id                        ║
+    # ║                                                                  ║
+    # ║    4. Wait for running (BM takes longer: hardware POST/BIOS):    ║
+    # ║       client.wait_until_running(instance.id, timeout=1200)       ║
+    # ║       info = client.describe_instance(instance.id)               ║
+    # ║       result["public_ip"] = info.public_ip                       ║
+    # ║       result["vpc_id"] = info.vpc_id                             ║
+    # ║       result["instance_state"] = "running"                       ║
+    # ║       result["success"] = True                                   ║
+    # ╚══════════════════════════════════════════════════════════════════╝
+
+    result["error"] = "Not implemented - replace with your platform's instance launch logic"
+    print(json.dumps(result, indent=2))
+    return 0 if result["success"] else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

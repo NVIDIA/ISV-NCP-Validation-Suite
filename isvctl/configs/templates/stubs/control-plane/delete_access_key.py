@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+"""Delete an access key and its associated test user.
+
+Provider-agnostic template — replace the TODO section with your platform's
+credential and user cleanup calls.
+
+Required JSON output:
+{
+    "success":           bool      — true if cleanup succeeded,
+    "platform":          str       — "control_plane",
+    "resources_deleted": list[str] — names/IDs of deleted resources,
+    "message":           str       — human-readable summary
+}
+
+Usage:
+    python delete_access_key.py --username testuser --access-key-id AKID
+
+AWS reference implementation:
+    ../../../stubs/aws/control-plane/delete_access_key.py
+"""
+
+import argparse
+import json
+import sys
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Delete access key and test user")
+    parser.add_argument("--username", required=True, help="User who owns the key")
+    parser.add_argument("--access-key-id", required=True, help="Key to delete")
+    _args = parser.parse_args()
+
+    result: dict = {
+        "success": False,
+        "platform": "control_plane",
+        "resources_deleted": [],
+        "message": "",
+    }
+
+    # ╔══════════════════════════════════════════════════════════════════╗
+    # ║  TODO: Replace this block with your platform's implementation    ║
+    # ║                                                                  ║
+    # ║  1. Delete the access key / API token                            ║
+    # ║     → result["resources_deleted"].append("access_key:AKID")      ║
+    # ║  2. Delete the test user / service account                       ║
+    # ║     → result["resources_deleted"].append("user:<username>")      ║
+    # ║  3. Set result["message"] and result["success"] = True           ║
+    # ╚══════════════════════════════════════════════════════════════════╝
+
+    result["error"] = "Not implemented - replace with your platform's access key deletion logic"
+
+    print(json.dumps(result, indent=2))
+    return 0 if result["success"] else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

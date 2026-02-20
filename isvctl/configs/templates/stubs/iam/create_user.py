@@ -46,15 +46,15 @@ def main() -> int:
     }
 
     # ╔══════════════════════════════════════════════════════════════════╗
-    # ║  TODO: Replace this block with your platform's user creation   ║
-    # ║                                                                ║
-    # ║  Example (pseudocode):                                         ║
-    # ║    client = MyIamClient(api_url=os.environ["IAM_API_URL"])     ║
-    # ║    user = client.create_user(username=args.username)           ║
-    # ║    result["user_id"] = user.id                                 ║
-    # ║    result["access_key_id"] = user.api_key_id                   ║
-    # ║    result["secret_access_key"] = user.api_key_secret           ║
-    # ║    result["success"] = True                                    ║
+    # ║  TODO: Replace this block with your platform's user creation     ║
+    # ║                                                                  ║
+    # ║  Example (pseudocode):                                           ║
+    # ║    client = MyIamClient(api_url=os.environ["IAM_API_URL"])       ║
+    # ║    user = client.create_user(username=args.username)             ║
+    # ║    result["user_id"] = user.id                                   ║
+    # ║    result["access_key_id"] = user.api_key_id                     ║
+    # ║    result["secret_access_key"] = user.api_key_secret             ║
+    # ║    result["success"] = True                                      ║
     # ╚══════════════════════════════════════════════════════════════════╝
 
     result["error"] = "Not implemented - replace with your platform's user creation logic"

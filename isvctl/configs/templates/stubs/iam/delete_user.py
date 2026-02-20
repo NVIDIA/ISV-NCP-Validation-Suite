@@ -49,19 +49,19 @@ def main() -> int:
         return 0
 
     # ╔══════════════════════════════════════════════════════════════════╗
-    # ║  TODO: Replace this block with your platform's user deletion   ║
-    # ║                                                                ║
-    # ║  Example (pseudocode):                                         ║
-    # ║    client = MyIamClient(api_url=os.environ["IAM_API_URL"])     ║
-    # ║    client.revoke_all_keys(username=args.username)              ║
-    # ║    client.delete_user(username=args.username)                  ║
-    # ║    result["resources_deleted"].append(f"user:{args.username}") ║
-    # ║    result["success"] = True                                    ║
-    # ║    result["message"] = "User deleted successfully"             ║
-    # ║                                                                ║
-    # ║  If user not found, still return success (idempotent):         ║
-    # ║    result["success"] = True                                    ║
-    # ║    result["message"] = "User not found (already deleted)"      ║
+    # ║  TODO: Replace this block with your platform's user deletion     ║
+    # ║                                                                  ║
+    # ║  Example (pseudocode):                                           ║
+    # ║    client = MyIamClient(api_url=os.environ["IAM_API_URL"])       ║
+    # ║    client.revoke_all_keys(username=args.username)                ║
+    # ║    client.delete_user(username=args.username)                    ║
+    # ║    result["resources_deleted"].append(f"user:{args.username}")   ║
+    # ║    result["success"] = True                                      ║
+    # ║    result["message"] = "User deleted successfully"               ║
+    # ║                                                                  ║
+    # ║  If user not found, still return success (idempotent):           ║
+    # ║    result["success"] = True                                      ║
+    # ║    result["message"] = "User not found (already deleted)"        ║
     # ╚══════════════════════════════════════════════════════════════════╝
 
     result["error"] = "Not implemented - replace with your platform's user deletion logic"

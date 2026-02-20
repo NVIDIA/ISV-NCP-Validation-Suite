@@ -1,0 +1,261 @@
+# VM (Virtual Machine) Validation - Template Configuration
+#
+# This is a PROVIDER-AGNOSTIC template for testing GPU virtual machine
+# lifecycle: launch -> verify -> reboot -> NIM deploy -> teardown.
+# Copy this file and the accompanying stubs/ scripts, then replace the
+# script implementations with your platform's API calls.
+#
+# Architecture:
+#   - Scripts: Platform-specific (YOU implement these) - do all VM work
+#   - Validations: Platform-agnostic (provided) - just check JSON output
+#
+# Contract:
+#   Each script MUST print a JSON object to stdout. The validations
+#   only inspect that JSON. As long as your scripts output the right
+#   fields, the validations pass regardless of which cloud you use.
+#
+# Steps:
+#   1. launch_instance  (setup)    - Provision GPU VM, output IP/key
+#   2. list_instances   (test)     - List instances, verify target exists
+#   3. reboot_instance  (test)     - Reboot VM, validate recovery
+#   4. deploy_nim       (test)     - Deploy NIM container via SSH
+#   5. teardown_nim     (teardown) - Stop NIM container via SSH
+#   6. teardown         (teardown) - Terminate VM and cleanup
+#
+# Quick start:
+#   1. Copy this folder:  cp -r templates/ my-isv/
+#   2. Edit the stubs:    my-isv/stubs/vm/*.py
+#   3. Run:               uv run isvctl test run -f isvctl/configs/my-isv/vm.yaml
+#
+# See also:
+#   - AWS reference implementation: ../aws-vm.yaml + ../stubs/aws/vm/
+#   - JSON schemas: isvctl/src/isvctl/config/output_schemas.py
+
+version: "1.0"
+
+commands:
+  vm:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      # ─── Step 1: Launch Instance ───────────────────────────────────
+      # YOUR SCRIPT must output JSON with at minimum:
+      #   {
+      #     "success": true,
+      #     "platform": "vm",
+      #     "instance_id": "<unique-id>",
+      #     "public_ip": "<ip-address>",
+      #     "key_file": "<path-to-ssh-key>",
+      #     "vpc_id": "<network-id>",
+      #     "instance_state": "running",
+      #     "security_group_id": "<sg-id>",
+      #     "key_name": "<key-pair-name>"
+      #   }
+      - name: launch_instance
+        phase: setup
+        command: "python3 ./stubs/vm/launch_instance.py"
+        args:
+          - "--name"
+          - "isv-test-gpu"
+          - "--instance-type"
+          - "{{instance_type}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 600
+
+      # ─── Step 2: List Instances ────────────────────────────────────
+      # YOUR SCRIPT must output JSON with at minimum:
+      #   {
+      #     "success": true,
+      #     "platform": "vm",
+      #     "instances": [{"instance_id": "...", "state": "running"}],
+      #     "total_count": 1
+      #   }
+      - name: list_instances
+        phase: test
+        command: "python3 ./stubs/vm/list_instances.py"
+        args:
+          - "--vpc-id"
+          - "{{steps.launch_instance.vpc_id}}"
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 120
+
+      # ─── Step 3: Reboot Instance ──────────────────────────────────
+      # YOUR SCRIPT must output JSON with at minimum:
+      #   {
+      #     "success": true,
+      #     "platform": "vm",
+      #     "instance_id": "...",
+      #     "instance_state": "running",
+      #     "public_ip": "...",
+      #     "key_file": "...",
+      #     "uptime_seconds": <int>,
+      #     "ssh_connectivity": true
+      #   }
+      - name: reboot_instance
+        phase: test
+        command: "python3 ./stubs/vm/reboot_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+          - "--public-ip"
+          - "{{steps.launch_instance.public_ip}}"
+        timeout: 600
+
+      # ─── Step 4: Deploy NIM Container ─────────────────────────────
+      # Shared script - deploys NIM inference container via SSH.
+      # See stubs/common/deploy_nim.py for the JSON contract.
+      - name: deploy_nim
+        phase: test
+        command: "python3 ./stubs/common/deploy_nim.py"
+        args:
+          - "--host"
+          - "{{steps.launch_instance.public_ip}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+        timeout: 1800
+
+      # ─── Step 5: Teardown NIM ─────────────────────────────────────
+      - name: teardown_nim
+        phase: teardown
+        command: "python3 ./stubs/common/teardown_nim.py"
+        args:
+          - "--host"
+          - "{{steps.launch_instance.public_ip}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+        timeout: 120
+
+      # ─── Step 6: Teardown Instance ────────────────────────────────
+      # YOUR SCRIPT must output JSON with at minimum:
+      #   {
+      #     "success": true,
+      #     "platform": "vm",
+      #     "resources_deleted": [...],
+      #     "message": "..."
+      #   }
+      - name: teardown
+        phase: teardown
+        command: "python3 ./stubs/vm/teardown.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+          - "--delete-key-pair"
+          - "--delete-security-group"
+        timeout: 600
+
+tests:
+  platform: vm
+  cluster_name: "vm-validation"
+  description: "VM (virtual machine) GPU validation tests (template)"
+
+  settings:
+    region: "us-west-2"
+    instance_type: "g5.xlarge"
+
+  # ─── Validations ─────────────────────────────────────────────────
+  # These are PROVIDER-AGNOSTIC. They only check JSON field names/values.
+  validations:
+    setup_checks:
+      step: launch_instance
+      checks:
+        - InstanceStateCheck:
+            expected_state: "running"
+
+    list_instances:
+      step: list_instances
+      checks:
+        - InstanceListCheck:
+            min_count: 1
+
+    ssh:
+      step: launch_instance
+      checks:
+        - SshConnectivityCheck: {}
+        - SshOsCheck:
+            expected_os: "ubuntu"
+
+    gpu:
+      step: launch_instance
+      checks:
+        - SshGpuCheck:
+            expected_gpus: 1
+
+    host_os:
+      step: launch_instance
+      checks:
+        - SshVcpuPinningCheck: {}
+        - SshPciBusCheck:
+            expected_gpus: 1
+        - SshHostSoftwareCheck: {}
+
+    reboot_checks:
+      step: reboot_instance
+      checks:
+        - InstanceRebootCheck:
+            max_uptime: 600
+
+    reboot_state:
+      step: reboot_instance
+      checks:
+        - InstanceStateCheck:
+            expected_state: "running"
+
+    reboot_ssh:
+      step: reboot_instance
+      checks:
+        - SshConnectivityCheck: {}
+        - SshOsCheck:
+            expected_os: "ubuntu"
+
+    reboot_gpu:
+      step: reboot_instance
+      checks:
+        - SshGpuCheck:
+            expected_gpus: 1
+
+    reboot_host_os:
+      step: reboot_instance
+      checks:
+        - SshVcpuPinningCheck: {}
+        - SshPciBusCheck:
+            expected_gpus: 1
+        - SshHostSoftwareCheck: {}
+
+    nim_health:
+      step: deploy_nim
+      checks:
+        - SshNimHealthCheck: {}
+
+    nim_models:
+      step: deploy_nim
+      checks:
+        - SshNimModelCheck: {}
+
+    nim_inference:
+      step: deploy_nim
+      checks:
+        - SshNimInferenceCheck:
+            prompt: "What is CUDA?"
+            max_tokens: 50
+
+    nim_teardown:
+      step: teardown_nim
+      checks:
+        - StepSuccessCheck: {}
+
+    teardown_checks:
+      step: teardown
+      checks:
+        - StepSuccessCheck: {}
+
+  exclude:
+    markers: []

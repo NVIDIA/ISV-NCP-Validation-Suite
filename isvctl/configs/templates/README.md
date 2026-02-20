@@ -19,107 +19,188 @@ Provider-agnostic templates for ISV Lab validation tests. Copy a template, imple
 
 ## Available Templates
 
-| Template | Tests | Reference Implementation |
-|----------|-------|--------------------------|
-| `iam.yaml` | User create -> verify credentials -> delete | `../stubs/aws/iam/` |
+| Template | Tests | Stubs | Reference Implementation |
+|----------|-------|-------|--------------------------|
+| `iam.yaml` | User create → verify credentials → delete | `stubs/iam/` (3 scripts) | `../stubs/aws/iam/` |
+| `network.yaml` | VPC CRUD, subnets, isolation, security, connectivity, traffic | `stubs/network/` (8 scripts) | `../stubs/aws/network/` |
+| `vm.yaml` | Launch GPU VM → list → reboot → NIM deploy → teardown | `stubs/vm/` (4 scripts) + `stubs/common/` (2) | `../stubs/aws/vm/` |
+| `bm.yaml` | Launch bare-metal → describe → reboot → NIM → teardown → verify | `stubs/bm/` (5 scripts) + `stubs/common/` (2) | `../stubs/aws/bm/` |
+| `eks.yaml` | Provision K8s GPU cluster → validate nodes/GPU/workloads → teardown | `stubs/eks/` (2 scripts) | `../stubs/aws/eks/` |
+| `control-plane.yaml` | API health, access key lifecycle, tenant lifecycle | `stubs/control-plane/` (10 scripts) | `../stubs/aws/control-plane/` |
+| `iso.yaml` | Image upload/import → launch instance → teardown | `stubs/iso/` (3 scripts) | `../stubs/aws/iso/` |
 
-## Quick Start (IAM Example)
+## Quick Start
 
 ```bash
-# 1. Copy the template
+# 1. Copy the template folder
 cp -r templates/ my-isv/
 
-# 2. Edit the stub scripts with your platform's API calls
-#    - my-isv/stubs/iam/create_user.py      -> call your create user API
-#    - my-isv/stubs/iam/test_credentials.py -> verify creds work
-#    - my-isv/stubs/iam/delete_user.py      -> call your delete user API
+# 2. Pick a template (e.g., vm) and edit the stub scripts
+#    Each stub has a TODO block showing what to implement
+vim my-isv/stubs/vm/launch_instance.py
 
-# 3. Update config paths (iam.yaml command: fields)
-#    command: "python ./stubs/iam/create_user.py"
-#    becomes: "python ./my-isv/stubs/iam/create_user.py"
-#    (or adjust the working directory)
-
-# 4. Run
-uv run isvctl test run -f isvctl/configs/my-isv/iam.yaml
+# 3. Run the validation
+uv run isvctl test run -f isvctl/configs/my-isv/vm.yaml
 ```
+
+## Template Details
+
+### IAM (`iam.yaml`)
+
+Tests user account lifecycle: create user → verify credentials → delete user.
+
+| Step | Phase | Script | Key JSON Fields |
+|------|-------|--------|-----------------|
+| `create_user` | setup | `stubs/iam/create_user.py` | `username`, `user_id`, `access_key_id`, `secret_access_key` |
+| `test_credentials` | test | `stubs/iam/test_credentials.py` | `account_id`, `tests.identity.passed`, `tests.access.passed` |
+| `teardown` | teardown | `stubs/iam/delete_user.py` | `resources_deleted`, `message` |
+
+### Network (`network.yaml`)
+
+Comprehensive network validation with 6 test suites plus shared VPC setup/teardown.
+
+| Step | Phase | Script | What It Tests |
+|------|-------|--------|---------------|
+| `create_network` | setup | `stubs/network/create_vpc.py` | Shared VPC creation |
+| `vpc_crud` | test | `stubs/network/vpc_crud_test.py` | Create/Read/Update/Delete lifecycle |
+| `subnet_config` | test | `stubs/network/subnet_test.py` | Multi-AZ subnet distribution |
+| `vpc_isolation` | test | `stubs/network/isolation_test.py` | Security boundaries between VPCs |
+| `security_blocking` | test | `stubs/network/security_test.py` | Firewall/ACL blocking rules |
+| `connectivity_test` | test | `stubs/network/test_connectivity.py` | Instance network assignment |
+| `traffic_validation` | test | `stubs/network/traffic_test.py` | Ping allowed/blocked, internet |
+| `teardown` | teardown | `stubs/network/teardown.py` | VPC cleanup |
+
+### VM (`vm.yaml`)
+
+GPU virtual machine lifecycle with SSH, GPU, host OS, and NIM inference validations.
+
+| Step | Phase | Script | Key JSON Fields |
+|------|-------|--------|-----------------|
+| `launch_instance` | setup | `stubs/vm/launch_instance.py` | `instance_id`, `public_ip`, `key_file`, `vpc_id` |
+| `list_instances` | test | `stubs/vm/list_instances.py` | `instances`, `total_count` |
+| `reboot_instance` | test | `stubs/vm/reboot_instance.py` | `uptime_seconds`, `ssh_connectivity` |
+| `deploy_nim` | test | `stubs/common/deploy_nim.py` | `container_id`, `health_endpoint` |
+| `teardown_nim` | teardown | `stubs/common/teardown_nim.py` | `message` |
+| `teardown` | teardown | `stubs/vm/teardown.py` | `resources_deleted`, `message` |
+
+### Bare Metal (`bm.yaml`)
+
+Bare-metal GPU instance lifecycle. Similar to VM but with longer timeouts for hardware POST/BIOS and post-teardown verification.
+
+| Step | Phase | Script | Key JSON Fields |
+|------|-------|--------|-----------------|
+| `launch_instance` | setup | `stubs/bm/launch_instance.py` | `instance_id`, `public_ip`, `key_file`, `vpc_id` |
+| `list_instances` | test | `stubs/vm/list_instances.py` | Reuses VM script |
+| `describe_instance` | test | `stubs/bm/describe_instance.py` | `instance_state`, `public_ip`, `key_file` |
+| `reboot_instance` | test | `stubs/bm/reboot_instance.py` | `uptime_seconds`, `ssh_connectivity` |
+| `deploy_nim` | test | `stubs/common/deploy_nim.py` | Shared NIM deployment |
+| `teardown_nim` | teardown | `stubs/common/teardown_nim.py` | Shared NIM cleanup |
+| `teardown` | teardown | `stubs/bm/teardown.py` | `resources_deleted`, `message` |
+| `verify_teardown` | teardown | `stubs/bm/verify_terminated.py` | `checks.instance_terminated`, `checks.sg_deleted` |
+
+### Kubernetes / EKS (`eks.yaml`)
+
+GPU-enabled Kubernetes cluster provisioning and validation. Uses shell scripts for cluster lifecycle.
+
+| Step | Phase | Script | Key JSON Fields |
+|------|-------|--------|-----------------|
+| `provision_cluster` | setup | `stubs/eks/setup.sh` | `cluster_name`, `cluster_endpoint`, `node_count` |
+| `teardown_cluster` | teardown | `stubs/eks/teardown.sh` | `message` |
+
+Validations use `kubectl` directly: node counts, GPU operator, pod health, NCCL/NIM workloads.
+
+### Control Plane (`control-plane.yaml`)
+
+API health, access key lifecycle, and tenant management.
+
+| Step | Phase | Script | Key JSON Fields |
+|------|-------|--------|-----------------|
+| `check_api` | setup | `stubs/control-plane/check_api.py` | `account_id`, `tests` |
+| `create_access_key` | setup | `stubs/control-plane/create_access_key.py` | `username`, `access_key_id` |
+| `create_tenant` | setup | `stubs/control-plane/create_tenant.py` | `tenant_name`, `tenant_id` |
+| `test_access_key` | test | `stubs/control-plane/test_access_key.py` | `authenticated`, `account_id` |
+| `disable_access_key` | test | `stubs/control-plane/disable_access_key.py` | `status` |
+| `verify_key_rejected` | test | `stubs/control-plane/verify_key_rejected.py` | `rejected`, `error_type` |
+| `list_tenants` | test | `stubs/control-plane/list_tenants.py` | `tenants`, `found` |
+| `get_tenant` | test | `stubs/control-plane/get_tenant.py` | `tenant_name`, `description` |
+| `delete_access_key` | teardown | `stubs/control-plane/delete_access_key.py` | `resources_deleted` |
+| `delete_tenant` | teardown | `stubs/control-plane/delete_tenant.py` | `resources_deleted` |
+
+### ISO / Image Import (`iso.yaml`)
+
+Disk image import (VMDK/ISO) and instance launch validation.
+
+| Step | Phase | Script | Key JSON Fields |
+|------|-------|--------|-----------------|
+| `upload_image` | setup | `stubs/iso/upload_image.py` | `image_id`, `storage_bucket`, `disk_ids` |
+| `launch_instance` | test | `stubs/iso/launch_instance.py` | `instance_id`, `public_ip`, `key_path` |
+| `teardown` | teardown | `stubs/iso/teardown.py` | `resources_deleted`, `message` |
 
 ## JSON Output Contract
 
-Each script must print **one JSON object** to stdout. The minimum required fields vary by step:
+Each script must print **one JSON object** to stdout. The minimum required fields vary by step (see each template's YAML comments and stub docstrings for details).
 
-> Note: scripts should also use process exit codes (`0` for success, non-zero for failure) so failures are visible in step execution logs.
-
-### `create_user` (setup phase)
+### Success Pattern
 
 ```json
 {
   "success": true,
-  "platform": "iam",
-  "username": "isv-test-user-a1b2c3",
-  "user_id": "unique-id-from-your-system",
-  "access_key_id": "credential-identifier",
-  "secret_access_key": "credential-secret"
+  "platform": "<domain>",
+  "field1": "value1",
+  "field2": "value2"
 }
 ```
 
-### `test_credentials` (test phase)
-
-```json
-{
-  "success": true,
-  "platform": "iam",
-  "account_id": "account-or-tenant-id",
-  "tests": {
-    "identity": { "passed": true },
-    "access": { "passed": true }
-  }
-}
-```
-
-### `teardown` (teardown phase)
-
-```json
-{
-  "success": true,
-  "platform": "iam",
-  "resources_deleted": ["user:isv-test-user-a1b2c3"],
-  "message": "User deleted successfully"
-}
-```
-
-### On Failure
-
-Any step can report failure by setting `"success": false` and including an `"error"` field:
+### Failure Pattern
 
 ```json
 {
   "success": false,
-  "platform": "iam",
-  "error": "Connection refused: https://api.example.com/iam"
+  "platform": "<domain>",
+  "error": "descriptive error message"
 }
 ```
 
+> Scripts should also use process exit codes (`0` for success, non-zero for failure) so failures are visible in step execution logs.
+
 ## Validations Reference
 
-The template uses these built-in validations (you don't need to modify these):
+The templates use these built-in validations (you don't need to modify these):
 
 | Validation | What it checks |
 |-----------|----------------|
 | `StepSuccessCheck` | `success == true` in JSON output |
 | `FieldExistsCheck` | Named fields exist and are non-empty |
-
-Additional validations available in `isvtest/validations/iam.py`:
-
-| Validation | What it checks |
-|-----------|----------------|
-| `AccessKeyCreatedCheck` | `access_key_id` and `username` exist |
-| `AccessKeyAuthenticatedCheck` | `authenticated == true` |
-| `TenantCreatedCheck` | `tenant_name` and `tenant_id` exist |
+| `FieldValueCheck` | Field matches expected value |
+| `InstanceStateCheck` | Instance state matches expected (e.g., "running") |
+| `InstanceListCheck` | Instance list has minimum count |
+| `InstanceRebootCheck` | Reboot succeeded (uptime, SSH, state) |
+| `NetworkProvisionedCheck` | Network created with required subnets |
+| `VpcCrudCheck` | VPC CRUD operations all passed |
+| `SubnetConfigCheck` | Subnets configured correctly |
+| `VpcIsolationCheck` | VPCs are properly isolated |
+| `SecurityBlockingCheck` | Firewall rules block correctly |
+| `NetworkConnectivityCheck` | Network connectivity verified |
+| `TrafficFlowCheck` | Traffic flows as expected |
+| `SshConnectivityCheck` | SSH connection succeeds |
+| `SshGpuCheck` | GPU detected via nvidia-smi |
+| `SshHostSoftwareCheck` | Host OS / driver stack verified |
+| `SshNimHealthCheck` | NIM health endpoint responds |
+| `SshNimInferenceCheck` | NIM inference returns result |
+| `AccessKeyCreatedCheck` | Access key fields present |
+| `AccessKeyAuthenticatedCheck` | Key authenticates successfully |
+| `AccessKeyDisabledCheck` | Key disabled confirmation |
+| `AccessKeyRejectedCheck` | Disabled key is rejected |
+| `TenantCreatedCheck` | Tenant fields present |
+| `TenantListedCheck` | Tenant appears in list |
+| `TenantInfoCheck` | Tenant details retrievable |
 
 ## Tips
 
 - **Any language works** - scripts can be Python, Bash, Go, curl-based, etc.
 - **Jinja2 templating** - use `{{steps.create_user.username}}` to pass data between steps
 - **Sensitive args** - use `sensitive_args` in the YAML to mask secrets in logs
-- **Skip teardown** - set `IAM_SKIP_TEARDOWN=true` to keep resources for debugging
+- **Skip teardown** - set env vars like `BM_SKIP_TEARDOWN=true` to keep resources for debugging
 - **Extra fields are fine** - JSON output can include additional fields beyond the required ones
+- **Shared scripts** - `stubs/common/` contains scripts reused across templates (e.g., NIM deployment)
+- **Dev workflow** - BM and VM templates support reusing existing instances via environment variables

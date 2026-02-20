@@ -45,18 +45,18 @@ def main() -> int:
     }
 
     # ╔══════════════════════════════════════════════════════════════════╗
-    # ║  TODO: Replace this block with your platform's auth test       ║
-    # ║                                                                ║
-    # ║  Example (pseudocode):                                         ║
-    # ║    session = MyIamClient(                                      ║
-    # ║        key_id=args.credential_id,                              ║
-    # ║        secret=args.credential_secret,                          ║
-    # ║    )                                                           ║
-    # ║    identity = session.whoami()                                  ║
-    # ║    result["account_id"] = identity.account_id                  ║
-    # ║    result["tests"]["identity"] = {"passed": True}              ║
-    # ║    result["tests"]["access"] = {"passed": True}                ║
-    # ║    result["success"] = True                                    ║
+    # ║  TODO: Replace this block with your platform's auth test         ║
+    # ║                                                                  ║
+    # ║  Example (pseudocode):                                           ║
+    # ║    session = MyIamClient(                                        ║
+    # ║        key_id=args.credential_id,                                ║
+    # ║        secret=args.credential_secret,                            ║
+    # ║    )                                                             ║
+    # ║    identity = session.whoami()                                   ║
+    # ║    result["account_id"] = identity.account_id                    ║
+    # ║    result["tests"]["identity"] = {"passed": True}                ║
+    # ║    result["tests"]["access"] = {"passed": True}                  ║
+    # ║    result["success"] = True                                      ║
     # ╚══════════════════════════════════════════════════════════════════╝
 
     result["error"] = "Not implemented - replace with your platform's credential test logic"

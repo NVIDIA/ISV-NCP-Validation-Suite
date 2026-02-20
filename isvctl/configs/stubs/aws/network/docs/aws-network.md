@@ -395,7 +395,7 @@ Increase timeout in config:
 ## Cost & Cleanup
 
 > **Warning**: These tests create AWS resources (VPCs, subnets, security groups,
-> internet gateways, EC2 instances) that may incur costs. Resources are
+> internet gateways, EC2 instances) that incur costs. Resources are
 > automatically cleaned up during the teardown phase, but if teardown fails
 > or is skipped, you must manually delete them to avoid ongoing charges.
 

@@ -100,16 +100,9 @@ AWS_BM_INSTANCE_ID=i-xxx AWS_BM_KEY_FILE=/tmp/isv-bm-test-key.pem \
 
 > **Warning**: These tests create AWS resources (EC2 bare-metal instances,
 > security groups, key pairs) that incur costs. Bare-metal instances are
-> significantly more expensive than regular VMs.
->
-> Resources are automatically cleaned up during the teardown phase, but if
-> teardown fails or is skipped, you must manually delete them to avoid
-> ongoing charges.
-
-| Resource | Hourly Cost (approx) |
-|----------|---------------------|
-| g4dn.metal | $7.82 |
-| g5g.metal | $2.74 |
+> significantly more expensive than regular VMs. Resources are automatically
+> cleaned up during the teardown phase, but if teardown fails or is skipped,
+> you must manually delete them to avoid ongoing charges.
 
 ### Checking for Orphaned Resources
 

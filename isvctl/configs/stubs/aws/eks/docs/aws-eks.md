@@ -459,9 +459,9 @@ For running AWS VPC network validation tests (`-m network`), additional permissi
 ## Cost & Cleanup
 
 > **Warning**: These tests create AWS resources (EKS clusters, EC2 node groups,
-> VPCs, IAM roles) that incur significant costs. Resources are automatically
-> cleaned up during the teardown phase, but if teardown fails or is skipped,
-> you must manually delete them to avoid ongoing charges.
+> VPCs, IAM roles) that incur costs. Resources are automatically cleaned up
+> during the teardown phase, but if teardown fails or is skipped, you must
+> manually delete them to avoid ongoing charges.
 
 ```bash
 # Check for running EKS clusters
@@ -469,11 +469,6 @@ aws eks list-clusters --query 'clusters' --output table
 
 # Delete orphaned cluster
 aws eks delete-cluster --name isv-test-cluster
-
-# Check running costs
-aws ce get-cost-and-usage \
-  --time-period Start=$(date -d '-1 day' +%Y-%m-%d),End=$(date +%Y-%m-%d) \
-  --granularity DAILY --metrics BlendedCost
 ```
 
 ## Related Documentation

@@ -21,6 +21,7 @@ Required JSON output fields:
   instance_state    (str)    - must be "running" on success
   security_group_id (str)    - security group/firewall rule identifier
   key_name          (str)    - name of the SSH key pair
+  error             (str, optional) - error message provided when success is false
 
 Usage:
     python launch_instance.py --name isv-test-gpu --instance-type g5.xlarge --region us-west-2
@@ -39,18 +40,18 @@ def main() -> int:
     parser.add_argument("--name", default="isv-test-gpu", help="Instance name tag")
     parser.add_argument("--instance-type", default="g5.xlarge", help="GPU instance type")
     parser.add_argument("--region", default="us-west-2", help="Cloud region")
-    _args = parser.parse_args()
+    args = parser.parse_args()  # noqa: F841 — used in TODO block below
 
     result = {
         "success": False,
         "platform": "vm",
-        "instance_id": None,
-        "public_ip": None,
-        "key_file": None,
-        "vpc_id": None,
-        "instance_state": None,
-        "security_group_id": None,
-        "key_name": None,
+        "instance_id": "",
+        "public_ip": "",
+        "key_file": "",
+        "vpc_id": "",
+        "instance_state": "",
+        "security_group_id": "",
+        "key_name": "",
     }
 
     try:

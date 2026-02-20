@@ -9,7 +9,8 @@ Required JSON output:
     "success":           bool      — true if cleanup succeeded,
     "platform":          str       — "control_plane",
     "resources_deleted": list[str] — names/IDs of deleted resources,
-    "message":           str       — human-readable summary
+    "message":           str       — human-readable summary,
+    "error":             str       — (optional) error message, present when success is false
 }
 
 Usage:
@@ -28,7 +29,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Delete access key and test user")
     parser.add_argument("--username", required=True, help="User who owns the key")
     parser.add_argument("--access-key-id", required=True, help="Key to delete")
-    _args = parser.parse_args()
+    args = parser.parse_args()  # noqa: F841 — used in TODO block below
 
     result: dict = {
         "success": False,
@@ -37,15 +38,19 @@ def main() -> int:
         "message": "",
     }
 
-    # ╔══════════════════════════════════════════════════════════════════╗
-    # ║  TODO: Replace this block with your platform's implementation    ║
-    # ║                                                                  ║
-    # ║  1. Delete the access key / API token                            ║
-    # ║     → result["resources_deleted"].append("access_key:AKID")      ║
-    # ║  2. Delete the test user / service account                       ║
-    # ║     → result["resources_deleted"].append("user:<username>")      ║
-    # ║  3. Set result["message"] and result["success"] = True           ║
-    # ╚══════════════════════════════════════════════════════════════════╝
+    # ╔══════════════════════════════════════════════════════════════════════════╗
+    # ║  TODO: Replace this block with your platform's implementation           ║
+    # ║                                                                         ║
+    # ║  Available arguments:                                                   ║
+    # ║    args.username       — user who owns the key                          ║
+    # ║    args.access_key_id  — key to delete                                  ║
+    # ║                                                                         ║
+    # ║  1. Delete the access key / API token                                   ║
+    # ║     → result["resources_deleted"].append(f"access_key:{args.access_key_id}")  ║
+    # ║  2. Delete the test user / service account                              ║
+    # ║     → result["resources_deleted"].append(f"user:{args.username}")        ║
+    # ║  3. Set result["message"] and result["success"] = True                  ║
+    # ╚══════════════════════════════════════════════════════════════════════════╝
 
     result["error"] = "Not implemented - replace with your platform's access key deletion logic"
 

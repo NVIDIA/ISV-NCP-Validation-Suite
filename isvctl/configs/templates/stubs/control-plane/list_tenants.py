@@ -9,7 +9,8 @@ Required JSON output:
     "success":  bool             — true if listing succeeded,
     "platform": str              — "control_plane",
     "tenants":  list[{name, id}] — list of tenant objects,
-    "found":    bool             — true if target tenant is in the list
+    "found":    bool             — true if target tenant is in the list,
+    "error":    str              — error message (present when success is false)
 }
 
 Usage:
@@ -28,7 +29,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="List tenants / resource groups")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")
     parser.add_argument("--target-group", required=True, help="Tenant name to look for")
-    _args = parser.parse_args()
+    args = parser.parse_args()  # noqa: F841 — used in TODO block below
 
     result: dict = {
         "success": False,

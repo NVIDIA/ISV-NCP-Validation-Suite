@@ -9,7 +9,8 @@ Required JSON output:
     "success":       bool — true if key was disabled,
     "platform":      str  — "control_plane",
     "access_key_id": str  — the key that was disabled,
-    "status":        str  — "disabled"
+    "status":        str  — "disabled",
+    "error":         str or null — error message when disabling fails; null/absent on success
 }
 
 Usage:

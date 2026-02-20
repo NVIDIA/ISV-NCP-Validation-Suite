@@ -10,16 +10,17 @@ This script must:
   3. Remove the container
 
 Required JSON output fields:
-  success   (bool)  - whether the operation succeeded
-  platform  (str)   - always "nim"
-  host      (str)   - remote host IP/hostname
-  message   (str)   - human-readable summary of the teardown
+  success   (bool)           - whether the operation succeeded
+  platform  (str)            - always "nim"
+  host      (str)            - remote host IP/hostname
+  message   (str)            - human-readable summary of the teardown
+  error     (str, optional)  - error message or details provided when the operation fails
 
 Usage:
     python teardown_nim.py --host 54.1.2.3 --key-file /tmp/key.pem
 
 Reference implementation (AWS):
-    ../../../stubs/common/teardown_nim.py
+    ../../../stubs/aws/common/teardown_nim.py
     (see also: AWS VM config usage in ../../../aws/vm.yaml)
 """
 

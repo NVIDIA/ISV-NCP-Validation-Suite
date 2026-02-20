@@ -10,7 +10,8 @@ Required JSON output:
     "success":           bool      — true if all resources deleted,
     "platform":          str       — "iso",
     "resources_deleted": list[str] — names/IDs of deleted resources,
-    "message":           str       — human-readable summary
+    "message":           str       — human-readable summary,
+    "error":             str       — (optional) error message, present when success is false
 }
 
 Usage:

@@ -14,7 +14,8 @@ Required JSON output:
     "instance_state":    str  — "running",
     "key_name":          str  — name of the key pair,
     "security_group_id": str  — security group / firewall rule ID,
-    "instance_profile":  str  — IAM / instance profile name
+    "instance_profile":  str  — IAM / instance profile name,
+    "error":             str  — (optional) error message, present when success is false
 }
 
 Usage:
@@ -34,7 +35,7 @@ def main() -> int:
     parser.add_argument("--image-id", required=True, help="Imported machine image ID")
     parser.add_argument("--instance-type", required=True, help="Instance type / flavor (e.g. g4dn.xlarge)")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")
-    _args = parser.parse_args()
+    args = parser.parse_args()  # noqa: F841 — used in TODO block below
 
     result: dict = {
         "success": False,

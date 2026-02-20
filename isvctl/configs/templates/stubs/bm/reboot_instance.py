@@ -48,7 +48,7 @@ def main() -> int:
         "success": False,
         "platform": "bm",
         "instance_id": args.instance_id,
-        "instance_state": None,
+        "instance_state": "",
         "public_ip": args.public_ip,
         "key_file": args.key_file,
         "uptime_seconds": None,

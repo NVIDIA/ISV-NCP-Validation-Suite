@@ -14,6 +14,7 @@ Required JSON output fields:
   platform     (str)   - always "vm"
   instances    (list)  - list of {"instance_id": str, "state": str}
   total_count  (int)   - number of instances returned
+  error        (str, optional) - error message provided when success is false
 
 Usage:
     python list_instances.py --vpc-id vpc-xxx --region us-west-2
@@ -33,7 +34,7 @@ def main() -> int:
     parser.add_argument("--vpc-id", required=True, help="VPC or network identifier")
     parser.add_argument("--instance-id", help="Filter to a specific instance ID")
     parser.add_argument("--region", default="us-west-2", help="Cloud region")
-    _args = parser.parse_args()
+    args = parser.parse_args()  # noqa: F841 — used in TODO block below
 
     result = {
         "success": False,

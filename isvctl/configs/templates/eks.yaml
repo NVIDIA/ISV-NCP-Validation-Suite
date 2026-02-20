@@ -59,7 +59,8 @@ commands:
         command: "./stubs/eks/teardown.sh"
         timeout: 1800
         env:
-          TEARDOWN_ENABLED: "false"
+          # Override with TEARDOWN_ENABLED=false to preserve resources for debugging
+          TEARDOWN_ENABLED: "true"
 
 tests:
   cluster_name: "{{inventory.cluster_name}}"
@@ -90,7 +91,7 @@ tests:
       - K8sGpuCapacityCheck:
           resource_name: "nvidia.com/gpu"
           expected_per_node: 1
-          expected_total: 1
+          expected_total: 3
       - K8sGpuOperatorNamespaceCheck:
           namespace: "gpu-operator"
       - K8sGpuOperatorPodsCheck:

@@ -9,7 +9,8 @@ Required JSON output:
     "success":           bool      — true if tenant deleted,
     "platform":          str       — "control_plane",
     "resources_deleted": list[str] — names/IDs of deleted resources,
-    "message":           str       — human-readable summary
+    "message":           str       — human-readable summary,
+    "error":             str       — (optional) human-readable error details, present when success is false
 }
 
 Usage:
@@ -28,7 +29,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Delete tenant / resource group")
     parser.add_argument("--group-name", required=True, help="Tenant / group to delete")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")
-    _args = parser.parse_args()
+    args = parser.parse_args()  # noqa: F841 — used in TODO block below
 
     result: dict = {
         "success": False,

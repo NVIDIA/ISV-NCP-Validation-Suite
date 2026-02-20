@@ -9,7 +9,8 @@ Required JSON output:
     "success":       bool — true if authentication succeeded,
     "platform":      str  — "control_plane",
     "authenticated": bool — true if the key successfully authenticated,
-    "account_id":    str  — identity / account returned by the API
+    "account_id":    str  — identity / account returned by the API,
+    "error":         str  — optional error message when authentication fails (omitted on success)
 }
 
 Usage:
@@ -29,7 +30,7 @@ def main() -> int:
     parser.add_argument("--access-key-id", required=True, help="Public credential identifier")
     parser.add_argument("--secret-access-key", required=True, help="Secret credential value")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")
-    _args = parser.parse_args()
+    args = parser.parse_args()  # noqa: F841 — used in TODO block below
 
     result: dict = {
         "success": False,

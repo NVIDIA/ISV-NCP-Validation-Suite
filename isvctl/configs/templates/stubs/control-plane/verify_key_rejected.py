@@ -10,7 +10,8 @@ Required JSON output:
     "success":    bool — true if the disabled key was correctly rejected,
     "platform":   str  — "control_plane",
     "rejected":   bool — true if authentication was denied,
-    "error_type": str  — category of rejection (e.g. "InvalidClientTokenId")
+    "error_type": str  — category of rejection (e.g. "InvalidClientTokenId"),
+    "error":      str  — (optional) error message, present when success is false
 }
 
 Usage:
@@ -30,7 +31,7 @@ def main() -> int:
     parser.add_argument("--access-key-id", required=True, help="Disabled key to test")
     parser.add_argument("--secret-access-key", required=True, help="Secret for the disabled key")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")
-    _args = parser.parse_args()
+    args = parser.parse_args()  # noqa: F841 — used in TODO block below
 
     result: dict = {
         "success": False,

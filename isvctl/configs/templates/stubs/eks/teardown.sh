@@ -13,6 +13,14 @@
 #     "message": "Cluster destroyed"
 #   }
 #
+# When teardown is skipped (TEARDOWN_ENABLED != "true"):
+#   {
+#     "success": true,
+#     "platform": "kubernetes",
+#     "skipped": true,
+#     "message": "Teardown skipped (set TEARDOWN_ENABLED=true to enable)"
+#   }
+#
 # On failure, print JSON with "success": false and an "error" field.
 #
 # Environment Variables:

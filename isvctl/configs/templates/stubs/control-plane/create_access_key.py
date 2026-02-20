@@ -10,7 +10,8 @@ Required JSON output:
     "platform":         str  — "control_plane",
     "username":         str  — name of the created test user,
     "access_key_id":    str  — public credential identifier,
-    "secret_access_key": str — secret credential value
+    "secret_access_key": str — secret credential value,
+    "error":             str — (optional) error message, present when success is false
 }
 
 Usage:
@@ -28,7 +29,7 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(description="Create test user and access key")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")
-    _args = parser.parse_args()
+    args = parser.parse_args()  # noqa: F841 — used in TODO block below
 
     result: dict = {
         "success": False,

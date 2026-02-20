@@ -50,18 +50,18 @@ def main() -> int:
     parser.add_argument("--name", default="isv-bm-test-gpu", help="Instance name tag")
     parser.add_argument("--instance-type", default="g4dn.metal", help="Bare-metal instance type")
     parser.add_argument("--region", default="us-west-2", help="Cloud region")
-    _args = parser.parse_args()
+    args = parser.parse_args()  # noqa: F841 — used in TODO block below
 
     result: dict = {
         "success": False,
         "platform": "bm",
-        "instance_id": None,
-        "public_ip": None,
-        "key_file": None,
-        "vpc_id": None,
-        "instance_state": None,
-        "security_group_id": None,
-        "key_name": None,
+        "instance_id": "",
+        "public_ip": "",
+        "key_file": "",
+        "vpc_id": "",
+        "instance_state": "",
+        "security_group_id": "",
+        "key_name": "",
     }
 
     # ── Dev workflow: reuse existing instance ──────────────────────────
@@ -108,8 +108,12 @@ def main() -> int:
     # ║    2. Create security group (SSH access):                        ║
     # ║       sg = client.create_security_group(                         ║
     # ║           name=f"{args.name}-sg",                                ║
-    # ║           rules=[{"port": 22, "cidr": "0.0.0.0/0"}]              ║
+    # ║           rules=[{"port": 22, "cidr": "<ADMIN_CIDR>"}]           ║
     # ║       )                                                          ║
+    # ║       # WARNING: "0.0.0.0/0" allows SSH from any IP and is      ║
+    # ║       # overly permissive for production. Prefer restricting     ║
+    # ║       # the CIDR to a known admin IP range, or route access      ║
+    # ║       # through a bastion host / VPN.                            ║
     # ║       result["security_group_id"] = sg.id                        ║
     # ║                                                                  ║
     # ║    3. Launch bare-metal GPU instance:                            ║

@@ -10,7 +10,8 @@ Required JSON output:
     "platform":    str  — "control_plane",
     "tenant_name": str  — human-readable name,
     "tenant_id":   str  — unique identifier,
-    "description": str  — tenant description or metadata
+    "description": str  — tenant description or metadata,
+    "error":       str  — (optional) error message, present when success is false
 }
 
 Usage:
@@ -29,7 +30,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Get tenant / resource group details")
     parser.add_argument("--group-name", required=True, help="Tenant / group name to look up")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")
-    _args = parser.parse_args()
+    args = parser.parse_args()  # noqa: F841 — used in TODO block below
 
     result: dict = {
         "success": False,

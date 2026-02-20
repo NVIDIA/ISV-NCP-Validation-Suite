@@ -10,7 +10,8 @@ Required JSON output:
     "success":     bool — true if tenant created,
     "platform":    str  — "control_plane",
     "tenant_name": str  — human-readable name of the tenant,
-    "tenant_id":   str  — unique identifier for the tenant
+    "tenant_id":   str  — unique identifier for the tenant,
+    "error":       str  — (optional) error message, present when success is false
 }
 
 Usage:
@@ -28,7 +29,7 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(description="Create tenant / resource group")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")
-    _args = parser.parse_args()
+    args = parser.parse_args()  # noqa: F841 — used in TODO block below
 
     result: dict = {
         "success": False,

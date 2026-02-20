@@ -20,13 +20,14 @@ Required JSON output fields:
   container_id     (str)   - running container ID
   health_endpoint  (str)   - URL of the NIM health endpoint
   model_name       (str)   - name of the deployed NIM model
+  error            (str, optional) - error message provided when success is false
 
 Usage:
     NGC_NIM_API_KEY=nvapi-... python deploy_nim.py \\
         --host 54.1.2.3 --key-file /tmp/key.pem
 
 Reference implementation (AWS):
-    ../../../stubs/common/deploy_nim.py
+    ../../../stubs/aws/common/deploy_nim.py
     (see also: AWS VM config usage in ../../../aws/vm.yaml)
 """
 
@@ -48,9 +49,9 @@ def main() -> int:
         "success": False,
         "platform": "nim",
         "host": args.host,
-        "container_id": None,
-        "health_endpoint": None,
-        "model_name": None,
+        "container_id": "",
+        "health_endpoint": "",
+        "model_name": "",
     }
 
     if not ngc_api_key:

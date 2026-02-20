@@ -19,6 +19,7 @@ Required JSON output fields:
   key_file          (str)   - path to SSH private key
   uptime_seconds    (int)   - system uptime after reboot (proves reboot happened)
   ssh_connectivity  (bool)  - whether SSH is reachable post-reboot
+  error             (str, optional) - human-readable error message provided when success is false
 
 Usage:
     python reboot_instance.py --instance-id i-xxx --region us-west-2 \\
@@ -45,7 +46,7 @@ def main() -> int:
         "success": False,
         "platform": "vm",
         "instance_id": args.instance_id,
-        "instance_state": None,
+        "instance_state": "",
         "public_ip": args.public_ip,
         "key_file": args.key_file,
         "uptime_seconds": None,

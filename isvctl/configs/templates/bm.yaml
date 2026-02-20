@@ -195,7 +195,7 @@ tests:
 
   settings:
     region: "us-west-2"
-    instance_type: "g4dn.metal"
+    instance_type: "{{instance_type}}" # Supply your platform-equivalent bare-metal/GPU instance type
     teardown_flag: "{{(env.BM_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"
 
   # ─── Validations ─────────────────────────────────────────────────

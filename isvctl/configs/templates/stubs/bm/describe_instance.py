@@ -44,8 +44,8 @@ def main() -> int:
         "success": False,
         "platform": "bm",
         "instance_id": args.instance_id,
-        "instance_state": None,
-        "public_ip": None,
+        "instance_state": "",
+        "public_ip": "",
         "key_file": args.key_file,
     }
 

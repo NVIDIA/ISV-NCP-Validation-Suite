@@ -29,15 +29,17 @@ Provider-agnostic templates for ISV Lab validation tests. Copy a template, imple
 | `control-plane.yaml` | API health, access key lifecycle, tenant lifecycle | `stubs/control-plane/` (10 scripts) | `../stubs/aws/control-plane/` |
 | `iso.yaml` | Image upload/import → launch instance → teardown | `stubs/iso/` (3 scripts) | `../stubs/aws/iso/` |
 
+> **Note on Reference Implementations:** The `../stubs/aws/` paths in the "Reference Implementation" column point to NVIDIA's AWS example scripts that live _outside_ the `templates/` folder. These are optional examples provided as implementation guides — they are **not** copied when you duplicate `templates/` and are **not** required dependencies. The relative paths will not resolve once the templates folder is relocated. Refer to them in-place for inspiration, then implement your own scripts in the `stubs/` directories listed in the "Stubs" column.
+
 ## Quick Start
 
 ```bash
 # 1. Copy the template folder
-cp -r templates/ my-isv/
+cp -r isvctl/configs/templates/ isvctl/configs/my-isv/
 
 # 2. Pick a template (e.g., vm) and edit the stub scripts
 #    Each stub has a TODO block showing what to implement
-vim my-isv/stubs/vm/launch_instance.py
+vim isvctl/configs/my-isv/stubs/vm/launch_instance.py
 
 # 3. Run the validation
 uv run isvctl test run -f isvctl/configs/my-isv/vm.yaml

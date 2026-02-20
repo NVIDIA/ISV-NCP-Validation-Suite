@@ -15,6 +15,7 @@ Required JSON output fields:
   platform           (str)   - always "vm"
   resources_deleted  (list)  - list of resource identifiers that were deleted
   message            (str)   - human-readable summary of what was cleaned up
+  error              (str, optional) - error message provided when success is false
 
 Usage:
     python teardown.py --instance-id i-xxx --region us-west-2 \\
@@ -43,7 +44,7 @@ def main() -> int:
         action="store_true",
         help="Also delete the security group",
     )
-    _args = parser.parse_args()
+    args = parser.parse_args()  # noqa: F841 — used in TODO block below
 
     result = {
         "success": False,

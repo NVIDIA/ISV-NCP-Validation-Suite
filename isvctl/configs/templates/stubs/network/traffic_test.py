@@ -45,7 +45,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Traffic flow test (template)")
     parser.add_argument("--region", default="us-west-2", help="Cloud region")
     parser.add_argument("--cidr", default="10.93.0.0/16", help="CIDR block for test VPC")
-    _args = parser.parse_args()
+    args = parser.parse_args()  # noqa: F841 — used in TODO block below
 
     result: dict = {
         "success": False,

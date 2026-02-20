@@ -13,7 +13,8 @@ Required JSON output:
         "auth":          {"passed": bool},
         "<service_name>": {"passed": bool}
         ...one entry per service checked...
-    }
+    },
+    "error": str — (optional) error message, present when success is false
 }
 
 Usage:

@@ -59,8 +59,8 @@ make clean          # Clean build artifacts and test outputs
 # isvctl - Main entry point for cluster validation
 uv run isvctl test run -f isvctl/configs/k8s.yaml
 uv run isvctl test run -f isvctl/configs/slurm.yaml -- -v -s -k "test_name"
-uv run isvctl test run -f isvctl/configs/aws-eks.yaml      # AWS EKS validation
-uv run isvctl test run -f isvctl/configs/aws-network.yaml  # AWS Network validation
+uv run isvctl test run -f isvctl/configs/aws/eks.yaml      # AWS EKS validation
+uv run isvctl test run -f isvctl/configs/aws/network.yaml  # AWS Network validation
 
 # Remote deployment
 uv run isvctl deploy run <target-ip> -f isvctl/configs/k8s.yaml

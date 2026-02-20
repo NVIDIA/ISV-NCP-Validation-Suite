@@ -22,18 +22,18 @@
 #
 # Dev workflow (reuse existing instance):
 #   # Run 1: launch + test, keep instance alive
-#   AWS_BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/aws-bm.yaml
+#   AWS_BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/aws/bm.yaml
 #
 #   # Run 2+: reuse instance, iterate on tests
 #   AWS_BM_INSTANCE_ID=i-xxx AWS_BM_KEY_FILE=/tmp/isv-bm-test-key.pem \
-#     AWS_BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/aws-bm.yaml
+#     AWS_BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/aws/bm.yaml
 #
 #   # Final: teardown
 #   AWS_BM_INSTANCE_ID=i-xxx AWS_BM_KEY_FILE=/tmp/isv-bm-test-key.pem \
-#     uv run isvctl test run -f isvctl/configs/aws-bm.yaml
+#     uv run isvctl test run -f isvctl/configs/aws/bm.yaml
 #
 # Usage:
-#   uv run isvctl test run -f isvctl/configs/aws-bm.yaml
+#   uv run isvctl test run -f isvctl/configs/aws/bm.yaml
 
 version: "1.0"
 
@@ -45,7 +45,7 @@ commands:
       # Set AWS_BM_INSTANCE_ID + AWS_BM_KEY_FILE to reuse an existing instance
       - name: launch_instance
         phase: setup
-        command: "python3 ./stubs/aws/bm/launch_instance.py"
+        command: "python3 ../stubs/aws/bm/launch_instance.py"
         args:
           - "--name"
           - "isv-bm-test-gpu"
@@ -59,7 +59,7 @@ commands:
       # Reuses VM script (generic EC2 API)
       - name: list_instances
         phase: test
-        command: "python3 ./stubs/aws/vm/list_instances.py"
+        command: "python3 ../stubs/aws/vm/list_instances.py"
         args:
           - "--vpc-id"
           - "{{steps.launch_instance.vpc_id}}"
@@ -72,7 +72,7 @@ commands:
       # Describe instance - test phase anchor for SSH/GPU validations
       - name: describe_instance
         phase: test
-        command: "python3 ./stubs/aws/bm/describe_instance.py"
+        command: "python3 ../stubs/aws/bm/describe_instance.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -86,7 +86,7 @@ commands:
       # BM-specific: longer waits for hardware POST/BIOS/OS boot
       - name: reboot_instance
         phase: test
-        command: "python3 ./stubs/aws/bm/reboot_instance.py"
+        command: "python3 ../stubs/aws/bm/reboot_instance.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -105,7 +105,7 @@ commands:
       # old volume until new one is attached.
       # - name: reinstall_instance
       #   phase: test
-      #   command: "python3 ./stubs/aws/bm/reinstall_instance.py"
+      #   command: "python3 ../stubs/aws/bm/reinstall_instance.py"
       #   args:
       #     - "--instance-id"
       #     - "{{steps.launch_instance.instance_id}}"
@@ -121,7 +121,7 @@ commands:
       # Requires NGC_NIM_API_KEY env var
       - name: deploy_nim
         phase: test
-        command: "python3 ./stubs/common/deploy_nim.py"
+        command: "python3 ../stubs/common/deploy_nim.py"
         args:
           - "--host"
           - "{{steps.launch_instance.public_ip}}"
@@ -132,7 +132,7 @@ commands:
       # Teardown NIM container via SSH (shared script)
       - name: teardown_nim
         phase: teardown
-        command: "python3 ./stubs/common/teardown_nim.py"
+        command: "python3 ../stubs/common/teardown_nim.py"
         args:
           - "--host"
           - "{{steps.launch_instance.public_ip}}"
@@ -144,7 +144,7 @@ commands:
       # Set AWS_BM_SKIP_TEARDOWN=true to keep the instance alive
       - name: teardown
         phase: teardown
-        command: "python3 ./stubs/aws/bm/teardown.py"
+        command: "python3 ../stubs/aws/bm/teardown.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -158,7 +158,7 @@ commands:
       # Post-teardown sanitization: verify instance terminated and resources deleted
       - name: verify_teardown
         phase: teardown
-        command: "python3 ./stubs/aws/bm/verify_terminated.py"
+        command: "python3 ../stubs/aws/bm/verify_terminated.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"

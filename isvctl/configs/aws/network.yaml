@@ -15,11 +15,11 @@
 # Validation timing is inferred from step's phase.
 #
 # Usage:
-#   uv run isvctl test run -f isvctl/configs/aws-network.yaml
+#   uv run isvctl test run -f isvctl/configs/aws/network.yaml
 #
 # Run specific tests:
-#   uv run isvctl test run -f isvctl/configs/aws-network.yaml -- -k "vpc_crud"
-#   uv run isvctl test run -f isvctl/configs/aws-network.yaml -- -k "isolation"
+#   uv run isvctl test run -f isvctl/configs/aws/network.yaml -- -k "vpc_crud"
+#   uv run isvctl test run -f isvctl/configs/aws/network.yaml -- -k "isolation"
 #
 # Estimated runtime: ~10-12 minutes for all tests
 
@@ -35,7 +35,7 @@ commands:
       # =====================================================================
       - name: create_network
         phase: setup
-        command: "python3 ./stubs/aws/network/create_vpc.py"
+        command: "python3 ../stubs/aws/network/create_vpc.py"
         args:
           - "--name"
           - "isv-shared-vpc"
@@ -52,7 +52,7 @@ commands:
       # =====================================================================
       - name: vpc_crud
         phase: test
-        command: "python3 ./stubs/aws/network/vpc_crud_test.py"
+        command: "python3 ../stubs/aws/network/vpc_crud_test.py"
         args:
           - "--region"
           - "{{region}}"
@@ -68,7 +68,7 @@ commands:
       # =====================================================================
       - name: subnet_config
         phase: test
-        command: "python3 ./stubs/aws/network/subnet_test.py"
+        command: "python3 ../stubs/aws/network/subnet_test.py"
         args:
           - "--region"
           - "{{region}}"
@@ -86,7 +86,7 @@ commands:
       # =====================================================================
       - name: vpc_isolation
         phase: test
-        command: "python3 ./stubs/aws/network/isolation_test.py"
+        command: "python3 ../stubs/aws/network/isolation_test.py"
         args:
           - "--region"
           - "{{region}}"
@@ -104,7 +104,7 @@ commands:
       # =====================================================================
       - name: security_blocking
         phase: test
-        command: "python3 ./stubs/aws/network/security_test.py"
+        command: "python3 ../stubs/aws/network/security_test.py"
         args:
           - "--region"
           - "{{region}}"
@@ -120,7 +120,7 @@ commands:
       # =====================================================================
       - name: connectivity_test
         phase: test
-        command: "python3 ./stubs/aws/network/test_connectivity.py"
+        command: "python3 ../stubs/aws/network/test_connectivity.py"
         args:
           - "--vpc-id"
           - "{{steps.create_network.network_id}}"
@@ -140,7 +140,7 @@ commands:
       # =====================================================================
       - name: traffic_validation
         phase: test
-        command: "python3 ./stubs/aws/network/traffic_test.py"
+        command: "python3 ../stubs/aws/network/traffic_test.py"
         args:
           - "--region"
           - "{{region}}"
@@ -154,7 +154,7 @@ commands:
       # =====================================================================
       - name: teardown
         phase: teardown
-        command: "python3 ./stubs/aws/network/teardown.py"
+        command: "python3 ../stubs/aws/network/teardown.py"
         args:
           - "--vpc-id"
           - "{{steps.create_network.network_id}}"

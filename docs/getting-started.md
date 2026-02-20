@@ -28,10 +28,10 @@ uv run isvctl --help
 
 ```bash
 # AWS control plane validation
-uv run isvctl test run -f isvctl/configs/aws-control-plane.yaml
+uv run isvctl test run -f isvctl/configs/aws/control-plane.yaml
 
 # AWS network validation
-uv run isvctl test run -f isvctl/configs/aws-network.yaml
+uv run isvctl test run -f isvctl/configs/aws/network.yaml
 
 # Kubernetes cluster
 uv run isvctl test run -f isvctl/configs/k8s.yaml

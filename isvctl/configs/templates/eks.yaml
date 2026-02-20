@@ -23,7 +23,7 @@
 #   3. Run:               uv run isvctl test run -f isvctl/configs/my-isv/eks.yaml
 #
 # See also:
-#   - AWS reference implementation: ../aws-eks.yaml + ../stubs/aws/eks/
+#   - AWS reference implementation: ../aws/eks.yaml + ../stubs/aws/eks/
 #   - Terraform example: ../stubs/aws/eks/terraform/
 
 version: "1.0"

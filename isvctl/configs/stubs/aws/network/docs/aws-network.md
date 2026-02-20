@@ -96,16 +96,16 @@ All scripts are located in `isvctl/configs/stubs/aws/network/`:
 
 ```bash
 # Run all network tests
-uv run isvctl test run -f isvctl/configs/aws-network.yaml
+uv run isvctl test run -f isvctl/configs/aws/network.yaml
 
 # Run specific test suites
-uv run isvctl test run -f isvctl/configs/aws-network.yaml -- -k "vpc_crud"
-uv run isvctl test run -f isvctl/configs/aws-network.yaml -- -k "isolation"
-uv run isvctl test run -f isvctl/configs/aws-network.yaml -- -k "security"
-uv run isvctl test run -f isvctl/configs/aws-network.yaml -- -k "traffic"
+uv run isvctl test run -f isvctl/configs/aws/network.yaml -- -k "vpc_crud"
+uv run isvctl test run -f isvctl/configs/aws/network.yaml -- -k "isolation"
+uv run isvctl test run -f isvctl/configs/aws/network.yaml -- -k "security"
+uv run isvctl test run -f isvctl/configs/aws/network.yaml -- -k "traffic"
 
 # Run with verbose output
-uv run isvctl test run -f isvctl/configs/aws-network.yaml -v
+uv run isvctl test run -f isvctl/configs/aws/network.yaml -v
 ```
 
 ## Test Cases
@@ -286,7 +286,7 @@ export AWS_REGION=us-west-2
 
 ## Configuration
 
-### aws-network.yaml Structure
+### network.yaml Structure
 
 ```yaml
 version: "1.0"
@@ -439,7 +439,7 @@ For automated cleanup, use the suite's teardown phase which handles the full
 dependency sequence via [`teardown_vpc.py`](../teardown_vpc.py):
 
 ```bash
-uv run isvctl test run -f isvctl/configs/aws-network.yaml --phase teardown
+uv run isvctl test run -f isvctl/configs/aws/network.yaml --phase teardown
 ```
 
 ## Related Documentation

@@ -50,7 +50,7 @@ The AWS ISO/VMDK import validation tests verify:
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────┐
-│  uv run isvctl test run -f isvctl/configs/aws-iso.yaml              │
+│  uv run isvctl test run -f isvctl/configs/aws/iso.yaml              │
 └─────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
@@ -194,7 +194,7 @@ cd ISV-NCP-Validation-Suite
 uv sync
 
 # Run AWS ISO import validation
-uv run isvctl test run -f isvctl/configs/aws-iso.yaml
+uv run isvctl test run -f isvctl/configs/aws/iso.yaml
 ```
 
 ### Test Duration Summary
@@ -213,7 +213,7 @@ uv run isvctl test run -f isvctl/configs/aws-iso.yaml
 
 ## Configuration
 
-### aws-iso.yaml Structure
+### iso.yaml Structure
 
 ```yaml
 version: "1.0"
@@ -334,33 +334,33 @@ tests:
 ### Run Full ISO Import Test
 
 ```bash
-uv run isvctl test run -f isvctl/configs/aws-iso.yaml
+uv run isvctl test run -f isvctl/configs/aws/iso.yaml
 ```
 
 ### Skip Teardown (for debugging)
 
 ```bash
-AWS_ISO_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/aws-iso.yaml
+AWS_ISO_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/aws/iso.yaml
 ```
 
 ### Run in Different Region
 
 ```bash
-uv run isvctl test run -f isvctl/configs/aws-iso.yaml \
+uv run isvctl test run -f isvctl/configs/aws/iso.yaml \
   --set tests.settings.region=us-east-1
 ```
 
 ### Use Different Instance Type
 
 ```bash
-uv run isvctl test run -f isvctl/configs/aws-iso.yaml \
+uv run isvctl test run -f isvctl/configs/aws/iso.yaml \
   --set tests.settings.instance_type=g5.xlarge
 ```
 
 ### Verbose Output
 
 ```bash
-uv run isvctl test run -f isvctl/configs/aws-iso.yaml -v
+uv run isvctl test run -f isvctl/configs/aws/iso.yaml -v
 ```
 
 ---
@@ -448,7 +448,7 @@ Common causes:
 No capacity for the instance type in the AZ. Try a different region or instance type:
 
 ```bash
-uv run isvctl test run -f isvctl/configs/aws-iso.yaml \
+uv run isvctl test run -f isvctl/configs/aws/iso.yaml \
   --set tests.settings.instance_type=g5.xlarge
 ```
 

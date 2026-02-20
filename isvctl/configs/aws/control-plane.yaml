@@ -13,7 +13,7 @@
 # Validation timing is inferred from step's phase.
 #
 # Usage:
-#   uv run isvctl test run -f isvctl/configs/aws-control-plane.yaml
+#   uv run isvctl test run -f isvctl/configs/aws/control-plane.yaml
 #
 # Required IAM Permissions:
 #   sts:GetCallerIdentity, iam:ListUsers, ec2:DescribeRegions, s3:ListBuckets,
@@ -31,7 +31,7 @@ commands:
       # =======================================================================
       - name: check_api
         phase: setup
-        command: "python3 ./stubs/aws/control-plane/check_api.py"
+        command: "python3 ../stubs/aws/control-plane/check_api.py"
         args: ["--region", "{{region}}", "--services", "{{services}}"]
         timeout: 120
 
@@ -40,13 +40,13 @@ commands:
       # =======================================================================
       - name: create_access_key
         phase: setup
-        command: "python3 ./stubs/aws/control-plane/create_access_key.py"
+        command: "python3 ../stubs/aws/control-plane/create_access_key.py"
         args: ["--region", "{{region}}"]
         timeout: 60
 
       - name: create_tenant
         phase: setup
-        command: "python3 ./stubs/aws/control-plane/create_tenant.py"
+        command: "python3 ../stubs/aws/control-plane/create_tenant.py"
         args: ["--region", "{{region}}"]
         timeout: 60
 
@@ -55,7 +55,7 @@ commands:
       # =======================================================================
       - name: test_access_key
         phase: test
-        command: "python3 ./stubs/aws/control-plane/test_access_key.py"
+        command: "python3 ../stubs/aws/control-plane/test_access_key.py"
         args:
           - "--access-key-id"
           - "{{steps.create_access_key.access_key_id}}"
@@ -72,7 +72,7 @@ commands:
 
       - name: disable_access_key
         phase: test
-        command: "python3 ./stubs/aws/control-plane/disable_access_key.py"
+        command: "python3 ../stubs/aws/control-plane/disable_access_key.py"
         args:
           - "--username"
           - "{{steps.create_access_key.username}}"
@@ -82,7 +82,7 @@ commands:
 
       - name: verify_key_rejected
         phase: test
-        command: "python3 ./stubs/aws/control-plane/verify_key_rejected.py"
+        command: "python3 ../stubs/aws/control-plane/verify_key_rejected.py"
         args:
           - "--access-key-id"
           - "{{steps.create_access_key.access_key_id}}"
@@ -102,7 +102,7 @@ commands:
       # =======================================================================
       - name: list_tenants
         phase: test
-        command: "python3 ./stubs/aws/control-plane/list_tenants.py"
+        command: "python3 ../stubs/aws/control-plane/list_tenants.py"
         args:
           - "--region"
           - "{{region}}"
@@ -112,7 +112,7 @@ commands:
 
       - name: get_tenant
         phase: test
-        command: "python3 ./stubs/aws/control-plane/get_tenant.py"
+        command: "python3 ../stubs/aws/control-plane/get_tenant.py"
         args:
           - "--group-name"
           - "{{steps.create_tenant.tenant_name}}"
@@ -125,7 +125,7 @@ commands:
       # =======================================================================
       - name: delete_access_key
         phase: teardown
-        command: "python3 ./stubs/aws/control-plane/delete_access_key.py"
+        command: "python3 ../stubs/aws/control-plane/delete_access_key.py"
         args:
           - "--username"
           - "{{steps.create_access_key.username}}"
@@ -136,7 +136,7 @@ commands:
 
       - name: delete_tenant
         phase: teardown
-        command: "python3 ./stubs/aws/control-plane/delete_tenant.py"
+        command: "python3 ../stubs/aws/control-plane/delete_tenant.py"
         args:
           - "--group-name"
           - "{{steps.create_tenant.tenant_name}}"

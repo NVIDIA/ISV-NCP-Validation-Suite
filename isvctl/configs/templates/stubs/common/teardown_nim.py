@@ -20,7 +20,7 @@ Usage:
 
 Reference implementation (AWS):
     ../../../stubs/common/teardown_nim.py
-    (see also: AWS VM config usage in ../../../aws-vm.yaml)
+    (see also: AWS VM config usage in ../../../aws/vm.yaml)
 """
 
 import argparse

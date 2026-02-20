@@ -2,17 +2,17 @@
 # Provisions an EKS GPU cluster using Terraform and runs Kubernetes validation tests.
 #
 # This config uses Shell + Terraform (legacy mode) as an example of the alternative approach.
-# Compare with aws-vm.yaml which uses Python scripts with step-based execution.
+# Compare with vm.yaml which uses Python scripts with step-based execution.
 #
 # Usage:
 #   # Provision cluster and run tests
-#   TF_AUTO_APPROVE=true uv run isvctl test run -f isvctl/configs/aws-eks.yaml
+#   TF_AUTO_APPROVE=true uv run isvctl test run -f isvctl/configs/aws/eks.yaml
 #
 #   # Run tests only (skip setup/teardown)
-#   uv run isvctl test run -f isvctl/configs/aws-eks.yaml --phase test
+#   uv run isvctl test run -f isvctl/configs/aws/eks.yaml --phase test
 #
 #   # Teardown cluster
-#   AWS_TEARDOWN_ENABLED=true TF_AUTO_APPROVE=true uv run isvctl test run -f isvctl/configs/aws-eks.yaml --phase teardown
+#   AWS_TEARDOWN_ENABLED=true TF_AUTO_APPROVE=true uv run isvctl test run -f isvctl/configs/aws/eks.yaml --phase teardown
 #
 # Environment Variables:
 #   - TF_AUTO_APPROVE: Set to "true" to skip Terraform approval prompts (default: false)
@@ -33,7 +33,7 @@ commands:
     steps:
       - name: provision_cluster
         phase: setup
-        command: "./stubs/aws/eks/setup.sh"
+        command: "../stubs/aws/eks/setup.sh"
         timeout: 1800 # 30 min for Terraform provisioning
         env:
           TF_AUTO_APPROVE: "true"
@@ -45,7 +45,7 @@ commands:
 
       - name: teardown_cluster
         phase: teardown
-        command: "./stubs/aws/eks/teardown.sh"
+        command: "../stubs/aws/eks/teardown.sh"
         timeout: 1800 # 30 min for Terraform destroy
         env:
           AWS_TEARDOWN_ENABLED: "false"

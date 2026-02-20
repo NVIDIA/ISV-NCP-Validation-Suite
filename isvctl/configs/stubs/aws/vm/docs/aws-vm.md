@@ -80,20 +80,20 @@ export AWS_REGION=us-west-2
 export NGC_NIM_API_KEY=...  # optional, for NIM tests
 
 # 3. Run all tests
-uv run isvctl test run -f isvctl/configs/aws-vm.yaml
+uv run isvctl test run -f isvctl/configs/aws/vm.yaml
 
 # 4. Run specific tests
-uv run isvctl test run -f isvctl/configs/aws-vm.yaml -- -k "Ssh"
-uv run isvctl test run -f isvctl/configs/aws-vm.yaml -- -k "reboot"
-uv run isvctl test run -f isvctl/configs/aws-vm.yaml -- -k "Nim"
-uv run isvctl test run -f isvctl/configs/aws-vm.yaml -- -m "gpu"
-uv run isvctl test run -f isvctl/configs/aws-vm.yaml -- -m "not workload"
-uv run isvctl test run -f isvctl/configs/aws-vm.yaml -v -- -v -s  # verbose
+uv run isvctl test run -f isvctl/configs/aws/vm.yaml -- -k "Ssh"
+uv run isvctl test run -f isvctl/configs/aws/vm.yaml -- -k "reboot"
+uv run isvctl test run -f isvctl/configs/aws/vm.yaml -- -k "Nim"
+uv run isvctl test run -f isvctl/configs/aws/vm.yaml -- -m "gpu"
+uv run isvctl test run -f isvctl/configs/aws/vm.yaml -- -m "not workload"
+uv run isvctl test run -f isvctl/configs/aws/vm.yaml -v -- -v -s  # verbose
 ```
 
 ## Configuration
 
-Full config: [`isvctl/configs/aws-vm.yaml`](../../../aws-vm.yaml)
+Full config: [`isvctl/configs/aws/vm.yaml`](../../../aws/vm.yaml)
 
 ### Settings
 

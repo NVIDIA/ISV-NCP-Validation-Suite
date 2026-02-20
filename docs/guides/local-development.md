@@ -37,16 +37,16 @@ Run AWS validation tests:
 
 ```bash
 # Control plane validation (API health, IAM, tenants)
-uv run isvctl test run -f isvctl/configs/aws-control-plane.yaml
+uv run isvctl test run -f isvctl/configs/aws/control-plane.yaml
 
 # Network validation (VPC, subnets, security groups)
-uv run isvctl test run -f isvctl/configs/aws-network.yaml
+uv run isvctl test run -f isvctl/configs/aws/network.yaml
 
 # VM validation (EC2 instances)
-uv run isvctl test run -f isvctl/configs/aws-vm.yaml
+uv run isvctl test run -f isvctl/configs/aws/vm.yaml
 
 # IAM user lifecycle
-uv run isvctl test run -f isvctl/configs/aws-iam.yaml
+uv run isvctl test run -f isvctl/configs/aws/iam.yaml
 ```
 
 ### Kubernetes Tests (MicroK8s)

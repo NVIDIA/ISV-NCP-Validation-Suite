@@ -27,7 +27,7 @@ Usage:
 
 Reference implementation (AWS):
     ../../../stubs/common/deploy_nim.py
-    (see also: AWS VM config usage in ../../../aws-vm.yaml)
+    (see also: AWS VM config usage in ../../../aws/vm.yaml)
 """
 
 import argparse

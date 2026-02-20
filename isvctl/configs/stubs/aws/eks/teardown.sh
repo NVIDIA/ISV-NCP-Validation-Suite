@@ -26,7 +26,7 @@ if [ "$AWS_TEARDOWN_ENABLED" != "true" ]; then
     echo "" >&2
     echo "To destroy resources, run with:" >&2
     echo "  AWS_TEARDOWN_ENABLED=true TF_AUTO_APPROVE=true \\" >&2
-    echo "    uv run isvctl test run -f isvctl/configs/aws-eks.yaml --phase teardown" >&2
+    echo "    uv run isvctl test run -f isvctl/configs/aws/eks.yaml --phase teardown" >&2
     echo "" >&2
     echo "Or manually:" >&2
     echo "  cd isvctl/configs/stubs/aws/eks/terraform" >&2

@@ -51,10 +51,10 @@ The IAM validation framework tests user CRUD operations:
 
 ```bash
 # Run AWS IAM validations (requires AWS credentials)
-uv run isvctl test run -f isvctl/configs/aws-iam.yaml
+uv run isvctl test run -f isvctl/configs/aws/iam.yaml
 
 # Run with mock provider (no AWS credentials needed)
-uv run isvctl test run -f isvctl/configs/aws-iam.yaml -- -k "IamUserLifecycleCheck" --provider mock
+uv run isvctl test run -f isvctl/configs/aws/iam.yaml -- -k "IamUserLifecycleCheck" --provider mock
 ```
 
 ## Environment Variables

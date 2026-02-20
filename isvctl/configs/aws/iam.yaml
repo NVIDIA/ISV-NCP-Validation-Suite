@@ -12,7 +12,7 @@
 # Validation timing is inferred from step's phase.
 #
 # Usage:
-#   uv run isvctl test run -f isvctl/configs/aws-iam.yaml
+#   uv run isvctl test run -f isvctl/configs/aws/iam.yaml
 
 version: "1.0"
 
@@ -22,7 +22,7 @@ commands:
     steps:
       - name: create_user
         phase: setup
-        command: "python ./stubs/aws/iam/create_user.py"
+        command: "python ../stubs/aws/iam/create_user.py"
         args:
           - "--username"
           - "isv-test-user"
@@ -31,7 +31,7 @@ commands:
 
       - name: test_credentials
         phase: test
-        command: "python ./stubs/aws/iam/test_credentials.py"
+        command: "python ../stubs/aws/iam/test_credentials.py"
         args:
           - "--access-key-id"
           - "{{steps.create_user.access_key_id}}"
@@ -44,7 +44,7 @@ commands:
 
       - name: teardown
         phase: teardown
-        command: "python ./stubs/aws/iam/delete_user.py"
+        command: "python ../stubs/aws/iam/delete_user.py"
         args:
           - "--username"
           - "{{steps.create_user.username}}"

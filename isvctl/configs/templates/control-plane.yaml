@@ -25,7 +25,7 @@
 #   3. Run:               uv run isvctl test run -f isvctl/configs/my-isv/control-plane.yaml
 #
 # See also:
-#   - AWS reference implementation: ../aws-control-plane.yaml + ../stubs/aws/control-plane/
+#   - AWS reference implementation: ../aws/control-plane.yaml + ../stubs/aws/control-plane/
 #   - JSON schemas: isvctl/src/isvctl/config/output_schemas.py
 
 version: "1.0"

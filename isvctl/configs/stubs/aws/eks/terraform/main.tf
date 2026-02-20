@@ -9,7 +9,7 @@
 #
 # After deployment:
 #   aws eks update-kubeconfig --name $(terraform output -raw cluster_name) --region $(terraform output -raw region)
-#   isvctl test run -f isvctl/configs/aws-eks.yaml
+#   isvctl test run -f isvctl/configs/aws/eks.yaml
 
 terraform {
   required_version = ">= 1.5.0"

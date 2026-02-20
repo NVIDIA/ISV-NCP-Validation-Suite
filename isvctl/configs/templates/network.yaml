@@ -27,7 +27,7 @@
 #   3. Run:               uv run isvctl test run -f isvctl/configs/my-isv/network.yaml
 #
 # See also:
-#   - AWS reference implementation: ../aws-network.yaml + ../stubs/aws/network/
+#   - AWS reference implementation: ../aws/network.yaml + ../stubs/aws/network/
 #   - JSON schemas: isvctl/src/isvctl/config/output_schemas.py
 
 version: "1.0"

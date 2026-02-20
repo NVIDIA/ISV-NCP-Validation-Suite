@@ -25,7 +25,7 @@
 #   3. Run:               uv run isvctl test run -f isvctl/configs/my-isv/iam.yaml
 #
 # See also:
-#   - AWS reference implementation: ../aws-iam.yaml + ../stubs/aws/iam/
+#   - AWS reference implementation: ../aws/iam.yaml + ../stubs/aws/iam/
 #   - JSON schemas: isvctl/src/isvctl/config/output_schemas.py
 
 version: "1.0"

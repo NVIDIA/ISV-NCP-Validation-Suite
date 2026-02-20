@@ -14,10 +14,10 @@
 # Validation timing is inferred from step's phase.
 #
 # Usage:
-#   uv run isvctl test run -f isvctl/configs/aws-iso.yaml
+#   uv run isvctl test run -f isvctl/configs/aws/iso.yaml
 #
 #   # Skip specific steps
-#   uv run isvctl test run -f isvctl/configs/aws-iso.yaml --set commands.iso.steps[0].skip=true
+#   uv run isvctl test run -f isvctl/configs/aws/iso.yaml --set commands.iso.steps[0].skip=true
 #
 # Environment Variables:
 #   - AWS_REGION: AWS region (default: us-west-2)
@@ -45,7 +45,7 @@ commands:
       # Step 1: Upload VMDK and import as AMI (long-running: 15-60 min)
       - name: upload_image
         phase: setup
-        command: "python3 ./stubs/aws/iso/upload_image.py"
+        command: "python3 ../stubs/aws/iso/upload_image.py"
         args:
           - "--image-url"
           - "{{image_url}}"
@@ -58,7 +58,7 @@ commands:
       # Step 2: Launch GPU instance from imported image
       - name: launch_instance
         phase: test
-        command: "python3 ./stubs/aws/iso/launch_instance.py"
+        command: "python3 ../stubs/aws/iso/launch_instance.py"
         args:
           - "--ami-id"
           - "{{steps.upload_image.image_id}}" # Use generic field name
@@ -71,7 +71,7 @@ commands:
       # Step 3: Cleanup all resources
       - name: teardown
         phase: teardown
-        command: "python3 ./stubs/aws/iso/teardown.py"
+        command: "python3 ../stubs/aws/iso/teardown.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"

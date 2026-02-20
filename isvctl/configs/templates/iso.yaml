@@ -26,7 +26,7 @@
 #   3. Run:               uv run isvctl test run -f isvctl/configs/my-isv/iso.yaml
 #
 # See also:
-#   - AWS reference implementation: ../aws-iso.yaml + ../stubs/aws/iso/
+#   - AWS reference implementation: ../aws/iso.yaml + ../stubs/aws/iso/
 #   - JSON schemas: isvctl/src/isvctl/config/output_schemas.py
 
 version: "1.0"

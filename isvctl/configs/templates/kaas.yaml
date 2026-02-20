@@ -1,4 +1,4 @@
-# Kubernetes (EKS-style) Cluster Validation - Template Configuration
+# Kubernetes-as-a-Service (KaaS) Cluster Validation - Template Configuration
 #
 # This is a PROVIDER-AGNOSTIC template for testing GPU-enabled Kubernetes
 # cluster lifecycle: provision -> validate -> workloads -> teardown.
@@ -19,8 +19,8 @@
 #
 # Quick start:
 #   1. Copy this folder:  cp -r templates/ my-isv/
-#   2. Edit the stubs:    my-isv/stubs/eks/setup.sh, teardown.sh
-#   3. Run:               uv run isvctl test run -f isvctl/configs/my-isv/eks.yaml
+#   2. Edit the stubs:    my-isv/stubs/kaas/setup.sh, teardown.sh
+#   3. Run:               uv run isvctl test run -f isvctl/configs/my-isv/kaas.yaml
 #
 # See also:
 #   - AWS reference implementation: ../aws/eks.yaml + ../stubs/aws/eks/
@@ -47,7 +47,7 @@ commands:
       #      }
       - name: provision_cluster
         phase: setup
-        command: "./stubs/eks/setup.sh"
+        command: "./stubs/kaas/setup.sh"
         timeout: 1800
         env:
           CLUSTER_REGION: "us-west-2"
@@ -56,7 +56,7 @@ commands:
       # YOUR SCRIPT must destroy all cluster resources.
       - name: teardown_cluster
         phase: teardown
-        command: "./stubs/eks/teardown.sh"
+        command: "./stubs/kaas/teardown.sh"
         timeout: 1800
         env:
           # Override with TEARDOWN_ENABLED=false to preserve resources for debugging

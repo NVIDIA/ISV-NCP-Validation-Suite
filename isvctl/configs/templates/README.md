@@ -25,7 +25,7 @@ Provider-agnostic templates for ISV Lab validation tests. Copy a template, imple
 | `network.yaml` | VPC CRUD, subnets, isolation, security, connectivity, traffic | `stubs/network/` (8 scripts) | `../stubs/aws/network/` |
 | `vm.yaml` | Launch GPU VM → list → reboot → NIM deploy → teardown | `stubs/vm/` (4 scripts) + `stubs/common/` (2) | `../stubs/aws/vm/` |
 | `bm.yaml` | Launch bare-metal → describe → reboot → NIM → teardown → verify | `stubs/bm/` (5 scripts) + `stubs/common/` (2) | `../stubs/aws/bm/` |
-| `eks.yaml` | Provision K8s GPU cluster → validate nodes/GPU/workloads → teardown | `stubs/eks/` (2 scripts) | `../stubs/aws/eks/` |
+| `kaas.yaml` | Provision K8s GPU cluster → validate nodes/GPU/workloads → teardown | `stubs/kaas/` (2 scripts) | `../stubs/aws/eks/` |
 | `control-plane.yaml` | API health, access key lifecycle, tenant lifecycle | `stubs/control-plane/` (10 scripts) | `../stubs/aws/control-plane/` |
 | `iso.yaml` | Image upload/import → launch instance → teardown | `stubs/iso/` (3 scripts) | `../stubs/aws/iso/` |
 
@@ -100,14 +100,14 @@ Bare-metal GPU instance lifecycle. Similar to VM but with longer timeouts for ha
 | `teardown` | teardown | `stubs/bm/teardown.py` | `resources_deleted`, `message` |
 | `verify_teardown` | teardown | `stubs/bm/verify_terminated.py` | `checks.instance_terminated`, `checks.sg_deleted` |
 
-### Kubernetes / EKS (`eks.yaml`)
+### Kubernetes / KaaS (`kaas.yaml`)
 
 GPU-enabled Kubernetes cluster provisioning and validation. Uses shell scripts for cluster lifecycle.
 
 | Step | Phase | Script | Key JSON Fields |
 |------|-------|--------|-----------------|
-| `provision_cluster` | setup | `stubs/eks/setup.sh` | `cluster_name`, `cluster_endpoint`, `node_count` |
-| `teardown_cluster` | teardown | `stubs/eks/teardown.sh` | `message` |
+| `provision_cluster` | setup | `stubs/kaas/setup.sh` | `cluster_name`, `cluster_endpoint`, `node_count` |
+| `teardown_cluster` | teardown | `stubs/kaas/teardown.sh` | `message` |
 
 Validations use `kubectl` directly: node counts, GPU operator, pod health, NCCL/NIM workloads.
 

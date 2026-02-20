@@ -3,8 +3,8 @@
 #
 # Tests:
 # - API Health: Authentication and service connectivity
-# - Access Key Lifecycle (ISVP-173, 174): Create, authenticate, disable, verify rejection, delete
-# - Tenant Lifecycle (ISVP-175-179): Create, list, get info, delete
+# - Access Key Lifecycle: Create, authenticate, disable, verify rejection, delete
+# - Tenant Lifecycle: Create, list, get info, delete
 #
 # Architecture:
 #   - Scripts: Platform-specific (boto3) - CRUD operations
@@ -51,7 +51,7 @@ commands:
         timeout: 60
 
       # =======================================================================
-      # TEST: Access Key Lifecycle - ISVP-173, 174
+      # TEST: Access Key Lifecycle
       # =======================================================================
       - name: test_access_key
         phase: test
@@ -98,7 +98,7 @@ commands:
         timeout: 120
 
       # =======================================================================
-      # TEST: Tenant Lifecycle - ISVP-175 to 179
+      # TEST: Tenant Lifecycle
       # =======================================================================
       - name: list_tenants
         phase: test

@@ -82,6 +82,28 @@ commands:
           - "{{steps.launch_instance.key_file}}"
         timeout: 120
 
+      # Verify OS image installed on BM instance
+      - name: verify_image
+        phase: test
+        command: "python3 ../stubs/aws/image-registry/verify_image_installed.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 60
+
+      # Verify install config can provision BM
+      - name: verify_config
+        phase: test
+        command: "python3 ../stubs/aws/image-registry/verify_config_installable.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 120
+
       # Reboot instance and validate recovery
       # BM-specific: longer waits for hardware POST/BIOS/OS boot
       - name: reboot_instance
@@ -222,6 +244,23 @@ tests:
       step: describe_instance
       checks:
         - SshHostSoftwareCheck: {}
+
+    # Test phase: image registry validations
+    image_installed:
+      step: verify_image
+      checks:
+        - StepSuccessCheck: {}
+        - FieldExistsCheck:
+            fields: ["instance_id", "image_id", "image_name", "instance_state"]
+        - InstanceStateCheck:
+            expected_state: "running"
+
+    config_installable:
+      step: verify_config
+      checks:
+        - StepSuccessCheck: {}
+        - FieldExistsCheck:
+            fields: ["config_id", "config_name", "dry_run_passed"]
 
     # TODO: Add GPU stress test
     # gpu_workload:

@@ -7,8 +7,8 @@ This guide covers validating AWS control plane connectivity, IAM operations, and
 The control plane validation tests verify:
 
 1. **API Health** - Authentication and service connectivity
-2. **Access Key Lifecycle** - Create, authenticate, disable, verify rejection, delete (ISVP-173, 174)
-3. **Tenant Lifecycle** - Create, list, get info, delete resource groups (ISVP-175-179)
+2. **Access Key Lifecycle** - Create, authenticate, disable, verify rejection, delete
+3. **Tenant Lifecycle** - Create, list, get info, delete resource groups
 
 **Architecture:**
 

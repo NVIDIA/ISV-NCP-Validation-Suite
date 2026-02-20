@@ -68,7 +68,16 @@ commands:
           - "{{region}}"
         timeout: 600 # 10 minutes
 
-      # Step 3: Cleanup all resources
+      # Step 3: CRUD OS install config (EC2 Launch Template lifecycle)
+      - name: crud_install_config
+        phase: test
+        command: "python3 ../stubs/aws/image-registry/crud_install_config.py"
+        args:
+          - "--region"
+          - "{{region}}"
+        timeout: 120
+
+      # Step 4: Cleanup all resources
       - name: teardown
         phase: teardown
         command: "python3 ../stubs/aws/image-registry/teardown.py"
@@ -152,6 +161,14 @@ tests:
     #   checks:
     #     - SshGpuStressCheck:
     #         duration: 60
+
+    # Validate install config CRUD
+    install_config_crud:
+      step: crud_install_config
+      checks:
+        - StepSuccessCheck: {}
+        - FieldExistsCheck:
+            fields: ["config_id", "config_name", "operations"]
 
     # Validate teardown succeeded
     teardown_checks:

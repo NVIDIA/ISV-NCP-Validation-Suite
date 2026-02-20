@@ -186,7 +186,7 @@ tests:
   # ─── Validations ─────────────────────────────────────────────────
   # These are PROVIDER-AGNOSTIC. They only check JSON field names/values.
   validations:
-    # --- OS Image Upload (ISVP-164) ---
+    # --- OS Image Upload ---
     image_upload:
       step: upload_image
       checks:
@@ -194,7 +194,7 @@ tests:
         - FieldExistsCheck:
             fields: ["image_id", "storage_bucket", "disk_ids"]
 
-    # --- VM Launch from Image (ISVP-169) ---
+    # --- VM Launch from Image ---
     vm_from_image:
       step: launch_instance
       checks:
@@ -211,7 +211,7 @@ tests:
         - SshOsCheck:
             expected_os: "ubuntu"
 
-    # --- OS Install Config CRUD (ISVP-165) ---
+    # --- OS Install Config CRUD ---
     install_config_crud:
       step: crud_install_config
       checks:
@@ -219,7 +219,7 @@ tests:
         - FieldExistsCheck:
             fields: ["config_id", "config_name", "operations"]
 
-    # --- OS Image on BMaaS (ISVP-167) ---
+    # --- OS Image on BMaaS ---
     bm_from_image:
       step: install_image_bm
       checks:
@@ -229,7 +229,7 @@ tests:
         - InstanceStateCheck:
             expected_state: "running"
 
-    # --- OS Install Config on BMaaS (ISVP-168) ---
+    # --- OS Install Config on BMaaS ---
     bm_from_config:
       step: install_config_bm
       checks:

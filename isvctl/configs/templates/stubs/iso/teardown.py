@@ -14,7 +14,7 @@ Required JSON output:
 }
 
 Usage:
-    python teardown.py --instance-id i-xxx --ami-id ami-xxx --snapshot-ids snap-a,snap-b \\
+    python teardown.py --instance-id i-xxx --image-id img-xxx --disk-ids disk-a,disk-b \\
         --bucket-name my-bucket --key-name my-key --security-group-id sg-xxx \\
         --instance-profile my-profile --region us-west-2
 
@@ -32,8 +32,8 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(description="Tear down ISO validation resources")
     parser.add_argument("--instance-id", default="", help="Instance to terminate")
-    parser.add_argument("--ami-id", default="", help="Machine image to deregister")
-    parser.add_argument("--snapshot-ids", default="", help="Comma-separated snapshot/disk IDs to delete")
+    parser.add_argument("--image-id", default="", help="Machine image to deregister")
+    parser.add_argument("--disk-ids", default="", help="Comma-separated snapshot/disk IDs to delete")
     parser.add_argument("--bucket-name", default="", help="Storage bucket to delete")
     parser.add_argument("--key-name", default="", help="Key pair to delete")
     parser.add_argument("--security-group-id", default="", help="Security group to delete")
@@ -55,7 +55,7 @@ def main() -> int:
         print(json.dumps(result, indent=2))
         return 0
 
-    _snapshot_ids = [s.strip() for s in args.snapshot_ids.split(",") if s.strip()]
+    _disk_ids = [s.strip() for s in args.disk_ids.split(",") if s.strip()]
 
     # ╔══════════════════════════════════════════════════════════════════╗
     # ║  TODO: Replace this block with your platform's implementation    ║
@@ -64,9 +64,9 @@ def main() -> int:
     # ║                                                                  ║
     # ║  1. Terminate the instance (args.instance_id)                    ║
     # ║     → result["resources_deleted"].append("instance:<id>")        ║
-    # ║  2. Deregister / delete the machine image (args.ami_id)          ║
+    # ║  2. Deregister / delete the machine image (args.image_id)        ║
     # ║     → result["resources_deleted"].append("image:<id>")           ║
-    # ║  3. Delete snapshots / disks (snapshot_ids)                      ║
+    # ║  3. Delete disks (disk_ids)                                      ║
     # ║     → result["resources_deleted"].append("snapshot:<id>")        ║
     # ║  4. Delete the storage bucket (args.bucket_name)                 ║
     # ║     → result["resources_deleted"].append("bucket:<name>")        ║

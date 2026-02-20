@@ -46,7 +46,7 @@ commands:
       #   }
       - name: create_user
         phase: setup
-        command: "python ./stubs/iam/create_user.py"
+        command: "python3 ./stubs/iam/create_user.py"
         args:
           - "--username"
           - "isv-test-user"
@@ -68,7 +68,7 @@ commands:
       # the create_user step output. Adjust arg names to match your script.
       - name: test_credentials
         phase: test
-        command: "python ./stubs/iam/test_credentials.py"
+        command: "python3 ./stubs/iam/test_credentials.py"
         args:
           - "--username"
           - "{{steps.create_user.username}}"
@@ -89,7 +89,7 @@ commands:
       #   }
       - name: teardown
         phase: teardown
-        command: "python ./stubs/iam/delete_user.py"
+        command: "python3 ./stubs/iam/delete_user.py"
         args:
           - "--username"
           - "{{steps.create_user.username}}"

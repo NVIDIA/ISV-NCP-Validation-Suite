@@ -73,7 +73,7 @@ commands:
         phase: test
         command: "python3 ./stubs/iso/launch_instance.py"
         args:
-          - "--ami-id"
+          - "--image-id"
           - "{{steps.upload_image.image_id}}"
           - "--instance-type"
           - "{{instance_type}}"
@@ -90,9 +90,9 @@ commands:
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
-          - "--ami-id"
+          - "--image-id"
           - "{{steps.upload_image.image_id}}"
-          - "--snapshot-ids"
+          - "--disk-ids"
           - "{{steps.upload_image.disk_ids | join(',')}}"
           - "--bucket-name"
           - "{{steps.upload_image.storage_bucket}}"

@@ -20,7 +20,7 @@ variable "environment" {
 variable "cluster_name_prefix" {
   description = "Prefix for the EKS cluster name"
   type        = string
-  default     = "isv-validation"
+  default     = "isvtest-eks"
 }
 
 # -----------------------------------------------------------------------------

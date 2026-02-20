@@ -56,6 +56,10 @@ def create_instance_profile(iam_client: Any, name: str) -> str | None:
             RoleName=name,
             AssumeRolePolicyDocument=json.dumps(trust_policy),
             Description="ISV ISO validation instance role",
+            Tags=[
+                {"Key": "Name", "Value": name},
+                {"Key": "CreatedBy", "Value": "isvtest"},
+            ],
         )
         print(f"Created IAM role: {name}", file=sys.stderr)
     except ClientError as e:
@@ -115,7 +119,7 @@ def launch_instance(
                     "ResourceType": "instance",
                     "Tags": [
                         {"Key": "Name", "Value": f"isv-iso-validation-{uuid.uuid4().hex[:8]}"},
-                        {"Key": "Purpose", "Value": "isv-validation"},
+                        {"Key": "CreatedBy", "Value": "isvtest"},
                     ],
                 }
             ],

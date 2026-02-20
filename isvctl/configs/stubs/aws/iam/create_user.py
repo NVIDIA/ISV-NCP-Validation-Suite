@@ -45,7 +45,12 @@ def main() -> int:
     iam = boto3.client("iam")
 
     # Create user
-    response = iam.create_user(UserName=username)
+    response = iam.create_user(
+        UserName=username,
+        Tags=[
+            {"Key": "CreatedBy", "Value": "isvtest"},
+        ],
+    )
     result["user_arn"] = response["User"]["Arn"]
     result["user_id"] = response["User"]["UserId"]
 

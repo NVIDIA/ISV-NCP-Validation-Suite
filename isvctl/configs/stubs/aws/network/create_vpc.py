@@ -62,7 +62,10 @@ def create_vpc(ec2: Any, name: str, cidr: str) -> dict[str, Any]:
         # Tag VPC
         ec2.create_tags(
             Resources=[vpc_id],
-            Tags=[{"Key": "Name", "Value": f"{name}-{tag_suffix}"}],
+            Tags=[
+                {"Key": "Name", "Value": f"{name}-{tag_suffix}"},
+                {"Key": "CreatedBy", "Value": "isvtest"},
+            ],
         )
 
         # Enable DNS hostnames
@@ -76,7 +79,10 @@ def create_vpc(ec2: Any, name: str, cidr: str) -> dict[str, Any]:
         ec2.attach_internet_gateway(InternetGatewayId=igw_id, VpcId=vpc_id)
         ec2.create_tags(
             Resources=[igw_id],
-            Tags=[{"Key": "Name", "Value": f"{name}-igw-{tag_suffix}"}],
+            Tags=[
+                {"Key": "Name", "Value": f"{name}-igw-{tag_suffix}"},
+                {"Key": "CreatedBy", "Value": "isvtest"},
+            ],
         )
 
         # Get availability zones
@@ -91,7 +97,10 @@ def create_vpc(ec2: Any, name: str, cidr: str) -> dict[str, Any]:
 
             ec2.create_tags(
                 Resources=[subnet_id],
-                Tags=[{"Key": "Name", "Value": f"{name}-subnet-{i}-{tag_suffix}"}],
+                Tags=[
+                    {"Key": "Name", "Value": f"{name}-subnet-{i}-{tag_suffix}"},
+                    {"Key": "CreatedBy", "Value": "isvtest"},
+                ],
             )
 
             # Enable auto-assign public IP
@@ -112,7 +121,10 @@ def create_vpc(ec2: Any, name: str, cidr: str) -> dict[str, Any]:
 
         ec2.create_tags(
             Resources=[rtb_id],
-            Tags=[{"Key": "Name", "Value": f"{name}-rtb-{tag_suffix}"}],
+            Tags=[
+                {"Key": "Name", "Value": f"{name}-rtb-{tag_suffix}"},
+                {"Key": "CreatedBy", "Value": "isvtest"},
+            ],
         )
 
         # Add route to internet gateway

@@ -45,6 +45,7 @@ def test_sg_default_deny_inbound(ec2: Any, vpc_id: str) -> dict[str, Any]:
             GroupName=f"isv-test-empty-sg-{uuid.uuid4().hex[:8]}",
             Description="Test empty SG for default deny",
             VpcId=vpc_id,
+            TagSpecifications=[{"ResourceType": "security-group", "Tags": [{"Key": "CreatedBy", "Value": "isvtest"}]}],
         )
         sg_id = sg["GroupId"]
 
@@ -82,6 +83,7 @@ def test_sg_allows_specific_ssh(ec2: Any, vpc_id: str) -> dict[str, Any]:
             GroupName=f"isv-test-ssh-sg-{uuid.uuid4().hex[:8]}",
             Description="Test SG allowing specific SSH",
             VpcId=vpc_id,
+            TagSpecifications=[{"ResourceType": "security-group", "Tags": [{"Key": "CreatedBy", "Value": "isvtest"}]}],
         )
         sg_id = sg["GroupId"]
 
@@ -136,6 +138,7 @@ def test_sg_denies_vpc_icmp(ec2: Any, vpc_id: str, vpc_cidr: str) -> dict[str, A
             GroupName=f"isv-test-no-icmp-sg-{uuid.uuid4().hex[:8]}",
             Description="Test SG without ICMP",
             VpcId=vpc_id,
+            TagSpecifications=[{"ResourceType": "security-group", "Tags": [{"Key": "CreatedBy", "Value": "isvtest"}]}],
         )
         sg_id = sg["GroupId"]
 
@@ -177,7 +180,10 @@ def test_nacl_explicit_deny(ec2: Any, vpc_id: str) -> dict[str, Any]:
 
         ec2.create_tags(
             Resources=[nacl_id],
-            Tags=[{"Key": "Name", "Value": "isv-test-deny-nacl"}],
+            Tags=[
+                {"Key": "Name", "Value": "isv-test-deny-nacl"},
+                {"Key": "CreatedBy", "Value": "isvtest"},
+            ],
         )
 
         # Add explicit deny rule for ICMP from 10.0.0.0/8
@@ -274,6 +280,7 @@ def test_sg_restricted_egress(ec2: Any, vpc_id: str) -> dict[str, Any]:
             GroupName=f"isv-test-egress-sg-{uuid.uuid4().hex[:8]}",
             Description="Test SG with restricted egress",
             VpcId=vpc_id,
+            TagSpecifications=[{"ResourceType": "security-group", "Tags": [{"Key": "CreatedBy", "Value": "isvtest"}]}],
         )
         sg_id = sg["GroupId"]
 

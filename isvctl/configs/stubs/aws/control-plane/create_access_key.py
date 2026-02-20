@@ -35,7 +35,12 @@ def main() -> int:
 
     try:
         # Create user
-        user_response = iam.create_user(UserName=username)
+        user_response = iam.create_user(
+            UserName=username,
+            Tags=[
+                {"Key": "CreatedBy", "Value": "isvtest"},
+            ],
+        )
         result["user_id"] = user_response["User"]["Arn"]
 
         # Create access key

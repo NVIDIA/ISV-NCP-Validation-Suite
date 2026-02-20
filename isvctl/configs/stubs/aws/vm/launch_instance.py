@@ -174,7 +174,10 @@ def main() -> int:
                     TagSpecifications=[
                         {
                             "ResourceType": "instance",
-                            "Tags": [{"Key": "Name", "Value": args.name}],
+                            "Tags": [
+                                {"Key": "Name", "Value": args.name},
+                                {"Key": "CreatedBy", "Value": "isvtest"},
+                            ],
                         }
                     ],
                     BlockDeviceMappings=[

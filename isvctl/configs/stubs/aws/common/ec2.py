@@ -127,7 +127,18 @@ def create_key_pair(
 
     # Create new key pair
     try:
-        response = ec2.create_key_pair(KeyName=key_name)
+        response = ec2.create_key_pair(
+            KeyName=key_name,
+            TagSpecifications=[
+                {
+                    "ResourceType": "key-pair",
+                    "Tags": [
+                        {"Key": "Name", "Value": key_name},
+                        {"Key": "CreatedBy", "Value": "isvtest"},
+                    ],
+                }
+            ],
+        )
     except ClientError as e:
         raise RuntimeError(f"Failed to create key pair '{key_name}': {e}") from e
 
@@ -167,6 +178,15 @@ def create_security_group(
             GroupName=name,
             Description=description,
             VpcId=vpc_id,
+            TagSpecifications=[
+                {
+                    "ResourceType": "security-group",
+                    "Tags": [
+                        {"Key": "Name", "Value": name},
+                        {"Key": "CreatedBy", "Value": "isvtest"},
+                    ],
+                }
+            ],
         )
         sg_id = response["GroupId"]
 

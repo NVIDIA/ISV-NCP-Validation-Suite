@@ -62,7 +62,10 @@ def create_igw(ec2: Any, vpc_id: str) -> dict[str, Any]:
 
         ec2.create_tags(
             Resources=[igw_id],
-            Tags=[{"Key": "Name", "Value": "isv-traffic-test-igw"}],
+            Tags=[
+                {"Key": "Name", "Value": "isv-traffic-test-igw"},
+                {"Key": "CreatedBy", "Value": "isvtest"},
+            ],
         )
 
         result["passed"] = True
@@ -86,6 +89,10 @@ def create_iam_profile(iam) -> dict:
             RoleName=role_name,
             AssumeRolePolicyDocument=SSM_ROLE_TRUST_POLICY,
             Description="Temporary role for traffic testing",
+            Tags=[
+                {"Key": "Name", "Value": role_name},
+                {"Key": "CreatedBy", "Value": "isvtest"},
+            ],
         )
 
         iam.attach_role_policy(
@@ -118,6 +125,7 @@ def create_security_groups(ec2: Any, vpc_id: str) -> dict[str, Any]:
             GroupName=f"isv-allow-icmp-{uuid.uuid4().hex[:8]}",
             Description="Allow ICMP",
             VpcId=vpc_id,
+            TagSpecifications=[{"ResourceType": "security-group", "Tags": [{"Key": "CreatedBy", "Value": "isvtest"}]}],
         )
         sg_allow_id = sg_allow["GroupId"]
 
@@ -134,6 +142,7 @@ def create_security_groups(ec2: Any, vpc_id: str) -> dict[str, Any]:
             GroupName=f"isv-deny-icmp-{uuid.uuid4().hex[:8]}",
             Description="Deny ICMP (default)",
             VpcId=vpc_id,
+            TagSpecifications=[{"ResourceType": "security-group", "Tags": [{"Key": "CreatedBy", "Value": "isvtest"}]}],
         )
         sg_deny_id = sg_deny["GroupId"]
 
@@ -210,7 +219,12 @@ def launch_instances(ec2: Any, subnet_id: str, sg_allow: str, sg_deny: str, prof
             SubnetId=subnet_id,
             SecurityGroupIds=[sg_allow],
             IamInstanceProfile={"Name": profile_name},
-            TagSpecifications=[{"ResourceType": "instance", "Tags": [{"Key": "Name", "Value": "isv-traffic-source"}]}],
+            TagSpecifications=[
+                {
+                    "ResourceType": "instance",
+                    "Tags": [{"Key": "Name", "Value": "isv-traffic-source"}, {"Key": "CreatedBy", "Value": "isvtest"}],
+                }
+            ],
         )
         source_id = source["Instances"][0]["InstanceId"]
 
@@ -223,7 +237,13 @@ def launch_instances(ec2: Any, subnet_id: str, sg_allow: str, sg_deny: str, prof
             SubnetId=subnet_id,
             SecurityGroupIds=[sg_allow],
             TagSpecifications=[
-                {"ResourceType": "instance", "Tags": [{"Key": "Name", "Value": "isv-traffic-target-allow"}]}
+                {
+                    "ResourceType": "instance",
+                    "Tags": [
+                        {"Key": "Name", "Value": "isv-traffic-target-allow"},
+                        {"Key": "CreatedBy", "Value": "isvtest"},
+                    ],
+                }
             ],
         )
         target_allow_id = target_allow["Instances"][0]["InstanceId"]
@@ -237,7 +257,13 @@ def launch_instances(ec2: Any, subnet_id: str, sg_allow: str, sg_deny: str, prof
             SubnetId=subnet_id,
             SecurityGroupIds=[sg_deny],
             TagSpecifications=[
-                {"ResourceType": "instance", "Tags": [{"Key": "Name", "Value": "isv-traffic-target-deny"}]}
+                {
+                    "ResourceType": "instance",
+                    "Tags": [
+                        {"Key": "Name", "Value": "isv-traffic-target-deny"},
+                        {"Key": "CreatedBy", "Value": "isvtest"},
+                    ],
+                }
             ],
         )
         target_deny_id = target_deny["Instances"][0]["InstanceId"]

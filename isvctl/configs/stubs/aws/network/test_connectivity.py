@@ -57,6 +57,10 @@ def create_ssm_instance_profile(iam: Any) -> tuple[str, str]:
         RoleName=role_name,
         AssumeRolePolicyDocument=SSM_ROLE_TRUST_POLICY,
         Description="Temporary role for SSM connectivity testing",
+        Tags=[
+            {"Key": "Name", "Value": role_name},
+            {"Key": "CreatedBy", "Value": "isvtest"},
+        ],
     )
 
     # Attach SSM managed policy
@@ -130,7 +134,10 @@ def launch_instances(
             "TagSpecifications": [
                 {
                     "ResourceType": "instance",
-                    "Tags": [{"Key": "Name", "Value": f"isv-connectivity-test-{i}"}],
+                    "Tags": [
+                        {"Key": "Name", "Value": f"isv-connectivity-test-{i}"},
+                        {"Key": "CreatedBy", "Value": "isvtest"},
+                    ],
                 }
             ],
         }

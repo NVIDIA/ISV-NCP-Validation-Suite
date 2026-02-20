@@ -44,7 +44,7 @@ def main() -> int:
                     }
                 ),
             },
-            Tags={"created-by": "isv-test", "purpose": "tenant-lifecycle-test"},
+            Tags={"CreatedBy": "isvtest", "purpose": "tenant-lifecycle-test"},
         )
         result["tenant_id"] = response["Group"]["GroupArn"]
         result["success"] = True

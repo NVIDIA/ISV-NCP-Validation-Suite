@@ -2,6 +2,10 @@
 
 This guide covers installation and basic usage of NVIDIA ISV NCP Validation Suite.
 
+## Prerequisites
+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python package manager)
+
 ## Installation
 
 ### Local Development

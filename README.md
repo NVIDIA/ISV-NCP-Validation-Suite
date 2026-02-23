@@ -28,6 +28,10 @@ Templates are available for: [IAM](isvctl/configs/templates/iam.yaml) | [Network
 
 See the [Templates README](isvctl/configs/templates/README.md) for the full guide, and the [AWS Reference Implementation](docs/references/aws.md) as a working example.
 
+## Prerequisites
+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python package manager)
+
 ## Quick Start
 
 ```bash

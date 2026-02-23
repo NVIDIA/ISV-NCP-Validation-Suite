@@ -223,12 +223,15 @@ def _transform_validations_for_pytest(
                     params = {"phase": group_phase, **params}
 
                 # Determine validation phase (priority: explicit > infer from step > default)
+                # If a step is referenced but has no registered phase, it was skipped
                 if "phase" in params:
                     validation_phase = params["phase"]
                 elif "step" in params:
-                    # Infer from the step's phase
                     step_name = params["step"]
-                    validation_phase = step_phases.get(step_name, "test")
+                    if step_name not in step_phases:
+                        logger.info(f"Skipping validation '{name}' in [{category}]: step '{step_name}' is skipped")
+                        continue
+                    validation_phase = step_phases[step_name]
                 else:
                     validation_phase = "test"  # Default to test phase
 

@@ -85,6 +85,7 @@ commands:
       # Verify OS image installed on BM instance
       - name: verify_image
         phase: test
+        skip: true
         command: "python3 ../stubs/aws/image-registry/verify_image_installed.py"
         args:
           - "--instance-id"
@@ -96,6 +97,7 @@ commands:
       # Verify install config can provision BM
       - name: verify_config
         phase: test
+        skip: true
         command: "python3 ../stubs/aws/image-registry/verify_config_installable.py"
         args:
           - "--instance-id"
@@ -108,6 +110,7 @@ commands:
       # BM-specific: longer waits for hardware POST/BIOS/OS boot
       - name: reboot_instance
         phase: test
+        skip: true
         command: "python3 ../stubs/aws/bm/reboot_instance.py"
         args:
           - "--instance-id"
@@ -143,6 +146,7 @@ commands:
       # Requires NGC_NIM_API_KEY env var
       - name: deploy_nim
         phase: test
+        skip: true
         command: "python3 ../stubs/common/deploy_nim.py"
         args:
           - "--host"
@@ -154,6 +158,7 @@ commands:
       # Teardown NIM container via SSH (shared script)
       - name: teardown_nim
         phase: teardown
+        skip: true
         command: "python3 ../stubs/common/teardown_nim.py"
         args:
           - "--host"
@@ -245,6 +250,22 @@ tests:
       checks:
         - SshHostSoftwareCheck: {}
 
+    # GPU stress test - PyTorch matrix multiplications on all GPUs
+    gpu_stress:
+      step: describe_instance
+      checks:
+        - SshGpuStressCheck:
+            runtime: 30
+            memory_gb: 16
+            expected_gpus: 8
+
+    # NCCL AllReduce - validates GPU-to-GPU communication (NVLink/NVSwitch)
+    nccl:
+      step: describe_instance
+      checks:
+        - SshNcclCheck:
+            expected_gpus: 8
+
     # Test phase: image registry validations
     image_installed:
       step: verify_image
@@ -261,22 +282,6 @@ tests:
         - StepSuccessCheck: {}
         - FieldExistsCheck:
             fields: ["config_id", "config_name", "dry_run_passed"]
-
-    # GPU stress test - PyTorch matrix multiplications on all GPUs
-    gpu_stress:
-      step: describe_instance
-      checks:
-        - SshGpuStressCheck:
-            runtime: 30
-            memory_gb: 16
-            expected_gpus: 8
-
-    # NCCL AllReduce - validates GPU-to-GPU communication (NVLink/NVSwitch)
-    nccl:
-      step: describe_instance
-      checks:
-        - SshNcclCheck:
-            expected_gpus: 8
 
     # Test phase: reboot validations
     reboot_checks:

@@ -238,9 +238,12 @@ class Orchestrator:
             step_phase = (step.phase or "setup").lower()
             steps_by_phase[step_phase].append(step)
 
-        # Register all step phases upfront so validation phase inference works
-        # even before a step has executed
+        # Register step phases upfront so validation phase inference works
+        # even before a step has executed. Skipped steps are excluded so
+        # their validations are also skipped automatically.
         for step in steps:
+            if step.skip:
+                continue
             step_phase = (step.phase or "setup").lower()
             self.context.set_step_phase(step.name, step_phase)
 

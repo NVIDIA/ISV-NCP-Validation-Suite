@@ -204,7 +204,7 @@ class StepExecutor:
 
         for step in steps:
             if step.skip:
-                logger.info(f"Skipping step: {step.name}")
+                logger.info(f"Skipping step '{step.name}' (skip: true) and its validations")
                 results.add_step(
                     StepResult(
                         name=step.name,

@@ -274,6 +274,24 @@ tests:
             steps: 50
             expected_gpus: 8
 
+    # Network / interconnect checks
+    nvlink:
+      step: describe_instance
+      checks:
+        - SshNvlinkCheck:
+            expected_gpus: 8
+
+    infiniband:
+      step: describe_instance
+      checks:
+        - SshInfiniBandCheck: {}
+
+    ethernet:
+      step: describe_instance
+      checks:
+        - SshEthernetCheck:
+            ping_target: "8.8.8.8"
+
     # Test phase: image registry validations
     image_installed:
       step: verify_image

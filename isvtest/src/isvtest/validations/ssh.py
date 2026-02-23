@@ -1446,6 +1446,306 @@ class SshTrainingCheck(BaseValidation):
             self.set_failed(f"Training check failed: {e}")
 
 
+# =============================================================================
+# Network / Interconnect Validations
+# =============================================================================
+
+
+class SshNvlinkCheck(BaseValidation):
+    """Validate NVLink topology and link status via SSH.
+
+    Checks that NVLink interconnects between GPUs are present and active
+    using ``nvidia-smi nvlink -s`` and ``nvidia-smi topo -m``.
+
+    Config:
+        host, key_file, user: SSH connection details
+        expected_gpus (int): Expected GPU count (optional)
+    """
+
+    description: ClassVar[str] = "NVLink topology and status via SSH"
+    timeout: ClassVar[int] = 120
+    markers: ClassVar[list[str]] = ["ssh", "gpu", "network"]
+
+    def run(self) -> None:
+        try:
+            import paramiko  # noqa: F401
+        except ImportError:
+            self.set_failed("paramiko not installed")
+            return
+
+        ssh_cfg = get_ssh_config(self.config, self.config.get("inventory", {}))
+        host = ssh_cfg["ssh_host"]
+        user = ssh_cfg["ssh_user"]
+        key_path = ssh_cfg["ssh_key_path"]
+
+        if not host or not key_path:
+            self.set_failed("Missing host or key_file")
+            return
+
+        expected_gpus = self.config.get("expected_gpus", ssh_cfg.get("gpu_count"))
+
+        try:
+            ssh = get_ssh_client(host, user, key_path, timeout=60)
+
+            # Check NVLink status per GPU
+            exit_code, stdout, _ = run_ssh_command(ssh, "nvidia-smi nvlink -s 2>/dev/null")
+            if exit_code != 0 or not stdout.strip():
+                # NVLink may not be available (e.g., consumer GPUs)
+                self.report_subtest("nvlink", True, "NVLink not available (OK for non-NVLink GPUs)")
+                self.set_passed(f"NVLink not available on {host} (skipped)")
+                ssh.close()
+                return
+
+            # Parse per-GPU NVLink status
+            # Format: "GPU 0: ..." followed by link lines
+            current_gpu = None
+            gpu_links: dict[str, list[str]] = {}
+            inactive_links: list[str] = []
+            for line in stdout.strip().splitlines():
+                gpu_match = re.match(r"GPU\s+(\d+):", line)
+                if gpu_match:
+                    current_gpu = gpu_match.group(1)
+                    gpu_links[current_gpu] = []
+                elif current_gpu is not None and line.strip():
+                    gpu_links[current_gpu].append(line.strip())
+                    if "inactive" in line.lower():
+                        inactive_links.append(f"GPU {current_gpu}: {line.strip()}")
+
+            for gpu_id, links in gpu_links.items():
+                active = [ln for ln in links if "inactive" not in ln.lower()]
+                link_ok = len(active) > 0
+                self.report_subtest(
+                    f"gpu{gpu_id}_nvlink",
+                    link_ok,
+                    f"GPU {gpu_id}: {len(active)} active link(s)",
+                )
+
+            if expected_gpus and len(gpu_links) < expected_gpus:
+                self.report_subtest(
+                    "gpu_count",
+                    False,
+                    f"NVLink on {len(gpu_links)} GPUs, expected {expected_gpus}",
+                )
+
+            # Get topology matrix for context
+            exit_code, stdout, _ = run_ssh_command(ssh, "nvidia-smi topo -m 2>/dev/null")
+            if exit_code == 0 and stdout.strip():
+                self.report_subtest("topology", True, "Topology matrix available")
+                self.log.info(f"GPU topology:\n{stdout.strip()}")
+
+            ssh.close()
+
+            failed = get_failed_subtests(self._subtest_results)
+            if failed:
+                self.set_failed(f"NVLink subtests failed: {', '.join(failed)}")
+            elif inactive_links:
+                self.set_failed(f"Inactive NVLink links detected: {'; '.join(inactive_links)}")
+            else:
+                self.set_passed(f"NVLink check on {host} OK ({len(gpu_links)} GPUs)")
+
+        except Exception as e:
+            self.set_failed(f"NVLink check failed: {e}")
+
+
+class SshInfiniBandCheck(BaseValidation):
+    """Validate InfiniBand interfaces via SSH.
+
+    Checks that IB ports are present and in Active state using ``ibstat``.
+
+    Config:
+        host, key_file, user: SSH connection details
+        expected_ports (int): Expected number of active IB ports (optional)
+    """
+
+    description: ClassVar[str] = "InfiniBand interface status via SSH"
+    timeout: ClassVar[int] = 120
+    markers: ClassVar[list[str]] = ["ssh", "network"]
+
+    def run(self) -> None:
+        try:
+            import paramiko  # noqa: F401
+        except ImportError:
+            self.set_failed("paramiko not installed")
+            return
+
+        ssh_cfg = get_ssh_config(self.config, self.config.get("inventory", {}))
+        host = ssh_cfg["ssh_host"]
+        user = ssh_cfg["ssh_user"]
+        key_path = ssh_cfg["ssh_key_path"]
+
+        if not host or not key_path:
+            self.set_failed("Missing host or key_file")
+            return
+
+        expected_ports = self.config.get("expected_ports")
+
+        try:
+            ssh = get_ssh_client(host, user, key_path, timeout=60)
+
+            # Check if ibstat is available
+            exit_code, stdout, _ = run_ssh_command(ssh, "ibstat 2>/dev/null")
+            if exit_code != 0 or not stdout.strip():
+                self.report_subtest("infiniband", True, "InfiniBand not available (OK if not expected)")
+                self.set_passed(f"InfiniBand not available on {host} (skipped)")
+                ssh.close()
+                return
+
+            # Parse ibstat output for CA (Channel Adapter) and port status
+            # Format: "CA 'mlx5_0'" ... "Port 1:" ... "State: Active"
+            current_ca = None
+            current_port = None
+            active_ports = 0
+            total_ports = 0
+            for line in stdout.strip().splitlines():
+                ca_match = re.match(r"\s*CA\s+'(\S+)'", line)
+                port_match = re.match(r"\s*Port\s+(\d+):", line)
+                state_match = re.match(r"\s*State:\s+(\S+)", line)
+
+                if ca_match:
+                    current_ca = ca_match.group(1)
+                elif port_match:
+                    current_port = port_match.group(1)
+                    total_ports += 1
+                elif state_match and current_ca and current_port:
+                    state = state_match.group(1)
+                    is_active = state == "Active"
+                    if is_active:
+                        active_ports += 1
+                    self.report_subtest(
+                        f"{current_ca}_port{current_port}",
+                        is_active,
+                        f"{current_ca} port {current_port}: {state}",
+                    )
+
+            if total_ports == 0:
+                self.report_subtest("ib_ports", False, "No IB ports found")
+                self.set_failed(f"No InfiniBand ports found on {host}")
+                ssh.close()
+                return
+
+            if expected_ports and active_ports < expected_ports:
+                self.report_subtest(
+                    "port_count",
+                    False,
+                    f"{active_ports} active ports, expected {expected_ports}",
+                )
+
+            ssh.close()
+
+            failed = get_failed_subtests(self._subtest_results)
+            if failed:
+                self.set_failed(f"InfiniBand subtests failed: {', '.join(failed)}")
+            else:
+                self.set_passed(f"InfiniBand check on {host} OK ({active_ports}/{total_ports} ports active)")
+
+        except Exception as e:
+            self.set_failed(f"InfiniBand check failed: {e}")
+
+
+class SshEthernetCheck(BaseValidation):
+    """Validate network interfaces and connectivity via SSH.
+
+    Checks that expected network interfaces are up and optionally
+    verifies connectivity to a target host via ping.
+
+    Config:
+        host, key_file, user: SSH connection details
+        expected_interfaces (list[str]): Interface names to check (optional, e.g. ["eth0", "ens5"])
+        ping_target (str): Host to ping for connectivity check (optional)
+    """
+
+    description: ClassVar[str] = "Ethernet interfaces and connectivity via SSH"
+    timeout: ClassVar[int] = 120
+    markers: ClassVar[list[str]] = ["ssh", "network"]
+
+    def run(self) -> None:
+        try:
+            import paramiko  # noqa: F401
+        except ImportError:
+            self.set_failed("paramiko not installed")
+            return
+
+        ssh_cfg = get_ssh_config(self.config, self.config.get("inventory", {}))
+        host = ssh_cfg["ssh_host"]
+        user = ssh_cfg["ssh_user"]
+        key_path = ssh_cfg["ssh_key_path"]
+
+        if not host or not key_path:
+            self.set_failed("Missing host or key_file")
+            return
+
+        expected_interfaces = self.config.get("expected_interfaces", [])
+        ping_target = self.config.get("ping_target")
+
+        try:
+            ssh = get_ssh_client(host, user, key_path, timeout=60)
+
+            # List all UP interfaces
+            exit_code, stdout, _ = run_ssh_command(
+                ssh,
+                "ip -o link show up | awk -F': ' '{print $2}' | grep -v lo",
+            )
+            if exit_code != 0:
+                self.set_failed(f"Cannot list network interfaces on {host}")
+                ssh.close()
+                return
+
+            up_interfaces = [iface.strip() for iface in stdout.strip().splitlines() if iface.strip()]
+            self.report_subtest(
+                "interfaces_up",
+                len(up_interfaces) > 0,
+                f"{len(up_interfaces)} interface(s) up: {', '.join(up_interfaces[:10])}",
+            )
+
+            # Check expected interfaces if specified
+            for iface in expected_interfaces:
+                found = iface in up_interfaces
+                self.report_subtest(
+                    f"iface_{iface}",
+                    found,
+                    f"{iface}: {'UP' if found else 'NOT FOUND'}",
+                )
+
+            # Get interface details (IP addresses)
+            exit_code, stdout, _ = run_ssh_command(
+                ssh,
+                "ip -o addr show | grep -v '127.0.0.1' | grep -v '::1' | awk '{print $2, $3, $4}'",
+            )
+            if exit_code == 0 and stdout.strip():
+                addr_idx = 0
+                for line in stdout.strip().splitlines()[:10]:
+                    parts = line.split()
+                    if len(parts) >= 3:
+                        iface, family, addr = parts[0], parts[1], parts[2]
+                        self.report_subtest(
+                            f"addr_{addr_idx}_{iface}",
+                            True,
+                            f"{iface} ({family}): {addr}",
+                        )
+                        addr_idx += 1
+
+            # Ping test if target specified
+            if ping_target:
+                exit_code, stdout, _ = run_ssh_command(ssh, f"ping -c 3 -W 5 {ping_target} 2>&1")
+                ping_ok = exit_code == 0 and "0% packet loss" in stdout
+                self.report_subtest(
+                    "ping",
+                    ping_ok,
+                    f"Ping {ping_target}: {'OK' if ping_ok else 'FAILED'}",
+                )
+
+            ssh.close()
+
+            failed = get_failed_subtests(self._subtest_results)
+            if failed:
+                self.set_failed(f"Ethernet subtests failed: {', '.join(failed)}")
+            else:
+                self.set_passed(f"Ethernet check on {host} OK ({len(up_interfaces)} interfaces up)")
+
+        except Exception as e:
+            self.set_failed(f"Ethernet check failed: {e}")
+
+
 class SshContainerRuntimeCheck(BaseValidation):
     """Container runtime and NVIDIA Docker check.
 

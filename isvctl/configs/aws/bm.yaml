@@ -266,6 +266,14 @@ tests:
         - SshNcclCheck:
             expected_gpus: 8
 
+    # Training workload - validates full training stack (forward/backward/optimizer)
+    training:
+      step: describe_instance
+      checks:
+        - SshTrainingCheck:
+            steps: 50
+            expected_gpus: 8
+
     # Test phase: image registry validations
     image_installed:
       step: verify_image

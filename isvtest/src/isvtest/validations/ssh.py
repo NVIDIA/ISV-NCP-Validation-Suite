@@ -1285,6 +1285,142 @@ class SshNcclCheck(BaseValidation):
             self.set_failed(f"NCCL test failed: {e}")
 
 
+class SshTrainingCheck(BaseValidation):
+    """Run a PyTorch training workload via SSH.
+
+    Validates the full training stack (forward, backward, optimizer) by
+    training a small MLP on synthetic data inside a Docker container.
+    Verifies that loss computation, gradient backpropagation, and weight
+    updates work correctly on each GPU.
+
+    Config:
+        host, key_file, user: SSH connection details
+        steps (int): Number of training steps (default: 50)
+        batch_size (int): Training batch size (default: 64)
+        hidden_size (int): Hidden layer size (default: 2048)
+        image (str): PyTorch container image (default: nvcr.io/nvidia/pytorch:25.04-py3)
+        container_runtime (str): "docker" or "python" (default: auto-detect)
+        expected_gpus (int): Expected GPU count (optional)
+    """
+
+    description: ClassVar[str] = "PyTorch training workload via SSH"
+    timeout: ClassVar[int] = 900
+    markers: ClassVar[list[str]] = ["ssh", "gpu", "workload"]
+
+    def run(self) -> None:
+        try:
+            import paramiko  # noqa: F401
+        except ImportError:
+            self.set_failed("paramiko not installed")
+            return
+
+        ssh_cfg = get_ssh_config(self.config, self.config.get("inventory", {}))
+        host = ssh_cfg["ssh_host"]
+        user = ssh_cfg["ssh_user"]
+        key_path = ssh_cfg["ssh_key_path"]
+
+        if not host or not key_path:
+            self.set_failed("Missing host or key_file")
+            return
+
+        steps = self.config.get("steps", 50)
+        batch_size = self.config.get("batch_size", 64)
+        hidden_size = self.config.get("hidden_size", 2048)
+        image = self.config.get("image", "nvcr.io/nvidia/pytorch:25.04-py3")
+        container_runtime = self.config.get("container_runtime")
+        expected_gpus = self.config.get("expected_gpus", ssh_cfg.get("gpu_count"))
+
+        script_path = Path(__file__).parent.parent / "workloads" / "scripts" / "gpu_train_torch.py"
+        if not script_path.exists():
+            self.set_failed(f"Training script not found: {script_path}")
+            return
+
+        try:
+            ssh = get_ssh_client(host, user, key_path, timeout=60)
+
+            if not container_runtime:
+                container_runtime = _detect_ssh_container_runtime(ssh)
+                self.log.info(f"Auto-detected runtime: {container_runtime}")
+
+            script_b64 = base64.b64encode(script_path.read_bytes()).decode()
+            decode_and_run = f"echo {script_b64} | base64 -d | python3"
+            env_vars = f"TRAIN_STEPS={steps} TRAIN_BATCH_SIZE={batch_size} TRAIN_HIDDEN_SIZE={hidden_size}"
+
+            if container_runtime == "python":
+                cmd = f"bash -c '{env_vars} {decode_and_run}'"
+            else:
+                cmd = (
+                    f"docker run --rm --gpus all "
+                    f"-e TRAIN_STEPS={steps} -e TRAIN_BATCH_SIZE={batch_size} "
+                    f"-e TRAIN_HIDDEN_SIZE={hidden_size} "
+                    f"{image} bash -c '{decode_and_run}'"
+                )
+
+            self.log.info(
+                f"Running training on {host}: steps={steps}, "
+                f"batch={batch_size}, hidden={hidden_size}, mode={container_runtime}"
+            )
+
+            _, stdout, stderr = run_ssh_command(ssh, cmd)
+            ssh.close()
+
+            output = f"{stdout}\n{stderr}".strip()
+            self.log.debug(f"Training output:\n{output[:2000]}")
+
+            if "FAILURE:" in output:
+                self.report_subtest("training", False, output.strip())
+                self.set_failed(f"Training failed on {host}: {output.strip()}")
+                return
+
+            if "SUCCESS:" not in output:
+                self.report_subtest("training", False, "SUCCESS marker not found")
+                self.set_failed(
+                    f"Training did not complete on {host}",
+                    output=output[-500:],
+                )
+                return
+
+            # Parse per-GPU results
+            gpu_lines = re.findall(
+                r"GPU (\d+): loss ([\d.]+) -> ([\d.]+) "
+                r"\(decreased=(True|False), grads=(True|False)\)",
+                output,
+            )
+            for gpu_id, first, last, decreased, grads in gpu_lines:
+                grad_ok = grads == "True"
+                self.report_subtest(
+                    f"gpu{gpu_id}_grads",
+                    grad_ok,
+                    f"GPU {gpu_id}: loss {first} -> {last}, grads={grads}",
+                )
+
+            # Parse SUCCESS line
+            match = re.search(r"SUCCESS:.*trained (\d+) steps on (\d+) GPU", output)
+            if match:
+                trained_steps = int(match.group(1))
+                gpu_count = int(match.group(2))
+                self.report_subtest("steps", trained_steps > 0, f"{trained_steps} steps completed")
+                self.report_subtest("gpu_count", True, f"{gpu_count} GPU(s) trained")
+
+                if expected_gpus and gpu_count < expected_gpus:
+                    self.report_subtest(
+                        "gpu_count_check",
+                        False,
+                        f"Expected {expected_gpus} GPUs, got {gpu_count}",
+                    )
+                    self.set_failed(f"GPU count mismatch: expected {expected_gpus}, got {gpu_count}")
+                    return
+
+            failed = get_failed_subtests(self._subtest_results)
+            if failed:
+                self.set_failed(f"Training subtests failed: {', '.join(failed)}")
+            else:
+                self.set_passed(f"Training passed on {host}: {output.strip().splitlines()[-1]}")
+
+        except Exception as e:
+            self.set_failed(f"Training check failed: {e}")
+
+
 class SshContainerRuntimeCheck(BaseValidation):
     """Container runtime and NVIDIA Docker check.
 

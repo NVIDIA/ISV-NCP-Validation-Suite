@@ -1286,12 +1286,17 @@ class SshNcclCheck(BaseValidation):
 
 
 class SshTrainingCheck(BaseValidation):
-    """Run a PyTorch training workload via SSH.
+    """Run a DDP PyTorch training workload via SSH.
 
-    Validates the full training stack (forward, backward, optimizer) by
-    training a small MLP on synthetic data inside a Docker container.
-    Verifies that loss computation, gradient backpropagation, and weight
-    updates work correctly on each GPU.
+    Validates the full distributed training stack by running a small MLP
+    with DistributedDataParallel across all GPUs.  Uses ``torchrun`` to
+    launch one process per GPU, with NCCL gradient synchronisation every
+    step -- the same communication path real training workloads use.
+
+    Validates:
+      - Forward / backward / optimizer work on every GPU
+      - NCCL gradient sync completes without error
+      - Weights stay identical across all ranks (DDP invariant)
 
     Config:
         host, key_file, user: SSH connection details
@@ -1303,7 +1308,7 @@ class SshTrainingCheck(BaseValidation):
         expected_gpus (int): Expected GPU count (optional)
     """
 
-    description: ClassVar[str] = "PyTorch training workload via SSH"
+    description: ClassVar[str] = "DDP training workload via SSH"
     timeout: ClassVar[int] = 900
     markers: ClassVar[list[str]] = ["ssh", "gpu", "workload"]
 
@@ -1342,22 +1347,36 @@ class SshTrainingCheck(BaseValidation):
                 container_runtime = _detect_ssh_container_runtime(ssh)
                 self.log.info(f"Auto-detected runtime: {container_runtime}")
 
+            # Detect GPU count for torchrun --nproc_per_node
+            exit_code, stdout_gpu, _ = run_ssh_command(ssh, "nvidia-smi --query-gpu=name --format=csv,noheader | wc -l")
+            if exit_code != 0 or not stdout_gpu.strip().isdigit():
+                self.set_failed(f"Cannot detect GPU count on {host}")
+                ssh.close()
+                return
+            gpu_count = int(stdout_gpu.strip())
+            if expected_gpus:
+                gpu_count = int(expected_gpus)
+
             script_b64 = base64.b64encode(script_path.read_bytes()).decode()
-            decode_and_run = f"echo {script_b64} | base64 -d | python3"
+            # torchrun needs a file path, not stdin
+            write_and_run = (
+                f"echo {script_b64} | base64 -d > /tmp/_isv_train.py && "
+                f"torchrun --nproc_per_node={gpu_count} /tmp/_isv_train.py"
+            )
             env_vars = f"TRAIN_STEPS={steps} TRAIN_BATCH_SIZE={batch_size} TRAIN_HIDDEN_SIZE={hidden_size}"
 
             if container_runtime == "python":
-                cmd = f"bash -c '{env_vars} {decode_and_run}'"
+                cmd = f"bash -c '{env_vars} {write_and_run}'"
             else:
                 cmd = (
-                    f"docker run --rm --gpus all "
+                    f"docker run --rm --gpus all --ipc=host "
                     f"-e TRAIN_STEPS={steps} -e TRAIN_BATCH_SIZE={batch_size} "
                     f"-e TRAIN_HIDDEN_SIZE={hidden_size} "
-                    f"{image} bash -c '{decode_and_run}'"
+                    f"{image} bash -c '{write_and_run}'"
                 )
 
             self.log.info(
-                f"Running training on {host}: steps={steps}, "
+                f"Running DDP training on {host}: {gpu_count} GPUs, steps={steps}, "
                 f"batch={batch_size}, hidden={hidden_size}, mode={container_runtime}"
             )
 
@@ -1380,35 +1399,41 @@ class SshTrainingCheck(BaseValidation):
                 )
                 return
 
-            # Parse per-GPU results
+            # Parse per-GPU results (DDP format includes synced field)
             gpu_lines = re.findall(
                 r"GPU (\d+): loss ([\d.]+) -> ([\d.]+) "
-                r"\(decreased=(True|False), grads=(True|False)\)",
+                r"\(decreased=(True|False), grads=(True|False), synced=(True|False)\)",
                 output,
             )
-            for gpu_id, first, last, decreased, grads in gpu_lines:
+            for gpu_id, first, last, decreased, grads, synced in gpu_lines:
                 grad_ok = grads == "True"
+                sync_ok = synced == "True"
                 self.report_subtest(
                     f"gpu{gpu_id}_grads",
                     grad_ok,
                     f"GPU {gpu_id}: loss {first} -> {last}, grads={grads}",
+                )
+                self.report_subtest(
+                    f"gpu{gpu_id}_sync",
+                    sync_ok,
+                    f"GPU {gpu_id}: weights synced={synced}",
                 )
 
             # Parse SUCCESS line
             match = re.search(r"SUCCESS:.*trained (\d+) steps on (\d+) GPU", output)
             if match:
                 trained_steps = int(match.group(1))
-                gpu_count = int(match.group(2))
+                result_gpus = int(match.group(2))
                 self.report_subtest("steps", trained_steps > 0, f"{trained_steps} steps completed")
-                self.report_subtest("gpu_count", True, f"{gpu_count} GPU(s) trained")
+                self.report_subtest("ddp", True, f"DDP on {result_gpus} GPU(s)")
 
-                if expected_gpus and gpu_count < expected_gpus:
+                if expected_gpus and result_gpus < expected_gpus:
                     self.report_subtest(
                         "gpu_count_check",
                         False,
-                        f"Expected {expected_gpus} GPUs, got {gpu_count}",
+                        f"Expected {expected_gpus} GPUs, got {result_gpus}",
                     )
-                    self.set_failed(f"GPU count mismatch: expected {expected_gpus}, got {gpu_count}")
+                    self.set_failed(f"GPU count mismatch: expected {expected_gpus}, got {result_gpus}")
                     return
 
             failed = get_failed_subtests(self._subtest_results)

@@ -81,11 +81,11 @@ See [Contributing](docs/contributing.md) for development setup and guidelines.
 
 | Variable | Description |
 | -------- | ----------- |
-| `NGC_NIM_API_KEY` | Required for NIM model benchmarks |
 | `ISV_SERVICE_ENDPOINT` | Required for ISV Lab Service uploads |
 | `ISV_SSA_ISSUER` | Required for ISV Lab Service uploads |
 | `ISV_CLIENT_ID` | Required for ISV Lab Service uploads |
 | `ISV_CLIENT_SECRET` | Required for ISV Lab Service uploads |
+| `NGC_NIM_API_KEY` | Required for NIM model benchmarks |
 
 ## License
 

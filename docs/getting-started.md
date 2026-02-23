@@ -98,11 +98,11 @@ See [Remote Deployment Guide](guides/remote-deployment.md) for details.
 | `AWS_ACCESS_KEY_ID` | AWS access key (for AWS tests) |
 | `AWS_SECRET_ACCESS_KEY` | AWS secret key (for AWS tests) |
 | `AWS_REGION` | AWS region (default: us-west-2) |
-| `NGC_NIM_API_KEY` | Required for NIM model benchmarks |
 | `ISV_SERVICE_ENDPOINT` | Required for result upload to ISV Lab Service |
 | `ISV_SSA_ISSUER` | Required for result upload to ISV Lab Service |
 | `ISV_CLIENT_ID` | Required for result upload to ISV Lab Service |
 | `ISV_CLIENT_SECRET` | Required for result upload to ISV Lab Service |
+| `NGC_NIM_API_KEY` | Required for NIM model benchmarks |
 
 ## Next Steps
 

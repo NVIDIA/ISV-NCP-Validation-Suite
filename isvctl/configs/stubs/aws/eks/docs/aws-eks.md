@@ -85,7 +85,7 @@ NGC_NIM_API_KEY=nvapi-XXXXX \
   uv run isvctl test run -f isvctl/configs/aws/eks.yaml
 ```
 
-> **Note**: By default, teardown is disabled to preserve resources. The setup phase is idempotent - if the cluster already exists, it will skip provisioning and just generate inventory. See [Teardown](#phase-3-teardown) for cleanup instructions.
+> **Note**: By default, teardown runs automatically to clean up resources. Set `AWS_SKIP_TEARDOWN=true` to preserve resources after testing. The setup phase is idempotent - if the cluster already exists, it will skip provisioning and just generate inventory. See [Teardown](#phase-3-teardown) for details.
 
 ---
 
@@ -191,8 +191,10 @@ The test phase runs validation checks and workloads.
 
 ```bash
 # Runs: setup -> test -> teardown
-# Teardown is disabled by default, so resources are preserved
 uv run isvctl test run -f isvctl/configs/aws/eks.yaml
+
+# To preserve resources, skip teardown:
+AWS_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/aws/eks.yaml
 ```
 
 #### Run Phases Separately
@@ -207,7 +209,7 @@ uv run isvctl test run -f isvctl/configs/aws/eks.yaml --phase setup
 uv run isvctl test run -f isvctl/configs/aws/eks.yaml --phase test
 ```
 
-> **Note**: The `--phase` option only accepts one value at a time. To run setup and test together, omit `--phase` to run all phases (teardown is disabled by default).
+> **Note**: The `--phase` option only accepts one value at a time. To run setup and test together without teardown, use `AWS_SKIP_TEARDOWN=true` and omit `--phase`.
 
 #### Validation Categories
 
@@ -268,7 +270,7 @@ Results are saved to:
 
 ### Phase 3: Teardown
 
-> **Important**: Teardown is **disabled by default** to prevent accidental resource deletion.
+> **Important**: Teardown runs by default. Set `AWS_SKIP_TEARDOWN=true` to preserve resources.
 
 #### Check Current Resources
 
@@ -287,16 +289,15 @@ aws ce get-cost-and-usage \
 #### Destroy Infrastructure
 
 ```bash
-# Option 1: Via isvctl (recommended)
-AWS_TEARDOWN_ENABLED=true \
-  uv run isvctl test run -f isvctl/configs/aws/eks.yaml --phase teardown
+# Option 1: Via isvctl (recommended) - teardown runs by default
+uv run isvctl test run -f isvctl/configs/aws/eks.yaml --phase teardown
 
 # Option 2: Direct Terraform
 cd isvctl/configs/stubs/aws/eks/terraform
 terraform destroy
 ```
 
-When teardown is skipped, you'll see:
+When teardown is skipped (via `AWS_SKIP_TEARDOWN=true`), you'll see:
 
 ```text
 ========================================
@@ -306,9 +307,8 @@ When teardown is skipped, you'll see:
 AWS infrastructure was NOT destroyed.
 Your EKS cluster and resources are still running.
 
-To destroy resources, run with:
-  AWS_TEARDOWN_ENABLED=true TF_AUTO_APPROVE=true \
-    uv run isvctl test run -f isvctl/configs/aws/eks.yaml --phase teardown
+To destroy resources, run without AWS_SKIP_TEARDOWN:
+  uv run isvctl test run -f isvctl/configs/aws/eks.yaml --phase teardown
 ```
 
 ---
@@ -329,17 +329,11 @@ export TF_VAR_gpu_node_desired_size=1
 
 # Run all phases: setup -> test -> teardown
 # Setup detects existing cluster and skips provisioning if it exists
-# Teardown is disabled by default (AWS_TEARDOWN_ENABLED=false)
+# Teardown runs by default (set AWS_SKIP_TEARDOWN=true to preserve resources)
 echo "=== RUNNING VALIDATION (setup -> test -> teardown) ==="
 uv run isvctl test run -f isvctl/configs/aws/eks.yaml
 
-# Phase 3: Cleanup (optional - uncomment to destroy)
-# echo "=== DESTROYING INFRASTRUCTURE ==="
-# AWS_TEARDOWN_ENABLED=true uv run isvctl test run -f isvctl/configs/aws/eks.yaml --phase teardown
-
 echo "=== VALIDATION COMPLETE ==="
-echo "Remember to destroy resources when done:"
-echo "  AWS_TEARDOWN_ENABLED=true uv run isvctl test run -f isvctl/configs/aws/eks.yaml --phase teardown"
 ```
 
 ---

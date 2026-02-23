@@ -2,7 +2,7 @@
 # AWS EKS Teardown Stub - Destroys AWS infrastructure using Terraform
 #
 # Environment Variables:
-#   - AWS_TEARDOWN_ENABLED: Set to "true" to enable teardown (default: false)
+#   - AWS_SKIP_TEARDOWN: Set to "true" to skip teardown and preserve resources (default: false)
 #   - TF_AUTO_APPROVE: Set to "true" to skip confirmation (default: false)
 #
 # Warning: This will permanently delete all AWS resources!
@@ -12,10 +12,9 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TERRAFORM_DIR="${SCRIPT_DIR}/terraform"
 
-# Safety check
-AWS_TEARDOWN_ENABLED="${AWS_TEARDOWN_ENABLED:-false}"
+AWS_SKIP_TEARDOWN="${AWS_SKIP_TEARDOWN:-false}"
 AWS_REGION="${AWS_REGION:-us-west-2}"
-if [ "$AWS_TEARDOWN_ENABLED" != "true" ]; then
+if [ "$AWS_SKIP_TEARDOWN" = "true" ]; then
     echo "" >&2
     echo "========================================" >&2
     echo "  TEARDOWN SKIPPED - Resources Preserved" >&2
@@ -24,21 +23,19 @@ if [ "$AWS_TEARDOWN_ENABLED" != "true" ]; then
     echo "AWS infrastructure was NOT destroyed." >&2
     echo "Your EKS cluster and resources are still running." >&2
     echo "" >&2
-    echo "To destroy resources, run with:" >&2
-    echo "  AWS_TEARDOWN_ENABLED=true TF_AUTO_APPROVE=true \\" >&2
-    echo "    uv run isvctl test run -f isvctl/configs/aws/eks.yaml --phase teardown" >&2
+    echo "To destroy resources, run without AWS_SKIP_TEARDOWN:" >&2
+    echo "  uv run isvctl test run -f isvctl/configs/aws/eks.yaml --phase teardown" >&2
     echo "" >&2
     echo "Or manually:" >&2
     echo "  cd isvctl/configs/stubs/aws/eks/terraform" >&2
     echo "  terraform destroy" >&2
     echo "" >&2
-    # Output JSON for orchestration framework
     cat << EOF
 {
   "success": true,
   "platform": "kubernetes",
   "skipped": true,
-  "message": "Teardown skipped (set AWS_TEARDOWN_ENABLED=true to enable)",
+  "message": "Teardown skipped (AWS_SKIP_TEARDOWN=true)",
   "aws": {
     "region": "${AWS_REGION}"
   }

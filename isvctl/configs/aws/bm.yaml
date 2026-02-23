@@ -262,12 +262,21 @@ tests:
         - FieldExistsCheck:
             fields: ["config_id", "config_name", "dry_run_passed"]
 
-    # TODO: Add GPU stress test
-    # gpu_workload:
-    #   step: describe_instance
-    #   checks:
-    #     - SshGpuStressCheck:
-    #         duration: 60
+    # GPU stress test - PyTorch matrix multiplications on all GPUs
+    gpu_stress:
+      step: describe_instance
+      checks:
+        - SshGpuStressCheck:
+            runtime: 30
+            memory_gb: 16
+            expected_gpus: 8
+
+    # NCCL AllReduce - validates GPU-to-GPU communication (NVLink/NVSwitch)
+    nccl:
+      step: describe_instance
+      checks:
+        - SshNcclCheck:
+            expected_gpus: 8
 
     # Test phase: reboot validations
     reboot_checks:

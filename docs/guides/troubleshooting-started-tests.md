@@ -1,6 +1,6 @@
 # Troubleshooting: Test Runs Stuck in STARTED
 
-This guide helps ISV Lab partners diagnose and fix test runs that never reach a terminal state (SUCCESS or FAILED) and remain **STARTED** in the [ISV Validation Labs portal](https://ncp-isv-validation-labs.nvidia.com/).
+This guide helps ISV Lab partners diagnose and fix test runs that never reach a terminal state (SUCCESS or FAILED) and remain **STARTED** in the [ISV Validation Labs portal](https://public.ncp-isv-validation-labs.nvidia.com/).
 
 ## Root cause (single RCA)
 

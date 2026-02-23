@@ -85,7 +85,6 @@ commands:
       # Verify OS image installed on BM instance
       - name: verify_image
         phase: test
-        skip: true
         command: "python3 ../stubs/aws/image-registry/verify_image_installed.py"
         args:
           - "--instance-id"
@@ -97,7 +96,6 @@ commands:
       # Verify install config can provision BM
       - name: verify_config
         phase: test
-        skip: true
         command: "python3 ../stubs/aws/image-registry/verify_config_installable.py"
         args:
           - "--instance-id"
@@ -110,7 +108,6 @@ commands:
       # BM-specific: longer waits for hardware POST/BIOS/OS boot
       - name: reboot_instance
         phase: test
-        skip: true
         command: "python3 ../stubs/aws/bm/reboot_instance.py"
         args:
           - "--instance-id"
@@ -146,7 +143,6 @@ commands:
       # Requires NGC_NIM_API_KEY env var
       - name: deploy_nim
         phase: test
-        skip: true
         command: "python3 ../stubs/common/deploy_nim.py"
         args:
           - "--host"
@@ -158,7 +154,6 @@ commands:
       # Teardown NIM container via SSH (shared script)
       - name: teardown_nim
         phase: teardown
-        skip: true
         command: "python3 ../stubs/common/teardown_nim.py"
         args:
           - "--host"

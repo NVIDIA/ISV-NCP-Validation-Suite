@@ -14,6 +14,12 @@ from isvtest.core.workload import BaseWorkloadCheck
 
 
 class K8sNcclWorkload(BaseWorkloadCheck):
+    """Run NCCL allreduce test on Kubernetes.
+
+    Config:
+        min_bus_bw_gbps (float): Minimum expected bus bandwidth in GB/s (default: env or 0 = no check)
+    """
+
     description = "Run NCCL allreduce test on Kubernetes."
     markers: ClassVar[list[str]] = ["workload", "kubernetes", "gpu", "slow"]
 
@@ -21,7 +27,9 @@ class K8sNcclWorkload(BaseWorkloadCheck):
         # Get configuration
         namespace = get_k8s_namespace()
         timeout = get_nccl_timeout()
-        min_bus_bw = get_nccl_min_bus_bw_gbps()
+
+        min_bus_bw_config = self.config.get("min_bus_bw_gbps")
+        min_bus_bw = float(min_bus_bw_config) if min_bus_bw_config is not None else get_nccl_min_bus_bw_gbps()
 
         # Verify GPU nodes available
         # Note: We still rely on k8s_utils here for convenience, but we should eventually move this to Runner

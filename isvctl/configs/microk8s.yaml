@@ -90,7 +90,8 @@ tests:
 
     k8s_workloads:
       checks:
-        - K8sNcclWorkload: {}
+        - K8sNcclWorkload:
+            min_bus_bw_gbps: 100
         - K8sGpuStressWorkload:
             memory_gb: 1
             runtime: 30

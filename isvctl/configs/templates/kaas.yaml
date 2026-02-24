@@ -111,6 +111,20 @@ tests:
           runtime: 30
       - K8sNimInferenceWorkload:
           timeout: 900
+      - K8sNimHelmWorkload-1b:
+          model: "meta/llama-3.2-1b-instruct"
+          model_tag: "latest"
+          gpu_count: 1
+          timeout: 900
+          genai_perf_requests: 100
+          genai_perf_concurrency: 4
+      - K8sNimHelmWorkload-3b:
+          model: "meta/llama-3.2-3b-instruct"
+          model_tag: "latest"
+          gpu_count: 1
+          timeout: 1800
+          genai_perf_requests: 200
+          genai_perf_concurrency: 8
 
   exclude:
     markers: []

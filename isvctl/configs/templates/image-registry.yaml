@@ -23,6 +23,10 @@
 #   5. install_config_bm      (test)     - Install OS config on bare-metal
 #   6. teardown               (teardown) - Clean up all resources
 #
+# Note: In the AWS reference implementation, the BM install/verify steps
+#   (install_image_bm, install_config_bm) are in ../aws/bm.yaml instead of
+#   here, as verify_image and verify_config steps within the BM lifecycle.
+#
 # Quick start:
 #   1. Copy this folder:  cp -r templates/ my-isv/
 #   2. Edit the stubs:    my-isv/stubs/image-registry/*.py

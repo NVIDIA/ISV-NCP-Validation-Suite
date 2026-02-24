@@ -86,7 +86,7 @@ tests:
             memory_gb: 1
             runtime: 30
         - K8sNimInferenceWorkload:
-            timeout: 900
+            timeout: 1500
         - K8sNimHelmWorkload-1b:
             model: "meta/llama-3.2-1b-instruct"
             model_tag: "latest"

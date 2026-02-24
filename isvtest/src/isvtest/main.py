@@ -154,6 +154,17 @@ def run_validations_via_pytest(
         # Get detailed results captured during test execution
         results = get_validation_results()
 
+        if not results and extra_pytest_args:
+            k_filters = [
+                extra_pytest_args[i + 1]
+                for i, a in enumerate(extra_pytest_args)
+                if a == "-k" and i + 1 < len(extra_pytest_args)
+            ]
+            if k_filters:
+                logger.warning(
+                    f"No tests matched -k '{k_filters[0]}' — check spelling or run without -k to see available tests"
+                )
+
         return exit_code, results
 
     finally:

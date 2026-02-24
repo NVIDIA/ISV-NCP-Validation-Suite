@@ -12,7 +12,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: nccl-allreduce
-          image: ghcr.io/coreweave/nccl-tests:12.9.1-devel-ubuntu22.04-nccl2.27.5-1-0120901
+          image: nvcr.io/nvidia/hpc-benchmarks:25.04
           imagePullPolicy: IfNotPresent
           command:
             - /bin/bash
@@ -20,17 +20,18 @@ spec:
             - |
               set -euo pipefail
               TS=$(date +%Y%m%dT%H%M%S)
+              # Note: '-np 8' is overridden at runtime by K8sNcclWorkload
               mpirun --allow-run-as-root -np 8 \
                      --bind-to none --map-by slot \
                      -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH \
-                     /opt/nccl-tests/build/all_reduce_perf -b 8 -e 2G -f 2 -g 1 \
+                     all_reduce_perf_mpi -b 8 -e 2G -f 2 -g 1 \
                      2>&1 | tee /results/nccl-allreduce_${TS}.log
           volumeMounts:
             - name: results
               mountPath: /results
           resources:
             limits:
-              nvidia.com/gpu: 8
+              nvidia.com/gpu: 8 # overridden at runtime by K8sNcclWorkload
           securityContext:
             #  runAsNonRoot: true
             allowPrivilegeEscalation: false

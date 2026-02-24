@@ -28,7 +28,7 @@ class Settings:
         GPU_CUDA_ARCH: CUDA compute capability for CuPy on ARM64 (e.g., "80" for A100, "90" for H100, default: auto-detect)
 
         NCCL Allreduce Test Configuration:
-        NCCL_IMAGE: Container image for NCCL test (default: ghcr.io/coreweave/nccl-tests:12.9.1-devel-ubuntu22.04-nccl2.27.5-1-0120901)
+        NCCL_IMAGE: Container image for NCCL test (default: nvcr.io/nvidia/hpc-benchmarks:25.04)
         NCCL_TIMEOUT: Total timeout for NCCL test job (default: 600 = 10 minutes)
         NCCL_GPU_COUNT: Number of GPUs to request per job (default: auto-detect all)
         NCCL_MIN_BUS_BW_GBPS: Minimum expected bus bandwidth in GB/s (default: 0 = no check)
@@ -149,7 +149,7 @@ def get_nccl_image() -> str:
     """
     return os.getenv(
         "NCCL_IMAGE",
-        "ghcr.io/coreweave/nccl-tests:12.9.1-devel-ubuntu22.04-nccl2.27.5-1-0120901",
+        "nvcr.io/nvidia/hpc-benchmarks:25.04",
     )
 
 

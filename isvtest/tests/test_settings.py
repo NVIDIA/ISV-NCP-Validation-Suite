@@ -142,7 +142,7 @@ class TestNcclSettings:
         """Test default NCCL image."""
         with patch.dict(os.environ, {}, clear=True):
             result = get_nccl_image()
-            assert "nccl" in result.lower()
+            assert "hpc-benchmarks" in result
 
     def test_get_nccl_timeout_default(self) -> None:
         """Test default NCCL timeout."""

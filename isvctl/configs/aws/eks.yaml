@@ -18,7 +18,7 @@
 #   - TF_AUTO_APPROVE: Set to "true" to skip Terraform approval prompts (default: false)
 #   - TF_VAR_*: Terraform variables (e.g., TF_VAR_region, TF_VAR_gpu_node_instance_types)
 #   - AWS_SKIP_TEARDOWN: Set to "true" to skip teardown and preserve resources (default: false)
-#   - NGC_NIM_API_KEY: NGC API key for NIM workloads
+#   - NGC_API_KEY: NGC API key for NIM workloads
 #   - AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY: AWS credentials (if not using IAM roles)
 
 version: "1.0"

@@ -48,7 +48,7 @@ export ISV_SERVICE_ENDPOINT="..."  # From NVIDIA
 export ISV_SSA_ISSUER="..."
 export ISV_CLIENT_ID="..."
 export ISV_CLIENT_SECRET="..."
-export NGC_NIM_API_KEY="..."  # From https://build.nvidia.com/settings/api-keys
+export NGC_API_KEY="..."  # optional, for NIM tests
 
 # Kubernetes
 isvctl test run -f configs/k8s.yaml --lab-id ${ISV_LAB_ID}

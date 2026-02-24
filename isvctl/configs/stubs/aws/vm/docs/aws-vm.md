@@ -60,7 +60,7 @@ to prevent resource leaks. NIM steps are shared and reusable across VMaaS and BM
 
 - AWS CLI v2, Python 3.12+ with boto3/paramiko, uv package manager
 - AWS credentials with EC2 permissions (RunInstances, TerminateInstances, CreateKeyPair, etc.)
-- `NGC_NIM_API_KEY` environment variable (optional, for NIM tests)
+- `NGC_API_KEY` environment variable (optional, for NIM tests)
 
 ```bash
 aws --version
@@ -77,7 +77,7 @@ cd ISV-NCP-Validation-Suite && uv sync
 export AWS_ACCESS_KEY_ID=...
 export AWS_SECRET_ACCESS_KEY=...
 export AWS_REGION=us-west-2
-export NGC_NIM_API_KEY=...  # optional, for NIM tests
+export NGC_API_KEY=...  # optional, for NIM tests
 
 # 3. Run all tests
 uv run isvctl test run -f isvctl/configs/aws/vm.yaml
@@ -266,7 +266,7 @@ Validates that an EC2 instance rebooted successfully and fully recovered.
 }
 ```
 
-When `NGC_NIM_API_KEY` is not set, returns `{"success": true, "skipped": true}`.
+When `NGC_API_KEY` is not set, returns `{"success": true, "skipped": true}`.
 
 ### teardown_nim.py
 

@@ -437,8 +437,8 @@ def run(
         config_args = " ".join(f"-f {c}" for c in configs)
 
         # Handle NGC API key securely - use shlex.quote to prevent shell injection
-        ngc_nim_api_key = os.environ.get("NGC_NIM_API_KEY", "")
-        env_vars = f"NGC_NIM_API_KEY={shlex.quote(ngc_nim_api_key)}" if ngc_nim_api_key else ""
+        ngc_api_key = os.environ.get("NGC_API_KEY", "") or os.environ.get("NGC_NIM_API_KEY", "")
+        env_vars = f"NGC_API_KEY={shlex.quote(ngc_api_key)}" if ngc_api_key else ""
 
         # Note: Variables like $PATH and $TEST_RESULT expand on the remote shell
         remote_script = f"""

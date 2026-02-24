@@ -20,7 +20,7 @@ import pytest
 
 from isvtest.config.settings import get_k8s_namespace
 from isvtest.core.k8s import get_gpu_nodes, get_kubectl_command
-from isvtest.core.ngc import get_kubectl_base, validate_nim_inference
+from isvtest.core.ngc import get_kubectl_base, get_ngc_api_key, validate_nim_inference
 from isvtest.core.workload import BaseWorkloadCheck
 
 
@@ -246,15 +246,15 @@ class K8sNimHelmWorkload(BaseWorkloadCheck):
 
         Creates two secrets as per NVIDIA NIM Helm docs:
         1. ngc-secret: docker-registry secret for pulling NIM images from nvcr.io
-        2. ngc-api: generic secret with NGC_API_KEY key (value from NGC_NIM_API_KEY env var)
+        2. ngc-api: generic secret with NGC_API_KEY key (value from NGC_API_KEY env var)
 
         Reference: https://docs.nvidia.com/nim/large-language-models/latest/deploy-helm.html
         """
-        ngc_nim_api_key = os.environ.get("NGC_NIM_API_KEY")
+        ngc_api_key = get_ngc_api_key()
 
-        if not ngc_nim_api_key:
-            self.log.warning("Skipping: NGC_NIM_API_KEY not set - NGC credentials required")
-            pytest.skip("NGC_NIM_API_KEY not set - NGC credentials required")
+        if not ngc_api_key:
+            self.log.warning("Skipping: NGC_API_KEY not set - NGC credentials required")
+            pytest.skip("NGC_API_KEY not set - NGC credentials required")
 
         kubectl_parts = get_kubectl_command()
         kubectl_base = get_kubectl_base()
@@ -282,7 +282,7 @@ class K8sNimHelmWorkload(BaseWorkloadCheck):
                 "ngc-secret",
                 "--docker-server=nvcr.io",
                 "--docker-username=$oauthtoken",  # Literal string - NGC special username
-                f"--docker-password={ngc_nim_api_key}",
+                f"--docker-password={ngc_api_key}",
                 "-n",
                 namespace,
             ]
@@ -313,7 +313,7 @@ class K8sNimHelmWorkload(BaseWorkloadCheck):
                 "secret",
                 "generic",
                 "ngc-api",
-                f"--from-literal=NGC_API_KEY={ngc_nim_api_key}",  # Key name required by NIM Helm chart
+                f"--from-literal=NGC_API_KEY={ngc_api_key}",  # Key name required by NIM Helm chart
                 "-n",
                 namespace,
             ]
@@ -337,9 +337,9 @@ class K8sNimHelmWorkload(BaseWorkloadCheck):
         as a .tgz file, not from a public Helm repository.
         Reference: https://docs.nvidia.com/nim/large-language-models/latest/deploy-helm.html
         """
-        ngc_nim_api_key = os.environ.get("NGC_NIM_API_KEY", "")
-        if not ngc_nim_api_key:
-            self.set_failed("NGC_NIM_API_KEY is required to download NIM Helm chart")
+        ngc_api_key = get_ngc_api_key()
+        if not ngc_api_key:
+            self.set_failed("NGC_API_KEY is required to download NIM Helm chart")
             return False
 
         chart_version = self.config.get("helm_chart_version", self.HELM_CHART_VERSION)
@@ -359,7 +359,7 @@ class K8sNimHelmWorkload(BaseWorkloadCheck):
                     "--username",
                     "$oauthtoken",
                     "--password",
-                    ngc_nim_api_key,
+                    ngc_api_key,
                 ],
                 capture_output=True,
                 text=True,

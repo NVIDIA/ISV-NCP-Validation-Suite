@@ -203,10 +203,10 @@ if [ "$SKIP_PREFLIGHT" != "true" ]; then
     fi
 
     # Check NGC credentials
-    if [ -z "${NGC_NIM_API_KEY:-}" ]; then
-        echo "  Warning: NGC_NIM_API_KEY not set (required for NIM workloads)" >&2
+    if [ -z "${NGC_API_KEY:-}" ]; then
+        echo "  Warning: NGC_API_KEY not set (required for NIM workloads)" >&2
     else
-        echo "  NGC_NIM_API_KEY: set" >&2
+        echo "  NGC_API_KEY: set" >&2
     fi
 
     echo "" >&2

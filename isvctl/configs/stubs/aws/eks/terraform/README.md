@@ -58,7 +58,7 @@ kubectl get pods -n gpu-operator
 # 8. Run ISV Lab tests
 export AWS_REGION=$(terraform output -raw region)
 export EKS_CLUSTER_NAME=$(terraform output -raw cluster_name)
-export NGC_NIM_API_KEY=nvapi-XXXXX  # Your NGC API key
+export NGC_API_KEY=nvapi-XXXXX  # Your NGC API key
 
 cd ../../../../..  # Back to repo root
 uv run isvctl test run -f isvctl/configs/aws/eks.yaml

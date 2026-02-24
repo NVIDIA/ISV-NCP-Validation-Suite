@@ -140,7 +140,7 @@ commands:
         timeout: 3600
 
       # Deploy NIM container via SSH (shared script)
-      # Requires NGC_NIM_API_KEY env var
+      # Requires NGC_API_KEY env var
       - name: deploy_nim
         phase: test
         command: "python3 ../stubs/common/deploy_nim.py"

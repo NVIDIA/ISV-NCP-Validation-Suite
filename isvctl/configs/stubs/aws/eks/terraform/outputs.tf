@@ -99,7 +99,7 @@ output "run_tests" {
     # Set environment variables
     export AWS_REGION=${var.region}
     export EKS_CLUSTER_NAME=${module.eks.cluster_name}
-    export NGC_NIM_API_KEY=nvapi-XXXXX  # Replace with your NGC API key
+    export NGC_API_KEY=nvapi-XXXXX  # Replace with your NGC API key
 
     # Run tests
     uv run isvctl test run -f isvctl/configs/aws/eks.yaml

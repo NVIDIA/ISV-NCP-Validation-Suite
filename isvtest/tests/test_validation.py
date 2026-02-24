@@ -361,11 +361,11 @@ class TestSshNimHealthCheck:
             config={
                 "step_output": {
                     "skipped": True,
-                    "skip_reason": "NGC_NIM_API_KEY not set",
+                    "skip_reason": "NGC_API_KEY not set",
                 },
             }
         )
-        with pytest.raises(pytest.skip.Exception, match="NGC_NIM_API_KEY"):
+        with pytest.raises(pytest.skip.Exception, match="NGC_API_KEY"):
             v.execute()
 
     @patch("isvtest.validations.nim.get_ssh_client")
@@ -597,7 +597,7 @@ class TestValidationResultCapture:
     def test_skipped_validation_captured(self) -> None:
         """Skipped validations must appear in _validation_results with skipped=True."""
         config = {
-            "step_output": {"skipped": True, "skip_reason": "NGC_NIM_API_KEY not set"},
+            "step_output": {"skipped": True, "skip_reason": "NGC_API_KEY not set"},
             "_category": "nim",
         }
         subtests = MagicMock()
@@ -611,7 +611,7 @@ class TestValidationResultCapture:
         assert r["skipped"] is True
         assert r["passed"] is True
         assert r["category"] == "nim"
-        assert "NGC_NIM_API_KEY" in r["message"]
+        assert "NGC_API_KEY" in r["message"]
 
     def test_passed_validation_captured(self) -> None:
         """Passed validations must appear with skipped=False."""

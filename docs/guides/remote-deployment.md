@@ -26,7 +26,7 @@ Environment variables required by tests must be set on the local machine - they 
 | `ISV_SSA_ISSUER` | Required for result upload to ISV Lab Service |
 | `ISV_CLIENT_ID` | Required for result upload to ISV Lab Service |
 | `ISV_CLIENT_SECRET` | Required for result upload to ISV Lab Service |
-| `NGC_NIM_API_KEY` | Required for NIM model benchmarks |
+| `NGC_API_KEY` | Required for NIM model benchmarks |
 
 ## Usage
 

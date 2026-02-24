@@ -106,7 +106,7 @@ See [Remote Deployment Guide](guides/remote-deployment.md) for details.
 | `ISV_SSA_ISSUER` | Required for result upload to ISV Lab Service |
 | `ISV_CLIENT_ID` | Required for result upload to ISV Lab Service |
 | `ISV_CLIENT_SECRET` | Required for result upload to ISV Lab Service |
-| `NGC_NIM_API_KEY` | Required for NIM model benchmarks |
+| `NGC_API_KEY` | Required for NIM model benchmarks |
 
 ## Next Steps
 

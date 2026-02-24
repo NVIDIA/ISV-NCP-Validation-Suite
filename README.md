@@ -89,7 +89,7 @@ See [Contributing](docs/contributing.md) for development setup and guidelines.
 | `ISV_SSA_ISSUER` | Required for ISV Lab Service uploads |
 | `ISV_CLIENT_ID` | Required for ISV Lab Service uploads |
 | `ISV_CLIENT_SECRET` | Required for ISV Lab Service uploads |
-| `NGC_NIM_API_KEY` | Required for NIM model benchmarks |
+| `NGC_API_KEY` | Required for NIM model benchmarks |
 
 ## License
 

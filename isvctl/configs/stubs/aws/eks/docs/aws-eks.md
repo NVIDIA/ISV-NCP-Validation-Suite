@@ -62,7 +62,7 @@ export AWS_REGION=us-west-2
 Required for NIM inference workloads:
 
 ```bash
-export NGC_NIM_API_KEY=nvapi-XXXXX
+export NGC_API_KEY=nvapi-XXXXX
 ```
 
 Get your API key from [NGC](https://ngc.nvidia.com/setup/api-key).
@@ -81,7 +81,7 @@ uv sync
 
 # Run full validation (setup -> test -> teardown)
 # This runs all three phases: setup provisions/queries cluster, test runs validations
-NGC_NIM_API_KEY=nvapi-XXXXX \
+NGC_API_KEY=nvapi-XXXXX \
   uv run isvctl test run -f isvctl/configs/aws/eks.yaml
 ```
 
@@ -322,7 +322,7 @@ Here's a complete example running all phases:
 set -e
 
 # Configuration
-export NGC_NIM_API_KEY=nvapi-XXXXX
+export NGC_API_KEY=nvapi-XXXXX
 export TF_VAR_region=us-west-2
 export TF_VAR_gpu_node_instance_types='["g5.xlarge"]'
 export TF_VAR_gpu_node_desired_size=1
@@ -383,7 +383,7 @@ MIG (Multi-Instance GPU) requires A100 or H100 GPUs. For g5/g4 instances:
 
 ```bash
 # Check NGC API key
-echo $NGC_NIM_API_KEY
+echo $NGC_API_KEY
 
 # Check NIM pod status
 kubectl get pods -l app.kubernetes.io/name=nim-llm

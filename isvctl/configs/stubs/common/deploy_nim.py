@@ -70,7 +70,7 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=8000, help="Host port to expose NIM on")
     parser.add_argument("--container-name", default="isv-nim", help="Docker container name")
     parser.add_argument(
-        "--ngc-api-key",
+        "--ngc-nim-api-key",
         default=os.environ.get("NGC_NIM_API_KEY", ""),
         help="NGC API key for pulling NIM images",
     )
@@ -100,7 +100,7 @@ def main() -> int:
         "ssh_user": args.user,
     }
 
-    if not args.ngc_api_key:
+    if not args.ngc_nim_api_key:
         print("NGC_NIM_API_KEY not set, skipping NIM deployment", file=sys.stderr)
         result["success"] = True
         result["skipped"] = True
@@ -116,7 +116,7 @@ def main() -> int:
         print("Logging in to NGC registry...", file=sys.stderr)
         exit_code, _, stderr_out = run_cmd(
             ssh,
-            f"echo '{args.ngc_api_key}' | docker login nvcr.io -u '$oauthtoken' --password-stdin 2>&1",
+            f"echo '{args.ngc_nim_api_key}' | docker login nvcr.io -u '$oauthtoken' --password-stdin 2>&1",
         )
         if exit_code != 0:
             result["error"] = f"NGC login failed: {stderr_out}"
@@ -133,7 +133,7 @@ def main() -> int:
             f"docker run -d --gpus all"
             f" --name {args.container_name}"
             f" -p {args.port}:8000"
-            f" -e NGC_API_KEY='{args.ngc_api_key}'"
+            f" -e NGC_NIM_API_KEY='{args.ngc_nim_api_key}'"
             f" {image}"
         )
         exit_code, stdout, stderr_out = run_cmd(ssh, docker_cmd, timeout=1200)

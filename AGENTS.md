@@ -335,8 +335,7 @@ tests:
 | `ISV_SSA_ISSUER` | ISV Lab Service SSA issuer URL | isvreporter |
 | `ISV_CLIENT_ID` | ISV Lab Service client ID | isvreporter |
 | `ISV_CLIENT_SECRET` | ISV Lab Service client secret | isvreporter |
-| `NGC_API_KEY` | NGC API key | install.sh |
-| `NGC_NIM_API_KEY` | NGC NIM API key | isvtest NIM workloads |
+| `NGC_NIM_API_KEY` | NGC API key for NIM workloads and container registry | isvtest, isvctl |
 | `AWS_ACCESS_KEY_ID` | AWS access key | AWS scripts |
 | `AWS_SECRET_ACCESS_KEY` | AWS secret key | AWS scripts |
 | `AWS_REGION` | AWS region | AWS scripts |

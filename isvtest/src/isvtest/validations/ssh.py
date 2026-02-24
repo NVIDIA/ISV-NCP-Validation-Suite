@@ -1753,7 +1753,7 @@ class SshContainerRuntimeCheck(BaseValidation):
 
     Config:
         host, key_file, user: SSH connection details
-        ngc_api_key: NGC API key for registry access (optional)
+        ngc_nim_api_key: NGC API key for registry access (optional)
     """
 
     description: ClassVar[str] = "Tests container runtime and NVIDIA Docker support"
@@ -1771,7 +1771,7 @@ class SshContainerRuntimeCheck(BaseValidation):
         host = ssh_cfg["ssh_host"]
         user = ssh_cfg["ssh_user"]
         key_path = ssh_cfg["ssh_key_path"]
-        ngc_api_key = self.config.get("ngc_api_key", os.environ.get("NGC_NIM_API_KEY", ""))
+        ngc_nim_api_key = self.config.get("ngc_nim_api_key", os.environ.get("NGC_NIM_API_KEY", ""))
 
         if not host or not key_path:
             self.set_failed("Missing host or key_file")
@@ -1803,10 +1803,10 @@ class SshContainerRuntimeCheck(BaseValidation):
             )
 
             # Check NGC login if key provided
-            if ngc_api_key:
+            if ngc_nim_api_key:
                 self.log.info("Testing NGC registry access...")
                 _, stdout, _ = run_ssh_command(
-                    ssh, f"echo '{ngc_api_key}' | docker login nvcr.io -u '$oauthtoken' --password-stdin 2>&1"
+                    ssh, f"echo '{ngc_nim_api_key}' | docker login nvcr.io -u '$oauthtoken' --password-stdin 2>&1"
                 )
                 login_ok = "Succeeded" in stdout
                 self.report_subtest("ngc_login", login_ok, "NGC login successful" if login_ok else "NGC login failed")

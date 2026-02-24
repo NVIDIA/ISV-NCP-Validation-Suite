@@ -33,7 +33,7 @@ def get_kubectl_base() -> str:
     return " ".join(shlex.quote(part) for part in kubectl_parts)
 
 
-def ensure_ngc_secrets(namespace: str, ngc_api_key: str | None = None) -> tuple[bool, str]:
+def ensure_ngc_secrets(namespace: str, ngc_nim_api_key: str | None = None) -> tuple[bool, str]:
     """Ensure NGC secrets exist in the namespace, creating them if needed.
 
     Creates two secrets as per NVIDIA NIM docs:
@@ -42,15 +42,15 @@ def ensure_ngc_secrets(namespace: str, ngc_api_key: str | None = None) -> tuple[
 
     Args:
         namespace: Kubernetes namespace.
-        ngc_api_key: NGC API key. If None, reads from NGC_NIM_API_KEY environment variable.
+        ngc_nim_api_key: NGC API key. If None, reads from NGC_NIM_API_KEY environment variable.
 
     Returns:
         Tuple of (success, error_message). If success is True, error_message is empty.
     """
-    if ngc_api_key is None:
-        ngc_api_key = os.environ.get("NGC_NIM_API_KEY")
+    if ngc_nim_api_key is None:
+        ngc_nim_api_key = os.environ.get("NGC_NIM_API_KEY")
 
-    if not ngc_api_key:
+    if not ngc_nim_api_key:
         return False, "NGC_NIM_API_KEY not set"
 
     kubectl_parts = get_kubectl_command()
@@ -86,7 +86,7 @@ def ensure_ngc_secrets(namespace: str, ngc_api_key: str | None = None) -> tuple[
                 NGC_IMAGE_SECRET_NAME,
                 "--docker-server=nvcr.io",
                 "--docker-username=$oauthtoken",
-                f"--docker-password={ngc_api_key}",
+                f"--docker-password={ngc_nim_api_key}",
                 "-n",
                 namespace,
             ]
@@ -121,7 +121,7 @@ def ensure_ngc_secrets(namespace: str, ngc_api_key: str | None = None) -> tuple[
                     "-n",
                     namespace,
                 ],
-                input=ngc_api_key,
+                input=ngc_nim_api_key,
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -273,13 +273,13 @@ spec:
         run_kubectl(["delete", "job", job_name, "-n", namespace, "--wait=false"], timeout=10)
 
 
-def create_ngc_docker_config(ngc_api_key: str) -> dict[str, Any]:
+def create_ngc_docker_config(ngc_nim_api_key: str) -> dict[str, Any]:
     """Create a Docker config JSON for NGC registry authentication.
 
     This is useful when you need the full docker config (e.g., for --from-file).
 
     Args:
-        ngc_api_key: NGC API key.
+        ngc_nim_api_key: NGC API key.
 
     Returns:
         Docker config dictionary suitable for .dockerconfigjson.
@@ -290,8 +290,8 @@ def create_ngc_docker_config(ngc_api_key: str) -> dict[str, Any]:
         "auths": {
             "nvcr.io": {
                 "username": "$oauthtoken",
-                "password": ngc_api_key,
-                "auth": base64.b64encode(f"$oauthtoken:{ngc_api_key}".encode()).decode(),
+                "password": ngc_nim_api_key,
+                "auth": base64.b64encode(f"$oauthtoken:{ngc_nim_api_key}".encode()).decode(),
             }
         }
     }

@@ -43,12 +43,12 @@ Use one command so that create and update happen in the same process:
 
 ```bash
 # Required env (see ISV Lab Validation Guide)
-export NGC_API_KEY="..."
-export ISV_LAB_ID="35"   # Your assigned lab ID
-export ISV_SERVICE_ENDPOINT="..."   # From NVIDIA
+export ISV_LAB_ID="35"  # Your assigned lab ID
+export ISV_SERVICE_ENDPOINT="..."  # From NVIDIA
 export ISV_SSA_ISSUER="..."
 export ISV_CLIENT_ID="..."
 export ISV_CLIENT_SECRET="..."
+export NGC_NIM_API_KEY="..."  # From https://build.nvidia.com/settings/api-keys
 
 # Kubernetes
 isvctl test run -f configs/k8s.yaml --lab-id ${ISV_LAB_ID}

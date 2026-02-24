@@ -15,14 +15,15 @@
 #   fields, the validations pass regardless of which cloud you use.
 #
 # Steps:
-#   1. launch_instance    (setup)    - Provision bare-metal GPU instance
-#   2. list_instances     (test)     - List instances, verify target exists
-#   3. describe_instance  (test)     - Describe instance state + SSH info
-#   4. reboot_instance    (test)     - Reboot instance, validate recovery
-#   5. deploy_nim         (test)     - Deploy NIM container via SSH
-#   6. teardown_nim       (teardown) - Stop NIM container
-#   7. teardown           (teardown) - Terminate instance
-#   8. verify_teardown    (teardown) - Confirm resources deleted
+#   1. launch_instance      (setup)    - Provision bare-metal GPU instance
+#   2. list_instances       (test)     - List instances, verify target exists
+#   3. describe_instance    (test)     - Describe instance state + SSH info
+#   4. reboot_instance      (test)     - Reboot instance, validate recovery
+#   5. reinstall_instance   (test)     - Reinstall OS from stock image [skip: true by default]
+#   6. deploy_nim           (test)     - Deploy NIM container via SSH
+#   7. teardown_nim         (teardown) - Stop NIM container
+#   8. teardown             (teardown) - Terminate instance
+#   9. verify_teardown      (teardown) - Confirm resources deleted
 #
 # Dev workflow (reuse existing instance):
 #   # Run 1: launch + test, keep instance alive
@@ -135,7 +136,27 @@ commands:
           - "{{steps.launch_instance.public_ip}}"
         timeout: 1800
 
-      # ─── Step 5: Deploy NIM Container ─────────────────────────────
+      # ─── Step 5: Reinstall Instance ─────────────────────────────────
+      # Reinstall the node from its configured stock OS.
+      # Skipped by default: can be very slow depending on platform.
+      # Set skip: false and implement stubs/bm/reinstall_instance.py to enable.
+      # See ../aws/bm.yaml + stubs/aws/bm/reinstall_instance.py for reference.
+      - name: reinstall_instance
+        phase: test
+        skip: true
+        command: "python3 ./stubs/bm/reinstall_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+          - "--public-ip"
+          - "{{steps.launch_instance.public_ip}}"
+        timeout: 3600
+
+      # ─── Step 6: Deploy NIM Container ─────────────────────────────
       - name: deploy_nim
         phase: test
         command: "python3 ./stubs/common/deploy_nim.py"
@@ -146,7 +167,7 @@ commands:
           - "{{steps.launch_instance.key_file}}"
         timeout: 1800
 
-      # ─── Step 6: Teardown NIM ─────────────────────────────────────
+      # ─── Step 7: Teardown NIM ─────────────────────────────────────
       - name: teardown_nim
         phase: teardown
         command: "python3 ./stubs/common/teardown_nim.py"
@@ -157,7 +178,7 @@ commands:
           - "{{steps.launch_instance.key_file}}"
         timeout: 120
 
-      # ─── Step 7: Teardown Instance ────────────────────────────────
+      # ─── Step 8: Teardown Instance ────────────────────────────────
       - name: teardown
         phase: teardown
         command: "python3 ./stubs/bm/teardown.py"
@@ -171,7 +192,7 @@ commands:
           - "{{teardown_flag}}"
         timeout: 1800
 
-      # ─── Step 8: Verify Teardown ──────────────────────────────────
+      # ─── Step 9: Verify Teardown ──────────────────────────────────
       # Post-teardown sanitization: verify instance terminated and
       # resources deleted.
       - name: verify_teardown
@@ -237,6 +258,44 @@ tests:
       checks:
         - SshHostSoftwareCheck: {}
 
+    # GPU stress test - PyTorch matrix multiplications on all GPUs
+    gpu_stress:
+      step: describe_instance
+      checks:
+        - SshGpuStressCheck:
+            runtime: 30
+            memory_gb: 16
+
+    # NCCL AllReduce - validates GPU-to-GPU communication (NVLink/NVSwitch)
+    nccl:
+      step: describe_instance
+      checks:
+        - SshNcclCheck: {}
+
+    # DDP training workload - validates full training stack
+    training:
+      step: describe_instance
+      checks:
+        - SshTrainingCheck:
+            steps: 50
+
+    # Network / interconnect checks
+    nvlink:
+      step: describe_instance
+      checks:
+        - SshNvlinkCheck: {}
+
+    infiniband:
+      step: describe_instance
+      checks:
+        - SshInfiniBandCheck: {}
+
+    ethernet:
+      step: describe_instance
+      checks:
+        - SshEthernetCheck:
+            ping_target: "8.8.8.8"
+
     reboot_checks:
       step: reboot_instance
       checks:
@@ -266,6 +325,25 @@ tests:
       step: reboot_instance
       checks:
         - SshHostSoftwareCheck: {}
+
+    # Reinstall validations (skipped when reinstall_instance step is skipped)
+    reinstall_state:
+      step: reinstall_instance
+      checks:
+        - InstanceStateCheck:
+            expected_state: "running"
+
+    reinstall_ssh:
+      step: reinstall_instance
+      checks:
+        - SshConnectivityCheck: {}
+        - SshOsCheck:
+            expected_os: "ubuntu"
+
+    reinstall_gpu:
+      step: reinstall_instance
+      checks:
+        - SshGpuCheck: {}
 
     nim_health:
       step: deploy_nim

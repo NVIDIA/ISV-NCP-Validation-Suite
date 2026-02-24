@@ -153,10 +153,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
                         hint = f"Did you mean: {', '.join(similar)}?"
                     else:
                         hint = "Check spelling or run without --config to see all available tests."
-                    print(
-                        f"WARNING: Validation not found: '{validation_name}'. {hint}",
-                        file=sys.stderr,
-                    )
+                    sys.stderr.write(f"\n\033[33mWarning:\033[0m Validation not found: '{validation_name}'. {hint}\n")
 
             # 2. Add skipped tests for classes NOT in config (if show_skipped)
             if show_skipped:

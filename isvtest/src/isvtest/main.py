@@ -17,6 +17,7 @@ import typer
 from isvtest.config.loader import ConfigLoader
 from isvtest.core import runners as reframe_runner
 from isvtest.core.logger import setup_logger
+from isvtest.tests.test_validations import ADAPTER_HANDLED_CATEGORIES
 
 logger = setup_logger()
 
@@ -196,6 +197,9 @@ def _transform_validations_for_pytest(
     result = []
 
     for category, category_config in validations.items():
+        if category in ADAPTER_HANDLED_CATEGORIES:
+            continue
+
         # Determine format: group defaults or list
         if isinstance(category_config, dict) and "checks" in category_config:
             # Group defaults format

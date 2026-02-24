@@ -133,7 +133,7 @@ def main() -> int:
             f"docker run -d --gpus all"
             f" --name {args.container_name}"
             f" -p {args.port}:8000"
-            f" -e NGC_NIM_API_KEY='{args.ngc_nim_api_key}'"
+            f" -e NGC_API_KEY='{args.ngc_nim_api_key}'"  # NIM container expects NGC_API_KEY
             f" {image}"
         )
         exit_code, stdout, stderr_out = run_cmd(ssh, docker_cmd, timeout=1200)

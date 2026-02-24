@@ -60,7 +60,7 @@ spec:
               echo "[INFO] Server exited on its own"
               exit 0
           env:
-            - name: NGC_API_KEY
+            - name: NGC_API_KEY # NIM container expects this env var name
               valueFrom:
                 secretKeyRef:
                   name: ngc-api-secret

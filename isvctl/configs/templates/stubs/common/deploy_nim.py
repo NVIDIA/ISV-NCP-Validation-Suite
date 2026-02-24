@@ -78,7 +78,7 @@ def main() -> int:
         # ║  4. Start the container with GPU access                      ║
         # ║     ssh.run("docker run -d --gpus all "                      ║
         # ║             f"--name isv-nim -p 8000:8000 "                  ║
-        # ║             f"-e NGC_NIM_API_KEY={ngc_nim_api_key} {image}")     ║
+        # ║             f"-e NGC_API_KEY={ngc_nim_api_key} {image}")     ║
         # ║                                                              ║
         # ║  5. Wait for the health endpoint to report ready             ║
         # ║     poll until: curl http://localhost:8000/v1/health/ready   ║

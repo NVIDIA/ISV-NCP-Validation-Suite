@@ -246,7 +246,7 @@ class K8sNimHelmWorkload(BaseWorkloadCheck):
 
         Creates two secrets as per NVIDIA NIM Helm docs:
         1. ngc-secret: docker-registry secret for pulling NIM images from nvcr.io
-        2. ngc-api: generic secret with NGC_NIM_API_KEY key (value from NGC_NIM_API_KEY env var)
+        2. ngc-api: generic secret with NGC_API_KEY key (value from NGC_NIM_API_KEY env var)
 
         Reference: https://docs.nvidia.com/nim/large-language-models/latest/deploy-helm.html
         """
@@ -313,7 +313,7 @@ class K8sNimHelmWorkload(BaseWorkloadCheck):
                 "secret",
                 "generic",
                 "ngc-api",
-                f"--from-literal=NGC_NIM_API_KEY={ngc_nim_api_key}",
+                f"--from-literal=NGC_API_KEY={ngc_nim_api_key}",  # Key name required by NIM Helm chart
                 "-n",
                 namespace,
             ]

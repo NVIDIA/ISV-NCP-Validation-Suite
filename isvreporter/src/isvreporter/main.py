@@ -16,12 +16,30 @@ from isvreporter.client import (
     update_test_run,
 )
 from isvreporter.platform import get_platform_from_config, is_valid_platform, normalize_platform
+from isvreporter.version import get_version
 
 app = typer.Typer(
     name="report",
     help="Report ISV Lab test results to the ISV Lab Service API",
     no_args_is_help=True,
 )
+
+
+def _version_callback(value: bool) -> None:
+    """Print version and exit."""
+    if value:
+        typer.echo(f"isvreporter {get_version('isvreporter')}")
+        raise typer.Exit()
+
+
+@app.callback()
+def main(
+    version: Annotated[
+        bool,
+        typer.Option("--version", "-V", help="Show version and exit.", callback=_version_callback, is_eager=True),
+    ] = False,
+) -> None:
+    """Report ISV Lab test results to the ISV Lab Service API."""
 
 
 def _get_credentials() -> tuple[str, str, str, str]:

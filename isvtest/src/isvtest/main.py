@@ -13,6 +13,7 @@ from typing import Annotated, Any
 
 import pytest
 import typer
+from isvreporter.version import get_version
 
 from isvtest.config.loader import ConfigLoader
 from isvtest.core import runners as reframe_runner
@@ -478,14 +479,26 @@ def workload(
     raise typer.Exit(code=0 if results["success"] else 1)
 
 
+def _version_callback(value: bool) -> None:
+    """Print version and exit."""
+    if value:
+        typer.echo(f"isvtest {get_version('isvtest')}")
+        raise typer.Exit()
+
+
 @app.callback(invoke_without_command=True)
-def callback(ctx: typer.Context) -> None:
+def callback(
+    ctx: typer.Context,
+    version: Annotated[
+        bool,
+        typer.Option("--version", "-V", help="Show version and exit.", callback=_version_callback, is_eager=True),
+    ] = False,
+) -> None:
     """NVIDIA ISV Lab validation tests.
 
     For full cluster lifecycle management, use isvctl:
         isvctl test run -f isvctl/configs/k8s.yaml
     """
-    # If no command specified, run test with defaults
     if ctx.invoked_subcommand is None:
         ctx.invoke(test_cmd)
 

@@ -1,10 +1,10 @@
 """Main CLI entry point for isvctl."""
 
-from importlib.metadata import version
 from typing import Annotated
 
 import typer
 from isvreporter.main import app as report_app
+from isvreporter.version import get_version
 
 from isvctl.cli import clean, deploy, docs, test
 
@@ -18,7 +18,7 @@ app = typer.Typer(
 def _version_callback(value: bool) -> None:
     """Print version and exit."""
     if value:
-        typer.echo(f"isvctl {version('isvctl')}")
+        typer.echo(f"isvctl {get_version('isvctl')}")
         raise typer.Exit()
 
 

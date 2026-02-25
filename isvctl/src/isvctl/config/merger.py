@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 _MERGE_MARKER = "__merge__"
+_REMOVE_SENTINEL = "__remove__"
 
 
 def _is_mergeable_list(lst: list[Any]) -> bool:
@@ -87,7 +88,7 @@ def _merge_single_key_dict_lists(
 
         if key in override_by_key:
             override_value = override_by_key[key]
-            if override_value == "__remove__":
+            if override_value == _REMOVE_SENTINEL:
                 continue  # Drop this item
             base_value = item[key]
             if isinstance(base_value, dict) and isinstance(override_value, dict):
@@ -101,7 +102,7 @@ def _merge_single_key_dict_lists(
     # Append new items from override that weren't in base
     for key in override_order:
         if key not in seen_keys:
-            if override_by_key[key] == "__remove__":
+            if override_by_key[key] == _REMOVE_SENTINEL:
                 continue  # Removing nonexistent key is a no-op
             result.append({key: copy.deepcopy(override_by_key[key])})
 
@@ -126,7 +127,9 @@ def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]
     result = copy.deepcopy(base)
 
     for key, value in override.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+        if value == _REMOVE_SENTINEL:
+            result.pop(key, None)
+        elif key in result and isinstance(result[key], dict) and isinstance(value, dict):
             # Recursively merge nested dicts
             result[key] = deep_merge(result[key], value)
         elif (

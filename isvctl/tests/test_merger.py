@@ -52,6 +52,27 @@ class TestDeepMerge:
         result = deep_merge(base, override)
         assert result == {"items": [4, 5]}
 
+    def test_remove_dict_key(self) -> None:
+        """Test that __remove__ deletes a key during dict merge."""
+        base = {"a": 1, "b": 2, "c": 3}
+        override = {"b": "__remove__"}
+        result = deep_merge(base, override)
+        assert result == {"a": 1, "c": 3}
+
+    def test_remove_nested_dict_key(self) -> None:
+        """Test that __remove__ works inside nested dicts."""
+        base = {"outer": {"a": 1, "b": 2}}
+        override = {"outer": {"b": "__remove__"}}
+        result = deep_merge(base, override)
+        assert result == {"outer": {"a": 1}}
+
+    def test_remove_nonexistent_dict_key(self) -> None:
+        """Removing a key that doesn't exist is a no-op."""
+        base = {"a": 1}
+        override = {"z": "__remove__"}
+        result = deep_merge(base, override)
+        assert result == {"a": 1}
+
     def test_original_not_modified(self) -> None:
         """Test that original dicts are not modified."""
         base = {"a": {"b": 1}}

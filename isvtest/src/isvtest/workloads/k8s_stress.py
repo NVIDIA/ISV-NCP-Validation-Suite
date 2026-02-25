@@ -215,5 +215,10 @@ spec:
       limits:
         nvidia.com/gpu: "{gpu_count}"
     imagePullPolicy: IfNotPresent
+  runtimeClassName: nvidia
+  tolerations:
+  - key: "nvidia.com/gpu"
+    operator: "Exists"
+    effect: "NoSchedule"
 """
         return pod_yaml

@@ -37,6 +37,7 @@ spec:
             allowPrivilegeEscalation: false
       nodeSelector:
         nvidia.com/gpu.present: "true"
+      runtimeClassName: nvidia
       tolerations:
         - key: "nvidia.com/gpu"
           operator: "Exists"

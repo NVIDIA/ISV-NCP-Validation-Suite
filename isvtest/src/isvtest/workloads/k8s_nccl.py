@@ -26,7 +26,7 @@ class K8sNcclWorkload(BaseWorkloadCheck):
     def run(self) -> None:
         # Get configuration
         namespace = get_k8s_namespace()
-        timeout = get_nccl_timeout()
+        timeout = self.config.get("timeout") or get_nccl_timeout()
 
         min_bus_bw_config = self.config.get("min_bus_bw_gbps")
         min_bus_bw = float(min_bus_bw_config) if min_bus_bw_config is not None else get_nccl_min_bus_bw_gbps()

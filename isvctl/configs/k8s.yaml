@@ -82,9 +82,11 @@ tests:
       checks:
         - K8sNcclWorkload:
             min_bus_bw_gbps: 100
+            timeout: 600
         - K8sGpuStressWorkload:
             memory_gb: 1
             runtime: 30
+            timeout: 420
         - K8sNimInferenceWorkload:
             timeout: 1500
         - K8sNimHelmWorkload-1b:

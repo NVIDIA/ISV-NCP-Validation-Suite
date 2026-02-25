@@ -4,4 +4,4 @@
 # Rules are evaluated from top to bottom, with later rules taking precedence.
 
 # Default owners for everything in the repo
-* @NVIDIA/ncp-isv-lab-maintainer @NVIDIA/ncp-isv-lab-admin
+* @NVIDIA/ncp-isv-lab-maintainer

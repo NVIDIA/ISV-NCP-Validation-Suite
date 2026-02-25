@@ -10,12 +10,22 @@
 
 """Tests for YAML merging functionality."""
 
+import copy
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from isvctl.config.merger import apply_set_value, deep_merge, merge_yaml_files, parse_set_value
+from isvctl.config.merger import (
+    _has_merge_marker,
+    _is_mergeable_list,
+    _merge_single_key_dict_lists,
+    _strip_merge_marker,
+    apply_set_value,
+    deep_merge,
+    merge_yaml_files,
+    parse_set_value,
+)
 
 
 class TestDeepMerge:
@@ -183,3 +193,149 @@ class TestMergeYamlFiles:
 
         result = merge_yaml_files([str(file1), str(file2)])
         assert result == {"a": 1}
+
+
+class TestStrategicMerge:
+    """Tests for opt-in strategic merge of single-key dict lists.
+
+    Strategic merge is triggered by including ``{__merge__: true}`` in the
+    override list.  Without the marker, lists are replaced as before.
+    """
+
+    # -- marker helpers -------------------------------------------------------
+
+    def test_has_merge_marker(self) -> None:
+        """_has_merge_marker detects the opt-in marker."""
+        assert _has_merge_marker([{"__merge__": True}]) is True
+        assert _has_merge_marker([{"__merge__": True}, {"A": 1}]) is True
+        assert _has_merge_marker([{"A": 1}]) is False
+        assert _has_merge_marker([]) is False
+
+    def test_strip_merge_marker(self) -> None:
+        """_strip_merge_marker removes only the marker item."""
+        lst = [{"__merge__": True}, {"A": 1}, {"B": 2}]
+        assert _strip_merge_marker(lst) == [{"A": 1}, {"B": 2}]
+
+    def test_is_mergeable_list_helper(self) -> None:
+        """Direct tests for _is_mergeable_list."""
+        assert _is_mergeable_list([{"A": 1}]) is True
+        assert _is_mergeable_list([{"A": 1}, {"B": 2}]) is True
+        assert _is_mergeable_list([]) is False
+        assert _is_mergeable_list([1, 2]) is False
+        assert _is_mergeable_list(["a", "b"]) is False
+        assert _is_mergeable_list([{"A": 1, "B": 2}]) is False
+        assert _is_mergeable_list([{"A": 1}, "b"]) is False
+
+    # -- opt-in behavior via deep_merge ---------------------------------------
+
+    def test_no_marker_replaces_list(self) -> None:
+        """Without __merge__, single-key dict lists are replaced (backward compat)."""
+        base = {"checks": [{"A": {"p": 1}}, {"B": {"p": 2}}]}
+        override = {"checks": [{"A": {"p": 99}}]}
+        result = deep_merge(base, override)
+        # B is gone — full replacement
+        assert result == {"checks": [{"A": {"p": 99}}]}
+
+    def test_merge_matching_check_params(self) -> None:
+        """Core case: merge params of a matching check."""
+        base = {"checks": [{"CheckA": {"param1": 1, "param2": 2}}]}
+        override = {"checks": [{"__merge__": True}, {"CheckA": {"param2": 99}}]}
+        result = deep_merge(base, override)
+        assert result == {"checks": [{"CheckA": {"param1": 1, "param2": 99}}]}
+
+    def test_append_new_check(self) -> None:
+        """New check in override is appended to end."""
+        base = {"checks": [{"CheckA": {"p": 1}}]}
+        override = {"checks": [{"__merge__": True}, {"CheckB": {"p": 2}}]}
+        result = deep_merge(base, override)
+        assert result == {"checks": [{"CheckA": {"p": 1}}, {"CheckB": {"p": 2}}]}
+
+    def test_remove_check_via_sentinel(self) -> None:
+        """Check removed when value is '__remove__'."""
+        base = {"checks": [{"CheckA": {"p": 1}}, {"CheckB": {"p": 2}}]}
+        override = {"checks": [{"__merge__": True}, {"CheckA": "__remove__"}]}
+        result = deep_merge(base, override)
+        assert result == {"checks": [{"CheckB": {"p": 2}}]}
+
+    def test_preserve_base_order_append_new(self) -> None:
+        """Base order preserved; new items appended at end."""
+        base = {"checks": [{"A": {}}, {"B": {}}, {"C": {}}]}
+        override = {"checks": [{"__merge__": True}, {"D": {"new": True}}, {"B": {"updated": True}}]}
+        result = deep_merge(base, override)
+        assert result == {
+            "checks": [
+                {"A": {}},
+                {"B": {"updated": True}},
+                {"C": {}},
+                {"D": {"new": True}},
+            ]
+        }
+
+    def test_regular_lists_still_replaced(self) -> None:
+        """Regular lists (scalars) use replace behavior even with no marker."""
+        base = {"items": [1, 2, 3]}
+        override = {"items": [4, 5]}
+        result = deep_merge(base, override)
+        assert result == {"items": [4, 5]}
+
+    def test_marker_with_non_mergeable_base_strips_marker(self) -> None:
+        """Marker present but base not mergeable: replace with stripped list."""
+        base = {"items": [{"A": {}}, "string"]}
+        override = {"items": [{"__merge__": True}, {"B": {}}]}
+        result = deep_merge(base, override)
+        assert result == {"items": [{"B": {}}]}
+
+    def test_marker_with_multi_key_dicts_strips_marker(self) -> None:
+        """Marker present but override items have >1 key: replace with stripped list."""
+        base = {"items": [{"A": 1}]}
+        override = {"items": [{"__merge__": True}, {"C": 3, "D": 4}]}
+        result = deep_merge(base, override)
+        assert result == {"items": [{"C": 3, "D": 4}]}
+
+    def test_empty_base_list_with_marker(self) -> None:
+        """Empty base list not mergeable; marker list replaces (stripped)."""
+        base = {"items": []}
+        override = {"items": [{"__merge__": True}, {"A": {}}]}
+        result = deep_merge(base, override)
+        assert result == {"items": [{"A": {}}]}
+
+    def test_empty_dict_values_merge(self) -> None:
+        """Checks with {} values merge correctly."""
+        base = {"checks": [{"CheckA": {}}]}
+        override = {"checks": [{"__merge__": True}, {"CheckA": {"new_param": True}}]}
+        result = deep_merge(base, override)
+        assert result == {"checks": [{"CheckA": {"new_param": True}}]}
+
+    def test_variant_names_stay_separate(self) -> None:
+        """Variant names like -1b and -3b are distinct keys."""
+        base = {
+            "checks": [
+                {"Workload-1b": {"gpu": 1}},
+                {"Workload-3b": {"gpu": 4}},
+            ]
+        }
+        override = {"checks": [{"__merge__": True}, {"Workload-1b": {"gpu": 2}}]}
+        result = deep_merge(base, override)
+        assert result == {
+            "checks": [
+                {"Workload-1b": {"gpu": 2}},
+                {"Workload-3b": {"gpu": 4}},
+            ]
+        }
+
+    def test_inputs_not_mutated(self) -> None:
+        """Original base and override are not modified."""
+        base = {"checks": [{"A": {"p": 1}}, {"B": {"p": 2}}]}
+        override = {"checks": [{"__merge__": True}, {"A": {"p": 99}}, {"C": {"p": 3}}]}
+        base_copy = copy.deepcopy(base)
+        override_copy = copy.deepcopy(override)
+        deep_merge(base, override)
+        assert base == base_copy
+        assert override == override_copy
+
+    def test_remove_nonexistent_check_is_noop(self) -> None:
+        """Removing a check that doesn't exist in base is a no-op."""
+        base = {"checks": [{"A": {"p": 1}}]}
+        override = {"checks": [{"__merge__": True}, {"Z": "__remove__"}]}
+        result = deep_merge(base, override)
+        assert result == {"checks": [{"A": {"p": 1}}]}

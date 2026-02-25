@@ -17,17 +17,104 @@ Later files override earlier ones. The --set flag can override individual values
 """
 
 import copy
+import logging
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+logger = logging.getLogger(__name__)
+
+
+_MERGE_MARKER = "__merge__"
+
+
+def _is_mergeable_list(lst: list[Any]) -> bool:
+    """Check if a list can be strategically merged.
+
+    Returns True if the list is non-empty and every item is a dict with exactly
+    one key. This pattern matches config lists like checks where each item is
+    ``{"CheckName": {params}}``.
+    """
+    if not lst:
+        return False
+    return all(isinstance(item, dict) and len(item) == 1 for item in lst)
+
+
+def _has_merge_marker(lst: list[Any]) -> bool:
+    """Check if a list contains the ``__merge__`` opt-in marker."""
+    return any(
+        isinstance(item, dict) and len(item) == 1 and _MERGE_MARKER in item
+        for item in lst
+    )
+
+
+def _strip_merge_marker(lst: list[Any]) -> list[Any]:
+    """Return a copy of the list with the ``__merge__`` marker removed."""
+    return [
+        item for item in lst
+        if not (isinstance(item, dict) and len(item) == 1 and _MERGE_MARKER in item)
+    ]
+
+
+def _merge_single_key_dict_lists(
+    base_list: list[dict[str, Any]], override_list: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Merge two lists of single-key dicts by matching on the dict key.
+
+    - Matching key: deep-merge the params (override wins on conflicts)
+    - New key in override: append to end
+    - Key not in override: keep unchanged
+    - Value set to ``"__remove__"``: delete the item
+
+    Preserves base list order; new items from override appended at end.
+    """
+    # Build an index of override items keyed by their single key
+    override_by_key: dict[str, Any] = {}
+    override_order: list[str] = []
+    for item in override_list:
+        key = next(iter(item))
+        override_by_key[key] = item[key]
+        override_order.append(key)
+
+    seen_keys: set[str] = set()
+    result: list[dict[str, Any]] = []
+
+    # Walk base list, merging or removing as needed
+    for item in base_list:
+        key = next(iter(item))
+        seen_keys.add(key)
+
+        if key in override_by_key:
+            override_value = override_by_key[key]
+            if override_value == "__remove__":
+                continue  # Drop this item
+            base_value = item[key]
+            if isinstance(base_value, dict) and isinstance(override_value, dict):
+                merged = deep_merge(base_value, override_value)
+            else:
+                merged = copy.deepcopy(override_value)
+            result.append({key: merged})
+        else:
+            result.append(copy.deepcopy(item))
+
+    # Append new items from override that weren't in base
+    for key in override_order:
+        if key not in seen_keys:
+            if override_by_key[key] == "__remove__":
+                continue  # Removing nonexistent key is a no-op
+            result.append({key: copy.deepcopy(override_by_key[key])})
+
+    return result
 
 
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     """Deep merge two dictionaries.
 
     Values from `override` take precedence. Nested dicts are merged recursively.
-    Lists are replaced entirely (not concatenated).
+    Lists are replaced entirely by default. When the override list contains a
+    ``{__merge__: true}`` marker and both lists are single-key dict lists, they
+    are merged by matching on the dict key instead.
 
     Args:
         base: Base dictionary
@@ -42,6 +129,26 @@ def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]
         if key in result and isinstance(result[key], dict) and isinstance(value, dict):
             # Recursively merge nested dicts
             result[key] = deep_merge(result[key], value)
+        elif (
+            key in result
+            and isinstance(result[key], list)
+            and isinstance(value, list)
+            and _has_merge_marker(value)
+        ):
+            # Opt-in strategic merge for lists of single-key dicts
+            override_items = _strip_merge_marker(value)
+            if _is_mergeable_list(result[key]) and _is_mergeable_list(override_items):
+                override_keys = [next(iter(item)) for item in override_items]
+                logger.debug(
+                    "Strategic merge on '%s': %d base items, %d override items %s",
+                    key, len(result[key]), len(override_items), override_keys,
+                )
+                result[key] = _merge_single_key_dict_lists(result[key], override_items)
+            else:
+                logger.debug(
+                    "Merge marker on '%s' but lists not mergeable, replacing", key,
+                )
+                result[key] = copy.deepcopy(override_items)
         else:
             # Override with new value (including None)
             result[key] = copy.deepcopy(value)

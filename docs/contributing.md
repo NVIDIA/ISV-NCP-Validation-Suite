@@ -162,6 +162,49 @@ ISV-NCP-Validation-Suite/
 └── docs/             # Documentation
 ```
 
+## Releasing
+
+### Version Bumping
+
+All packages share a single version. The canonical version lives in each package's `pyproject.toml` and is read at runtime via `importlib.metadata`.
+
+To bump the version, use the bump script:
+
+```bash
+# Bump using keywords (increments from the latest git tag)
+python scripts/bump-version.py patch          # 0.4.2 -> 0.4.3 (alias: fix)
+python scripts/bump-version.py minor          # 0.4.2 -> 0.5.0 (alias: feat)
+python scripts/bump-version.py major          # 0.4.2 -> 1.0.0
+
+# Or set an explicit version
+python scripts/bump-version.py 1.2.3
+
+# Pre-release versions are also supported
+python scripts/bump-version.py 1.0.0-rc.1
+```
+
+The script will:
+
+1. Show the current version (from the latest git tag) and the proposed new version
+2. Warn about major changes, skipped versions, or other anomalies
+3. Ask for confirmation before writing
+4. Update all 4 `pyproject.toml` files (root + isvctl + isvtest + isvreporter)
+5. Run `uv lock` to sync the lockfile
+
+### Creating a Release Tag
+
+After bumping, open a PR, review, and merge. Then create the tag:
+
+1. Go to **Actions** > **Create version tag** in GitHub
+2. Enter the version (e.g. `1.0.0`, without leading `v`)
+3. The workflow verifies all `pyproject.toml` files match, then creates and pushes `v1.0.0`
+
+You can also verify locally before triggering the workflow:
+
+```bash
+python scripts/bump-version.py --check 1.0.0
+```
+
 ## Advanced
 
 ### Minimal Installation

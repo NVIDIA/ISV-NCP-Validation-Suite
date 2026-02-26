@@ -92,8 +92,11 @@ class BaseWorkloadCheck(BaseValidation):
             # Timeout
             self.log.error(f"Job {job_name} timed out after {timeout}s")
             # Try to get debug info
-            self.run_command(f"{kubectl_base} describe job {job_name} -n {namespace}")
-            self.run_command(f"{kubectl_base} get pods -n {namespace} -l job-name={job_name}")
+            res_desc = self.run_command(f"{kubectl_base} describe job {job_name} -n {namespace}")
+            self.log.error(f"Job Description:\n{res_desc.stdout}")
+
+            res_pods = self.run_command(f"{kubectl_base} get pods -n {namespace} -l job-name={job_name}")
+            self.log.error(f"Job Pods:\n{res_pods.stdout}")
 
             # Cleanup and return failure
             self.run_command(f"{kubectl_base} delete job {job_name} -n {namespace} --wait=false")

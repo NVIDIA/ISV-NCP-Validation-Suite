@@ -86,7 +86,7 @@ tests:
         - K8sGpuStressWorkload:
             memory_gb: 1
             runtime: 30
-            timeout: 420
+            timeout: 300
         - K8sNimInferenceWorkload:
             timeout: 1500
         - K8sNimHelmWorkload-1b:

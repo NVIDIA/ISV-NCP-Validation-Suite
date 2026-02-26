@@ -1,6 +1,7 @@
-.PHONY: help pre-commit build test coverage clean lint format install
+.PHONY: help pre-commit build test coverage clean lint format install bump-patch bump-fix bump-minor bump-feat bump-major bump bump-check
 
 PACKAGES := isvctl isvreporter isvtest
+BUMP_SCRIPT := scripts/bump-version.py
 
 help: ## Show this help message
 	@echo "Available targets:"
@@ -79,6 +80,27 @@ install: ## Install all packages in development mode
 	uv sync
 	@echo ""
 	@echo "✅ Installation complete!"
+
+bump-patch: ## Bump patch version (e.g. 0.4.2 -> 0.4.3)
+	uv run python $(BUMP_SCRIPT) patch
+
+bump-fix: bump-patch ## Alias for bump-patch
+
+bump-minor: ## Bump minor version (e.g. 0.4.2 -> 0.5.0)
+	uv run python $(BUMP_SCRIPT) minor
+
+bump-feat: bump-minor ## Alias for bump-minor
+
+bump-major: ## Bump major version (e.g. 0.4.2 -> 1.0.0)
+	uv run python $(BUMP_SCRIPT) major
+
+bump: ## Bump to explicit version (e.g. make bump VERSION=1.2.3)
+	@if [ -z "$(VERSION)" ]; then echo "Usage: make bump VERSION=x.y.z"; exit 1; fi
+	uv run python $(BUMP_SCRIPT) $(VERSION)
+
+bump-check: ## Verify versions match (CI; e.g. make bump-check VERSION=1.2.3)
+	@if [ -z "$(VERSION)" ]; then echo "Usage: make bump-check VERSION=x.y.z"; exit 1; fi
+	uv run python $(BUMP_SCRIPT) --check $(VERSION)
 
 clean: ## Clean build artifacts and test outputs
 	@echo "Cleaning build artifacts and test outputs..."

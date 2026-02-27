@@ -9,7 +9,6 @@ and benefit from NVLink/NVSwitch to accelerate those jobs.
 """
 
 import os
-import re
 import tempfile
 import time
 from dataclasses import dataclass
@@ -34,13 +33,14 @@ from isvtest.core.slurm import (
     parse_sbatch_job_id,
 )
 from isvtest.core.workload import BaseWorkloadCheck
+from isvtest.workloads.nccl_common import parse_nccl_output
 
 MANIFESTS_DIR = Path(__file__).parent / "manifests" / "slurm"
 
 
 @dataclass
-class NcclResult:
-    """Result of NCCL multi-node test."""
+class SlurmNcclResult:
+    """Result of a Slurm NCCL multi-node job (job tracking + parsed metrics)."""
 
     success: bool
     job_id: str = ""
@@ -264,7 +264,7 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
             },
         )
 
-    def _submit_and_wait(self, script: str, timeout: int) -> NcclResult:
+    def _submit_and_wait(self, script: str, timeout: int) -> SlurmNcclResult:
         """Submit sbatch script and wait for completion."""
         # Write script to temp file
         with tempfile.NamedTemporaryFile(mode="w", suffix=".sh", delete=False, prefix="isvtest_nccl_") as f:
@@ -278,14 +278,14 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
             submit_result = self.run_command(f"sbatch {script_path}", timeout=30)
 
             if submit_result.exit_code != 0:
-                return NcclResult(
+                return SlurmNcclResult(
                     success=False,
                     error=f"sbatch failed (exit {submit_result.exit_code}): {submit_result.stderr}",
                 )
 
             job_id = parse_sbatch_job_id(submit_result.stdout)
             if not job_id:
-                return NcclResult(
+                return SlurmNcclResult(
                     success=False,
                     error=f"Could not parse job ID from: {submit_result.stdout}",
                 )
@@ -300,7 +300,7 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
             except OSError:
                 pass
 
-    def _wait_for_job(self, job_id: str, timeout: int) -> NcclResult:
+    def _wait_for_job(self, job_id: str, timeout: int) -> SlurmNcclResult:
         """Wait for job completion and collect results."""
         start_time = time.time()
         end_time = start_time + timeout
@@ -325,7 +325,7 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
                 output = f"{stdout}\n{stderr}".strip()
 
                 if state != "COMPLETED" or exit_code != 0:
-                    return NcclResult(
+                    return SlurmNcclResult(
                         success=False,
                         job_id=job_id,
                         error=f"Job {state} with exit code {exit_code}",
@@ -341,58 +341,36 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
         self.log.warning(f"Job {job_id} timed out after {timeout}s, cancelling...")
         self.run_command(f"scancel {job_id}", timeout=30)
 
-        return NcclResult(
+        return SlurmNcclResult(
             success=False,
             job_id=job_id,
             error=f"Job timed out after {timeout}s",
         )
 
-    def _parse_nccl_output(self, job_id: str, output: str) -> NcclResult:
+    def _parse_nccl_output(self, job_id: str, output: str) -> SlurmNcclResult:
         """Parse NCCL test output for bandwidth and errors."""
-        result = NcclResult(success=True, job_id=job_id, output=output)
+        parsed = parse_nccl_output(output)
 
-        # Extract average bus bandwidth
-        # Format: "# Avg bus bandwidth    : 123.45"
-        avg_bw_match = re.search(r"#\s*Avg bus bandwidth\s*:\s*([\d.]+)", output)
-        if avg_bw_match:
-            result.avg_bus_bw_gbps = float(avg_bw_match.group(1))
-            self.log.info(f"Average Bus Bandwidth: {result.avg_bus_bw_gbps:.2f} GB/s")
+        result = SlurmNcclResult(
+            success=parsed.success,
+            job_id=job_id,
+            avg_bus_bw_gbps=parsed.avg_bus_bw_gbps,
+            max_bus_bw_gbps=parsed.max_bus_bw_gbps,
+            out_of_bounds=parsed.out_of_bounds,
+            error=parsed.error,
+            output=output,
+        )
 
-        # Extract max bus bandwidth (from the data table, last non-empty algbw value)
-        # Look for lines like: "  4294967296    1073741824    float     sum    123.45    456.78"
-        bw_matches = re.findall(r"^\s+\d+\s+\d+\s+\w+\s+\w+\s+[\d.]+\s+([\d.]+)", output, re.MULTILINE)
-        if bw_matches:
-            result.max_bus_bw_gbps = max(float(bw) for bw in bw_matches)
-            self.log.info(f"Max Bus Bandwidth: {result.max_bus_bw_gbps:.2f} GB/s")
-
-        # Check for out of bounds errors (data corruption)
-        # Format: "# Out of bounds values : 0 OK"
-        oob_match = re.search(r"#\s*Out of bounds values\s*:\s*(\d+)", output)
-        if oob_match:
-            result.out_of_bounds = int(oob_match.group(1))
-            if result.out_of_bounds > 0:
-                result.success = False
-                result.error = f"Data corruption detected: {result.out_of_bounds} out of bounds values"
-                self.log.error(result.error)
-
-        # Extract node count from output
-        nodes_match = re.search(r"Nodes:\s*(\d+)", output)
-        if nodes_match:
-            result.nodes_used = int(nodes_match.group(1))
-
-        gpus_match = re.search(r"Total GPUs:\s*(\d+)", output)
-        if gpus_match:
-            result.total_gpus = int(gpus_match.group(1))
-
-        # Validate we got bandwidth results
-        if result.avg_bus_bw_gbps == 0 and result.max_bus_bw_gbps == 0:
-            result.success = False
-            result.error = "Could not parse bandwidth results from NCCL output"
-            self.log.warning(f"NCCL output parsing failed. Raw output:\n{output[:2000]}")
+        if parsed.avg_bus_bw_gbps > 0:
+            self.log.info(f"Average Bus Bandwidth: {parsed.avg_bus_bw_gbps:.2f} GB/s")
+        if parsed.max_bus_bw_gbps > 0:
+            self.log.info(f"Max Bus Bandwidth: {parsed.max_bus_bw_gbps:.2f} GB/s")
+        if not parsed.success:
+            self.log.warning(f"NCCL parse issue: {parsed.error}")
 
         return result
 
-    def _report_result(self, result: NcclResult, min_bus_bw: float, nodes: int, total_gpus: int) -> None:
+    def _report_result(self, result: SlurmNcclResult, min_bus_bw: float, nodes: int, total_gpus: int) -> None:
         """Report test results."""
         if not result.success:
             msg = "NCCL multi-node test failed"

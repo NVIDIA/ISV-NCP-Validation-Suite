@@ -1,4 +1,3 @@
-import re
 import uuid
 from pathlib import Path
 from typing import ClassVar
@@ -11,6 +10,7 @@ from isvtest.config.settings import (
 )
 from isvtest.core.k8s import get_gpu_nodes, get_node_gpu_count
 from isvtest.core.workload import BaseWorkloadCheck
+from isvtest.workloads.nccl_common import parse_nccl_output
 
 
 class K8sNcclWorkload(BaseWorkloadCheck):
@@ -80,29 +80,19 @@ class K8sNcclWorkload(BaseWorkloadCheck):
             self.set_failed(f"NCCL test failed: {result.stderr}")
             return
 
-        logs = result.stdout
+        nccl = parse_nccl_output(result.stdout)
 
-        # Parse NCCL results
-        avg_bw_match = re.search(r"Avg bus bandwidth\s*:\s*([\d.]+)", logs)
-        oob_match = re.search(r"Out of bounds values\s*:\s*(\d+)", logs)
+        if not nccl.success:
+            self.set_failed(nccl.error, output=nccl.output)
+            return
 
-        output_msg = ""
-        if avg_bw_match:
-            avg_bus_bw = float(avg_bw_match.group(1))
-            output_msg += f"Average Bus Bandwidth: {avg_bus_bw:.2f} GB/s\n"
+        if min_bus_bw > 0 and nccl.avg_bus_bw_gbps < min_bus_bw:
+            self.set_failed(f"Bus bandwidth {nccl.avg_bus_bw_gbps:.2f} GB/s below minimum {min_bus_bw} GB/s")
+            return
 
-            if min_bus_bw > 0:
-                if avg_bus_bw < min_bus_bw:
-                    self.set_failed(f"Bus bandwidth {avg_bus_bw:.2f} GB/s below minimum {min_bus_bw} GB/s")
-                    return
-        else:
-            output_msg += "Warning: Could not parse average bus bandwidth from logs\n"
+        msg = "NCCL allreduce test passed\n"
+        msg += f"Average Bus Bandwidth: {nccl.avg_bus_bw_gbps:.2f} GB/s\n"
+        if nccl.out_of_bounds >= 0:
+            msg += f"Out of Bounds Values: {nccl.out_of_bounds} (Pass)\n"
 
-        if oob_match:
-            oob_values = int(oob_match.group(1))
-            if oob_values != 0:
-                self.set_failed(f"NCCL test found {oob_values} out of bounds values (data corruption)")
-                return
-            output_msg += f"Out of Bounds Values: {oob_values} (Pass)\n"
-
-        self.set_passed(f"NCCL allreduce test passed\n{output_msg}")
+        self.set_passed(msg)

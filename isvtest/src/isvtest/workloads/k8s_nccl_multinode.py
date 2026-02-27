@@ -8,7 +8,6 @@ Requires the Kubeflow MPI Operator (kubeflow.org/v2beta1) to be installed
 in the cluster.
 """
 
-import re
 import subprocess
 import time
 import uuid
@@ -32,6 +31,7 @@ from isvtest.core.k8s import (
     wait_for_pod_completion,
 )
 from isvtest.core.workload import BaseWorkloadCheck
+from isvtest.workloads.nccl_common import parse_nccl_output
 
 _MPIJOB_LABEL_JOB_NAME = "training.kubeflow.org/job-name"
 _MPIJOB_LABEL_REPLICA_TYPE = "training.kubeflow.org/replica-type"
@@ -219,7 +219,7 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
             self.set_failed(f"MPIJob {job_name} failed (launcher phase: {phase})", output=logs)
             return
 
-        self._parse_and_report(logs, min_bus_bw, node_count, total_gpus, job_name)
+        self._check_and_report(logs, min_bus_bw, node_count, total_gpus, job_name)
 
     def _wait_for_launcher_pod(self, job_name: str, namespace: str, timeout: int = 120) -> str | None:
         """Wait for the MPIJob launcher pod to appear and return its name."""
@@ -254,7 +254,7 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
         if result.returncode == 0:
             self.log.error(f"MPIJob description:\n{result.stdout}")
 
-    def _parse_and_report(
+    def _check_and_report(
         self,
         logs: str,
         min_bus_bw: float,
@@ -262,41 +262,28 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
         total_gpus: int,
         job_name: str,
     ) -> None:
-        """Parse NCCL output and report results."""
-        avg_bw_match = re.search(r"Avg bus bandwidth\s*:\s*([\d.]+)", logs)
-        oob_match = re.search(r"Out of bounds values\s*:\s*(\d+)", logs)
+        """Parse NCCL output, check thresholds, and report results."""
+        nccl = parse_nccl_output(logs)
 
-        avg_bus_bw = float(avg_bw_match.group(1)) if avg_bw_match else 0.0
-        oob_values = int(oob_match.group(1)) if oob_match else -1
+        if not nccl.success:
+            self.set_failed(nccl.error, output=nccl.output)
+            return
 
-        if oob_match and oob_values > 0:
+        if min_bus_bw > 0 and nccl.avg_bus_bw_gbps < min_bus_bw:
             self.set_failed(
-                f"NCCL test found {oob_values} out of bounds values (data corruption)",
+                f"Bus bandwidth {nccl.avg_bus_bw_gbps:.2f} GB/s below minimum threshold {min_bus_bw} GB/s",
                 output=logs,
             )
             return
 
-        if avg_bus_bw == 0:
-            self.set_failed("Could not parse average bus bandwidth from NCCL output", output=logs[:2000])
-            return
-
-        if min_bus_bw > 0 and avg_bus_bw < min_bus_bw:
-            self.set_failed(
-                f"Bus bandwidth {avg_bus_bw:.2f} GB/s below minimum threshold {min_bus_bw} GB/s",
-                output=logs,
-            )
-            return
-
-        bw_matches = re.findall(r"^\s+\d+\s+\d+\s+\w+\s+\w+\s+[\d.]+\s+([\d.]+)", logs, re.MULTILINE)
-        max_bus_bw = max(float(bw) for bw in bw_matches) if bw_matches else 0.0
-
+        oob_str = str(nccl.out_of_bounds) if nccl.out_of_bounds >= 0 else "N/A"
         msg = (
             f"NCCL multi-node test passed (MPIJob {job_name})\n"
             f"  Nodes: {node_count}\n"
             f"  Total GPUs: {total_gpus}\n"
-            f"  Average Bus Bandwidth: {avg_bus_bw:.2f} GB/s\n"
-            f"  Max Bus Bandwidth: {max_bus_bw:.2f} GB/s\n"
-            f"  Out of Bounds: {oob_values if oob_values >= 0 else 'N/A'}"
+            f"  Average Bus Bandwidth: {nccl.avg_bus_bw_gbps:.2f} GB/s\n"
+            f"  Max Bus Bandwidth: {nccl.max_bus_bw_gbps:.2f} GB/s\n"
+            f"  Out of Bounds: {oob_str}"
         )
         if min_bus_bw > 0:
             msg += f"\n  Minimum Required: {min_bus_bw} GB/s"

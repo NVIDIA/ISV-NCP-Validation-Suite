@@ -57,6 +57,8 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
         gpus_per_node (int): GPUs per node (default: auto-detect, fallback 8)
         min_bus_bw_gbps (float): Minimum expected bus bandwidth in GB/s (default: 0 = no check)
         timeout (int): Job timeout in seconds (default: 900 via env)
+        startup_timeout (int): Seconds to wait for launcher pod to appear (default: 300).
+            Covers image pulls on workers, SSH key setup, and StatefulSet creation.
         image (str): Container image (default: nvcr.io/nvidia/hpc-benchmarks:25.04)
     """
 
@@ -199,9 +201,11 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
         total_gpus: int,
     ) -> None:
         """Wait for MPIJob launcher completion, collect logs, and report."""
-        launcher_pod = self._wait_for_launcher_pod(job_name, namespace, timeout=120)
+        startup_timeout = int(self.config.get("startup_timeout", 300))
+        launcher_pod = self._wait_for_launcher_pod(job_name, namespace, timeout=startup_timeout)
         if not launcher_pod:
-            self.set_failed(f"Launcher pod for MPIJob {job_name} not found within 120s")
+            self._dump_debug_info(job_name, namespace)
+            self.set_failed(f"Launcher pod for MPIJob {job_name} not found within {startup_timeout}s")
             return
 
         self.log.info(f"Launcher pod: {launcher_pod}, waiting for completion (timeout: {timeout}s)...")

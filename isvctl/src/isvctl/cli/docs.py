@@ -5,6 +5,7 @@ from collections import defaultdict
 from pathlib import Path
 from textwrap import dedent
 
+import isvtest.validations as validations_pkg
 import typer
 from isvtest.core.discovery import discover_tests
 from rich.console import Console
@@ -140,14 +141,14 @@ def tests(
         isvctl docs tests --flat                   # Flat alphabetical list
         isvctl docs tests -i SshGpuStressCheck     # Detailed info for a test
     """
-    import isvtest.validations as validations_pkg
-
     pkg_path = Path(validations_pkg.__file__).parent
     all_classes = list(discover_tests(pkg_path, "isvtest.validations"))
 
     if not all_classes:
         console.print("[yellow]No validation tests discovered.[/yellow]")
         raise typer.Exit(1)
+
+    _warn_duplicates(all_classes)
 
     if info:
         _print_test_info(all_classes, info)
@@ -159,15 +160,24 @@ def tests(
         _print_grouped(all_classes, marker)
 
 
+def _warn_duplicates(classes: list[type]) -> None:
+    """Warn if duplicate test class names are found."""
+    seen: dict[str, int] = {}
+    for cls in classes:
+        seen[cls.__name__] = seen.get(cls.__name__, 0) + 1
+    dupes = [name for name, count in seen.items() if count > 1]
+    if dupes:
+        console.print(f"[yellow]Warning: Duplicate test class names found: {', '.join(dupes)}[/yellow]")
+
+
 def _print_test_info(classes: list[type], name: str) -> None:
     """Print detailed info for a single test class."""
-    # Case-insensitive lookup
-    by_name = {cls.__name__.lower(): cls for cls in classes}
-    cls = by_name.get(name.lower())
+    by_name = {cls.__name__: cls for cls in classes}
+    cls = by_name.get(name)
 
     if cls is None:
         console.print(f"[red]Test not found:[/red] {name}")
-        close = [c.__name__ for c in classes if name.lower() in c.__name__.lower()]
+        close = [c.__name__ for c in classes if name in c.__name__]
         if close:
             console.print(f"[dim]Did you mean: {', '.join(close)}?[/dim]")
         raise typer.Exit(1)

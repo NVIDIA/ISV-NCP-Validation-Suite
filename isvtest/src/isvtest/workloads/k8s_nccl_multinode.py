@@ -28,7 +28,6 @@ from isvtest.core.k8s import (
     get_node_gpu_count,
     get_pod_logs,
     run_kubectl,
-    wait_for_pod_completion,
 )
 from isvtest.core.workload import BaseWorkloadCheck
 from isvtest.workloads.nccl_common import parse_nccl_output
@@ -210,24 +209,34 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
 
         self.log.info(f"Launcher pod: {launcher_pod}, waiting for completion (timeout: {timeout}s)...")
 
-        completed, phase = wait_for_pod_completion(launcher_pod, namespace, timeout=timeout)
+        completed, phase = self._wait_for_mpijob_completion(launcher_pod, job_name, namespace, timeout)
+
+        # Collect logs before any cleanup -- pod may still exist with cleanPodPolicy: None
+        logs = get_pod_logs(launcher_pod, namespace, container="launcher", timeout=60)
 
         if not completed:
             self._dump_debug_info(job_name, namespace)
-            self.set_failed(f"MPIJob {job_name} timed out after {timeout}s (launcher phase: {phase})")
+            self.set_failed(
+                f"MPIJob {job_name} timed out after {timeout}s (launcher phase: {phase})",
+                output=logs,
+            )
             return
 
-        logs = get_pod_logs(launcher_pod, namespace, container="launcher", timeout=60)
-
         if phase != "Succeeded":
+            self._dump_debug_info(job_name, namespace)
             self.set_failed(f"MPIJob {job_name} failed (launcher phase: {phase})", output=logs)
             return
 
         self._check_and_report(logs, min_bus_bw, node_count, total_gpus, job_name)
 
     def _wait_for_launcher_pod(self, job_name: str, namespace: str, timeout: int = 120) -> str | None:
-        """Wait for the MPIJob launcher pod to appear and return its name."""
-        label_selector = f"{_MPIJOB_LABEL_JOB_NAME}={job_name},{_MPIJOB_LABEL_REPLICA_TYPE}=launcher"
+        """Wait for the MPIJob launcher pod to appear and return its name.
+
+        Searches by job-name label, then identifies the launcher pod by name
+        suffix (works across MPI Operator versions regardless of label casing).
+        """
+        label_selector = f"{_MPIJOB_LABEL_JOB_NAME}={job_name}"
+        launcher_prefix = f"{job_name}-launcher-"
         start = time.time()
         while time.time() - start < timeout:
             result = run_kubectl(
@@ -239,20 +248,179 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
                     "-l",
                     label_selector,
                     "-o",
-                    "jsonpath={.items[0].metadata.name}",
+                    "jsonpath={range .items[*]}{.metadata.name}{'\\n'}{end}",
                 ]
             )
             if result.returncode == 0 and result.stdout.strip():
-                return result.stdout.strip()
+                for pod_name in result.stdout.strip().split("\n"):
+                    if pod_name.startswith(launcher_prefix):
+                        return pod_name
             time.sleep(5)
         return None
 
+    def _wait_for_mpijob_completion(
+        self,
+        launcher_pod: str,
+        job_name: str,
+        namespace: str,
+        timeout: int,
+    ) -> tuple[bool, str]:
+        """Wait for MPIJob completion, checking launcher pod and MPIJob conditions.
+
+        Checks three signals each iteration:
+        1. Launcher pod phase (Succeeded/Failed)
+        2. MPIJob status conditions (catches BackoffLimitExceeded, etc.)
+        3. Worker pod health (catches StartError, ImagePullBackOff)
+
+        Returns:
+            (completed, phase) tuple matching wait_for_pod_completion semantics.
+        """
+        label_selector = f"{_MPIJOB_LABEL_JOB_NAME}={job_name}"
+        worker_prefix = f"{job_name}-worker-"
+        start = time.time()
+        last_phase = "Unknown"
+
+        while time.time() - start < timeout:
+            # 1. Check launcher pod phase and container state
+            result = run_kubectl(
+                [
+                    "get",
+                    "pod",
+                    launcher_pod,
+                    "-n",
+                    namespace,
+                    "-o",
+                    "jsonpath={.status.phase}{'\\t'}"
+                    "{.status.containerStatuses[0].state}{'\\t'}"
+                    "{.status.containerStatuses[0].restartCount}",
+                ]
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                parts = result.stdout.strip().split("\t")
+                last_phase = parts[0] if parts else "Unknown"
+                container_state = parts[1] if len(parts) > 1 else ""
+                restart_count = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
+
+                if last_phase in ("Succeeded", "Failed"):
+                    return True, last_phase
+
+                if "CrashLoopBackOff" in container_state or restart_count >= 3:
+                    self.log.error(f"Launcher pod crash-looping (restarts: {restart_count})")
+                    return True, "Failed"
+            elif result.returncode != 0:
+                # Pod may have been deleted -- check MPIJob directly
+                pass
+
+            # 2. Check MPIJob status conditions directly
+            mpijob_failed = self._check_mpijob_conditions(job_name, namespace)
+            if mpijob_failed:
+                self.log.error(f"MPIJob failed: {mpijob_failed}")
+                return True, "Failed"
+
+            # 3. Check worker pods for unrecoverable errors
+            worker_error = self._check_worker_health(label_selector, worker_prefix, namespace)
+            if worker_error:
+                self.log.error(f"Worker failure detected: {worker_error}")
+                self._dump_debug_info(job_name, namespace)
+                return True, "Failed"
+
+            time.sleep(5)
+
+        return False, last_phase
+
+    def _check_mpijob_conditions(self, job_name: str, namespace: str) -> str | None:
+        """Check MPIJob status conditions for terminal failure.
+
+        Returns:
+            Error message if MPIJob has failed, None otherwise.
+        """
+        result = run_kubectl(
+            [
+                "get",
+                "mpijob",
+                job_name,
+                "-n",
+                namespace,
+                "-o",
+                "jsonpath={range .status.conditions[*]}"
+                "{.type}{'\\t'}{.status}{'\\t'}{.reason}{'\\t'}{.message}{'\\n'}{end}",
+            ]
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return None
+
+        for line in result.stdout.strip().split("\n"):
+            parts = line.split("\t")
+            if len(parts) < 3:
+                continue
+            cond_type, status, reason = parts[0], parts[1], parts[2]
+            message = parts[3] if len(parts) > 3 else ""
+            if cond_type == "Failed" and status == "True":
+                return f"{reason}: {message}"
+
+        return None
+
+    def _check_worker_health(self, label_selector: str, worker_prefix: str, namespace: str) -> str | None:
+        """Check if any worker pods are in an unrecoverable error state.
+
+        Returns:
+            Error description if workers have failed, None if healthy or pending.
+        """
+        result = run_kubectl(
+            [
+                "get",
+                "pods",
+                "-n",
+                namespace,
+                "-l",
+                label_selector,
+                "-o",
+                "jsonpath={range .items[*]}"
+                "{.metadata.name}{'\\t'}{.status.phase}{'\\t'}"
+                "{.status.containerStatuses[0].state}{'\\n'}{end}",
+            ]
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return None
+
+        failed_workers: list[str] = []
+        for line in result.stdout.strip().split("\n"):
+            parts = line.split("\t")
+            if len(parts) < 2:
+                continue
+            pod_name, phase = parts[0], parts[1]
+            if not pod_name.startswith(worker_prefix):
+                continue
+            state_info = parts[2] if len(parts) > 2 else ""
+
+            # StartError and ImagePullBackOff are unrecoverable without intervention
+            if phase == "Failed" or "StartError" in state_info or "ImagePullBackOff" in state_info:
+                failed_workers.append(f"{pod_name}: phase={phase} {state_info}")
+
+        if failed_workers:
+            return "Worker pods failed:\n  " + "\n  ".join(failed_workers)
+        return None
+
     def _dump_debug_info(self, job_name: str, namespace: str) -> None:
-        """Log debug info on timeout to help troubleshoot."""
+        """Log debug info on failure to help troubleshoot."""
         label_selector = f"{_MPIJOB_LABEL_JOB_NAME}={job_name}"
         result = run_kubectl(["get", "pods", "-n", namespace, "-l", label_selector, "-o", "wide"])
         if result.returncode == 0:
             self.log.error(f"MPIJob pods:\n{result.stdout}")
+
+        # Get worker pod events/describe for StartError diagnosis
+        result = run_kubectl(
+            [
+                "describe",
+                "pods",
+                "-n",
+                namespace,
+                "-l",
+                label_selector,
+            ]
+        )
+        if result.returncode == 0:
+            self.log.error(f"Pod details:\n{result.stdout}")
 
         result = run_kubectl(["describe", "mpijob", job_name, "-n", namespace])
         if result.returncode == 0:

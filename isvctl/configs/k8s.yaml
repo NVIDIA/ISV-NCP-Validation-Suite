@@ -86,7 +86,7 @@ tests:
         - K8sNcclMultiNodeWorkload:
             nodes: 2
             min_bus_bw_gbps: 100
-            timeout: 900
+            timeout: 600
         - K8sGpuStressWorkload:
             memory_gb: 1
             runtime: 30

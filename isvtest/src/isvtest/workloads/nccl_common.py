@@ -11,7 +11,8 @@ from dataclasses import dataclass
 # The "#" prefix is optional -- present in some container output, absent in others.
 _RE_AVG_BUS_BW = re.compile(r"#?\s*Avg bus bandwidth\s*:\s*([\d.]+)")
 _RE_OUT_OF_BOUNDS = re.compile(r"#?\s*Out of bounds values\s*:\s*(\d+)")
-_RE_MAX_BUS_BW = re.compile(r"^\s+\d+\s+\d+\s+\w+\s+\w+\s+[\d.]+\s+([\d.]+)", re.MULTILINE)
+_NCCL_DATA_TYPES = {"float", "half", "double", "int8", "int32", "uint8", "uint32", "int64", "uint64", "bfloat16"}
+_BUSBW_COL = 7
 
 
 @dataclass
@@ -24,6 +25,24 @@ class NcclResult:
     out_of_bounds: int = -1
     error: str = ""
     output: str = ""
+
+
+def _parse_max_bus_bw(output: str) -> float:
+    """Extract max bus bandwidth from NCCL data table lines.
+
+    Data lines have the format (column indices):
+      0:size 1:count 2:type 3:redop 4:root 5:time 6:algbw 7:busbw 8:#wrong ...
+    Identified by having a known NCCL data type (e.g. "float") in column 2.
+    """
+    max_bw = 0.0
+    for line in output.splitlines():
+        fields = line.split()
+        if len(fields) >= _BUSBW_COL + 1 and fields[2] in _NCCL_DATA_TYPES:
+            try:
+                max_bw = max(max_bw, float(fields[_BUSBW_COL]))
+            except (ValueError, IndexError):
+                pass
+    return max_bw
 
 
 def parse_nccl_output(output: str) -> NcclResult:
@@ -47,9 +66,7 @@ def parse_nccl_output(output: str) -> NcclResult:
     if avg_match:
         result.avg_bus_bw_gbps = float(avg_match.group(1))
 
-    bw_matches = _RE_MAX_BUS_BW.findall(output)
-    if bw_matches:
-        result.max_bus_bw_gbps = max(float(bw) for bw in bw_matches)
+    result.max_bus_bw_gbps = _parse_max_bus_bw(output)
 
     oob_match = _RE_OUT_OF_BOUNDS.search(output)
     if oob_match:

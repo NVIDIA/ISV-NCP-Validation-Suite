@@ -6,6 +6,10 @@ fabric (inter-node).
 
 Requires the Kubeflow MPI Operator (kubeflow.org/v2beta1) to be installed
 in the cluster.
+
+When the NVIDIA DRA driver is available (ComputeDomain CRD registered),
+automatically creates a ComputeDomain to enable Multi-Node NVLink (MNNVL)
+via IMEX channels for full NVLink bandwidth across nodes.
 """
 
 import subprocess
@@ -35,6 +39,20 @@ from isvtest.workloads.nccl_common import parse_nccl_output
 _MPIJOB_LABEL_JOB_NAME = "training.kubeflow.org/job-name"
 _MPIJOB_LABEL_REPLICA_TYPE = "training.kubeflow.org/replica-type"
 
+_COMPUTE_DOMAIN_TEMPLATE = """\
+---
+apiVersion: resource.nvidia.com/v1beta1
+kind: ComputeDomain
+metadata:
+  name: {cd_name}
+spec:
+  numNodes: {num_nodes}
+  channel:
+    resourceClaimTemplate:
+      name: {cd_channel_name}
+---
+"""
+
 
 class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
     """Run NCCL AllReduce test across multiple Kubernetes nodes via MPIJob.
@@ -59,6 +77,8 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
         startup_timeout (int): Seconds to wait for launcher pod to appear (default: 300).
             Covers image pulls on workers, SSH key setup, and StatefulSet creation.
         image (str): Container image (default: nvcr.io/nvidia/hpc-benchmarks:25.04)
+        use_compute_domain (str): "auto" (default) detects DRA driver availability,
+            "true" to require ComputeDomain/MNNVL, "false" to skip.
     """
 
     description: ClassVar[str] = "Run NCCL AllReduce test across multiple K8s nodes (MPIJob)"
@@ -93,14 +113,19 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
             self.set_passed(f"Skipped: Multi-node NCCL test requires at least 2 GPU nodes, found {len(gpu_nodes)}")
             return
 
+        use_cd = self._resolve_compute_domain_mode()
+
         node_count, gpus_per_node = self._resolve_topology(gpu_nodes)
         total_gpus = node_count * gpus_per_node
         job_name = f"nccl-allreduce-mn-{uuid.uuid4().hex[:8]}"
+        cd_name = f"{job_name}-cd"
+        cd_channel_name = f"{job_name}-cd-channel"
 
         self.log.info(
             f"Starting multi-node NCCL test: {node_count} nodes x {gpus_per_node} GPUs = {total_gpus} total GPUs"
         )
         self.log.info(f"Image: {image}, Min BW: {min_bus_bw} GB/s, Timeout: {job_timeout}s")
+        self.log.info(f"ComputeDomain (MNNVL/IMEX): {'enabled' if use_cd else 'disabled'}")
 
         manifest_path = Path(__file__).parent / "manifests" / "k8s" / "nccl_allreduce_mpijob.yaml"
         if not manifest_path.exists():
@@ -109,6 +134,11 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
 
         yaml_content = manifest_path.read_text()
         yaml_content = self._patch_manifest(yaml_content, job_name, node_count, gpus_per_node, total_gpus, image)
+
+        if use_cd:
+            yaml_content = self._add_compute_domain(
+                yaml_content, job_name, cd_name, cd_channel_name, node_count, gpus_per_node
+            )
 
         self.log.info(f"Deploying MPIJob {job_name} in namespace {namespace}...")
         try:
@@ -131,6 +161,9 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
         finally:
             self.log.info(f"Cleaning up MPIJob {job_name}...")
             run_kubectl(["delete", "mpijob", job_name, "-n", namespace, "--ignore-not-found=true"])
+            if use_cd:
+                self.log.info(f"Cleaning up ComputeDomain {cd_name}...")
+                run_kubectl(["delete", "computedomain", cd_name, "-n", namespace, "--ignore-not-found=true"])
 
     def _check_mpi_operator(self) -> bool:
         """Check if the Kubeflow MPI Operator CRD is installed."""
@@ -189,6 +222,102 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
         if image != "nvcr.io/nvidia/hpc-benchmarks:25.04":
             yaml_content = yaml_content.replace("nvcr.io/nvidia/hpc-benchmarks:25.04", image)
         return yaml_content
+
+    def _resolve_compute_domain_mode(self) -> bool:
+        """Determine whether to use ComputeDomain for MNNVL/IMEX.
+
+        Checks the ``use_compute_domain`` config option:
+        - ``"auto"`` (default): enables ComputeDomain if the DRA driver CRD is present.
+        - ``"true"``: always enable (fails if CRD is missing).
+        - ``"false"``: never enable.
+
+        Returns:
+            True if ComputeDomain should be used.
+        """
+        mode = str(self.config.get("use_compute_domain", "auto")).lower()
+
+        if mode == "false":
+            return False
+
+        has_cd = self._has_compute_domain_support()
+
+        if mode == "true" and not has_cd:
+            self.log.warning(
+                "use_compute_domain=true but ComputeDomain CRD not found. "
+                "Install the NVIDIA DRA driver for GPUs to enable MNNVL."
+            )
+
+        if mode == "auto":
+            if has_cd:
+                self.log.info("ComputeDomain CRD detected -- enabling MNNVL/IMEX for NVLink fabric access")
+            return has_cd
+
+        return has_cd
+
+    def _has_compute_domain_support(self) -> bool:
+        """Check if the NVIDIA DRA driver ComputeDomain CRD is registered."""
+        result = run_kubectl(["api-resources", "--api-group=resource.nvidia.com", "-o", "name"], timeout=10)
+        if result.returncode != 0:
+            return False
+        return "computedomains.resource.nvidia.com" in result.stdout
+
+    def _add_compute_domain(
+        self,
+        yaml_content: str,
+        job_name: str,
+        cd_name: str,
+        cd_channel_name: str,
+        node_count: int,
+        gpus_per_node: int,
+    ) -> str:
+        """Prepend a ComputeDomain resource and add DRA claims to the MPIJob.
+
+        Modifies the manifest to:
+        1. Prepend a ComputeDomain resource for IMEX channel allocation
+        2. Add resourceClaims to the Worker pod spec
+        3. Add resource claims to the Worker container
+        4. Add podAffinity with nvidia.com/gpu.clique topology key
+        """
+        cd_yaml = _COMPUTE_DOMAIN_TEMPLATE.format(
+            cd_name=cd_name,
+            num_nodes=node_count,
+            cd_channel_name=cd_channel_name,
+        )
+
+        # Add resource claim reference to the worker container's resources
+        gpu_limit_line = f"nvidia.com/gpu: {gpus_per_node} # overridden at runtime by K8sNcclMultiNodeWorkload"
+        gpu_limit_with_claims = (
+            f"nvidia.com/gpu: {gpus_per_node}\n                claims:\n                  - name: cd-channel"
+        )
+        yaml_content = yaml_content.replace(gpu_limit_line, gpu_limit_with_claims)
+
+        # Add resourceClaims at the Worker pod spec level (after volumes)
+        yaml_content = yaml_content.replace(
+            "                sizeLimit: 8Gi",
+            "                sizeLimit: 8Gi\n"
+            "          resourceClaims:\n"
+            "            - name: cd-channel\n"
+            f"              resourceClaimTemplateName: {cd_channel_name}",
+        )
+
+        # Add podAffinity for GPU clique topology so workers land on same NVLink domain
+        yaml_content = yaml_content.replace(
+            '          nodeSelector:\n            nvidia.com/gpu.present: "true"',
+            "          nodeSelector:\n"
+            '            nvidia.com/gpu.present: "true"\n'
+            "          affinity:\n"
+            "            podAffinity:\n"
+            "              requiredDuringSchedulingIgnoredDuringExecution:\n"
+            "              - labelSelector:\n"
+            "                  matchExpressions:\n"
+            f"                  - key: {_MPIJOB_LABEL_JOB_NAME}\n"
+            "                    operator: In\n"
+            "                    values:\n"
+            f"                    - {job_name}\n"
+            "                topologyKey: nvidia.com/gpu.clique",
+        )
+
+        return cd_yaml + yaml_content
 
     def _wait_and_report(
         self,

@@ -1,0 +1,53 @@
+apiVersion: kubeflow.org/v2beta1
+kind: MPIJob
+metadata:
+  name: nccl-allreduce-multinode
+spec:
+  slotsPerWorker: 4
+  runPolicy:
+    cleanPodPolicy: Running
+    ttlSecondsAfterFinished: 600
+  mpiReplicaSpecs:
+    Launcher:
+      replicas: 1
+      template:
+        spec:
+          containers:
+            - name: launcher
+              image: nvcr.io/nvidia/hpc-benchmarks:25.04
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -euo pipefail
+                  # Note: '-np 8' is overridden at runtime by K8sNcclMultiNodeWorkload
+                  mpirun --allow-run-as-root \
+                         -np 8 \
+                         --bind-to none --map-by slot \
+                         -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH \
+                         all_reduce_perf_mpi -b 8 -e 2G -f 2 -g 1
+    Worker:
+      replicas: 2
+      template:
+        spec:
+          containers:
+            - name: worker
+              image: nvcr.io/nvidia/hpc-benchmarks:25.04
+              resources:
+                limits:
+                  nvidia.com/gpu: 4 # overridden at runtime by K8sNcclMultiNodeWorkload
+              volumeMounts:
+                - name: shm
+                  mountPath: /dev/shm
+          nodeSelector:
+            nvidia.com/gpu.present: "true"
+          runtimeClassName: nvidia
+          tolerations:
+            - key: "nvidia.com/gpu"
+              operator: "Exists"
+              effect: "NoSchedule"
+          volumes:
+            - name: shm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 8Gi

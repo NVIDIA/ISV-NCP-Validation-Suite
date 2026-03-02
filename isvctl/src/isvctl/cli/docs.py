@@ -367,23 +367,23 @@ def _print_config_instances(classes: list[type], config_path: Path, marker_filte
             padding=(0, 1),
             show_lines=False,
         )
-        table.add_column("Instance", style="green", no_wrap=True)
-        table.add_column("Class", style="dim")
+        table.add_column("Test", no_wrap=True)
         table.add_column("Description")
         table.add_column("Markers", style="dim")
 
         for name in names:
             cls = _resolve_class(name, class_map)
             if cls:
-                class_name = cls.__name__ if cls.__name__ != name else ""
+                label = f"[green]{name}[/green]"
+                if cls.__name__ != name:
+                    label += f" [dim]({cls.__name__})[/dim]"
                 table.add_row(
-                    name,
-                    class_name,
+                    label,
                     cls.description or "-",
                     ", ".join(cls.markers) if cls.markers else "-",
                 )
             else:
-                table.add_row(name, "", "[red]not found[/red]", "-")
+                table.add_row(f"[green]{name}[/green]", "[red]not found[/red]", "-")
 
         console.print(table)
         console.print()

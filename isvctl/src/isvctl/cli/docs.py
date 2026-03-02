@@ -357,7 +357,7 @@ def _print_config_instances(classes: list[type], config_path: Path, marker_filte
         f"\n[bold]Config: {config_path.name}[/bold] ({total} test instances across {len(categories)} categories)\n"
     )
 
-    for category in sorted(categories):
+    for category in categories:
         names = categories[category]
         table = Table(
             title=f"[bold cyan]{category}[/bold cyan] ({len(names)})",

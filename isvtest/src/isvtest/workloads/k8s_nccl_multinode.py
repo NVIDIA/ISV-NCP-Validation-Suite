@@ -37,7 +37,6 @@ from isvtest.core.workload import BaseWorkloadCheck
 from isvtest.workloads.nccl_common import parse_nccl_output
 
 _MPIJOB_LABEL_JOB_NAME = "training.kubeflow.org/job-name"
-_MPIJOB_LABEL_REPLICA_TYPE = "training.kubeflow.org/replica-type"
 
 _COMPUTE_DOMAIN_TEMPLATE = """\
 ---
@@ -274,9 +273,11 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
 
         Modifies the manifest to:
         1. Prepend a ComputeDomain resource for IMEX channel allocation
-        2. Add resourceClaims to the Worker pod spec
-        3. Add resource claims to the Worker container
-        4. Add podAffinity with nvidia.com/gpu.clique topology key
+        2. Add resourceClaims to the Worker container resources
+        3. Add resourceClaims to the Worker pod spec
+
+        The DRA controller handles topology-aware scheduling via the
+        ComputeDomain, so explicit podAffinity is not needed.
         """
         cd_yaml = _COMPUTE_DOMAIN_TEMPLATE.format(
             cd_name=cd_name,
@@ -284,37 +285,19 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
             cd_channel_name=cd_channel_name,
         )
 
-        # Add resource claim reference to the worker container's resources
-        gpu_limit_line = f"nvidia.com/gpu: {gpus_per_node} # overridden at runtime by K8sNcclMultiNodeWorkload"
-        gpu_limit_with_claims = (
-            f"nvidia.com/gpu: {gpus_per_node}\n                claims:\n                  - name: cd-channel"
+        # Add resource claim to worker container's resources (alongside GPU limit)
+        yaml_content = yaml_content.replace(
+            f"nvidia.com/gpu: {gpus_per_node}",
+            f"nvidia.com/gpu: {gpus_per_node}\n                claims:\n                  - name: cd-channel",
         )
-        yaml_content = yaml_content.replace(gpu_limit_line, gpu_limit_with_claims)
 
-        # Add resourceClaims at the Worker pod spec level (after volumes)
+        # Add resourceClaims at Worker pod spec level (after volumes section)
         yaml_content = yaml_content.replace(
             "                sizeLimit: 8Gi",
             "                sizeLimit: 8Gi\n"
             "          resourceClaims:\n"
             "            - name: cd-channel\n"
             f"              resourceClaimTemplateName: {cd_channel_name}",
-        )
-
-        # Add podAffinity for GPU clique topology so workers land on same NVLink domain
-        yaml_content = yaml_content.replace(
-            '          nodeSelector:\n            nvidia.com/gpu.present: "true"',
-            "          nodeSelector:\n"
-            '            nvidia.com/gpu.present: "true"\n'
-            "          affinity:\n"
-            "            podAffinity:\n"
-            "              requiredDuringSchedulingIgnoredDuringExecution:\n"
-            "              - labelSelector:\n"
-            "                  matchExpressions:\n"
-            f"                  - key: {_MPIJOB_LABEL_JOB_NAME}\n"
-            "                    operator: In\n"
-            "                    values:\n"
-            f"                    - {job_name}\n"
-            "                topologyKey: nvidia.com/gpu.clique",
         )
 
         return cd_yaml + yaml_content
@@ -340,7 +323,7 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
 
         completed, phase = self._wait_for_mpijob_completion(launcher_pod, job_name, namespace, timeout)
 
-        # Collect logs before any cleanup -- pod may still exist with cleanPodPolicy: None
+        # Collect logs before cleanup -- pods still exist with cleanPodPolicy: Running
         logs = get_pod_logs(launcher_pod, namespace, container="launcher", timeout=60)
 
         if not completed:

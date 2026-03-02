@@ -6,8 +6,7 @@ spec:
   slotsPerWorker: 4
   launcherCreationPolicy: WaitForWorkersReady
   runPolicy:
-    cleanPodPolicy: None
-    ttlSecondsAfterFinished: 600
+    cleanPodPolicy: Running
   sshAuthMountPath: /root/.ssh
   mpiReplicaSpecs:
     Launcher:
@@ -21,18 +20,22 @@ spec:
                 - /bin/bash
                 - -c
                 - |
-                  set -euo pipefail
-                  # Copy SSH keys from read-only Secret mount and fix permissions
-                  cp -r /root/.ssh /tmp/mpi-ssh
-                  chmod 700 /tmp/mpi-ssh
-                  chmod 600 /tmp/mpi-ssh/id_rsa
+                  # MPI Operator mounts SSH keys read-only; copy to fix permissions
+                  cp /root/.ssh/id_rsa /tmp/id_rsa && chmod 600 /tmp/id_rsa
                   # Note: '-np 8' is overridden at runtime by K8sNcclMultiNodeWorkload
-                  mpirun --allow-run-as-root \
-                         -np 8 \
-                         --bind-to none --map-by slot \
-                         -mca plm_rsh_args "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o IdentityFile=/tmp/mpi-ssh/id_rsa -o ConnectionAttempts=10" \
-                         -x PATH -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH \
-                         /usr/local/bin/all_reduce_perf_mpi -b 8 -e 2G -f 2 -g 1
+                  exec mpirun --allow-run-as-root \
+                    -np 8 \
+                    --bind-to none --map-by slot \
+                    -mca plm_rsh_args "-o StrictHostKeyChecking=no -o IdentityFile=/tmp/id_rsa" \
+                    -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH \
+                    /usr/local/bin/all_reduce_perf_mpi -b 8 -e 2G -f 2 -g 1
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: node-role.kubernetes.io/control-plane
+                        operator: Exists
     Worker:
       replicas: 2
       template:
@@ -43,17 +46,7 @@ spec:
               command:
                 - /bin/bash
                 - -c
-                - |
-                  if ! command -v sshd &>/dev/null; then
-                    apt-get update -qq && apt-get install -y -qq openssh-server >/dev/null 2>&1
-                  fi
-                  mkdir -p /var/run/sshd
-                  ssh-keygen -A 2>/dev/null
-                  cat >> /etc/ssh/sshd_config <<CFG
-                  PermitRootLogin yes
-                  StrictModes no
-                  CFG
-                  exec /usr/sbin/sshd -De
+                - "command -v sshd >/dev/null || { apt-get update -qq && apt-get install -y -qq openssh-server >/dev/null 2>&1; }; mkdir -p /var/run/sshd && ssh-keygen -A 2>/dev/null && exec /usr/sbin/sshd -De -o PermitRootLogin=yes -o StrictModes=no"
               readinessProbe:
                 tcpSocket:
                   port: 22

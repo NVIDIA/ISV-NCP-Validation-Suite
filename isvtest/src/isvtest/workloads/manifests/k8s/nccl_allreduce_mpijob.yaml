@@ -28,7 +28,7 @@ spec:
                     --bind-to none --map-by slot \
                     -mca plm_rsh_args "-o StrictHostKeyChecking=no -o IdentityFile=/tmp/id_rsa" \
                     -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH \
-                    /usr/local/bin/all_reduce_perf_mpi -b 8 -e 2G -f 2 -g 1
+                    /usr/local/bin/all_reduce_perf_mpi -b 8 -e 4G -f 2 -g 1
           affinity:
             nodeAffinity:
               requiredDuringSchedulingIgnoredDuringExecution:

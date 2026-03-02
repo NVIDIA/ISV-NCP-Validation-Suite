@@ -71,7 +71,7 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
         image (str): Container image (default: nvcr.io/nvidia/hpc-benchmarks:25.04)
         container_runtime (str): "enroot" | "pyxis" | "singularity" | "docker"
             (default: auto-detect, enroot > singularity > docker)
-        quick_mode (bool): Use reduced message sizes for faster execution (default: True)
+        quick_mode (bool): Use reduced message sizes for faster execution (default: False)
             - True: 1M-256M range, ~30 seconds (CI/dev validation)
             - False: 8B-4G range, 2-5 minutes (full performance test)
         env (dict[str, str]): Extra environment variables exported in the sbatch
@@ -104,7 +104,7 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
         container_runtime = self.config.get("container_runtime")
         if not container_runtime:
             container_runtime = detect_container_runtime(self)
-        quick_mode = self.config.get("quick_mode", True)
+        quick_mode = self.config.get("quick_mode", False)
         extra_env: dict[str, str] = self.config.get("env", {})
 
         # Validate partition is GPU-enabled
@@ -204,7 +204,7 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
         gpus_per_node: int,
         image: str,
         container_runtime: str,
-        quick_mode: bool = True,
+        quick_mode: bool = False,
         extra_env: dict[str, str] | None = None,
     ) -> str:
         """Generate sbatch script for multi-node NCCL test."""

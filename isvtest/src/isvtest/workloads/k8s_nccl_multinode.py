@@ -76,6 +76,9 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
         startup_timeout (int): Seconds to wait for launcher pod to appear (default: 300).
             Covers image pulls on workers, SSH key setup, and StatefulSet creation.
         image (str): Container image (default: nvcr.io/nvidia/hpc-benchmarks:25.04)
+        quick_mode (bool): Use reduced message sizes for faster execution (default: False)
+            - True: 1M-256M range, ~30 seconds (CI/dev validation)
+            - False: 8B-4G range, 2-5 minutes (full performance test)
         use_compute_domain (str): "auto" (default) detects DRA driver availability,
             "true" to require ComputeDomain/MNNVL, "false" to skip.
     """
@@ -95,6 +98,7 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
         min_bus_bw = float(min_bus_bw_config) if min_bus_bw_config is not None else get_nccl_min_bus_bw_gbps()
 
         image = self.config.get("image") or get_nccl_hpc_image()
+        quick_mode = self.config.get("quick_mode", False)
 
         if not self._check_mpi_operator():
             self.set_failed(
@@ -120,8 +124,10 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
         cd_name = f"{job_name}-cd"
         cd_channel_name = f"{job_name}-cd-channel"
 
+        mode_str = "quick" if quick_mode else "full"
         self.log.info(
-            f"Starting multi-node NCCL test: {node_count} nodes x {gpus_per_node} GPUs = {total_gpus} total GPUs"
+            f"Starting multi-node NCCL test ({mode_str} mode): "
+            f"{node_count} nodes x {gpus_per_node} GPUs = {total_gpus} total GPUs"
         )
         self.log.info(f"Image: {image}, Min BW: {min_bus_bw} GB/s, Timeout: {job_timeout}s")
         self.log.info(f"ComputeDomain (MNNVL/IMEX): {'enabled' if use_cd else 'disabled'}")
@@ -132,7 +138,9 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
             return
 
         yaml_content = manifest_path.read_text()
-        yaml_content = self._patch_manifest(yaml_content, job_name, node_count, gpus_per_node, total_gpus, image)
+        yaml_content = self._patch_manifest(
+            yaml_content, job_name, node_count, gpus_per_node, total_gpus, image, quick_mode
+        )
 
         if use_cd:
             yaml_content = self._add_compute_domain(
@@ -211,6 +219,7 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
         gpus_per_node: int,
         total_gpus: int,
         image: str,
+        quick_mode: bool = False,
     ) -> str:
         """Replace placeholder values in the MPIJob manifest."""
         yaml_content = yaml_content.replace("name: nccl-allreduce-multinode", f"name: {job_name}", 1)
@@ -220,6 +229,8 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
         yaml_content = yaml_content.replace("-np 8", f"-np {total_gpus}")
         if image != "nvcr.io/nvidia/hpc-benchmarks:25.04":
             yaml_content = yaml_content.replace("nvcr.io/nvidia/hpc-benchmarks:25.04", image)
+        if quick_mode:
+            yaml_content = yaml_content.replace("-b 8 -e 4G -f 2", "-b 1M -e 256M -f 2")
         return yaml_content
 
     def _resolve_compute_domain_mode(self) -> bool:

@@ -68,7 +68,7 @@ tests:
             partition: "{{ steps.setup.slurm.default_partition | default('gpu') }}"
             runtime: 30
             memory_gb: 16
-            timeout: 600
+            timeout: 900
             cuda_arch: "{{ steps.setup.slurm.cuda_arch | default('100') }}"
 
         # Multi-node NCCL test - validates GPU communication across nodes

@@ -304,7 +304,7 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
         """Wait for job completion and collect results."""
         start_time = time.time()
         end_time = start_time + timeout
-        poll_interval = 10
+        poll_interval = 30
         use_sacct = True
         nodelist = ""
 

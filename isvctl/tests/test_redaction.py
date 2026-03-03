@@ -30,6 +30,16 @@ class TestMaskSensitiveArgs:
         assert "wJalrXUtnFEMI" not in result
         assert REDACTED in result
 
+    def test_masks_access_key_id(self) -> None:
+        parts = ["cmd", "--access-key-id", "AKIAIOSFODNN7EXAMPLE"]
+        result = mask_sensitive_args(parts)
+        assert "AKIAIOSFODNN7EXAMPLE" not in result
+
+    def test_masks_connection_string(self) -> None:
+        parts = ["cmd", "--connection-string", "Server=tcp:myserver.database.windows.net"]
+        result = mask_sensitive_args(parts)
+        assert "myserver.database" not in result
+
     def test_masks_password_equals_format(self) -> None:
         parts = ["cmd", "--password=hunter2"]
         result = mask_sensitive_args(parts)
@@ -66,8 +76,21 @@ class TestMaskSensitiveArgs:
 class TestIsSensitiveKey:
     """Tests for dict key sensitivity detection."""
 
-    def test_exact_keys(self) -> None:
+    def test_aws_keys(self) -> None:
         assert is_sensitive_key("secret_access_key")
+        assert is_sensitive_key("access_key_id")
+        assert is_sensitive_key("AWS_SECRET_ACCESS_KEY")
+        assert is_sensitive_key("AWS_ACCESS_KEY_ID")
+
+    def test_azure_keys(self) -> None:
+        assert is_sensitive_key("account_key")
+        assert is_sensitive_key("subscription_key")
+        assert is_sensitive_key("connection_string")
+        assert is_sensitive_key("sas_token")
+        assert is_sensitive_key("signing_key")
+        assert is_sensitive_key("AZURE_STORAGE_ACCOUNT_KEY")
+
+    def test_general_keys(self) -> None:
         assert is_sensitive_key("password")
         assert is_sensitive_key("api_key")
         assert is_sensitive_key("private_key")
@@ -75,10 +98,9 @@ class TestIsSensitiveKey:
         assert is_sensitive_key("client_secret")
 
     def test_prefixed_keys(self) -> None:
-        """Keys like NGC_API_KEY and AWS_SECRET_ACCESS_KEY must match."""
         assert is_sensitive_key("NGC_API_KEY")
-        assert is_sensitive_key("AWS_SECRET_ACCESS_KEY")
         assert is_sensitive_key("IAM_API_KEY")
+        assert is_sensitive_key("GOOGLE_API_KEY")
         assert is_sensitive_key("user_password")
         assert is_sensitive_key("db_password")
 
@@ -86,7 +108,6 @@ class TestIsSensitiveKey:
         assert not is_sensitive_key("cluster_name")
         assert not is_sensitive_key("region")
         assert not is_sensitive_key("node_count")
-        assert not is_sensitive_key("access_key_id")
         assert not is_sensitive_key("success")
         assert not is_sensitive_key("platform")
 
@@ -94,7 +115,7 @@ class TestIsSensitiveKey:
 class TestRedactDict:
     """Tests for recursive dict redaction."""
 
-    def test_redacts_secret_access_key(self) -> None:
+    def test_redacts_aws_credentials(self) -> None:
         data = {
             "success": True,
             "access_key_id": "AKIAIOSFODNN7EXAMPLE",
@@ -102,8 +123,19 @@ class TestRedactDict:
         }
         result = redact_dict(data)
         assert result["success"] is True
-        assert result["access_key_id"] == "AKIAIOSFODNN7EXAMPLE"
+        assert result["access_key_id"] == REDACTED
         assert result["secret_access_key"] == REDACTED
+
+    def test_redacts_azure_credentials(self) -> None:
+        data = {
+            "account_key": "base64storagekey==",
+            "connection_string": "DefaultEndpointsProtocol=https;AccountName=...",
+            "resource_group": "my-rg",
+        }
+        result = redact_dict(data)
+        assert result["account_key"] == REDACTED
+        assert result["connection_string"] == REDACTED
+        assert result["resource_group"] == "my-rg"
 
     def test_redacts_nested_dicts(self) -> None:
         data = {"outer": {"credentials": {"api_key": "secret123", "name": "test"}}}
@@ -138,7 +170,7 @@ class TestRedactDict:
         }
         result = redact_dict(data)
         assert result["username"] == "test-user"
-        assert result["access_key_id"] == "AKIAIOSFODNN7EXAMPLE"
+        assert result["access_key_id"] == REDACTED
         assert result["secret_access_key"] == REDACTED
 
 
@@ -150,33 +182,58 @@ class TestRedactDict:
 class TestFilterEnv:
     """Tests for environment variable filtering."""
 
-    def test_removes_known_secrets(self) -> None:
+    def test_removes_aws_secrets(self) -> None:
         env = {
             "HOME": "/home/user",
+            "AWS_ACCESS_KEY_ID": "AKIAIOSFODNN7EXAMPLE",
             "AWS_SECRET_ACCESS_KEY": "wJalrXUtnFEMI",
-            "NGC_API_KEY": "nvapi-abc123",
-            "ISV_CLIENT_SECRET": "secret123",
             "AWS_SESSION_TOKEN": "token123",
+            "AWS_REGION": "us-west-2",
             "PATH": "/usr/bin",
         }
         result = filter_env(env)
         assert "HOME" in result
         assert "PATH" in result
+        assert "AWS_REGION" in result
+        assert "AWS_ACCESS_KEY_ID" not in result
         assert "AWS_SECRET_ACCESS_KEY" not in result
-        assert "NGC_API_KEY" not in result
-        assert "ISV_CLIENT_SECRET" not in result
         assert "AWS_SESSION_TOKEN" not in result
+
+    def test_removes_azure_secrets(self) -> None:
+        env = {
+            "AZURE_CLIENT_SECRET": "secret",
+            "AZURE_STORAGE_KEY": "key",
+            "AZURE_SUBSCRIPTION_KEY": "subkey",
+            "AZURE_TENANT_ID": "tenant-id",
+        }
+        result = filter_env(env)
+        assert "AZURE_CLIENT_SECRET" not in result
+        assert "AZURE_STORAGE_KEY" not in result
+        assert "AZURE_SUBSCRIPTION_KEY" not in result
+        assert "AZURE_TENANT_ID" in result
+
+    def test_removes_nvidia_secrets(self) -> None:
+        env = {"NGC_API_KEY": "nvapi-abc123", "NGC_NIM_API_KEY": "nvapi-def456"}
+        result = filter_env(env)
+        assert "NGC_API_KEY" not in result
+        assert "NGC_NIM_API_KEY" not in result
 
     def test_removes_suffix_matches(self) -> None:
         env = {
             "MY_CUSTOM_SECRET": "value",
             "DB_PASSWORD": "dbpass",
+            "CUSTOM_API_KEY": "key",
+            "STORAGE_ACCOUNT_KEY": "storagekey",
+            "DB_CONNECTION_STRING": "connstr",
             "SAFE_VAR": "ok",
         }
         result = filter_env(env)
         assert "SAFE_VAR" in result
         assert "MY_CUSTOM_SECRET" not in result
         assert "DB_PASSWORD" not in result
+        assert "CUSTOM_API_KEY" not in result
+        assert "STORAGE_ACCOUNT_KEY" not in result
+        assert "DB_CONNECTION_STRING" not in result
 
     def test_preserves_non_sensitive_skip_flags(self) -> None:
         """Env vars used in Jinja2 templates must not be filtered."""

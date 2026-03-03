@@ -22,6 +22,7 @@ REDACTED = "***"
 
 SENSITIVE_ARG_PATTERNS: list[str] = [
     r"--secret[-_]?access[-_]?key",
+    r"--access[-_]?key[-_]?id",
     r"--password",
     r"--token",
     r"--api[-_]?key",
@@ -29,6 +30,9 @@ SENSITIVE_ARG_PATTERNS: list[str] = [
     r"--secret",
     r"--credential",
     r"--auth",
+    r"--connection[-_]?string",
+    r"--account[-_]?key",
+    r"--subscription[-_]?key",
 ]
 
 _SENSITIVE_ARG_RE = re.compile(
@@ -88,8 +92,17 @@ def mask_sensitive_args(
 # ---------------------------------------------------------------------------
 
 SENSITIVE_KEY_PATTERNS: list[str] = [
+    # AWS
     r"secret[-_]?access[-_]?key",
+    r"access[-_]?key[-_]?id",
     r"secret[-_]?key",
+    # Azure
+    r"account[-_]?key",
+    r"subscription[-_]?key",
+    r"connection[-_]?string",
+    r"sas[-_]?token",
+    r"signing[-_]?key",
+    # General / multi-cloud
     r"password",
     r"api[-_]?key",
     r"private[-_]?key",
@@ -134,21 +147,34 @@ def redact_dict(data: Any) -> Any:
 
 SENSITIVE_ENV_VARS: frozenset[str] = frozenset(
     {
+        # AWS
+        "AWS_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY",
         "AWS_SESSION_TOKEN",
+        # Azure
+        "AZURE_CLIENT_SECRET",
+        "AZURE_STORAGE_KEY",
+        "AZURE_SUBSCRIPTION_KEY",
+        # GCP
+        "GOOGLE_API_KEY",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        # NVIDIA
         "NGC_API_KEY",
         "NGC_NIM_API_KEY",
+        # ISV
         "ISV_CLIENT_SECRET",
-        "IAM_API_KEY",
     }
 )
 
 SENSITIVE_ENV_SUFFIXES: tuple[str, ...] = (
     "_SECRET",
     "_PASSWORD",
+    "_API_KEY",
     "_SECRET_KEY",
     "_SECRET_ACCESS_KEY",
     "_PRIVATE_KEY",
+    "_ACCOUNT_KEY",
+    "_CONNECTION_STRING",
 )
 
 

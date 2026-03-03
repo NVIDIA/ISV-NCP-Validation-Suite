@@ -163,7 +163,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
                     if cls_name not in processed_classes:
                         markers = getattr(cls, "markers", [])
                         pytest_marks = [getattr(pytest.mark, m) for m in markers]
-                        pytest_marks.append(pytest.mark.skip(reason="Not configured in cluster YAML"))
+                        pytest_marks.append(pytest.mark.skip(reason="Not configured in config YAML"))
 
                         # Include inventory even for skipped tests (for consistency)
                         merged_config = {"inventory": cluster_inventory}

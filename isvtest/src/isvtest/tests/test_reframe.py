@@ -87,7 +87,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
         param_value = (cls, module_path, test_config)
         if filtering_enabled and not test_is_enabled and show_skipped:
             # Mark as skipped
-            params.append(pytest.param(*param_value, marks=pytest.mark.skip(reason="Not configured in cluster YAML")))
+            params.append(pytest.param(*param_value, marks=pytest.mark.skip(reason="Not configured in config YAML")))
         else:
             params.append(param_value)
 

@@ -6,7 +6,6 @@ capturing/validating their JSON output.
 
 import json
 import logging
-import shlex
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +15,7 @@ from pydantic import ValidationError
 
 from isvctl.config.schema import CommandConfig, CommandOutput
 from isvctl.orchestrator.context import _create_jinja_env
+from isvctl.redaction import mask_sensitive_args
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +101,6 @@ class CommandExecutor:
 
         # Build full command
         cmd_parts = [config.command] + rendered_args
-        cmd_str = " ".join(shlex.quote(p) for p in cmd_parts)
 
         # Determine working directory
         cwd = Path(config.working_dir) if config.working_dir else self.working_dir
@@ -114,7 +113,7 @@ class CommandExecutor:
             env = os.environ.copy()
             env.update(config.env)
 
-        logger.info(f"Executing: {cmd_str}")
+        logger.info(f"Executing: {mask_sensitive_args(cmd_parts)}")
         logger.debug(f"Working directory: {cwd}")
 
         try:

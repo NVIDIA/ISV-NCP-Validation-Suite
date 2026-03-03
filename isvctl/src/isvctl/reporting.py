@@ -9,6 +9,8 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 
+from isvctl.redaction import redact_text
+
 logger = logging.getLogger(__name__)
 
 
@@ -176,6 +178,10 @@ def update_test_run(
         except Exception as e:
             logger.warning(f"Failed to read log file: {e}")
 
+    # Redact sensitive values before uploading to external service
+    if log_output:
+        log_output = redact_text(log_output)
+
     # Auto-detect ISV test version from package
     isv_test_version = get_isv_test_version()
 
@@ -186,7 +192,7 @@ def update_test_run(
         if junit_xml and junit_xml.exists():
             try:
                 logger.info("Uploading JUnit XML: %s", junit_xml)
-                junit_content = junit_xml.read_text()
+                junit_content = redact_text(junit_xml.read_text())
                 report_test_results(
                     endpoint=endpoint,
                     lab_id=lab_id,

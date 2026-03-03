@@ -16,6 +16,7 @@ from isvctl.cli import setup_logging
 from isvctl.config.merger import merge_yaml_files
 from isvctl.config.schema import RunConfig
 from isvctl.orchestrator.loop import Orchestrator, Phase
+from isvctl.redaction import redact_dict
 from isvctl.reporting import check_upload_credentials, create_test_run, get_environment_config, update_test_run
 
 logger = logging.getLogger(__name__)
@@ -194,7 +195,8 @@ def run(
 
     if dry_run:
         typer.echo("\n--- Dry Run: Configuration ---")
-        typer.echo(config.model_dump_json(indent=2))
+        redacted_config = redact_dict(config.model_dump(mode="json"))
+        typer.echo(json.dumps(redacted_config, indent=2))
         if extra_pytest_args:
             typer.echo(f"\n--- Extra pytest args ---\n{extra_pytest_args}")
         return

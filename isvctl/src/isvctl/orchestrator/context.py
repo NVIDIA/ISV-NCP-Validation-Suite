@@ -15,6 +15,7 @@ from isvtest.config.loader import _ternary
 from jinja2 import ChainableUndefined, Environment
 
 from isvctl.config.schema import CommandOutput, RunConfig
+from isvctl.redaction import filter_env
 
 
 def _create_jinja_env() -> Environment:
@@ -85,8 +86,10 @@ class Context:
         self._step_phases: dict[str, str] = {}
 
         # Layer 6: Environment variables (for {{env.VAR}} access)
-        # Must be loaded before settings so settings can reference env vars
-        self.data["env"] = dict(os.environ)
+        # Must be loaded before settings so settings can reference env vars.
+        # Sensitive variables (API keys, secrets) are excluded to prevent
+        # accidental exposure in logs, dumps, or error messages.
+        self.data["env"] = filter_env(dict(os.environ))
 
         # Layer 7: Test settings (from tests.settings)
         # These are available as top-level variables for templating

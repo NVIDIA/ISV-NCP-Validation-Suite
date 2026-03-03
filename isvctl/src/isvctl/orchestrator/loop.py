@@ -18,6 +18,7 @@ from isvctl.config.schema import RunConfig
 from isvctl.orchestrator.commands import CommandExecutor
 from isvctl.orchestrator.context import Context
 from isvctl.orchestrator.step_executor import StepExecutor, StepResults
+from isvctl.redaction import redact_dict, redact_junit_xml_tree
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +93,8 @@ def _merge_junit_xmls(phase_files: list[Path], output_path: Path) -> None:
         except ET.ParseError:
             logger.warning(f"Failed to parse JUnit XML: {phase_file}")
             continue
+
+    redact_junit_xml_tree(root)
 
     tree = ET.ElementTree(root)
     ET.indent(tree, space="    ")
@@ -421,7 +424,7 @@ class Orchestrator:
                         "name": s.name,
                         "success": s.success,
                         "error": s.error,
-                        "output": s.output,
+                        "output": redact_dict(s.output),
                         "schema_name": s.schema_name,
                         "schema_valid": s.schema_valid,
                         "schema_errors": s.schema_errors,

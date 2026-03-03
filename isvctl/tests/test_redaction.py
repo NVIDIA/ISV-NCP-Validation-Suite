@@ -1,0 +1,324 @@
+"""Tests for the redaction module.
+
+Verifies that secrets are correctly redacted across all output formats:
+CLI arguments, dict keys, environment variables, free text, and JUnit XML.
+"""
+
+import xml.etree.ElementTree as ET
+
+from isvctl.redaction import (
+    REDACTED,
+    filter_env,
+    is_sensitive_key,
+    mask_sensitive_args,
+    redact_dict,
+    redact_junit_xml_tree,
+    redact_text,
+)
+
+# ---------------------------------------------------------------------------
+# mask_sensitive_args
+# ---------------------------------------------------------------------------
+
+
+class TestMaskSensitiveArgs:
+    """Tests for CLI argument masking."""
+
+    def test_masks_secret_access_key_flag_value(self) -> None:
+        parts = ["aws", "--secret-access-key", "wJalrXUtnFEMI/EXAMPLEKEY"]
+        result = mask_sensitive_args(parts)
+        assert "wJalrXUtnFEMI" not in result
+        assert REDACTED in result
+
+    def test_masks_password_equals_format(self) -> None:
+        parts = ["cmd", "--password=hunter2"]
+        result = mask_sensitive_args(parts)
+        assert "hunter2" not in result
+        assert f"--password={REDACTED}" in result
+
+    def test_masks_api_key(self) -> None:
+        parts = ["cmd", "--api-key", "sk-abc123"]
+        result = mask_sensitive_args(parts)
+        assert "sk-abc123" not in result
+
+    def test_preserves_non_sensitive_args(self) -> None:
+        parts = ["cmd", "--region", "us-west-2", "--nodes", "4"]
+        result = mask_sensitive_args(parts)
+        assert "us-west-2" in result
+        assert "4" in result
+
+    def test_extra_patterns_from_config(self) -> None:
+        parts = ["cmd", "--my-custom-secret", "top-secret"]
+        result = mask_sensitive_args(parts, extra_patterns=["--my-custom-secret"])
+        assert "top-secret" not in result
+
+    def test_token_flag(self) -> None:
+        parts = ["cmd", "--token", "eyJhbGciOiJSUzI1NiJ9"]
+        result = mask_sensitive_args(parts)
+        assert "eyJhbGciOiJSUzI1NiJ9" not in result
+
+
+# ---------------------------------------------------------------------------
+# is_sensitive_key / redact_dict
+# ---------------------------------------------------------------------------
+
+
+class TestIsSensitiveKey:
+    """Tests for dict key sensitivity detection."""
+
+    def test_exact_keys(self) -> None:
+        assert is_sensitive_key("secret_access_key")
+        assert is_sensitive_key("password")
+        assert is_sensitive_key("api_key")
+        assert is_sensitive_key("private_key")
+        assert is_sensitive_key("auth_token")
+        assert is_sensitive_key("client_secret")
+
+    def test_prefixed_keys(self) -> None:
+        """Keys like NGC_API_KEY and AWS_SECRET_ACCESS_KEY must match."""
+        assert is_sensitive_key("NGC_API_KEY")
+        assert is_sensitive_key("AWS_SECRET_ACCESS_KEY")
+        assert is_sensitive_key("IAM_API_KEY")
+        assert is_sensitive_key("user_password")
+        assert is_sensitive_key("db_password")
+
+    def test_non_sensitive_keys(self) -> None:
+        assert not is_sensitive_key("cluster_name")
+        assert not is_sensitive_key("region")
+        assert not is_sensitive_key("node_count")
+        assert not is_sensitive_key("access_key_id")
+        assert not is_sensitive_key("success")
+        assert not is_sensitive_key("platform")
+
+
+class TestRedactDict:
+    """Tests for recursive dict redaction."""
+
+    def test_redacts_secret_access_key(self) -> None:
+        data = {
+            "success": True,
+            "access_key_id": "AKIAIOSFODNN7EXAMPLE",
+            "secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        }
+        result = redact_dict(data)
+        assert result["success"] is True
+        assert result["access_key_id"] == "AKIAIOSFODNN7EXAMPLE"
+        assert result["secret_access_key"] == REDACTED
+
+    def test_redacts_nested_dicts(self) -> None:
+        data = {"outer": {"credentials": {"api_key": "secret123", "name": "test"}}}
+        result = redact_dict(data)
+        assert result["outer"]["credentials"]["api_key"] == REDACTED
+        assert result["outer"]["credentials"]["name"] == "test"
+
+    def test_redacts_in_lists(self) -> None:
+        data = [{"password": "abc"}, {"name": "safe"}]
+        result = redact_dict(data)
+        assert result[0]["password"] == REDACTED
+        assert result[1]["name"] == "safe"
+
+    def test_none_passthrough(self) -> None:
+        assert redact_dict(None) is None
+
+    def test_non_string_values_preserved(self) -> None:
+        """Only string values are redacted; numeric/bool passwords stay."""
+        data = {"password": 12345, "auth_token": True}
+        result = redact_dict(data)
+        assert result["password"] == 12345
+        assert result["auth_token"] is True
+
+    def test_real_create_user_output(self) -> None:
+        """Simulate actual create_user.py script output."""
+        data = {
+            "success": True,
+            "platform": "iam",
+            "username": "test-user",
+            "access_key_id": "AKIAIOSFODNN7EXAMPLE",
+            "secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        }
+        result = redact_dict(data)
+        assert result["username"] == "test-user"
+        assert result["access_key_id"] == "AKIAIOSFODNN7EXAMPLE"
+        assert result["secret_access_key"] == REDACTED
+
+
+# ---------------------------------------------------------------------------
+# filter_env
+# ---------------------------------------------------------------------------
+
+
+class TestFilterEnv:
+    """Tests for environment variable filtering."""
+
+    def test_removes_known_secrets(self) -> None:
+        env = {
+            "HOME": "/home/user",
+            "AWS_SECRET_ACCESS_KEY": "wJalrXUtnFEMI",
+            "NGC_API_KEY": "nvapi-abc123",
+            "ISV_CLIENT_SECRET": "secret123",
+            "AWS_SESSION_TOKEN": "token123",
+            "PATH": "/usr/bin",
+        }
+        result = filter_env(env)
+        assert "HOME" in result
+        assert "PATH" in result
+        assert "AWS_SECRET_ACCESS_KEY" not in result
+        assert "NGC_API_KEY" not in result
+        assert "ISV_CLIENT_SECRET" not in result
+        assert "AWS_SESSION_TOKEN" not in result
+
+    def test_removes_suffix_matches(self) -> None:
+        env = {
+            "MY_CUSTOM_SECRET": "value",
+            "DB_PASSWORD": "dbpass",
+            "SAFE_VAR": "ok",
+        }
+        result = filter_env(env)
+        assert "SAFE_VAR" in result
+        assert "MY_CUSTOM_SECRET" not in result
+        assert "DB_PASSWORD" not in result
+
+    def test_preserves_non_sensitive_skip_flags(self) -> None:
+        """Env vars used in Jinja2 templates must not be filtered."""
+        env = {
+            "AWS_BM_SKIP_TEARDOWN": "true",
+            "AWS_IAM_SKIP_TEARDOWN": "false",
+            "AWS_REGION": "us-west-2",
+        }
+        result = filter_env(env)
+        assert result == env
+
+
+# ---------------------------------------------------------------------------
+# redact_text
+# ---------------------------------------------------------------------------
+
+
+class TestRedactText:
+    """Tests for free-text redaction."""
+
+    def test_json_double_quoted(self) -> None:
+        text = '{"secret_access_key": "wJalrXUtnFEMI/EXAMPLEKEY", "name": "test"}'
+        result = redact_text(text)
+        assert "wJalrXUtnFEMI" not in result
+        assert f'"secret_access_key": "{REDACTED}"' in result
+        assert '"name": "test"' in result
+
+    def test_json_single_quoted_python_repr(self) -> None:
+        """Python dict repr uses single quotes."""
+        text = "{'NGC_API_KEY': 'nvapi-abc123', 'debug': 'true'}"
+        result = redact_text(text)
+        assert "nvapi-abc123" not in result
+        assert "'debug': 'true'" in result
+
+    def test_key_equals_value(self) -> None:
+        text = "export NGC_API_KEY=nvapi-abc123 NCCL_DEBUG=INFO"
+        result = redact_text(text)
+        assert "nvapi-abc123" not in result
+        assert "NCCL_DEBUG=INFO" in result
+
+    def test_prefixed_key_in_json(self) -> None:
+        """NGC_API_KEY must be caught, not just api_key."""
+        text = '"NGC_API_KEY": "nvapi-secret"'
+        result = redact_text(text)
+        assert "nvapi-secret" not in result
+
+    def test_aws_secret_in_json(self) -> None:
+        text = '"AWS_SECRET_ACCESS_KEY": "wJalrXUtnFEMI/K7MDENG"'
+        result = redact_text(text)
+        assert "wJalrXUtnFEMI" not in result
+
+    def test_sbatch_script_export(self) -> None:
+        """Simulates export lines in a generated sbatch script."""
+        text = "export NGC_API_KEY=nvapi-real-key\nexport NCCL_SOCKET_IFNAME=eth0"
+        result = redact_text(text)
+        assert "nvapi-real-key" not in result
+        assert "NCCL_SOCKET_IFNAME=eth0" in result
+
+    def test_no_false_positive_on_safe_keys(self) -> None:
+        text = '"cluster_name": "my-cluster", "region": "us-west-2"'
+        assert redact_text(text) == text
+
+
+# ---------------------------------------------------------------------------
+# redact_junit_xml_tree
+# ---------------------------------------------------------------------------
+
+
+class TestRedactJunitXmlTree:
+    """Tests for JUnit XML sanitisation."""
+
+    def test_redacts_failure_text(self) -> None:
+        xml_str = """<testsuites>
+          <testsuite name="test">
+            <testcase name="test_creds">
+              <failure message="failed">
+                Output: {"secret_access_key": "wJalrXUtnFEMI/EXAMPLEKEY"}
+              </failure>
+            </testcase>
+          </testsuite>
+        </testsuites>"""
+        root = ET.fromstring(xml_str)
+        redact_junit_xml_tree(root)
+        failure = root.find(".//failure")
+        assert failure is not None
+        assert "wJalrXUtnFEMI" not in (failure.text or "")
+        assert REDACTED in (failure.text or "")
+
+    def test_redacts_failure_message_attr(self) -> None:
+        xml_str = """<testsuites>
+          <testsuite>
+            <testcase name="t">
+              <failure message='secret_access_key=wJalrXUtnFEMI'>text</failure>
+            </testcase>
+          </testsuite>
+        </testsuites>"""
+        root = ET.fromstring(xml_str)
+        redact_junit_xml_tree(root)
+        failure = root.find(".//failure")
+        assert failure is not None
+        assert "wJalrXUtnFEMI" not in failure.get("message", "")
+
+    def test_redacts_system_out(self) -> None:
+        xml_str = """<testsuites>
+          <testsuite>
+            <testcase name="t">
+              <system-out>export NGC_API_KEY=nvapi-secret</system-out>
+            </testcase>
+          </testsuite>
+        </testsuites>"""
+        root = ET.fromstring(xml_str)
+        redact_junit_xml_tree(root)
+        sysout = root.find(".//system-out")
+        assert sysout is not None
+        assert "nvapi-secret" not in (sysout.text or "")
+
+    def test_redacts_system_err(self) -> None:
+        xml_str = """<testsuites>
+          <testsuite>
+            <testcase name="t">
+              <system-err>"password": "hunter2"</system-err>
+            </testcase>
+          </testsuite>
+        </testsuites>"""
+        root = ET.fromstring(xml_str)
+        redact_junit_xml_tree(root)
+        syserr = root.find(".//system-err")
+        assert syserr is not None
+        assert "hunter2" not in (syserr.text or "")
+
+    def test_leaves_safe_content_alone(self) -> None:
+        xml_str = """<testsuites>
+          <testsuite>
+            <testcase name="t">
+              <failure message="assertion failed">expected 4 nodes</failure>
+              <system-out>cluster is healthy</system-out>
+            </testcase>
+          </testsuite>
+        </testsuites>"""
+        root = ET.fromstring(xml_str)
+        redact_junit_xml_tree(root)
+        failure = root.find(".//failure")
+        assert failure is not None
+        assert failure.text == "expected 4 nodes"
+        assert failure.get("message") == "assertion failed"

@@ -34,7 +34,6 @@ Example config:
 import json
 import logging
 import os
-import re
 import shlex
 import subprocess
 import sys
@@ -45,71 +44,9 @@ from typing import Any
 from isvctl.config.output_schemas import get_schema_for_step, validate_output
 from isvctl.config.schema import StepConfig
 from isvctl.orchestrator.context import Context, _create_jinja_env
+from isvctl.redaction import mask_sensitive_args
 
 logger = logging.getLogger(__name__)
-
-# Patterns for sensitive arguments that should be masked in logs
-SENSITIVE_ARG_PATTERNS = [
-    r"--secret[-_]?access[-_]?key",
-    r"--password",
-    r"--token",
-    r"--api[-_]?key",
-    r"--private[-_]?key",
-    r"--secret",
-    r"--credential",
-    r"--auth",
-]
-
-# Compiled regex for sensitive patterns
-_SENSITIVE_PATTERN = re.compile(
-    "|".join(SENSITIVE_ARG_PATTERNS),
-    re.IGNORECASE,
-)
-
-
-def mask_sensitive_args(cmd_parts: list[str], extra_patterns: list[str] | None = None) -> str:
-    """Mask sensitive arguments in command string for logging.
-
-    Args:
-        cmd_parts: List of command parts
-        extra_patterns: Additional patterns to mask (from step config)
-
-    Returns:
-        Command string with sensitive values masked as ***
-    """
-    # Build pattern including any extra patterns from step config
-    if extra_patterns:
-        combined_patterns = SENSITIVE_ARG_PATTERNS + [re.escape(p) for p in extra_patterns]
-        pattern = re.compile("|".join(combined_patterns), re.IGNORECASE)
-    else:
-        pattern = _SENSITIVE_PATTERN
-
-    masked = []
-    skip_next = False
-
-    for i, part in enumerate(cmd_parts):
-        if skip_next:
-            masked.append("***")
-            skip_next = False
-            continue
-
-        # Check if this arg is a sensitive flag
-        if pattern.search(part):
-            masked.append(part)
-            # If next arg exists and doesn't start with -, it's the value
-            if i + 1 < len(cmd_parts) and not cmd_parts[i + 1].startswith("-"):
-                skip_next = True
-        # Check for --key=value format
-        elif "=" in part:
-            key, _, _value = part.partition("=")
-            if pattern.search(key):
-                masked.append(f"{key}=***")
-            else:
-                masked.append(part)
-        else:
-            masked.append(part)
-
-    return " ".join(shlex.quote(p) for p in masked)
 
 
 @dataclass

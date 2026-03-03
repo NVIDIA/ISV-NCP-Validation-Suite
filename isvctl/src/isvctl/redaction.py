@@ -135,7 +135,7 @@ def redact_dict(data: Any) -> Any:
     if data is None:
         return None
     if isinstance(data, dict):
-        return {k: REDACTED if is_sensitive_key(k) and isinstance(v, str) else redact_dict(v) for k, v in data.items()}
+        return {k: REDACTED if is_sensitive_key(k) else redact_dict(v) for k, v in data.items()}
     if isinstance(data, list):
         return [redact_dict(item) for item in data]
     return data

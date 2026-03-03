@@ -152,12 +152,13 @@ class TestRedactDict:
     def test_none_passthrough(self) -> None:
         assert redact_dict(None) is None
 
-    def test_non_string_values_preserved(self) -> None:
-        """Only string values are redacted; numeric/bool passwords stay."""
-        data = {"password": 12345, "auth_token": True}
+    def test_non_string_values_redacted(self) -> None:
+        """Sensitive keys are redacted regardless of value type."""
+        data = {"password": 12345, "auth_token": True, "api_key": None}
         result = redact_dict(data)
-        assert result["password"] == 12345
-        assert result["auth_token"] is True
+        assert result["password"] == REDACTED
+        assert result["auth_token"] == REDACTED
+        assert result["api_key"] == REDACTED
 
     def test_real_create_user_output(self) -> None:
         """Simulate actual create_user.py script output."""

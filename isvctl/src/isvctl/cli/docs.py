@@ -4,10 +4,11 @@ import inspect
 from collections import defaultdict
 from pathlib import Path
 from textwrap import dedent
+from typing import Any
 
-import isvtest.validations as validations_pkg
 import typer
-from isvtest.core.discovery import discover_tests
+import yaml
+from isvtest.core.discovery import discover_all_tests
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -124,6 +125,16 @@ def tests(
         "-m",
         help="Filter by marker (repeatable, e.g. -m kubernetes -m gpu)",
     ),
+    config_file: Path | None = typer.Option(
+        None,
+        "--config",
+        "-f",
+        help="Show test instances from a config file (counts aliases like CheckName-variant)",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+    ),
     flat: bool = typer.Option(False, "--flat", help="Flat list without grouping by marker"),
     info: str | None = typer.Option(
         None,
@@ -137,12 +148,11 @@ def tests(
     Examples:
         isvctl docs tests                          # All tests by category
         isvctl docs tests -m kubernetes            # Only kubernetes tests
-        isvctl docs tests -m gpu -m ssh            # GPU and SSH tests
+        isvctl docs tests -f isvctl/configs/k8s.yaml  # Tests from config file
         isvctl docs tests --flat                   # Flat alphabetical list
         isvctl docs tests -i SshGpuStressCheck     # Detailed info for a test
     """
-    pkg_path = Path(validations_pkg.__file__).parent
-    all_classes = list(discover_tests(pkg_path, "isvtest.validations"))
+    all_classes = list(discover_all_tests())
 
     if not all_classes:
         console.print("[yellow]No validation tests discovered.[/yellow]")
@@ -154,7 +164,9 @@ def tests(
         _print_test_info(all_classes, info)
         return
 
-    if flat:
+    if config_file:
+        _print_config_instances(all_classes, config_file, marker)
+    elif flat:
         _print_flat(all_classes, marker)
     else:
         _print_grouped(all_classes, marker)
@@ -253,6 +265,125 @@ def _print_grouped(classes: list[type], marker_filter: list[str] | None) -> None
                 cls.description or "-",
                 ", ".join(cls.markers) if cls.markers else "-",
             )
+
+        console.print(table)
+        console.print()
+
+
+def _extract_config_instances(config_path: Path) -> dict[str, list[str]]:
+    """Extract validation instance names from a config file, grouped by category.
+
+    Handles both config formats:
+    - Group defaults: {checks: [{Name: {...}}, ...]}
+    - List format: [{Name: {...}}, ...]
+
+    Returns:
+        Dict mapping category name to list of instance names (e.g. "CheckName-variant").
+    """
+    with open(config_path) as f:
+        raw = yaml.safe_load(f)
+
+    validations: dict[str, Any] = (raw.get("tests") or {}).get("validations", {})
+    result: dict[str, list[str]] = {}
+
+    for category, category_config in validations.items():
+        names: list[str] = []
+
+        if isinstance(category_config, dict) and "checks" in category_config:
+            checks = category_config["checks"]
+        elif isinstance(category_config, list):
+            checks = category_config
+        else:
+            continue
+
+        for check in checks:
+            if isinstance(check, dict):
+                for name in check:
+                    names.append(name)
+            elif isinstance(check, str):
+                names.append(check)
+
+        if names:
+            result[category] = names
+
+    return result
+
+
+def _resolve_class(instance_name: str, class_map: dict[str, type]) -> type | None:
+    """Resolve an instance name (possibly with suffix) to a class.
+
+    Uses the same suffix matching logic as the test runner:
+    exact match first, then longest class name prefix with - or _ separator.
+    """
+    if instance_name in class_map:
+        return class_map[instance_name]
+
+    possible = [name for name in class_map if instance_name.startswith(name)]
+    if possible:
+        longest = max(possible, key=len)
+        if instance_name.startswith(f"{longest}-") or instance_name.startswith(f"{longest}_"):
+            return class_map[longest]
+
+    return None
+
+
+def _print_config_instances(classes: list[type], config_path: Path, marker_filter: list[str] | None) -> None:
+    """Print test instances as defined in a config file, grouped by config category."""
+    class_map = {cls.__name__: cls for cls in classes}
+    categories = _extract_config_instances(config_path)
+
+    if not categories:
+        console.print("[yellow]No validations found in config file.[/yellow]")
+        raise typer.Exit(1)
+
+    if marker_filter:
+        filtered: dict[str, list[str]] = {}
+        for cat, names in categories.items():
+            matched = [
+                n
+                for n in names
+                if (cls := _resolve_class(n, class_map)) and any(m in (cls.markers or []) for m in marker_filter)
+            ]
+            if matched:
+                filtered[cat] = matched
+        categories = filtered
+
+    if not categories:
+        console.print("[yellow]No test instances match the given markers.[/yellow]")
+        raise typer.Exit(1)
+
+    total = sum(len(names) for names in categories.values())
+    console.print(
+        f"\n[bold]Config: {config_path.name}[/bold] ({total} test instances across {len(categories)} categories)\n"
+    )
+
+    for category in categories:
+        names = categories[category]
+        table = Table(
+            title=f"[bold cyan]{category}[/bold cyan] ({len(names)})",
+            title_justify="left",
+            show_header=True,
+            header_style="bold",
+            padding=(0, 1),
+            show_lines=False,
+        )
+        table.add_column("Test", no_wrap=True)
+        table.add_column("Description")
+        table.add_column("Markers", style="dim")
+
+        for name in names:
+            cls = _resolve_class(name, class_map)
+            if cls:
+                label = f"[green]{name}[/green]"
+                if cls.__name__ != name:
+                    label += f" [dim]({cls.__name__})[/dim]"
+                table.add_row(
+                    label,
+                    cls.description or "-",
+                    ", ".join(cls.markers) if cls.markers else "-",
+                )
+            else:
+                table.add_row(f"[green]{name}[/green]", "[red]not found[/red]", "-")
 
         console.print(table)
         console.print()

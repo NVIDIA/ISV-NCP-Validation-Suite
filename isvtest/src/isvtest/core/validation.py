@@ -207,16 +207,10 @@ def _discover_validation_classes() -> dict[str, type[BaseValidation]]:
 
     _validation_class_cache = {}
 
-    # Import validations package
     try:
-        from pathlib import Path
+        from isvtest.core.discovery import discover_all_tests  # lazy: circular with discovery.py
 
-        import isvtest.validations as validations_pkg
-        from isvtest.core.discovery import discover_tests
-
-        pkg_path = Path(validations_pkg.__file__).parent
-
-        for cls in discover_tests(pkg_path, "isvtest.validations"):
+        for cls in discover_all_tests():
             _validation_class_cache[cls.__name__] = cls
             _logger.debug(f"Discovered validation: {cls.__name__}")
 

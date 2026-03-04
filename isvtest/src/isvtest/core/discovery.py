@@ -7,6 +7,8 @@ import pkgutil
 from collections.abc import Generator
 from pathlib import Path
 
+import isvtest.validations as validations_pkg
+import isvtest.workloads as workloads_pkg
 from isvtest.core.validation import BaseValidation
 
 logger = logging.getLogger(__name__)
@@ -42,6 +44,16 @@ def discover_tests(
 
         except ImportError as e:
             logger.warning(f"Failed to import module {module_info.name}: {e}")
+
+
+def discover_all_tests() -> Generator[type[BaseValidation], None, None]:
+    """Discover all BaseValidation subclasses from validations and workloads packages.
+
+    Yields:
+        BaseValidation subclasses from both isvtest.validations and isvtest.workloads
+    """
+    yield from discover_tests(Path(validations_pkg.__file__).parent, "isvtest.validations")
+    yield from discover_tests(Path(workloads_pkg.__file__).parent, "isvtest.workloads")
 
 
 def discover_reframe_tests(

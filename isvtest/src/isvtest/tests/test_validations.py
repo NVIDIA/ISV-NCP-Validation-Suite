@@ -1,12 +1,11 @@
 import sys
 from difflib import get_close_matches
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
 
 from isvtest.config.loader import ConfigLoader
-from isvtest.core.discovery import discover_tests
+from isvtest.core.discovery import discover_all_tests
 from isvtest.core.runners import LocalRunner
 from isvtest.core.validation import BaseValidation
 
@@ -55,14 +54,7 @@ def _suggest_similar_tests(name: str, available: list[str], max_suggestions: int
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     """Generate tests for all BaseValidation and BaseWorkloadCheck subclasses."""
     if "validation_class" in metafunc.fixturenames and "validation_config" in metafunc.fixturenames:
-        # Discover validations in isvtest/validations
-        validations_dir = Path(__file__).parent.parent / "validations"
-        test_classes = list(discover_tests(validations_dir, "isvtest.validations"))
-
-        # Discover workloads in isvtest/workloads
-        workloads_dir = Path(__file__).parent.parent / "workloads"
-        if workloads_dir.exists():
-            test_classes.extend(list(discover_tests(workloads_dir, "isvtest.workloads")))
+        test_classes = list(discover_all_tests())
 
         if not test_classes:
             return

@@ -15,8 +15,9 @@ uv run isvctl docs -t getting-started        # view a specific topic
 
 # List all validation tests by category
 uv run isvctl docs tests
-uv run isvctl docs tests -m kubernetes       # filter by marker
-uv run isvctl docs tests -i StepSuccessCheck # detailed info for a test
+uv run isvctl docs tests -m kubernetes                   # filter by marker
+uv run isvctl docs tests -f isvctl/configs/k8s.yaml      # show config test instances
+uv run isvctl docs tests -i StepSuccessCheck             # detailed info for a test
 ```
 
 ## Documentation

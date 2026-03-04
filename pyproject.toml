@@ -11,11 +11,6 @@ authors = [
 requires-python = ">=3.12"
 dependencies = ["isvctl", "isvtest", "isvreporter"]
 
-[project.scripts]
-isvctl = "isvctl.main:app"
-isvtest = "isvtest.main:main"
-isvreporter = "isvreporter.main:main"
-
 [tool.uv.sources]
 isvctl = { workspace = true }
 isvtest = { workspace = true }

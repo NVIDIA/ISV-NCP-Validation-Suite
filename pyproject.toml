@@ -22,8 +22,17 @@ isvtest = { workspace = true }
 isvreporter = { workspace = true }
 
 [dependency-groups]
-dev = [
+test = [
+    "pytest>=8.3.4,<9.0.0",
+    "pytest-cov>=6.0.0",
     "coverage>=7.0.0",
+]
+lint = [
+    "pre-commit>=4.0.0",
+]
+dev = [
+    { include-group = "test" },
+    { include-group = "lint" },
 ]
 
 [tool.uv.workspace]

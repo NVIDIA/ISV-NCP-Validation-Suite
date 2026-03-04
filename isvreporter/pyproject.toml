@@ -15,7 +15,7 @@ dependencies = [
 isvreporter = "isvreporter.main:app"
 
 [build-system]
-requires = ["uv_build"]
+requires = ["uv_build>=0.7,<0.11"]
 build-backend = "uv_build"
 
 [tool.ruff]
@@ -31,10 +31,6 @@ line-ending = "auto"
 select = ["F", "E", "W", "I", "A", "UP", "RUF"]
 ignore = ["E501"]
 
-[tool.uv]
-package = true
-default-groups = ["dev"]
-
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
@@ -44,9 +40,3 @@ addopts = "-v --junitxml=junit.xml"
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
-
-[dependency-groups]
-dev = [
-    "pytest>=8.3.4",
-    "pytest-cov>=6.0.0",
-]

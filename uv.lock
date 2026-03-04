@@ -559,6 +559,17 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "coverage" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+lint = [
+    { name = "pre-commit" },
+]
+test = [
+    { name = "coverage" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
 ]
 
 [package.metadata]
@@ -569,7 +580,18 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "coverage", specifier = ">=7.0.0" }]
+dev = [
+    { name = "coverage", specifier = ">=7.0.0" },
+    { name = "pre-commit", specifier = ">=4.0.0" },
+    { name = "pytest", specifier = ">=8.3.4,<9.0.0" },
+    { name = "pytest-cov", specifier = ">=6.0.0" },
+]
+lint = [{ name = "pre-commit", specifier = ">=4.0.0" }]
+test = [
+    { name = "coverage", specifier = ">=7.0.0" },
+    { name = "pytest", specifier = ">=8.3.4,<9.0.0" },
+    { name = "pytest-cov", specifier = ">=6.0.0" },
+]
 
 [[package]]
 name = "isvctl"
@@ -584,13 +606,6 @@ dependencies = [
     { name = "typer" },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "pre-commit" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "isvreporter", editable = "isvreporter" },
@@ -599,13 +614,6 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.10.0,<3.0.0" },
     { name = "pyyaml", specifier = ">=6.0.2,<7.0.0" },
     { name = "typer", specifier = ">=0.21.1,<1.0.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pre-commit", specifier = ">=4.0.0" },
-    { name = "pytest", specifier = ">=8.3.4,<9.0.0" },
-    { name = "pytest-cov", specifier = ">=6.0.0" },
 ]
 
 [[package]]
@@ -617,22 +625,10 @@ dependencies = [
     { name = "typer" },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-cov" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.2,<7.0.0" },
     { name = "typer", specifier = ">=0.21.1,<1.0.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=8.3.4" },
-    { name = "pytest-cov", specifier = ">=6.0.0" },
 ]
 
 [[package]]
@@ -653,12 +649,6 @@ dependencies = [
     { name = "urllib3" },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "pre-commit" },
-    { name = "pytest-cov" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "attrs", specifier = ">=25.4.0,<26.0.0" },
@@ -672,12 +662,6 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.2,<7.0.0" },
     { name = "reframe-hpc", specifier = ">=4.8.4" },
     { name = "urllib3", specifier = ">=2.6.0,<3.0.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pre-commit", specifier = ">=4.0.0" },
-    { name = "pytest-cov", specifier = ">=6.0.0" },
 ]
 
 [[package]]

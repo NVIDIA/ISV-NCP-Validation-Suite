@@ -11,19 +11,23 @@ authors = [
 requires-python = ">=3.12"
 dependencies = ["isvctl", "isvtest", "isvreporter"]
 
-[project.scripts]
-isvctl = "isvctl.main:app"
-isvtest = "isvtest.main:main"
-isvreporter = "isvreporter.main:main"
-
 [tool.uv.sources]
 isvctl = { workspace = true }
 isvtest = { workspace = true }
 isvreporter = { workspace = true }
 
 [dependency-groups]
-dev = [
+test = [
+    "pytest>=8.3.4,<9.0.0",
+    "pytest-cov>=6.0.0",
     "coverage>=7.0.0",
+]
+lint = [
+    "pre-commit>=4.0.0",
+]
+dev = [
+    { include-group = "test" },
+    { include-group = "lint" },
 ]
 
 [tool.uv.workspace]

@@ -14,6 +14,7 @@ from isvreporter.client import (
     load_test_run_id,
     report_test_results,
     update_test_run,
+    upload_test_catalog,
 )
 from isvreporter.platform import get_platform_from_config, is_valid_platform, normalize_platform
 from isvreporter.version import get_version
@@ -205,6 +206,13 @@ def update(
             help="ISV test tool version (e.g., '1.12.3')",
         ),
     ] = None,
+    test_catalog: Annotated[
+        Path | None,
+        typer.Option(
+            "--test-catalog",
+            help="Path to test catalog JSON file to upload for coverage tracking",
+        ),
+    ] = None,
 ) -> None:
     """Update an existing test run with completion status.
 
@@ -262,6 +270,27 @@ def update(
             typer.echo(f"Warning: JUnit XML file not found: {junit_xml}", err=True)
         except Exception as e:
             typer.echo(f"Warning: Failed to upload JUnit XML: {e}", err=True)
+
+    # Upload test catalog if provided (for coverage tracking)
+    if test_catalog:
+        try:
+            import json
+
+            typer.echo(f"Reading test catalog: {test_catalog}")
+            catalog_data = json.loads(test_catalog.read_text())
+            catalog_version = catalog_data.get("isvTestVersion", isv_test_version or "unknown")
+            catalog_entries = catalog_data.get("entries", [])
+
+            upload_test_catalog(
+                endpoint=endpoint,
+                jwt_token=jwt_token,
+                isv_test_version=catalog_version,
+                entries=catalog_entries,
+            )
+        except FileNotFoundError:
+            typer.echo(f"Warning: Test catalog file not found: {test_catalog}", err=True)
+        except Exception as e:
+            typer.echo(f"Warning: Failed to upload test catalog: {e}", err=True)
 
     # Update test run with status and log
     update_test_run(

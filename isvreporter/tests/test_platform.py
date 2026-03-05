@@ -34,10 +34,9 @@ class TestNormalizePlatform:
     def test_normalize_bare_metal_aliases(self) -> None:
         """Test that bare metal aliases normalize correctly."""
         assert normalize_platform("bare_metal") == BARE_METAL
-        assert normalize_platform("baremetal") == BARE_METAL
         assert normalize_platform("bare-metal") == BARE_METAL
         assert normalize_platform("BARE_METAL") == BARE_METAL
-        assert normalize_platform("BAREMETAL") == BARE_METAL
+        assert normalize_platform("bm") == BARE_METAL
 
     def test_normalize_empty_and_none(self) -> None:
         """Test that empty/None returns default platform."""
@@ -65,8 +64,8 @@ class TestIsValidPlatform:
         assert is_valid_platform("k8s") is True
         assert is_valid_platform("slurm") is True
         assert is_valid_platform("bare_metal") is True
-        assert is_valid_platform("baremetal") is True
         assert is_valid_platform("bare-metal") is True
+        assert is_valid_platform("bm") is True
 
     def test_valid_platforms_case_insensitive(self) -> None:
         """Test that platform validation is case insensitive."""

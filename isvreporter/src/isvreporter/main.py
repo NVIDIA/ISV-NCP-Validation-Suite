@@ -1,5 +1,6 @@
 """CLI entry point for isvreporter - ISV Lab test results reporting tool."""
 
+import json
 import os
 from pathlib import Path
 from typing import Annotated
@@ -274,8 +275,6 @@ def update(
     # Upload test catalog if provided (for coverage tracking)
     if test_catalog:
         try:
-            import json
-
             typer.echo(f"Reading test catalog: {test_catalog}")
             catalog_data = json.loads(test_catalog.read_text())
             catalog_version = catalog_data.get("isvTestVersion", isv_test_version or "unknown")

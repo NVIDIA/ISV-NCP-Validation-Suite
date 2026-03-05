@@ -325,7 +325,8 @@ class ValidationConfig(BaseModel):
     cluster_name: str | None = Field(default=None, description="Cluster name for test run")
     description: str | None = Field(default=None, description="Test run description")
     platform: str | None = Field(
-        default=None, description="Platform: kubernetes, slurm, bare_metal, network, vm, iam, image_registry"
+        default=None,
+        description="Platform type: KUBERNETES, SLURM, BARE_METAL, CONTROL_PLANE, IAM, NETWORK, VM, IMAGE_REGISTRY",
     )
     settings: dict[str, Any] = Field(default_factory=dict, description="Test settings")
     validations: dict[str, list[dict[str, Any]] | dict[str, Any]] = Field(

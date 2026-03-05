@@ -7,37 +7,63 @@ from pathlib import Path
 
 import yaml
 
-# Valid platform types
-KUBERNETES = "kubernetes"
-SLURM = "slurm"
-BARE_METAL = "bare_metal"
+# Canonical platform types (uppercase, matching backend enums)
+KUBERNETES = "KUBERNETES"
+SLURM = "SLURM"
+BARE_METAL = "BARE_METAL"
+CONTROL_PLANE = "CONTROL_PLANE"
+IAM = "IAM"
+NETWORK = "NETWORK"
+VM = "VM"
+IMAGE_REGISTRY = "IMAGE_REGISTRY"
 
-# Platform aliases (normalized to canonical names)
+ALL_PLATFORMS = {
+    KUBERNETES,
+    SLURM,
+    BARE_METAL,
+    CONTROL_PLANE,
+    IAM,
+    NETWORK,
+    VM,
+    IMAGE_REGISTRY,
+}
+
+# Platform aliases (normalized to canonical uppercase names)
 PLATFORM_ALIASES: dict[str, str] = {
     "k8s": KUBERNETES,
     "kubernetes": KUBERNETES,
     "slurm": SLURM,
     "bare_metal": BARE_METAL,
-    "baremetal": BARE_METAL,
-    "bare-metal": BARE_METAL,
+    "bm": BARE_METAL,
+    "control_plane": CONTROL_PLANE,
+    "iam": IAM,
+    "network": NETWORK,
+    "vm": VM,
+    "image_registry": IMAGE_REGISTRY,
 }
 
 DEFAULT_PLATFORM = KUBERNETES
 
 
 def normalize_platform(platform: str | None) -> str:
-    """Normalize a platform string to a canonical platform name.
+    """Normalize a platform string to a canonical uppercase name.
 
     Args:
-        platform: Platform string (e.g., 'k8s', 'kubernetes', 'baremetal')
+        platform: Platform string (e.g., 'k8s', 'kubernetes', 'KUBERNETES',
+            'iam', 'control_plane')
 
     Returns:
-        Normalized platform string ('kubernetes', 'slurm', or 'bare_metal')
+        Canonical uppercase platform string (e.g., 'KUBERNETES', 'IAM')
     """
     if not platform:
         return DEFAULT_PLATFORM
 
-    normalized = platform.lower().strip().replace("-", "_")
+    cleaned = platform.strip()
+
+    if cleaned.upper() in ALL_PLATFORMS:
+        return cleaned.upper()
+
+    normalized = cleaned.lower().replace("-", "_")
     return PLATFORM_ALIASES.get(normalized, DEFAULT_PLATFORM)
 
 
@@ -48,7 +74,7 @@ def get_platform_from_config(config_path: Path | str) -> str:
         config_path: Path to the YAML config file
 
     Returns:
-        Normalized platform string ('kubernetes', 'slurm', or 'bare_metal')
+        Canonical uppercase platform string
     """
     try:
         with open(config_path) as f:
@@ -70,5 +96,8 @@ def is_valid_platform(platform: str | None) -> bool:
     """
     if not platform:
         return False
-    normalized = platform.lower().strip().replace("-", "_")
+    cleaned = platform.strip()
+    if cleaned.upper() in ALL_PLATFORMS:
+        return True
+    normalized = cleaned.lower().replace("-", "_")
     return normalized in PLATFORM_ALIASES

@@ -210,7 +210,7 @@ commands:
         timeout: 120
 
 tests:
-  platform: bm
+  platform: bare_metal
   cluster_name: "bm-validation"
   description: "Bare metal (BMaaS) GPU validation tests (template)"
 

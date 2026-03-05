@@ -1,6 +1,6 @@
 [project]
 name = "isv-ncp-validation-suite"
-version = "0.4.3"
+version = "0.4.4"
 description = "NVIDIA ISV NCP Validation Suite"
 readme = "README.md"
 license = "Apache-2.0"

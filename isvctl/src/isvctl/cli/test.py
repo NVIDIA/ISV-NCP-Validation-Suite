@@ -293,8 +293,8 @@ def run(
                     catalog_entries = build_catalog()
                     catalog_version = get_catalog_version()
                     typer.echo(f"Built test catalog: {len(catalog_entries)} tests (version: {catalog_version})")
-                    output_dir = Path("_output")
-                    output_dir.mkdir(exist_ok=True)
+                    output_dir = effective_working_dir / "_output"
+                    output_dir.mkdir(parents=True, exist_ok=True)
                     catalog_path = output_dir / "test_catalog.json"
                     catalog_path.write_text(
                         json.dumps({"isvTestVersion": catalog_version, "entries": catalog_entries}, indent=2)

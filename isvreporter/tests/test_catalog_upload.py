@@ -3,6 +3,7 @@
 import json
 from http import HTTPStatus
 from unittest.mock import MagicMock, patch
+from urllib.error import HTTPError, URLError
 
 from isvreporter.client import upload_test_catalog
 
@@ -47,8 +48,6 @@ class TestUploadTestCatalog:
     @patch("isvreporter.client.urlopen")
     def test_conflict_returns_true(self, mock_urlopen: MagicMock) -> None:
         """Test that 409 Conflict (catalog already exists) returns True."""
-        from urllib.error import HTTPError
-
         mock_urlopen.side_effect = HTTPError(
             url="https://api.example.com/v1/test-catalog",
             code=HTTPStatus.CONFLICT,
@@ -69,8 +68,6 @@ class TestUploadTestCatalog:
     @patch("isvreporter.client.urlopen")
     def test_server_error_returns_false(self, mock_urlopen: MagicMock) -> None:
         """Test that 500 error returns False."""
-        from urllib.error import HTTPError
-
         mock_urlopen.side_effect = HTTPError(
             url="https://api.example.com/v1/test-catalog",
             code=HTTPStatus.INTERNAL_SERVER_ERROR,
@@ -91,8 +88,6 @@ class TestUploadTestCatalog:
     @patch("isvreporter.client.urlopen")
     def test_connection_error_returns_false(self, mock_urlopen: MagicMock) -> None:
         """Test that connection error returns False."""
-        from urllib.error import URLError
-
         mock_urlopen.side_effect = URLError("Connection refused")
 
         result = upload_test_catalog(

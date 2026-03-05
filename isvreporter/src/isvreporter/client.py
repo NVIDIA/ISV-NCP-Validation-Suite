@@ -293,6 +293,7 @@ def upload_test_catalog(
                 "description": e.get("description", ""),
                 "markers": e.get("markers", []),
                 "module": e.get("module", ""),
+                "platforms": e.get("platforms", []),
             }
             for e in entries
         ],

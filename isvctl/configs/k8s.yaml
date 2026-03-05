@@ -83,6 +83,12 @@ tests:
         - K8sNcclWorkload:
             min_bus_bw_gbps: 100
             timeout: 600
+        - K8sNcclMultiNodeWorkload:
+            nodes: "{{ steps.setup.kubernetes.gpu_node_count | default(2, true) }}"
+            min_bus_bw_gbps: 100
+            quick_mode: false
+            timeout: 600
+            use_compute_domain: auto
         - K8sGpuStressWorkload:
             memory_gb: 1
             runtime: 30

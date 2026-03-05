@@ -1,0 +1,72 @@
+apiVersion: kubeflow.org/v2beta1
+kind: MPIJob
+metadata:
+  name: nccl-allreduce-multinode
+spec:
+  slotsPerWorker: 4
+  launcherCreationPolicy: WaitForWorkersReady
+  runPolicy:
+    cleanPodPolicy: Running
+  sshAuthMountPath: /root/.ssh
+  mpiReplicaSpecs:
+    Launcher:
+      replicas: 1
+      template:
+        spec:
+          containers:
+            - name: launcher
+              image: nvcr.io/nvidia/hpc-benchmarks:25.04
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  # MPI Operator mounts SSH keys read-only; copy to fix permissions
+                  cp /root/.ssh/id_rsa /tmp/id_rsa && chmod 600 /tmp/id_rsa
+                  # Note: '-np 8' is overridden at runtime by K8sNcclMultiNodeWorkload
+                  exec mpirun --allow-run-as-root \
+                    -np 8 \
+                    --bind-to none --map-by slot \
+                    -mca plm_rsh_args "-o StrictHostKeyChecking=no -o IdentityFile=/tmp/id_rsa" \
+                    -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH \
+                    /usr/local/bin/all_reduce_perf_mpi -b 8 -e 4G -f 2 -g 1
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: node-role.kubernetes.io/control-plane
+                        operator: Exists
+    Worker:
+      replicas: 2
+      template:
+        spec:
+          containers:
+            - name: worker
+              image: nvcr.io/nvidia/hpc-benchmarks:25.04
+              command:
+                - /bin/bash
+                - -c
+                - "command -v sshd >/dev/null || { apt-get update -qq && apt-get install -y -qq openssh-server >/dev/null 2>&1; }; mkdir -p /var/run/sshd && ssh-keygen -A 2>/dev/null && exec /usr/sbin/sshd -De -o PermitRootLogin=yes -o StrictModes=no"
+              readinessProbe:
+                tcpSocket:
+                  port: 22
+                initialDelaySeconds: 2
+                periodSeconds: 3
+              resources:
+                limits:
+                  nvidia.com/gpu: 4 # overridden at runtime by K8sNcclMultiNodeWorkload
+              volumeMounts:
+                - name: shm
+                  mountPath: /dev/shm
+          nodeSelector:
+            nvidia.com/gpu.present: "true"
+          runtimeClassName: nvidia
+          tolerations:
+            - key: "nvidia.com/gpu"
+              operator: "Exists"
+              effect: "NoSchedule"
+          volumes:
+            - name: shm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 8Gi

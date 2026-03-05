@@ -68,16 +68,16 @@ tests:
             partition: "{{ steps.setup.slurm.default_partition | default('gpu') }}"
             runtime: 30
             memory_gb: 16
-            timeout: 600
+            timeout: 900
             cuda_arch: "{{ steps.setup.slurm.cuda_arch | default('100') }}"
 
         # Multi-node NCCL test - validates GPU communication across nodes
         - SlurmNcclMultiNodeWorkload:
             partition: "{{ steps.setup.slurm.default_partition | default('gpu') }}"
-            nodes: 2
+            nodes: "{{ steps.setup.slurm.partitions.gpu.nodes | default([]) | length }}"
             # gpus_per_node: auto-detected from partition GRES if not specified
             min_bus_bw_gbps: 100 # Set to expected bandwidth to enforce threshold
-            quick_mode: true
+            quick_mode: false
             timeout: 900
 
         # Run GPU job from manifest file with variable substitution

@@ -39,6 +39,7 @@ isvtest/src/isvtest/
 │   └── reframe_*.py     # ReFrame validations
 ├── workloads/           # Workload-based tests (longer running)
 │   ├── k8s_*.py         # K8s workloads (NCCL, stress, NIM)
+│   ├── slurm_*.py       # Slurm workloads (NCCL, stress, sbatch)
 │   └── reframe_*.py     # ReFrame tests
 └── main.py              # CLI entry point
 ```
@@ -85,12 +86,26 @@ isvtest/src/isvtest/
 
 | Workload | Description |
 | -------- | ----------- |
-| `K8sNcclWorkload` | NCCL allreduce validation |
+| `K8sNcclWorkload` | Single-node NCCL AllReduce validation |
+| `K8sNcclMultiNodeWorkload` | Multi-node NCCL AllReduce via MPIJob |
 | `K8sGpuStressWorkload` | GPU stress test |
 | `K8sNimHelmWorkload` | NIM Helm deployment + GenAI-Perf KPIs |
 | `K8sNimInferenceWorkload` | NIM inference validation |
+| `SlurmNcclMultiNodeWorkload` | Multi-node NCCL AllReduce via Slurm |
+| `SlurmGpuStressWorkload` | GPU stress test across Slurm partition |
+| `SlurmSbatchWorkload` | Run arbitrary sbatch script |
 
 Each workload class has detailed docstrings covering config options, environment variables, and troubleshooting.
+
+#### Workload Prerequisites
+
+Some workloads require additional cluster components beyond the base GPU Operator:
+
+| Workload | Requirement | Notes |
+| -------- | ----------- | ----- |
+| `K8sNcclMultiNodeWorkload` | [Kubeflow MPI Operator](https://github.com/kubeflow/mpi-operator) | Provides the `MPIJob` CRD (`kubeflow.org/v2beta1`) used to orchestrate multi-node runs |
+| `K8sNcclMultiNodeWorkload` | NVIDIA DRA driver (optional) | When the `ComputeDomain` CRD is present, MNNVL/IMEX channels are enabled automatically for full NVLink bandwidth across nodes. Controlled by `use_compute_domain: auto\|true\|false` |
+| `K8sNimHelmWorkload` | `NGC_API_KEY` env var | Required to pull NIM models from NGC |
 
 ## Configuration Format
 

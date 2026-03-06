@@ -313,7 +313,7 @@ def _resolve_class(instance_name: str, class_map: dict[str, type]) -> type | Non
     """Resolve an instance name (possibly with suffix) to a class.
 
     Uses the same suffix matching logic as the test runner:
-    exact match first, then longest class name prefix with - or _ separator.
+    exact match first, then longest class name prefix with ``-`` separator.
     """
     if instance_name in class_map:
         return class_map[instance_name]
@@ -321,7 +321,7 @@ def _resolve_class(instance_name: str, class_map: dict[str, type]) -> type | Non
     possible = [name for name in class_map if instance_name.startswith(name)]
     if possible:
         longest = max(possible, key=len)
-        if instance_name.startswith(f"{longest}-") or instance_name.startswith(f"{longest}_"):
+        if instance_name.startswith(f"{longest}-"):
             return class_map[longest]
 
     return None

@@ -214,6 +214,39 @@ tests:
 | `teardown` | After teardown phase |
 | `<phase>` | After the specified phase |
 
+### Test Variants
+
+A validation check can be run multiple times with different parameters by appending a **dash-separated suffix** to the class name. The dash (`-`) is the only accepted variant separator.
+
+```yaml
+validations:
+  k8s_workloads:
+    checks:
+      - K8sNimHelmWorkload-1b:
+          model: "meta/llama-3.2-1b-instruct"
+          gpu_count: 1
+          timeout: 900
+      - K8sNimHelmWorkload-3b:
+          model: "meta/llama-3.2-3b-instruct"
+          gpu_count: 4
+          timeout: 1800
+
+  slurm:
+    checks:
+      - SlurmPartition-cpu:
+          partition_name: "cpu"
+      - SlurmPartition-gpu:
+          partition_name: "gpu"
+```
+
+The part before the dash must match an existing validation class name (e.g., `K8sNimHelmWorkload`, `SlurmPartition`). The suffix after the dash is a label -- it can be any descriptive string. Each variant runs as a separate test case with its own parameters and appears independently in test results and coverage.
+
+**Rules:**
+
+- Validation class names **cannot** contain dashes, so the first dash always marks the start of a variant suffix.
+- The suffix is free-form: `K8sNimHelmWorkload-small`, `SlurmPartition-cpu`, `SlurmGpuAllocation-1gpu` are all valid.
+- Each variant is a distinct test entry in coverage tracking.
+
 ## Template Variables
 
 ### Referencing Step Outputs

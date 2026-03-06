@@ -1,0 +1,89 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# OpenShift KaaS Provisioning on Carbide
+#
+# Orchestrates Assisted Installer + Carbide to provision an OpenShift cluster
+# on bare-metal infrastructure. The flow is:
+#
+#   1. Create cluster in Assisted Installer (aicli)
+#   2. Collect iPXE config with discovery token
+#   3. Create OperatingSystem in Carbide with iPXE config
+#   4. Batch-create bare-metal instances with OS + InstanceType
+#   5. Collect instance UUIDs + MAC addresses
+#   6. Monitor hosts in AI, match to instances, approve
+#   7. Monitor OpenShift installation, collect kubeconfig
+#   8. Day-2: GPU Operator, Network Operator, etc.
+#
+# Supports pre-existing Carbide resources (Tenant, VPC, Instance Type)
+# via environment variables.
+#
+# Usage:
+#   # Layered: template validations + OpenShift provisioning
+#   isvctl test run \
+#     -f isvctl/configs/templates/kaas.yaml \
+#     -f isvctl/configs/openshift/kaas-provision.yaml
+#
+#   # With OpenShift-specific overrides
+#   isvctl test run \
+#     -f isvctl/configs/templates/kaas.yaml \
+#     -f isvctl/configs/openshift/kaas-provision.yaml \
+#     -f isvctl/configs/openshift/kaas-overrides.yaml
+#
+# Carbide Environment (required):
+#   CARBIDE_TOKEN / CARBIDE_API_KEY — Authentication
+#   CARBIDE_ORG                     — Organization
+#   CARBIDE_SITE_ID                 — Site UUID
+#   CARBIDE_INSTANCE_TYPE           — Instance type UUID
+#
+# Carbide Environment (optional, use pre-existing):
+#   CARBIDE_VPC_ID                  — Pre-existing VPC UUID
+#   CARBIDE_SUBNET_ID               — Pre-existing subnet UUID
+#   CARBIDE_SSH_KEY_GROUP           — SSH key group UUID
+#
+# Assisted Installer Environment (required):
+#   AI_OFFLINETOKEN                 — Assisted Installer offline token (SaaS)
+#   AI_URL                          — Assisted Installer URL (on-prem, overrides SaaS)
+#   OCP_PULL_SECRET                 — OpenShift pull secret (JSON or file path)
+#
+# OpenShift Environment (optional):
+#   OCP_VERSION                     — OpenShift version (default: 4.18)
+#   OCP_BASE_DOMAIN                 — Base DNS domain (default: example.com)
+#   CARBIDE_INSTANCE_COUNT          — Number of instances (default: 3)
+#   TEARDOWN_ENABLED                — Set to "true" to enable deprovision
+
+version: "1.0"
+
+commands:
+  kubernetes:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: provision_cluster
+        phase: setup
+        command: "python3 ../stubs/openshift/kaas/provision.py"
+        timeout: 7200  # 2 hours for full bare-metal provisioning + OpenShift install
+
+      - name: teardown_cluster
+        phase: teardown
+        command: "python3 ../stubs/openshift/kaas/deprovision.py"
+        timeout: 1800  # 30 minutes for cleanup
+
+# Context overrides for OpenShift on Carbide defaults
+context:
+  node_count: "3"
+  gpu_per_node: "4"
+  total_gpus: "12"
+  gpu_node_count: "3"
+  runtime_class: ""
+  gpu_operator_ns: "nvidia-gpu-operator"
+  min_nccl_bw: "100"
+
+tests:
+  description: "OpenShift on Carbide: bare-metal provisioned cluster validation"

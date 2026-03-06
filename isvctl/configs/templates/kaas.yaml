@@ -33,7 +33,7 @@
 version: "1.0"
 
 tests:
-  cluster_name: "{{ context.cluster_name | default('') }}"
+  cluster_name: "{{ context.cluster_name | default(inventory.cluster_name | default('')) }}"
   description: "Kubernetes GPU cluster validation"
   platform: kubernetes
 

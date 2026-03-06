@@ -43,9 +43,13 @@ def _is_mergeable_list(lst: list[Any]) -> bool:
 
 
 def _has_merge_marker(lst: list[Any]) -> bool:
-    """Check if a list contains the ``__merge__`` opt-in marker."""
+    """Check if a list contains the ``{__merge__: true}`` opt-in marker.
+
+    Only the exact shape ``{"__merge__": True}`` triggers strategic merge.
+    """
     return any(
-        isinstance(item, dict) and len(item) == 1 and _MERGE_MARKER in item
+        isinstance(item, dict) and len(item) == 1
+        and item.get(_MERGE_MARKER) is True
         for item in lst
     )
 
@@ -99,9 +103,10 @@ def _merge_single_key_dict_lists(
         else:
             result.append(copy.deepcopy(item))
 
-    # Append new items from override that weren't in base
+    # Append new items from override that weren't in base (deduplicated)
     for key in override_order:
         if key not in seen_keys:
+            seen_keys.add(key)
             if override_by_key[key] == _REMOVE_SENTINEL:
                 continue  # Removing nonexistent key is a no-op
             result.append({key: copy.deepcopy(override_by_key[key])})
@@ -127,9 +132,7 @@ def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]
     result = copy.deepcopy(base)
 
     for key, value in override.items():
-        if value == _REMOVE_SENTINEL:
-            result.pop(key, None)
-        elif key in result and isinstance(result[key], dict) and isinstance(value, dict):
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
             # Recursively merge nested dicts
             result[key] = deep_merge(result[key], value)
         elif (
@@ -154,7 +157,12 @@ def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]
                 result[key] = copy.deepcopy(override_items)
         else:
             # Override with new value (including None)
-            result[key] = copy.deepcopy(value)
+            # Strip any __merge__ markers from lists to avoid leaking into runtime config
+            if isinstance(value, list):
+                stripped = _strip_merge_marker(value)
+                result[key] = copy.deepcopy(stripped)
+            else:
+                result[key] = copy.deepcopy(value)
 
     return result
 

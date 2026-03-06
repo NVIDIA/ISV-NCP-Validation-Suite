@@ -52,26 +52,21 @@ class TestDeepMerge:
         result = deep_merge(base, override)
         assert result == {"items": [4, 5]}
 
-    def test_remove_dict_key(self) -> None:
-        """Test that __remove__ deletes a key during dict merge."""
+    def test_remove_string_is_literal_at_dict_level(self) -> None:
+        """__remove__ at dict level is treated as a literal string value."""
         base = {"a": 1, "b": 2, "c": 3}
         override = {"b": "__remove__"}
         result = deep_merge(base, override)
-        assert result == {"a": 1, "c": 3}
+        # __remove__ only works inside strategic-merge lists, not at dict level
+        assert result == {"a": 1, "b": "__remove__", "c": 3}
 
-    def test_remove_nested_dict_key(self) -> None:
-        """Test that __remove__ works inside nested dicts."""
-        base = {"outer": {"a": 1, "b": 2}}
-        override = {"outer": {"b": "__remove__"}}
+    def test_remove_only_in_strategic_merge_lists(self) -> None:
+        """__remove__ deletes items only within strategic-merge lists."""
+        base = {"checks": [{"A": {"p": 1}}, {"B": {"p": 2}}]}
+        override = {"checks": [{"__merge__": True}, {"B": "__remove__"}]}
         result = deep_merge(base, override)
-        assert result == {"outer": {"a": 1}}
-
-    def test_remove_nonexistent_dict_key(self) -> None:
-        """Removing a key that doesn't exist is a no-op."""
-        base = {"a": 1}
-        override = {"z": "__remove__"}
-        result = deep_merge(base, override)
-        assert result == {"a": 1}
+        # B is removed from the list, A is kept
+        assert result == {"checks": [{"A": {"p": 1}}]}
 
     def test_original_not_modified(self) -> None:
         """Test that original dicts are not modified."""
@@ -360,3 +355,100 @@ class TestStrategicMerge:
         override = {"checks": [{"__merge__": True}, {"Z": "__remove__"}]}
         result = deep_merge(base, override)
         assert result == {"checks": [{"A": {"p": 1}}]}
+
+
+    def test_merge_marker_requires_true(self) -> None:
+        """__merge__: false should NOT trigger strategic merge."""
+        base = {"checks": [{"A": {"p": 1}}, {"B": {"p": 2}}]}
+        override = {"checks": [{"__merge__": False}, {"A": {"p": 99}}]}
+        result = deep_merge(base, override)
+        # No strategic merge — entire list is replaced (marker stripped)
+        assert result == {"checks": [{"A": {"p": 99}}]}
+
+    def test_duplicate_override_keys_deduplicated(self) -> None:
+        """Duplicate new keys in override list should only appear once."""
+        base = {"checks": [{"A": {"p": 1}}]}
+        override = {"checks": [{"__merge__": True}, {"B": {"p": 2}}, {"B": {"p": 3}}]}
+        result = deep_merge(base, override)
+        # B should appear once (first occurrence wins in override_by_key)
+        b_items = [item for item in result["checks"] if "B" in item]
+        assert len(b_items) == 1
+
+    def test_merge_marker_stripped_when_base_key_missing(self) -> None:
+        """Merge marker should not leak into result when base key doesn't exist."""
+        base = {"other": "value"}
+        override = {"checks": [{"__merge__": True}, {"A": {"p": 1}}]}
+        result = deep_merge(base, override)
+        # Marker should be stripped, only A remains
+        assert result == {"other": "value", "checks": [{"A": {"p": 1}}]}
+
+
+class TestLayeredConfigs:
+    """Integration tests for layered template + provider configs."""
+
+    CONFIGS_DIR = Path(__file__).parent.parent / "configs"
+
+    def test_template_has_no_commands(self) -> None:
+        """Templates should define validations only, no commands."""
+        template = merge_yaml_files([self.CONFIGS_DIR / "templates" / "kaas.yaml"])
+        assert "commands" not in template, "Template should not contain commands"
+        assert "tests" in template, "Template must contain tests"
+        assert "validations" in template["tests"], "Template must contain validations"
+
+    def test_layered_merge_has_both(self) -> None:
+        """Template + provider merge should have both commands and tests."""
+        merged = merge_yaml_files([
+            self.CONFIGS_DIR / "templates" / "kaas.yaml",
+            self.CONFIGS_DIR / "aws" / "eks-layered.yaml",
+        ])
+        assert "commands" in merged, "Merged config must have commands from provider"
+        assert "tests" in merged, "Merged config must have tests from template"
+        assert "kubernetes" in merged["commands"], "Commands must have kubernetes key"
+        steps = merged["commands"]["kubernetes"]["steps"]
+        assert any(s["name"] == "provision_cluster" for s in steps)
+
+    def test_context_overrides_flow_through(self) -> None:
+        """Provider context values should appear in the merged config."""
+        merged = merge_yaml_files([
+            self.CONFIGS_DIR / "templates" / "kaas.yaml",
+            self.CONFIGS_DIR / "aws" / "eks-layered.yaml",
+        ])
+        assert merged.get("context", {}).get("total_gpus") == "1"
+
+    def test_standalone_eks_still_works(self) -> None:
+        """Self-contained eks.yaml should parse with both commands and tests."""
+        standalone = merge_yaml_files([self.CONFIGS_DIR / "aws" / "eks.yaml"])
+        assert "commands" in standalone
+        assert "tests" in standalone
+        assert "validations" in standalone["tests"]
+
+    def test_layered_checks_match_standalone_structure(self) -> None:
+        """Layered and standalone should have the same validation check names."""
+        standalone = merge_yaml_files([self.CONFIGS_DIR / "aws" / "eks.yaml"])
+        layered = merge_yaml_files([
+            self.CONFIGS_DIR / "templates" / "kaas.yaml",
+            self.CONFIGS_DIR / "aws" / "eks-layered.yaml",
+        ])
+
+        def get_check_names(config: dict[str, Any]) -> set[str]:
+            names: set[str] = set()
+            for group in config.get("tests", {}).get("validations", {}).values():
+                for check in group:
+                    if isinstance(check, dict):
+                        names.update(check.keys())
+            return names
+
+        standalone_checks = get_check_names(standalone)
+        layered_checks = get_check_names(layered)
+        assert standalone_checks == layered_checks, (
+            f"Check mismatch: standalone-only={standalone_checks - layered_checks}, "
+            f"layered-only={layered_checks - standalone_checks}"
+        )
+
+    def test_all_templates_are_validation_only(self) -> None:
+        """All template YAML files should have tests but no commands."""
+        template_dir = self.CONFIGS_DIR / "templates"
+        for yaml_file in sorted(template_dir.glob("*.yaml")):
+            config = merge_yaml_files([yaml_file])
+            assert "commands" not in config, f"{yaml_file.name} should not have commands"
+            assert "tests" in config, f"{yaml_file.name} must have tests"

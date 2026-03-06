@@ -114,3 +114,8 @@ clean: ## Clean build artifacts and test outputs
 		find $$pkg -type f -name "*.pyc" -delete 2>/dev/null || true; \
 	done
 	@echo "✅ Clean complete!"
+
+update-spdx-headers: ## Update SPDX headers in all packages
+	@echo "Updating SPDX headers in all packages..."
+	uv run python scripts/add_spdx_headers.py; \
+	@echo "✅ SPDX headers updated!"

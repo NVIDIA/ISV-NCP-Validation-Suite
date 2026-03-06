@@ -1,0 +1,109 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# Carbide Image Registry - Layered Provider Configuration
+#
+# Supplies commands (carbidecli stubs) for the image-registry template.
+# Tests OS image upload, VM launch from image, install config CRUD,
+# and BMaaS provisioning from images and configs.
+#
+# Mapping to template concepts:
+#   upload_image       → carbidecli operating-system create (iPXE/kickstart type)
+#   launch_instance    → carbidecli instance create using the OS
+#   crud_install_config → carbidecli operating-system get/list/update/delete lifecycle
+#   install_image_bm   → carbidecli instance create with specific OS
+#   install_config_bm  → same, proving OS+config works on BM
+#   teardown           → delete instances and OS resources
+#
+# Usage:
+#   isvctl test run \
+#     -f isvctl/configs/templates/image-registry.yaml \
+#     -f isvctl/configs/carbide/image-registry.yaml
+#
+# Environment:
+#   carbidecli handles auth via config or env vars:
+#     CARBIDE_TOKEN / CARBIDE_API_KEY — Authentication
+#     CARBIDE_ORG                     — Organization
+#     CARBIDE_SITE_ID                 — Site UUID (required)
+
+version: "1.0"
+
+commands:
+  image_registry:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      # ─── SETUP: Upload OS Image ──────────────────────────────────────
+      - name: upload_image
+        phase: setup
+        command: "python3 ../stubs/carbide/image-registry/upload_image.py"
+        args:
+          - "--site-id"
+          - "{{ context.site_id }}"
+        timeout: 600
+
+      # ─── TEST: Launch Instance from OS Image ─────────────────────────
+      - name: launch_instance
+        phase: test
+        command: "python3 ../stubs/carbide/image-registry/launch_instance.py"
+        args:
+          - "--os-id"
+          - "{{steps.upload_image.image_id}}"
+          - "--site-id"
+          - "{{ context.site_id }}"
+        timeout: 600
+
+      # ─── TEST: OS Install Config CRUD ─────────────────────────────────
+      - name: crud_install_config
+        phase: test
+        command: "python3 ../stubs/carbide/image-registry/crud_install_config.py"
+        args:
+          - "--os-id"
+          - "{{steps.upload_image.image_id}}"
+          - "--site-id"
+          - "{{ context.site_id }}"
+        timeout: 300
+
+      # ─── TEST: Install OS Image on BM ─────────────────────────────────
+      - name: install_image_bm
+        phase: test
+        command: "python3 ../stubs/carbide/image-registry/install_image_bm.py"
+        args:
+          - "--os-id"
+          - "{{steps.upload_image.image_id}}"
+          - "--site-id"
+          - "{{ context.site_id }}"
+        timeout: 600
+
+      # ─── TEST: Install Config on BM ───────────────────────────────────
+      - name: install_config_bm
+        phase: test
+        command: "python3 ../stubs/carbide/image-registry/install_config_bm.py"
+        args:
+          - "--os-id"
+          - "{{steps.upload_image.image_id}}"
+          - "--site-id"
+          - "{{ context.site_id }}"
+        timeout: 600
+
+      # ─── TEARDOWN: Delete All Resources ───────────────────────────────
+      - name: teardown
+        phase: teardown
+        command: "python3 ../stubs/carbide/image-registry/teardown.py"
+        args:
+          - "--site-id"
+          - "{{ context.site_id }}"
+        timeout: 300
+
+# Provider-specific context
+context:
+  site_id: "{{ env.CARBIDE_SITE_ID | default('') }}"
+
+tests:
+  description: "Carbide image registry: OS upload, VM launch, config CRUD, BM provisioning"

@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# OpenShift KaaS Overrides
+#
+# Merge on top of the template + provider config to customize for your cluster.
+#
+# Usage:
+#   isvctl test run \
+#     -f isvctl/configs/templates/kaas.yaml \
+#     -f isvctl/configs/openshift/kaas.yaml \
+#     -f isvctl/configs/openshift/kaas-overrides.yaml
+#
+# Or override individual values:
+#   isvctl test run ... --set context.node_count=21 --set context.total_gpus=72
+
+# Uncomment and adjust for your cluster:
+
+# context:
+#   node_count: "21"          # 3 control + 18 GPU nodes
+#   gpu_per_node: "4"         # NVL72: 4 GPUs per tray
+#   total_gpus: "72"          # 18 × 4
+#   gpu_node_count: "18"
+#   min_nccl_bw: "400"        # NVLink: 400+ GB/s
+#   driver_version: "550.127.05"
+
+# Exclude slow workloads for quick validation:
+# tests:
+#   exclude:
+#     markers:
+#       - slow
+#       - workload

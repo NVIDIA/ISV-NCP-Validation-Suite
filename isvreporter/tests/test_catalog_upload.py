@@ -14,11 +14,18 @@ class TestUploadTestCatalog:
     @patch("isvreporter.client.urlopen")
     def test_successful_upload(self, mock_urlopen: MagicMock) -> None:
         """Test successful catalog upload returns True."""
-        mock_response = MagicMock()
-        mock_response.read.return_value = json.dumps({"status": "created"}).encode()
-        mock_response.__enter__ = MagicMock(return_value=mock_response)
-        mock_response.__exit__ = MagicMock(return_value=False)
-        mock_urlopen.return_value = mock_response
+        # GET returns empty list (version not found), POST returns success
+        get_response = MagicMock()
+        get_response.read.return_value = json.dumps([]).encode()
+        get_response.__enter__ = MagicMock(return_value=get_response)
+        get_response.__exit__ = MagicMock(return_value=False)
+
+        post_response = MagicMock()
+        post_response.read.return_value = json.dumps({"status": "created"}).encode()
+        post_response.__enter__ = MagicMock(return_value=post_response)
+        post_response.__exit__ = MagicMock(return_value=False)
+
+        mock_urlopen.side_effect = [get_response, post_response]
 
         entries = [
             {"name": "TestA", "description": "Test A", "markers": ["k8s"], "module": "mod.a"},
@@ -33,10 +40,10 @@ class TestUploadTestCatalog:
         )
 
         assert result is True
-        mock_urlopen.assert_called_once()
+        assert mock_urlopen.call_count == 2
 
-        call_args = mock_urlopen.call_args
-        request = call_args[0][0]
+        post_call = mock_urlopen.call_args_list[1]
+        request = post_call[0][0]
         assert request.full_url == "https://api.example.com/v1/test-catalog"
         assert request.method == "POST"
 
@@ -44,6 +51,25 @@ class TestUploadTestCatalog:
         assert payload["isvTestVersion"] == "1.2.3"
         assert len(payload["entries"]) == 2
         assert payload["entries"][0]["name"] == "TestA"
+
+    @patch("isvreporter.client.urlopen")
+    def test_skips_upload_when_version_exists(self, mock_urlopen: MagicMock) -> None:
+        """Test that upload is skipped when version already exists."""
+        get_response = MagicMock()
+        get_response.read.return_value = json.dumps(["1.2.3"]).encode()
+        get_response.__enter__ = MagicMock(return_value=get_response)
+        get_response.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = get_response
+
+        result = upload_test_catalog(
+            endpoint="https://api.example.com",
+            jwt_token="test-token",
+            isv_test_version="1.2.3",
+            entries=[{"name": "TestA"}],
+        )
+
+        assert result is True
+        mock_urlopen.assert_called_once()
 
     @patch("isvreporter.client.urlopen")
     def test_conflict_returns_true(self, mock_urlopen: MagicMock) -> None:

@@ -283,6 +283,18 @@ def upload_test_catalog(
     Returns:
         True if catalog was uploaded or already exists, False on error
     """
+    # Check if this version's catalog already exists
+    try:
+        check_url = f"{endpoint}/v1/test-catalog"
+        check_req = Request(check_url, headers={"Authorization": f"Bearer {jwt_token}"}, method="GET")
+        with urlopen(check_req, timeout=10) as resp:
+            versions = json.loads(resp.read().decode())
+            if isv_test_version in versions:
+                print(f"Test catalog already exists for version {isv_test_version} (skipped)")
+                return True
+    except Exception:
+        pass
+
     url = f"{endpoint}/v1/test-catalog"
 
     payload = {

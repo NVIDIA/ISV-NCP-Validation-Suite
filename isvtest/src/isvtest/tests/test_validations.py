@@ -121,11 +121,8 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
                     possible_matches = [name for name in test_classes_map.keys() if validation_name.startswith(name)]
                     if possible_matches:
                         longest_match = max(possible_matches, key=len)
-                        # Verify it is a valid variant (starts with name + separator)
-                        # We accept - or _ as separator
-                        if validation_name.startswith(f"{longest_match}-") or validation_name.startswith(
-                            f"{longest_match}_"
-                        ):
+                        # Dash is the only accepted variant separator
+                        if validation_name.startswith(f"{longest_match}-"):
                             target_class = test_classes_map[longest_match]
 
                 if target_class:

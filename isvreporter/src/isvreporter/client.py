@@ -271,6 +271,81 @@ def report_test_results(
         sys.exit(1)
 
 
+def upload_test_catalog(
+    endpoint: str,
+    jwt_token: str,
+    isv_test_version: str,
+    entries: list[dict[str, Any]],
+) -> bool:
+    """Upload test catalog for a suite version (idempotent per version).
+
+    Sends the full list of available validation tests for a given isvtest
+    version. If the backend already has a catalog for this version, it
+    returns 409 Conflict which is treated as success (dedup).
+
+    Args:
+        endpoint: ISV Lab Service endpoint URL
+        jwt_token: JWT access token
+        isv_test_version: Test suite version string (e.g. "1.2.3")
+        entries: List of catalog entry dicts with keys:
+            name, description, markers, module
+
+    Returns:
+        True if catalog was uploaded or already exists, False on error
+    """
+    # Check if this version's catalog already exists
+    try:
+        check_url = f"{endpoint}/v1/test-catalog"
+        check_req = Request(check_url, headers={"Authorization": f"Bearer {jwt_token}"}, method="GET")
+        with urlopen(check_req, timeout=10) as resp:
+            versions = json.loads(resp.read().decode())
+            if isv_test_version in versions:
+                print(f"Test catalog already exists for version {isv_test_version} (skipped)")
+                return True
+    except Exception:
+        pass
+
+    url = f"{endpoint}/v1/test-catalog"
+
+    payload = {
+        "isvTestVersion": isv_test_version,
+        "entries": [
+            {
+                "name": e["name"],
+                "description": e.get("description", ""),
+                "markers": e.get("markers", []),
+                "module": e.get("module", ""),
+                "platforms": e.get("platforms", []),
+            }
+            for e in entries
+        ],
+    }
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {jwt_token}",
+    }
+
+    try:
+        request = Request(url, data=json.dumps(payload).encode(), headers=headers, method="POST")
+        with urlopen(request, timeout=30) as response:
+            json.loads(response.read().decode())
+            print(f"Test catalog uploaded successfully (version: {isv_test_version}, {len(entries)} entries)")
+            return True
+    except HTTPError as e:
+        if e.code == 409:
+            print(f"Test catalog already exists for version {isv_test_version} (skipped)")
+            return True
+        print(f"ERROR: Failed to upload test catalog (HTTP {e.code})", file=sys.stderr)
+        print(f"Response: {e.read().decode()}", file=sys.stderr)
+        return False
+    except URLError as e:
+        print("ERROR: Failed to upload test catalog - unable to connect to service", file=sys.stderr)
+        print(f"       Endpoint: {endpoint}", file=sys.stderr)
+        print(f"       Reason: {e.reason}", file=sys.stderr)
+        return False
+
+
 def calculate_duration(start_time_str: str) -> int:
     """
     Calculate duration in seconds from start time to now.

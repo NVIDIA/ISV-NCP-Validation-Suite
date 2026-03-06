@@ -23,6 +23,7 @@ Features:
 
 from __future__ import annotations
 
+import re
 import sys
 import time
 import xml.etree.ElementTree as ET
@@ -418,18 +419,39 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     if not junit_xml_path:
         return  # No JUnit output configured
 
-    # Get collected subtest reports from module-level collector
-    if not _collected_subtest_reports:
-        return  # No subtests to add
-
     junit_path = Path(junit_xml_path)
     if not junit_path.exists():
         return  # JUnit file not created yet (shouldn't happen)
 
-    _inject_subtests_into_junit(junit_path, _collected_subtest_reports)
+    _normalize_junit_testcase_names(junit_path)
 
-    # Clear the collector for next run (important for test isolation)
-    _collected_subtest_reports = []
+    if _collected_subtest_reports:
+        _inject_subtests_into_junit(junit_path, _collected_subtest_reports)
+        _collected_subtest_reports = []
+
+
+_PARAMETRIZED_NAME_RE = re.compile(r"^\w+\[(.+)]$")
+
+
+def _normalize_junit_testcase_names(junit_path: Path) -> None:
+    """Strip pytest parametrize wrappers from testcase names in JUnit XML.
+
+    Transforms names like ``test_validation[K8sNodeCountCheck]`` to
+    ``K8sNodeCountCheck`` so they match the test catalog used by the backend.
+    """
+    try:
+        tree = ET.parse(junit_path)
+        changed = False
+        for testcase in tree.iter("testcase"):
+            name = testcase.get("name", "")
+            m = _PARAMETRIZED_NAME_RE.match(name)
+            if m:
+                testcase.set("name", m.group(1))
+                changed = True
+        if changed:
+            tree.write(junit_path, encoding="utf-8", xml_declaration=True)
+    except Exception:
+        pass  # don't break the test run for post-processing failures
 
 
 def _inject_subtests_into_junit(junit_path: Path, reports: list[SubTestReport]) -> None:
@@ -485,10 +507,9 @@ def _inject_subtests_into_junit(junit_path: Path, reports: list[SubTestReport]) 
         insertions: list[tuple[int, list[ET.Element]]] = []
 
         for parent_nodeid, parent_reports in subtests_by_parent.items():
-            # Find parent testcase by matching name pattern
-            # pytest JUnit uses format like "test_validation[CheckName]"
-            # nodeid is like "isvtest/src/.../test_validation[CheckName]"
-            parent_name = parent_nodeid.split("::")[-1] if "::" in parent_nodeid else parent_nodeid
+            raw_parent = parent_nodeid.split("::")[-1] if "::" in parent_nodeid else parent_nodeid
+            m = _PARAMETRIZED_NAME_RE.match(raw_parent)
+            parent_name = m.group(1) if m else raw_parent
             parent_idx = testcase_indices.get(parent_name)
 
             if parent_idx is None:

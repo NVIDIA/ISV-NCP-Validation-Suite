@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Annotated, TextIO
 
 import typer
+from isvtest.catalog import build_catalog, get_catalog_version
 
 from isvctl.cli import setup_logging
 from isvctl.config.merger import merge_yaml_files
@@ -280,6 +281,11 @@ def run(
     orchestrator = Orchestrator(config, working_dir=effective_working_dir)
     log_file_path = effective_working_dir / "pytest-output.log"
 
+    # Build test catalog early so it runs inside the TeeWriter context
+    # (avoids logging errors from stale stream references after the log file closes)
+    catalog_entries: list[dict] | None = None
+    catalog_version: str | None = None
+
     if upload_results:
         # Capture output to log file while still displaying (like `tee`)
         with open(log_file_path, "w") as log_file:
@@ -293,6 +299,19 @@ def run(
                     verbose=verbose,
                     junitxml=str(junitxml),
                 )
+                try:
+                    catalog_entries = build_catalog()
+                    catalog_version = get_catalog_version()
+                    typer.echo(f"Built test catalog: {len(catalog_entries)} tests (version: {catalog_version})")
+                    output_dir = Path("_output")
+                    output_dir.mkdir(parents=True, exist_ok=True)
+                    catalog_path = output_dir / "test_catalog.json"
+                    catalog_path.write_text(
+                        json.dumps({"isvTestVersion": catalog_version, "entries": catalog_entries}, indent=2)
+                    )
+                    typer.echo(f"  Saved test catalog to: {catalog_path}")
+                except Exception as e:
+                    logger.warning("Failed to build test catalog: %s", e)
             finally:
                 sys.stdout, sys.stderr = original_stdout, original_stderr
     else:
@@ -319,6 +338,8 @@ def run(
             junit_xml=junit_path if junit_path.exists() else None,
             log_file=log_file_path if log_file_path.exists() else None,
             isv_software_version=isv_software_version,
+            catalog_entries=catalog_entries,
+            catalog_version=catalog_version,
         ):
             typer.echo(typer.style("[OK]", fg=typer.colors.GREEN) + " Test results uploaded successfully")
         else:

@@ -203,7 +203,7 @@ commands:
         timeout: 120
 
 tests:
-  platform: bm
+  platform: bare_metal
   cluster_name: "aws-bm-validation"
   description: "AWS Bare Metal (BMaaS) validation tests"
 

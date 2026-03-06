@@ -45,40 +45,45 @@ def main() -> int:
     parser.add_argument("--region", default=os.environ.get("CARBIDE_REGION", ""))
     parser.add_argument("--site-id", default=os.environ.get("CARBIDE_SITE_ID", ""))
     parser.add_argument("--os-name", default="ncp-validation-os")
+    parser.add_argument("--os-id", default=os.environ.get("CARBIDE_OS_ID", ""))
     args = parser.parse_args()
-
-    if not args.site_id:
-        print(json.dumps({
-            "success": False,
-            "platform": "image_registry",
-            "error": "site-id is required (--site-id or CARBIDE_SITE_ID env var)",
-        }, indent=2))
-        return 1
-
-    os_name = f"{args.os_name}-{int(time.time())}"
 
     result: dict[str, Any] = {
         "success": False,
         "platform": "image_registry",
-        "image_name": os_name,
     }
 
     try:
-        resp = run_carbide(
-            "operating-system", "create",
-            "--name", os_name,
-            "--site-id", args.site_id,
-            "--type", "ipxe",
-        )
-        os_id = resp.get("id", resp.get("operating_system_id", ""))
+        state = load_state()
+
+        if args.os_id:
+            # Use pre-existing OperatingSystem
+            resp = run_carbide("operating-system", "get", args.os_id)
+            os_id = resp.get("id", args.os_id)
+            os_name = resp.get("name", args.os_id)
+            state["os_created"] = False
+        else:
+            # Create new OperatingSystem
+            if not args.site_id:
+                result["error"] = "site-id required when not using pre-existing OS"
+                print(json.dumps(result, indent=2))
+                return 1
+            os_name = f"{args.os_name}-{int(time.time())}"
+            resp = run_carbide(
+                "operating-system", "create",
+                "--name", os_name,
+                "--site-id", args.site_id,
+                "--type", "ipxe",
+            )
+            os_id = resp.get("id", resp.get("operating_system_id", ""))
+            state["os_created"] = True
 
         result["image_id"] = os_id
+        result["image_name"] = os_name
         result["storage_bucket"] = "carbide"
         result["disk_ids"] = [os_id]
         result["success"] = True
 
-        # Persist for subsequent steps
-        state = load_state()
         state["os_id"] = os_id
         state["os_name"] = os_name
         state["site_id"] = args.site_id

@@ -53,12 +53,19 @@ def main() -> int:
     state = load_state()
     group_id = state.get("ssh_key_group_id", "")
 
+    if not state.get("ssh_key_group_created", True):
+        result["success"] = True
+        result["skipped"] = True
+        result["message"] = f"SSH key group {group_id} is pre-existing, not deleting"
+        result["resources_deleted"] = []
+        print(json.dumps(result, indent=2))
+        return 0
+
     try:
         run_carbide("ssh-key-group", "delete", "--id", group_id)
         result["resources_deleted"] = [f"ssh-key-group/{group_id}"]
         result["success"] = True
     except RuntimeError as e:
-        # Already deleted is acceptable
         if "not found" in str(e).lower() or "404" in str(e):
             result["resources_deleted"] = [f"ssh-key-group/{group_id}"]
             result["success"] = True

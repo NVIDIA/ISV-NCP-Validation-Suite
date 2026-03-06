@@ -9,13 +9,17 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-"""Create a VPC in Carbide (maps to template's "tenant" concept).
+"""Create or reuse a VPC in Carbide (maps to template's "tenant" concept).
 
-Requires a site ID, provided via ``--site-id`` or the
+If ``CARBIDE_VPC_ID`` is set, uses the pre-existing VPC instead of creating
+a new one. Only VPCs created by this script are deleted during teardown.
+
+Requires a site ID when creating, provided via ``--site-id`` or the
 ``CARBIDE_SITE_ID`` environment variable.
 
 Usage:
     python create_tenant.py --site-id <site-id>
+    CARBIDE_VPC_ID=<uuid> python create_tenant.py
 
 Output JSON:
 {
@@ -43,40 +47,45 @@ def main() -> int:
     parser.add_argument("--region", default=os.environ.get("CARBIDE_REGION", "us-west-2"))
     parser.add_argument("--name-prefix", default="ncp-vpc")
     parser.add_argument("--site-id", default=os.environ.get("CARBIDE_SITE_ID", ""))
+    parser.add_argument("--vpc-id", default=os.environ.get("CARBIDE_VPC_ID", ""))
     args = parser.parse_args()
-
-    if not args.site_id:
-        print(json.dumps({
-            "success": False,
-            "platform": "control_plane",
-            "error": "site-id is required (--site-id or CARBIDE_SITE_ID env var)",
-        }, indent=2))
-        return 1
-
-    vpc_name = f"{args.name_prefix}-{int(time.time())}"
-    description = "NCP validation VPC"
 
     result: dict[str, Any] = {
         "success": False,
         "platform": "control_plane",
-        "tenant_name": vpc_name,
     }
 
     try:
-        resp = run_carbide(
-            "vpc", "create",
-            "--name", vpc_name,
-            "--description", description,
-            "--site-id", args.site_id,
-        )
-        vpc_id = resp.get("id", resp.get("vpc_id", ""))
+        state = load_state()
 
+        if args.vpc_id:
+            # Use pre-existing VPC
+            resp = run_carbide("vpc", "get", args.vpc_id)
+            vpc_id = resp.get("id", args.vpc_id)
+            vpc_name = resp.get("name", args.vpc_id)
+            state["vpc_created"] = False
+        else:
+            # Create new VPC
+            if not args.site_id:
+                result["error"] = "site-id is required when not using pre-existing VPC"
+                print(json.dumps(result, indent=2))
+                return 1
+
+            vpc_name = f"{args.name_prefix}-{int(time.time())}"
+            resp = run_carbide(
+                "vpc", "create",
+                "--name", vpc_name,
+                "--description", "NCP validation VPC",
+                "--site-id", args.site_id,
+            )
+            vpc_id = resp.get("id", resp.get("vpc_id", ""))
+            state["vpc_created"] = True
+
+        result["tenant_name"] = vpc_name
         result["tenant_id"] = vpc_id
-        result["description"] = description
+        result["description"] = "NCP validation VPC"
         result["success"] = True
 
-        # Persist for subsequent steps
-        state = load_state()
         state["vpc_id"] = vpc_id
         state["vpc_name"] = vpc_name
         state["site_id"] = args.site_id

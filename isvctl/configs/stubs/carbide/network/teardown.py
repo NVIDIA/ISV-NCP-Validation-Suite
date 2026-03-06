@@ -68,25 +68,28 @@ def main() -> int:
 
     state = load_state()
 
-    # Delete subnets first (must be removed before VPC)
-    for subnet_id in state.get("network_subnet_ids", []):
-        if _safe_delete("subnet", subnet_id):
-            result["resources_deleted"].append(f"subnet/{subnet_id}")
+    # Delete subnets (only those we created)
+    if state.get("network_subnet_created", True):
+        for subnet_id in state.get("network_subnet_ids", []):
+            if _safe_delete("subnet", subnet_id):
+                result["resources_deleted"].append(f"subnet/{subnet_id}")
 
-    # Delete NSGs
+    # Delete NSGs (always created by tests)
     for nsg_id in state.get("network_nsg_ids", []):
         if _safe_delete("network-security-group", nsg_id):
             result["resources_deleted"].append(f"nsg/{nsg_id}")
 
-    # Delete VPC prefix
+    # Delete VPC prefix (only if we created it)
     prefix_id = state.get("network_prefix_id", "")
-    if _safe_delete("vpc-prefix", prefix_id):
-        result["resources_deleted"].append(f"vpc-prefix/{prefix_id}")
+    if state.get("network_prefix_created", True) and prefix_id:
+        if _safe_delete("vpc-prefix", prefix_id):
+            result["resources_deleted"].append(f"vpc-prefix/{prefix_id}")
 
-    # Delete VPC
+    # Delete VPC (only if we created it)
     vpc_id = state.get("network_vpc_id", "")
-    if _safe_delete("vpc", vpc_id):
-        result["resources_deleted"].append(f"vpc/{vpc_id}")
+    if state.get("network_vpc_created", True) and vpc_id:
+        if _safe_delete("vpc", vpc_id):
+            result["resources_deleted"].append(f"vpc/{vpc_id}")
 
     # Clean up state keys
     for key in ("network_vpc_id", "network_vpc_name", "network_prefix_id",

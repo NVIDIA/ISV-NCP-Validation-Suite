@@ -50,12 +50,20 @@ def main() -> int:
     state = load_state()
     vpc_id = state.get("vpc_id", "")
 
+    if not state.get("vpc_created", True):
+        # Pre-existing VPC — don't delete
+        result["success"] = True
+        result["skipped"] = True
+        result["message"] = f"VPC {vpc_id} is pre-existing, not deleting"
+        result["resources_deleted"] = []
+        print(json.dumps(result, indent=2))
+        return 0
+
     try:
         run_carbide("vpc", "delete", "--id", vpc_id)
         result["resources_deleted"] = [f"vpc/{vpc_id}"]
         result["success"] = True
     except RuntimeError as e:
-        # Already deleted is acceptable
         if "not found" in str(e).lower() or "404" in str(e):
             result["resources_deleted"] = [f"vpc/{vpc_id}"]
             result["success"] = True

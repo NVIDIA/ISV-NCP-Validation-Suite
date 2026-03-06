@@ -1,0 +1,54 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# Carbide IAM - Layered Provider Configuration
+#
+# Validates API token, scope permissions, and credential lifecycle.
+# Carbide doesn't have user management (handled by NGC/Keycloak),
+# so this validates token health + scope coverage instead.
+#
+# What it tests:
+#   - Token authentication (tenant get)
+#   - API read access (site list)
+#   - Scope coverage for all Carbide templates
+#   - Write access (create/delete temp SSH key)
+#
+# Usage:
+#   isvctl test run \
+#     -f isvctl/configs/templates/iam.yaml \
+#     -f isvctl/configs/carbide/iam.yaml
+#
+# Environment:
+#   TARGET_SCOPES — Granted API scopes (auto-populated by carbidecli)
+#   carbidecli handles auth via config or env vars
+
+version: "1.0"
+
+commands:
+  iam:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: create_user
+        phase: setup
+        command: "python3 ../stubs/carbide/iam/create_user.py"
+        timeout: 120
+
+      - name: test_credentials
+        phase: test
+        command: "python3 ../stubs/carbide/iam/test_credentials.py"
+        timeout: 120
+
+      - name: teardown
+        phase: teardown
+        command: "python3 ../stubs/carbide/iam/delete_user.py"
+        timeout: 60
+
+tests:
+  description: "Carbide IAM: token validation, scope coverage, credential lifecycle"

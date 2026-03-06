@@ -10,13 +10,18 @@ Provider implementation for [NVIDIA Carbide](https://github.com/fabiendupont/clo
 | `network` | `network.yaml` | VPC, subnet, prefix, NSG |
 | `image-registry` | `image-registry.yaml` | OperatingSystem + InstanceType CRUD |
 | `bm` | `bm.yaml` | Instance launch/describe/reboot/teardown |
-| `iam` | — | Not applicable (auth via NGC/Keycloak, not carbidecli) |
+| `iam` | `iam.yaml` | Token validation, scope coverage, write access |
 | `vm` | — | Not applicable (VMs are a platform concern, e.g., KubeVirt) |
 | `kaas` | — | Not applicable (K8s installation is a platform concern) |
 
 ## Usage
 
 ```bash
+# IAM: token validation + scope coverage (run first)
+isvctl test run \
+  -f isvctl/configs/templates/iam.yaml \
+  -f isvctl/configs/carbide/iam.yaml
+
 # Control plane validation
 isvctl test run \
   -f isvctl/configs/templates/control-plane.yaml \

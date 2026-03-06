@@ -40,32 +40,34 @@ def main() -> int:
     parser.add_argument("--instance-id", default="")
     args = parser.parse_args()
 
+    state = load_state()
     if not args.instance_id:
-        state = load_state()
         args.instance_id = state.get("instance_id", "")
-
-    if not args.instance_id:
-        print(json.dumps({
-            "success": False,
-            "platform": "bm",
-            "error": "instance-id is required",
-        }, indent=2))
-        return 1
-
-    resources_deleted: list[str] = []
 
     result: dict[str, Any] = {
         "success": False,
         "platform": "bm",
-        "resources_deleted": resources_deleted,
+        "resources_deleted": [],
     }
+
+    if not args.instance_id:
+        result["success"] = True
+        result["message"] = "No instance to delete"
+        print(json.dumps(result, indent=2))
+        return 0
+
+    if not state.get("instance_created", True):
+        result["success"] = True
+        result["skipped"] = True
+        result["message"] = f"Instance {args.instance_id} is pre-existing, not deleting"
+        print(json.dumps(result, indent=2))
+        return 0
 
     try:
         run_carbide("instance", "delete", "--id", args.instance_id)
-        resources_deleted.append(f"instance:{args.instance_id}")
+        result["resources_deleted"].append(f"instance:{args.instance_id}")
         result["success"] = True
 
-        # Clear state
         save_state({})
 
     except Exception as e:

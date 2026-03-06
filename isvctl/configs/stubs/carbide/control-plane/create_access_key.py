@@ -55,13 +55,25 @@ def main() -> int:
         "username": args.username_prefix,
     }
 
+    existing_group_id = os.environ.get("CARBIDE_SSH_KEY_GROUP_ID", "")
+
     try:
-        # Create SSH key group
-        group_resp = run_carbide("ssh-key-group", "create", "--name", group_name)
-        group_id = group_resp.get("id", group_resp.get("ssh_key_group_id", ""))
+        state = load_state()
+
+        # SSH key group: reuse or create
+        if existing_group_id:
+            group_resp = run_carbide("ssh-key-group", "get", existing_group_id)
+            group_id = group_resp.get("id", existing_group_id)
+            group_name = group_resp.get("name", existing_group_id)
+            state["ssh_key_group_created"] = False
+        else:
+            group_resp = run_carbide("ssh-key-group", "create", "--name", group_name)
+            group_id = group_resp.get("id", group_resp.get("ssh_key_group_id", ""))
+            state["ssh_key_group_created"] = True
+
         result["user_id"] = group_id
 
-        # Create SSH key within the group
+        # SSH key: always create (it's the test artifact)
         key_resp = run_carbide(
             "ssh-key", "create",
             "--name", key_name,
@@ -74,8 +86,6 @@ def main() -> int:
         result["secret_access_key"] = public_key
         result["success"] = True
 
-        # Persist IDs for subsequent steps
-        state = load_state()
         state["ssh_key_group_id"] = group_id
         state["ssh_key_group_name"] = group_name
         state["ssh_key_id"] = key_id

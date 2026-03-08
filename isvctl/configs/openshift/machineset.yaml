@@ -1,0 +1,116 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# OpenShift MachineSet Scaling Validation (Carbide Machine API Provider)
+#
+# Validates dynamic GPU node provisioning via MachineSet:
+# 1. Verify Machine API configured with Carbide provider
+# 2. Create MachineSet targeting GPU instance type
+# 3. Wait for machines to provision and join as nodes
+# 4. Run single-node GPU workload (proves GPU scheduling)
+# 5. Scale up: trigger multi-node workload requiring >2 nodes
+# 6. Scale down: reduce replicas, verify deprovisioning
+#
+# Prerequisites:
+#   - OpenShift cluster with Machine API
+#   - Cloud Provider for Carbide installed
+#   - Machine API Provider for Carbide installed
+#   - GPU Operator installed
+#   - kubectl and oc CLI configured
+#
+# Usage:
+#   isvctl test run -f isvctl/configs/openshift/machineset.yaml
+#
+# Environment:
+#   CARBIDE_INSTANCE_TYPE   — Instance type for GPU machines
+#   CARBIDE_SITE_ID         — Site UUID
+#   MACHINESET_MIN_REPLICAS — Initial replicas (default: 2)
+#   MACHINESET_MAX_REPLICAS — Max replicas for autoscaler (default: 6)
+
+version: "1.0"
+
+commands:
+  openshift:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: verify_machine_api
+        phase: setup
+        command: "python3 ../stubs/openshift/machineset/verify_machine_api.py"
+        timeout: 120
+
+      - name: create_machineset
+        phase: setup
+        command: "python3 ../stubs/openshift/machineset/create_machineset.py"
+        timeout: 1800
+
+      - name: test_gpu_workload
+        phase: test
+        command: "python3 ../stubs/openshift/machineset/test_gpu_workload.py"
+        timeout: 600
+
+      - name: test_scale_up
+        phase: test
+        command: "python3 ../stubs/openshift/machineset/test_scale_up.py"
+        timeout: 1800
+
+      - name: test_scale_down
+        phase: test
+        command: "python3 ../stubs/openshift/machineset/test_scale_down.py"
+        timeout: 900
+
+      - name: teardown
+        phase: teardown
+        command: "python3 ../stubs/openshift/machineset/teardown.py"
+        timeout: 900
+
+tests:
+  platform: openshift
+  description: "OpenShift MachineSet scaling validation (Carbide Machine API)"
+
+  validations:
+    machine_api:
+      checks:
+        - StepSuccessCheck:
+            step: verify_machine_api
+        - FieldExistsCheck:
+            step: verify_machine_api
+            fields: ["provider_configured", "machine_api_ready"]
+
+    provisioning:
+      checks:
+        - StepSuccessCheck:
+            step: create_machineset
+        - FieldExistsCheck:
+            step: create_machineset
+            fields: ["replicas_ready", "nodes_joined"]
+
+    gpu_workload:
+      checks:
+        - StepSuccessCheck:
+            step: test_gpu_workload
+
+    scale_up:
+      checks:
+        - StepSuccessCheck:
+            step: test_scale_up
+        - FieldExistsCheck:
+            step: test_scale_up
+            fields: ["scaled_to", "nodes_after"]
+
+    scale_down:
+      checks:
+        - StepSuccessCheck:
+            step: test_scale_down
+        - FieldExistsCheck:
+            step: test_scale_down
+            fields: ["scaled_to", "nodes_after"]
+
+  exclude:
+    markers: []

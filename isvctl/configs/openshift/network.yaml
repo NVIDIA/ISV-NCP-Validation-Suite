@@ -1,0 +1,124 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# OpenShift GPU Network Validation
+#
+# Validates the in-cluster GPU networking stack:
+# - NVIDIA Network Operator (MOFED drivers, RDMA device plugin)
+# - SR-IOV Operator (VF provisioning for InfiniBand/RoCE)
+# - NetworkPolicy enforcement (OVN-Kubernetes)
+# - Multus secondary interfaces
+# - EgressFirewall rules
+# - Multi-node NCCL AllReduce over RDMA
+#
+# This is NOT the infrastructure-level network template (VPC CRUD).
+# It tests the Kubernetes network fabric for GPU workloads.
+#
+# Requirements:
+#   - OpenShift cluster with GPU nodes
+#   - NVIDIA Network Operator installed
+#   - SR-IOV Network Operator installed (for InfiniBand/RoCE)
+#   - kubectl and oc CLI configured
+#
+# Usage:
+#   isvctl test run -f isvctl/configs/openshift/network.yaml
+#
+# Environment:
+#   K8S_NAMESPACE — Test namespace (default: ncp-network-validation)
+
+version: "1.0"
+
+commands:
+  openshift:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: setup_namespaces
+        phase: setup
+        command: "python3 ../stubs/openshift/network/setup_namespaces.py"
+        timeout: 60
+
+      - name: network_operator_check
+        phase: test
+        command: "python3 ../stubs/openshift/network/network_operator_check.py"
+        timeout: 120
+
+      - name: sriov_check
+        phase: test
+        command: "python3 ../stubs/openshift/network/sriov_check.py"
+        timeout: 120
+
+      - name: network_policy_test
+        phase: test
+        command: "python3 ../stubs/openshift/network/network_policy_test.py"
+        timeout: 120
+
+      - name: multus_test
+        phase: test
+        command: "python3 ../stubs/openshift/network/multus_test.py"
+        timeout: 120
+
+      - name: rdma_test
+        phase: test
+        command: "python3 ../stubs/openshift/network/rdma_test.py"
+        timeout: 120
+
+      - name: nccl_multinode_test
+        phase: test
+        command: "python3 ../stubs/openshift/network/nccl_multinode_test.py"
+        timeout: 600
+
+      - name: teardown
+        phase: teardown
+        command: "python3 ../stubs/openshift/network/teardown.py"
+        timeout: 60
+
+tests:
+  platform: openshift
+  description: "OpenShift GPU network validation (Network Operator, SR-IOV, RDMA, NCCL)"
+
+  validations:
+    network_operator:
+      checks:
+        - StepSuccessCheck:
+            step: network_operator_check
+        - FieldExistsCheck:
+            step: network_operator_check
+            fields: ["mofed_ready", "rdma_device_plugin_ready"]
+
+    sriov:
+      checks:
+        - StepSuccessCheck:
+            step: sriov_check
+        - FieldExistsCheck:
+            step: sriov_check
+            fields: ["sriov_operator_ready", "vf_count"]
+
+    network_policy:
+      checks:
+        - StepSuccessCheck:
+            step: network_policy_test
+
+    multus:
+      checks:
+        - StepSuccessCheck:
+            step: multus_test
+
+    rdma:
+      checks:
+        - StepSuccessCheck:
+            step: rdma_test
+
+    nccl:
+      checks:
+        - StepSuccessCheck:
+            step: nccl_multinode_test
+
+  exclude:
+    markers: []

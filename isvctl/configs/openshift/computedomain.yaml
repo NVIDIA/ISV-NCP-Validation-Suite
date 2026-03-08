@@ -1,0 +1,94 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# OpenShift ComputeDomain (IMEX) Validation
+#
+# Validates ComputeDomain CRD and IMEX channel functionality:
+# - ComputeDomain CRD exists (installed by GPU Operator in DRA mode)
+# - Create a ComputeDomain spanning multiple GPU nodes
+# - Verify IMEX channels established
+# - Tray allocation test
+# - Multi-job scheduling test
+# - NVLink NCCL bandwidth across ComputeDomain
+#
+# Prerequisites:
+#   - GPU Operator in DRA mode (run dra.yaml first)
+#   - NVL72 rack with NVLink fabric
+#
+# Usage:
+#   isvctl test run -f isvctl/configs/openshift/computedomain.yaml
+
+version: "1.0"
+
+commands:
+  openshift:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: check_crd
+        phase: setup
+        command: "python3 ../stubs/openshift/computedomain/check_crd.py"
+        timeout: 60
+
+      - name: create_domain
+        phase: setup
+        command: "python3 ../stubs/openshift/computedomain/create_domain.py"
+        timeout: 300
+
+      - name: tray_allocation_test
+        phase: test
+        command: "python3 ../stubs/openshift/computedomain/tray_allocation_test.py"
+        timeout: 120
+
+      - name: multi_job_test
+        phase: test
+        command: "python3 ../stubs/openshift/computedomain/multi_job_test.py"
+        timeout: 300
+
+      - name: nccl_nvlink_test
+        phase: test
+        command: "python3 ../stubs/openshift/computedomain/nccl_nvlink_test.py"
+        timeout: 600
+
+      - name: teardown
+        phase: teardown
+        command: "python3 ../stubs/openshift/computedomain/teardown.py"
+        timeout: 120
+
+tests:
+  platform: openshift
+  description: "OpenShift ComputeDomain (IMEX) validation"
+
+  validations:
+    crd:
+      checks:
+        - StepSuccessCheck:
+            step: check_crd
+    domain:
+      checks:
+        - StepSuccessCheck:
+            step: create_domain
+        - FieldExistsCheck:
+            step: create_domain
+            fields: ["domain_name", "imex_channels_ready"]
+    tray:
+      checks:
+        - StepSuccessCheck:
+            step: tray_allocation_test
+    multi_job:
+      checks:
+        - StepSuccessCheck:
+            step: multi_job_test
+    nccl:
+      checks:
+        - StepSuccessCheck:
+            step: nccl_nvlink_test
+
+  exclude:
+    markers: []

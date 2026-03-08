@@ -1,0 +1,76 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# OpenShift VM Validation (KubeVirt + GPU Passthrough)
+#
+# Implements the VM template using OpenShift Virtualization (KubeVirt)
+# with GPU passthrough via VFIO. Creates a VirtualMachine with a GPU
+# device, verifies GPU access, reboots, and optionally deploys NIM.
+#
+# Prerequisites:
+#   - OpenShift Virtualization operator installed
+#   - GPU nodes with VFIO configured (via GPU Operator hostDevicePlugin)
+#   - kubectl, oc, and virtctl CLI configured
+#
+# Usage:
+#   isvctl test run \
+#     -f isvctl/configs/templates/vm.yaml \
+#     -f isvctl/configs/openshift/vm.yaml
+#
+# Environment:
+#   VM_NAMESPACE    — VM namespace (default: ncp-vm-validation)
+#   VM_GPU_COUNT    — GPUs to passthrough (default: 1)
+#   VM_DISK_SIZE    — Root disk size (default: 50Gi)
+#   VM_MEMORY       — VM memory (default: 16Gi)
+#   VM_CPUS         — VM CPU cores (default: 8)
+#   VM_IMAGE_URL    — Cloud image URL (default: RHEL 9 qcow2)
+#   VM_SSH_PUBKEY   — SSH public key for VM access
+
+version: "1.0"
+
+commands:
+  vm:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: launch_instance
+        phase: setup
+        command: "python3 ../stubs/openshift/vm/launch_instance.py"
+        timeout: 600
+
+      - name: list_instances
+        phase: test
+        command: "python3 ../stubs/openshift/vm/list_instances.py"
+        timeout: 60
+
+      - name: reboot_instance
+        phase: test
+        command: "python3 ../stubs/openshift/vm/reboot_instance.py"
+        timeout: 300
+
+      - name: deploy_nim
+        phase: test
+        command: "python3 ../stubs/openshift/vm/deploy_nim.py"
+        timeout: 1800
+        skip: true  # Enable with --set commands.vm.steps[3].skip=false
+
+      - name: teardown_nim
+        phase: teardown
+        command: "echo '{\"success\": true, \"platform\": \"vm\"}'"
+        timeout: 30
+
+      - name: teardown
+        phase: teardown
+        command: "python3 ../stubs/openshift/vm/teardown.py"
+        timeout: 300
+
+context:
+  expected_gpus: "1"
+  expected_os: "rhel"
+  max_reboot_uptime: "600"

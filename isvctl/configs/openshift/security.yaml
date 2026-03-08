@@ -1,0 +1,71 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# OpenShift Security & Compliance Validation
+#
+# Read-only checks against existing nodes:
+# - SELinux enforcing mode
+# - Secure Boot enabled
+# - FIPS mode enabled
+# - Compliance Operator scan results
+#
+# Usage:
+#   isvctl test run -f isvctl/configs/openshift/security.yaml
+
+version: "1.0"
+
+commands:
+  openshift:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: selinux_check
+        phase: test
+        command: "python3 ../stubs/openshift/security/selinux_check.py"
+        timeout: 120
+
+      - name: secure_boot_check
+        phase: test
+        command: "python3 ../stubs/openshift/security/secure_boot_check.py"
+        timeout: 120
+
+      - name: fips_check
+        phase: test
+        command: "python3 ../stubs/openshift/security/fips_check.py"
+        timeout: 120
+
+      - name: compliance_scan
+        phase: test
+        command: "python3 ../stubs/openshift/security/compliance_scan.py"
+        timeout: 300
+
+tests:
+  platform: openshift
+  description: "OpenShift security and compliance validation"
+
+  validations:
+    selinux:
+      checks:
+        - StepSuccessCheck:
+            step: selinux_check
+    secure_boot:
+      checks:
+        - StepSuccessCheck:
+            step: secure_boot_check
+    fips:
+      checks:
+        - StepSuccessCheck:
+            step: fips_check
+    compliance:
+      checks:
+        - StepSuccessCheck:
+            step: compliance_scan
+
+  exclude:
+    markers: []

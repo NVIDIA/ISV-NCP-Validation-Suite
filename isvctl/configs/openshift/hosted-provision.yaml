@@ -1,0 +1,122 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# OpenShift Hosted Control Plane Provisioning
+#
+# Deploys a hosted OpenShift cluster from the management cluster using
+# Cluster API (CAPI) Provider for Carbide. The flow is:
+#
+#   1. Deploy CAPI Provider for Carbide on management cluster
+#   2. Provision BareMetalHosts via Carbide (6 GPU nodes)
+#   3. Create Keycloak realm for hosted cluster auth
+#   4. Deploy hosted OpenShift cluster with BareMetalHosts as workers
+#   5. Configure GPU Operator, Network Operator, Virt on hosted cluster
+#   6. Export hosted cluster kubeconfig
+#
+# After provisioning, run the same validation tests targeting the
+# hosted cluster by setting KUBECONFIG to the hosted cluster's kubeconfig.
+#
+# Prerequisites:
+#   - Management cluster running (from kaas-provision.yaml)
+#   - CAPI Provider for Carbide installed
+#   - Carbide API access for BareMetalHost provisioning
+#   - Keycloak running on management cluster (from iam.yaml)
+#
+# Usage:
+#   # Provision hosted cluster
+#   isvctl test run -f isvctl/configs/openshift/hosted-provision.yaml
+#
+#   # Then validate hosted cluster
+#   KUBECONFIG=/tmp/hosted-kubeconfig \
+#     isvctl test run \
+#       -f isvctl/configs/templates/kaas.yaml \
+#       -f isvctl/configs/openshift/kaas.yaml
+#
+# Environment:
+#   CARBIDE_SITE_ID         — Site UUID for BareMetalHost provisioning
+#   CARBIDE_INSTANCE_TYPE   — Instance type UUID for hosted worker nodes
+#   HOSTED_CLUSTER_NAME     — Hosted cluster name (default: ncp-hosted)
+#   HOSTED_WORKER_COUNT     — Number of worker nodes (default: 6)
+#   HOSTED_BASE_DOMAIN      — Base DNS domain (default: from management cluster)
+#   KEYCLOAK_NAMESPACE      — Keycloak namespace on mgmt cluster (default: ncp-keycloak)
+#   KEYCLOAK_REALM          — Realm for hosted cluster (default: ncp-hosted)
+#   TEARDOWN_ENABLED        — Set to "true" to enable deprovision
+
+version: "1.0"
+
+commands:
+  openshift:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: deploy_capi_provider
+        phase: setup
+        command: "python3 ../stubs/openshift/hosted/deploy_capi_provider.py"
+        timeout: 600
+
+      - name: provision_baremetal_hosts
+        phase: setup
+        command: "python3 ../stubs/openshift/hosted/provision_baremetal_hosts.py"
+        timeout: 3600
+
+      - name: create_hosted_realm
+        phase: setup
+        command: "python3 ../stubs/openshift/hosted/create_hosted_realm.py"
+        timeout: 120
+
+      - name: deploy_hosted_cluster
+        phase: setup
+        command: "python3 ../stubs/openshift/hosted/deploy_hosted_cluster.py"
+        timeout: 7200
+
+      - name: configure_hosted_cluster
+        phase: setup
+        command: "python3 ../stubs/openshift/hosted/configure_hosted_cluster.py"
+        timeout: 900
+
+      - name: verify_hosted_cluster
+        phase: test
+        command: "python3 ../stubs/openshift/hosted/verify_hosted_cluster.py"
+        timeout: 300
+
+      - name: teardown
+        phase: teardown
+        command: "python3 ../stubs/openshift/hosted/teardown.py"
+        timeout: 1800
+
+tests:
+  platform: openshift
+  description: "OpenShift Hosted Control Plane provisioning via CAPI + Carbide"
+
+  validations:
+    capi:
+      checks:
+        - StepSuccessCheck:
+            step: deploy_capi_provider
+    baremetal:
+      checks:
+        - StepSuccessCheck:
+            step: provision_baremetal_hosts
+        - FieldExistsCheck:
+            step: provision_baremetal_hosts
+            fields: ["hosts_ready", "host_count"]
+    hosted_cluster:
+      checks:
+        - StepSuccessCheck:
+            step: deploy_hosted_cluster
+        - FieldExistsCheck:
+            step: deploy_hosted_cluster
+            fields: ["cluster_ready", "kubeconfig_path"]
+    hosted_verification:
+      checks:
+        - StepSuccessCheck:
+            step: verify_hosted_cluster
+
+  exclude:
+    markers: []

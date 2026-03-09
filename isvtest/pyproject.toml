@@ -1,6 +1,6 @@
 [project]
 name = "isvtest"
-version = "0.5.0"
+version = "0.5.1"
 description = "NV ISV Lab tests"
 readme = "README.md"
 license = "Apache-2.0"

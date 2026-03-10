@@ -1,0 +1,57 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# OpenShift KaaS Validation - Pre-existing Cluster
+#
+# Validates an existing OpenShift cluster with GPU Operator.
+# Does not provision or deprovision — assumes the cluster is already running.
+#
+# Usage:
+#   # Layered: template validations + OpenShift inventory
+#   isvctl test run \
+#     -f isvctl/configs/templates/kaas.yaml \
+#     -f isvctl/configs/openshift/kaas.yaml
+#
+#   # With overrides for specific cluster
+#   isvctl test run \
+#     -f isvctl/configs/templates/kaas.yaml \
+#     -f isvctl/configs/openshift/kaas.yaml \
+#     --set context.node_count=21 --set context.total_gpus=72
+#
+# Requirements:
+#   - oc CLI configured and authenticated
+#   - GPU Operator installed on the cluster
+#
+# Environment:
+#   KUBECONFIG — Path to kubeconfig (default: ~/.kube/config)
+
+version: "1.0"
+
+commands:
+  kubernetes:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: provision_cluster
+        phase: setup
+        command: "bash ../stubs/openshift/kaas/setup.sh"
+        timeout: 120
+
+      - name: teardown_cluster
+        phase: teardown
+        command: "bash ../stubs/openshift/kaas/teardown.sh"
+        timeout: 60
+
+# OpenShift-specific defaults
+context:
+  runtime_class: ""
+  gpu_operator_ns: "nvidia-gpu-operator"
+
+tests:
+  description: "OpenShift GPU cluster validation (pre-existing cluster)"

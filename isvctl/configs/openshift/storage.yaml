@@ -1,0 +1,98 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# OpenShift Storage Validation (ODF on NVMe)
+#
+# Validates OpenShift Data Foundation deployment and functionality:
+# - ODF operator installed (idempotent)
+# - Local NVMe disk discovery
+# - StorageCluster creation
+# - StorageClass provisioning (CephRBD, CephFS)
+# - PVC binding and pod mount
+#
+# This is OpenShift-specific — no upstream template equivalent.
+#
+# Requirements:
+#   - OpenShift cluster with cluster-admin access
+#   - Nodes with local NVMe disks (8 x 3.5TB per node typical)
+#   - kubectl and oc CLI configured
+#
+# Usage:
+#   isvctl test run -f isvctl/configs/openshift/storage.yaml
+#
+# Environment:
+#   ODF_NAMESPACE      — ODF namespace (default: openshift-storage)
+#   ODF_DISK_COUNT     — Min NVMe disks per node (default: 1)
+#   ODF_STORAGE_NODES  — Comma-separated node names for ODF (default: auto-detect)
+
+version: "1.0"
+
+commands:
+  openshift:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: deploy_odf
+        phase: setup
+        command: "python3 ../stubs/openshift/storage/deploy_odf.py"
+        timeout: 900
+
+      - name: verify_storage_classes
+        phase: test
+        command: "python3 ../stubs/openshift/storage/verify_storage_classes.py"
+        timeout: 120
+
+      - name: test_pvc_binding
+        phase: test
+        command: "python3 ../stubs/openshift/storage/test_pvc_binding.py"
+        timeout: 300
+
+      - name: test_pod_mount
+        phase: test
+        command: "python3 ../stubs/openshift/storage/test_pod_mount.py"
+        timeout: 300
+
+      - name: teardown
+        phase: teardown
+        command: "python3 ../stubs/openshift/storage/teardown.py"
+        timeout: 120
+
+tests:
+  platform: openshift
+  description: "OpenShift storage validation (ODF on NVMe)"
+
+  validations:
+    odf_deployment:
+      checks:
+        - StepSuccessCheck:
+            step: deploy_odf
+        - FieldExistsCheck:
+            step: deploy_odf
+            fields: ["odf_ready", "disks_discovered"]
+
+    storage_classes:
+      checks:
+        - StepSuccessCheck:
+            step: verify_storage_classes
+        - FieldExistsCheck:
+            step: verify_storage_classes
+            fields: ["rbd_class_exists", "cephfs_class_exists"]
+
+    pvc:
+      checks:
+        - StepSuccessCheck:
+            step: test_pvc_binding
+
+    pod_mount:
+      checks:
+        - StepSuccessCheck:
+            step: test_pod_mount
+
+  exclude:
+    markers: []

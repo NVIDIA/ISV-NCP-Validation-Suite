@@ -30,6 +30,25 @@ PLATFORM_CONFIGS: dict[str, list[str]] = {
     "NETWORK": ["templates/network.yaml"],
     "VM": ["templates/vm.yaml"],
     "IMAGE_REGISTRY": ["templates/image-registry.yaml"],
+    # Carbide provider — uses templates with carbidecli stubs
+    "CARBIDE_CONTROL_PLANE": ["carbide/control-plane.yaml"],
+    "CARBIDE_NETWORK": ["carbide/network.yaml"],
+    "CARBIDE_IMAGE_REGISTRY": ["carbide/image-registry.yaml"],
+    "CARBIDE_BARE_METAL": ["carbide/bm.yaml"],
+    "CARBIDE_IAM": ["carbide/iam.yaml"],
+    # OpenShift platform — platform-specific validations
+    "OPENSHIFT_KAAS": ["openshift/kaas.yaml"],
+    "OPENSHIFT_IAM": ["openshift/iam.yaml"],
+    "OPENSHIFT_NETWORK": ["openshift/network.yaml"],
+    "OPENSHIFT_STORAGE": ["openshift/storage.yaml"],
+    "OPENSHIFT_VM": ["openshift/vm.yaml"],
+    "OPENSHIFT_MACHINESET": ["openshift/machineset.yaml"],
+    "OPENSHIFT_SECURITY": ["openshift/security.yaml"],
+    "OPENSHIFT_GPU_HEALTH": ["openshift/gpu-health.yaml"],
+    "OPENSHIFT_DRA": ["openshift/dra.yaml"],
+    "OPENSHIFT_COMPUTEDOMAIN": ["openshift/computedomain.yaml"],
+    "OPENSHIFT_ARM": ["openshift/arm.yaml"],
+    "OPENSHIFT_HOSTED": ["openshift/hosted-provision.yaml"],
 }
 
 

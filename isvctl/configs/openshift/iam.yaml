@@ -1,0 +1,55 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# OpenShift IAM Validation (Keycloak via Red Hat Build of Keycloak Operator)
+#
+# Tests user lifecycle: deploy Keycloak (idempotent), create test user,
+# verify oc login with user credentials, check RBAC, clean up user.
+#
+# Prerequisites:
+#   - OpenShift cluster with cluster-admin access
+#   - Access to OperatorHub (redhat-operators catalog)
+#   - oc and kubectl CLI configured
+#
+# The create_user step is idempotent: it deploys the RHBK operator and
+# Keycloak instance if not already present, configures the OAuth IdP,
+# then creates a test user. Subsequent runs skip the deployment.
+#
+# Usage:
+#   isvctl test run \
+#     -f isvctl/configs/templates/iam.yaml \
+#     -f isvctl/configs/openshift/iam.yaml
+#
+# Environment:
+#   KEYCLOAK_NAMESPACE — Namespace for Keycloak (default: ncp-keycloak)
+#   KEYCLOAK_REALM     — Realm name (default: ncp-validation)
+#   TEST_USERNAME      — Test user name (default: ncp-test-user)
+#   TEST_PASSWORD      — Test user password (default: ncp-test-pass)
+
+version: "1.0"
+
+commands:
+  iam:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: create_user
+        phase: setup
+        command: "python3 ../stubs/openshift/iam/create_user.py"
+        timeout: 600  # includes Keycloak deployment on first run
+
+      - name: test_credentials
+        phase: test
+        command: "python3 ../stubs/openshift/iam/test_credentials.py"
+        timeout: 120
+
+      - name: teardown
+        phase: teardown
+        command: "python3 ../stubs/openshift/iam/teardown.py"
+        timeout: 120

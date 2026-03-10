@@ -661,7 +661,7 @@ requires-dist = [
     { name = "pytest", specifier = ">=8.3.4,<9.0.0" },
     { name = "pyyaml", specifier = ">=6.0.2,<7.0.0" },
     { name = "reframe-hpc", specifier = ">=4.8.4" },
-    { name = "urllib3", specifier = ">=2.6.0,<3.0.0" },
+    { name = "urllib3", specifier = ">=2.6.3,<3.0.0" },
 ]
 
 [[package]]

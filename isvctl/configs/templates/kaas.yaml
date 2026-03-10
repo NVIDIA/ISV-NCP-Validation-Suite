@@ -8,104 +8,61 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-# Kubernetes-as-a-Service (KaaS) Cluster Validation - Template Configuration
+# Kubernetes-as-a-Service (KaaS) Cluster Validation - Template
 #
-# This is a PROVIDER-AGNOSTIC template for testing GPU-enabled Kubernetes
-# cluster lifecycle: provision -> validate -> workloads -> teardown.
-# Copy this file and the accompanying stubs/ scripts, then replace the
-# script implementations with your platform's provisioning logic.
+# Provider-agnostic validations for GPU-enabled Kubernetes clusters.
+# Pair with a provider config that supplies the commands (stubs).
 #
-# Architecture:
-#   - Scripts: Platform-specific (YOU implement these) - provision/teardown cluster
-#   - Validations: Platform-agnostic (provided) - Kubernetes API checks
+# Usage:
+#   # Layered: template + provider
+#   isvctl test run -f isvctl/configs/templates/kaas.yaml -f isvctl/configs/aws/eks.yaml
 #
-# Contract:
-#   Setup script must configure kubectl access (e.g., write kubeconfig)
-#   and output a JSON object to stdout. Validations use kubectl directly.
+#   # With overrides
+#   isvctl test run -f ... --set context.node_count=5 --set context.total_gpus=4
 #
-# Steps:
-#   1. provision_cluster  (setup)    - Provision K8s cluster, configure kubectl
-#   2. teardown_cluster   (teardown) - Destroy cluster and resources
-#
-# Quick start:
-#   1. Copy this folder:  cp -r templates/ my-isv/
-#   2. Edit the stubs:    my-isv/stubs/kaas/setup.sh, teardown.sh
-#   3. Run:               uv run isvctl test run -f isvctl/configs/my-isv/kaas.yaml
-#
-# See also:
-#   - AWS reference implementation: ../aws/eks.yaml + ../stubs/aws/eks/
-#   - Terraform example: ../stubs/aws/eks/terraform/
+# Context variables (set by provider or --set):
+#   context.node_count       — Expected node count (default: 3)
+#   context.gpu_per_node     — GPUs per node (default: 1)
+#   context.total_gpus       — Total GPUs in cluster (default: 3)
+#   context.gpu_node_count   — Number of GPU nodes (default: 1)
+#   context.runtime_class    — RuntimeClass for GPU pods (default: nvidia)
+#   context.driver_version   — Expected NVIDIA driver version (default: 570.195.03)
+#   context.gpu_operator_ns  — GPU Operator namespace (default: gpu-operator)
+#   context.min_nccl_bw      — Min NCCL bus bandwidth in Gbps (default: 100)
 
 version: "1.0"
 
-commands:
-  kubernetes:
-    phases: ["setup", "test", "teardown"]
-    steps:
-      # ─── Setup: Provision Cluster ──────────────────────────────────
-      # YOUR SCRIPT must:
-      #   1. Provision a Kubernetes cluster with GPU nodes
-      #   2. Configure kubectl (write kubeconfig)
-      #   3. Print JSON to stdout:
-      #      {
-      #        "success": true,
-      #        "platform": "kubernetes",
-      #        "cluster_name": "<cluster-name>",
-      #        "cluster_endpoint": "<api-server-url>",
-      #        "node_count": <int>,
-      #        "gpu_node_count": <int>
-      #      }
-      - name: provision_cluster
-        phase: setup
-        command: "./stubs/kaas/setup.sh"
-        timeout: 1800
-        env:
-          CLUSTER_REGION: "us-west-2"
-
-      # ─── Teardown: Destroy Cluster ────────────────────────────────
-      # YOUR SCRIPT must destroy all cluster resources.
-      - name: teardown_cluster
-        phase: teardown
-        command: "./stubs/kaas/teardown.sh"
-        timeout: 1800
-        env:
-          # Override with TEARDOWN_ENABLED=false to preserve resources for debugging
-          TEARDOWN_ENABLED: "true"
-
 tests:
-  cluster_name: "{{inventory.cluster_name}}"
-  description: "Kubernetes GPU cluster validation (template)"
+  cluster_name: "{{ context.cluster_name | default(inventory.cluster_name | default('')) }}"
+  description: "Kubernetes GPU cluster validation"
   platform: kubernetes
 
   settings:
     show_skipped_tests: false
 
-  # ─── Validations ─────────────────────────────────────────────────
-  # These use kubectl (configured by setup script) to check cluster state.
-  # Adjust counts and settings to match your cluster configuration.
   validations:
     kubernetes:
       - K8sNodeCountCheck:
-          count: "3"
+          count: "{{ context.node_count | default('3') }}"
       - K8sNodeReadyCheck:
           require_all_ready: true
       - K8sNvidiaSmiCheck:
-          runtime_class: "nvidia"
+          runtime_class: "{{ context.runtime_class | default('nvidia') }}"
       - K8sDriverVersionCheck:
-          driver_version: "570.195.03"
-          runtime_class: "nvidia"
+          driver_version: "{{ context.driver_version | default('570.195.03') }}"
+          runtime_class: "{{ context.runtime_class | default('nvidia') }}"
       - K8sGpuPodAccessCheck:
           gpu_count: 1
-          total_gpu_count: 1
-          runtime_class: "nvidia"
+          total_gpu_count: "{{ context.gpu_node_count | default('1') }}"
+          runtime_class: "{{ context.runtime_class | default('nvidia') }}"
       - K8sGpuCapacityCheck:
           resource_name: "nvidia.com/gpu"
-          expected_per_node: 1
-          expected_total: 3
+          expected_per_node: "{{ context.gpu_per_node | default('1') }}"
+          expected_total: "{{ context.total_gpus | default('3') }}"
       - K8sGpuOperatorNamespaceCheck:
-          namespace: "gpu-operator"
+          namespace: "{{ context.gpu_operator_ns | default('gpu-operator') }}"
       - K8sGpuOperatorPodsCheck:
-          namespace: "gpu-operator"
+          namespace: "{{ context.gpu_operator_ns | default('gpu-operator') }}"
       - K8sGpuLabelsCheck:
           label_selector: "nvidia.com/gpu.present=true"
       - K8sPodHealthCheck:
@@ -116,7 +73,7 @@ tests:
 
     k8s_workloads:
       - K8sNcclWorkload:
-          min_bus_bw_gbps: 100
+          min_bus_bw_gbps: "{{ context.min_nccl_bw | default('100') }}"
       - K8sGpuStressWorkload:
           memory_gb: 1
           runtime: 30

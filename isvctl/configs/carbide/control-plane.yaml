@@ -1,0 +1,122 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# Carbide Control Plane - Layered Provider Configuration
+#
+# Supplies commands (carbidecli stubs) for the control-plane template.
+# Tests API health, SSH key lifecycle, and VPC lifecycle.
+#
+# Mapping to template concepts:
+#   API health   → carbidecli tenant get, site list
+#   Access keys  → SSH key group + SSH key CRUD
+#   Tenants      → VPC CRUD (primary tenant-scoped resource)
+#
+# Usage:
+#   isvctl test run \
+#     -f isvctl/configs/templates/control-plane.yaml \
+#     -f isvctl/configs/carbide/control-plane.yaml
+#
+# Environment:
+#   carbidecli handles auth via config or env vars:
+#     CARBIDE_TOKEN / CARBIDE_API_KEY — Authentication
+#     CARBIDE_ORG                     — Organization
+#     CARBIDE_SITE_ID                 — Site UUID (required for VPC creation)
+
+version: "1.0"
+
+commands:
+  control_plane:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      # ─── SETUP: API Health ─────────────────────────────────────────
+      - name: check_api
+        phase: setup
+        command: "python3 ../stubs/carbide/control-plane/check_api.py"
+        timeout: 120
+
+      # ─── SETUP: Create Resources ───────────────────────────────────
+      - name: create_access_key
+        phase: setup
+        command: "python3 ../stubs/carbide/control-plane/create_access_key.py"
+        timeout: 120
+
+      - name: create_tenant
+        phase: setup
+        command: "python3 ../stubs/carbide/control-plane/create_tenant.py"
+        args: ["--site-id", "{{ context.site_id }}"]
+        timeout: 120
+
+      # ─── TEST: Access Key (SSH Key) Lifecycle ──────────────────────
+      - name: test_access_key
+        phase: test
+        command: "python3 ../stubs/carbide/control-plane/test_access_key.py"
+        args:
+          - "--access-key-id"
+          - "{{ steps.create_access_key.access_key_id }}"
+        timeout: 60
+
+      - name: disable_access_key
+        phase: test
+        command: "python3 ../stubs/carbide/control-plane/disable_access_key.py"
+        args:
+          - "--access-key-id"
+          - "{{ steps.create_access_key.access_key_id }}"
+        timeout: 60
+
+      - name: verify_key_rejected
+        phase: test
+        command: "python3 ../stubs/carbide/control-plane/verify_key_rejected.py"
+        args:
+          - "--access-key-id"
+          - "{{ steps.create_access_key.access_key_id }}"
+        timeout: 60
+
+      # ─── TEST: Tenant (VPC) Lifecycle ──────────────────────────────
+      - name: list_tenants
+        phase: test
+        command: "python3 ../stubs/carbide/control-plane/list_tenants.py"
+        args:
+          - "--target-group"
+          - "{{ steps.create_tenant.tenant_name }}"
+        timeout: 60
+
+      - name: get_tenant
+        phase: test
+        command: "python3 ../stubs/carbide/control-plane/get_tenant.py"
+        args:
+          - "--group-name"
+          - "{{ steps.create_tenant.tenant_name }}"
+        timeout: 60
+
+      # ─── TEARDOWN: Cleanup ─────────────────────────────────────────
+      - name: delete_access_key
+        phase: teardown
+        command: "python3 ../stubs/carbide/control-plane/delete_access_key.py"
+        args:
+          - "--username"
+          - "{{ steps.create_access_key.username }}"
+        timeout: 60
+        output_schema: teardown
+
+      - name: delete_tenant
+        phase: teardown
+        command: "python3 ../stubs/carbide/control-plane/delete_tenant.py"
+        args:
+          - "--group-name"
+          - "{{ steps.create_tenant.tenant_name }}"
+        timeout: 60
+        output_schema: teardown
+
+# Provider-specific context
+context:
+  site_id: "{{ env.CARBIDE_SITE_ID | default('') }}"
+
+tests:
+  description: "Carbide control plane: API health, SSH key lifecycle, VPC lifecycle"

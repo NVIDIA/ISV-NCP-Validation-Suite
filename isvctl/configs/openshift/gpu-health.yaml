@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# OpenShift GPU Health & Observability Validation
+#
+# Read-only checks against existing GPU infrastructure:
+# - DCGM Exporter running and exposing metrics
+# - DCGM metrics content validation
+# - Node Health Check (NHC) operator
+# - Prometheus GPU metrics freshness
+#
+# Usage:
+#   isvctl test run -f isvctl/configs/openshift/gpu-health.yaml
+
+version: "1.0"
+
+commands:
+  openshift:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: dcgm_exporter_check
+        phase: test
+        command: "python3 ../stubs/openshift/gpu-health/dcgm_exporter_check.py"
+        timeout: 120
+
+      - name: dcgm_metrics_validate
+        phase: test
+        command: "python3 ../stubs/openshift/gpu-health/dcgm_metrics_validate.py"
+        timeout: 120
+
+      - name: nhc_operator_check
+        phase: test
+        command: "python3 ../stubs/openshift/gpu-health/nhc_operator_check.py"
+        timeout: 120
+
+      - name: prometheus_gpu_metrics
+        phase: test
+        command: "python3 ../stubs/openshift/gpu-health/prometheus_gpu_metrics.py"
+        timeout: 120
+
+tests:
+  platform: openshift
+  description: "OpenShift GPU health and observability validation"
+
+  validations:
+    dcgm_exporter:
+      checks:
+        - StepSuccessCheck:
+            step: dcgm_exporter_check
+        - FieldExistsCheck:
+            step: dcgm_exporter_check
+            fields: ["exporter_running", "metrics_endpoint"]
+
+    dcgm_metrics:
+      checks:
+        - StepSuccessCheck:
+            step: dcgm_metrics_validate
+
+    nhc:
+      checks:
+        - StepSuccessCheck:
+            step: nhc_operator_check
+
+    prometheus:
+      checks:
+        - StepSuccessCheck:
+            step: prometheus_gpu_metrics
+
+  exclude:
+    markers: []

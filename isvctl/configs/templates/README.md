@@ -1,37 +1,99 @@
 # Validation Templates
 
-Provider-agnostic templates for ISV Lab validation tests. Copy a template, implement the stub scripts for your platform, and run.
+Provider-agnostic validation templates for ISV Lab tests. Templates define **what to validate** (checks); provider configs define **how to provision** (stubs).
 
 ## How It Works
 
 ```text
-┌──────────────────┐      ┌──────────────────────┐      ┌────────────────────┐
-│   YAML Config    │─────▶│  Your Stub Scripts   │─────▶│   Validations      │
-│  (steps + args)  │      │  (call your API)     │      │  (check JSON)      │
-│                  │      │                      │      │                    │
-│  You configure   │      │  YOU IMPLEMENT THESE │      │  Already provided  │
-│  step names,     │      │  Output JSON to      │      │  StepSuccessCheck, │
-│  args, timeouts  │      │  stdout              │      │  FieldExistsCheck  │
-└──────────────────┘      └──────────────────────┘      └────────────────────┘
+┌──────────────────┐     ┌──────────────────────┐     ┌────────────────────┐
+│  Template YAML   │     │  Provider YAML       │     │   Validations      │
+│  (validations)   │     │  (commands + stubs)   │     │  (check JSON)      │
+│                  │     │                      │     │                    │
+│  WHAT to check   │  +  │  HOW to provision    │  =  │  Already provided  │
+│  K8sNodeReady,   │     │  YOUR stub scripts   │     │  StepSuccessCheck, │
+│  GpuCapacity...  │     │  call your API       │     │  FieldExistsCheck  │
+└──────────────────┘     └──────────────────────┘     └────────────────────┘
 ```
+
+**Two ways to use templates:**
+
+1. **Layered** (recommended for new providers): pair a template with a provider config
+   ```bash
+   isvctl test run -f templates/kaas.yaml -f my-provider/kaas.yaml
+   ```
+
+2. **Self-contained** (existing approach): copy a template and add commands inline
+   ```bash
+   isvctl test run -f my-provider/kaas.yaml  # has both commands + validations
+   ```
 
 **The contract is JSON.** Your scripts can be written in any language (Python, Bash, Go, etc.). They just need to print a JSON object to stdout with the required fields.
 
 ## Available Templates
 
-| Template | Tests | Stubs | Reference Implementation |
-|----------|-------|-------|--------------------------|
-| `iam.yaml` | User create → verify credentials → delete | `stubs/iam/` (3 scripts) | `../stubs/aws/iam/` |
-| `network.yaml` | VPC CRUD, subnets, isolation, security, connectivity, traffic | `stubs/network/` (8 scripts) | `../stubs/aws/network/` |
-| `vm.yaml` | Launch GPU VM → list → reboot → NIM deploy → teardown | `stubs/vm/` (4 scripts) + `stubs/common/` (2) | `../stubs/aws/vm/` |
-| `bm.yaml` | Launch bare-metal → describe → reboot → NIM → teardown → verify | `stubs/bm/` (5 scripts) + `stubs/common/` (2) | `../stubs/aws/bm/` |
-| `kaas.yaml` | Provision K8s GPU cluster → validate nodes/GPU/workloads → teardown | `stubs/kaas/` (2 scripts) | `../stubs/aws/eks/` |
-| `control-plane.yaml` | API health, access key lifecycle, tenant lifecycle | `stubs/control-plane/` (10 scripts) | `../stubs/aws/control-plane/` |
-| `image-registry.yaml` | Image upload → VM launch → install config CRUD → BMaaS install → teardown | `stubs/image-registry/` (6 scripts) | `../stubs/aws/image-registry/` |
+| Template | Validations | Provider Stubs | Reference Implementation |
+|----------|-------------|----------------|--------------------------|
+| `kaas.yaml` | K8s cluster health, GPU operator, GPU scheduling, workloads | `stubs/kaas/` (2 scripts) | `../aws/eks.yaml` |
+| `control-plane.yaml` | API health, access key lifecycle, tenant lifecycle | `stubs/control-plane/` (10 scripts) | `../aws/control-plane.yaml` |
+| `iam.yaml` | User create, verify credentials, delete | `stubs/iam/` (3 scripts) | `../aws/iam.yaml` |
+| `network.yaml` | VPC CRUD, subnets, isolation, security, connectivity | `stubs/network/` (8 scripts) | `../aws/network.yaml` |
+| `vm.yaml` | GPU VM lifecycle, SSH, NIM inference | `stubs/vm/` (4 scripts) + `stubs/common/` (2) | `../aws/vm.yaml` |
+| `bm.yaml` | Bare-metal lifecycle, SSH, GPU, NIM | `stubs/bm/` (5 scripts) + `stubs/common/` (2) | `../aws/bm.yaml` |
+| `image-registry.yaml` | Image upload, install config CRUD, BMaaS install | `stubs/image-registry/` (6 scripts) | `../aws/image-registry.yaml` |
 
-> **Note on Reference Implementations:** The `../stubs/aws/` paths in the "Reference Implementation" column point to NVIDIA's AWS example scripts that live _outside_ the `templates/` folder. These are optional examples provided as implementation guides — they are **not** copied when you duplicate `templates/` and are **not** required dependencies. The relative paths will not resolve once the templates folder is relocated. Refer to them in-place for inspiration, then implement your own scripts in the `stubs/` directories listed in the "Stubs" column.
+## Context Variables
+
+Templates use `{{ context.variable | default('value') }}` for provider-specific values.
+Providers set these via the `context:` block in their YAML:
+
+```yaml
+# my-provider/kaas.yaml
+context:
+  node_count: "5"
+  total_gpus: "20"
+  gpu_per_node: "4"
+  gpu_operator_ns: "nvidia-gpu-operator"
+```
+
+Or override at runtime:
+```bash
+isvctl test run -f templates/kaas.yaml -f my-provider/kaas.yaml \
+  --set context.node_count=10
+```
 
 ## Quick Start
+
+### Layered approach (new providers)
+
+```bash
+# 1. Create a provider config with just commands + context
+cat > isvctl/configs/my-isv/kaas.yaml << 'EOF'
+version: "1.0"
+commands:
+  kubernetes:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: provision_cluster
+        phase: setup
+        command: "../stubs/my-isv/kaas/setup.sh"
+        timeout: 1800
+      - name: teardown_cluster
+        phase: teardown
+        command: "../stubs/my-isv/kaas/teardown.sh"
+        timeout: 1800
+context:
+  node_count: "3"
+  total_gpus: "12"
+EOF
+
+# 2. Implement the stub scripts
+vim isvctl/configs/stubs/my-isv/kaas/setup.sh
+
+# 3. Run with the template
+isvctl test run -f isvctl/configs/templates/kaas.yaml -f isvctl/configs/my-isv/kaas.yaml
+```
+
+### Copy approach (existing workflow)
 
 ```bash
 # 1. Copy the template folder

@@ -1,0 +1,76 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# OpenShift DRA (Dynamic Resource Allocation) Validation
+#
+# Validates GPU Operator in DRA mode:
+# - DRA driver pods running
+# - ResourceClass exists for GPUs
+# - ResourceClaim allocation works
+# - SCC compatibility with DRA
+#
+# Prerequisites:
+#   - GPU Operator switched to DRA mode (ClusterPolicy devicePlugin.enabled=false)
+#   - OpenShift 4.17+ with DRA feature gate
+#
+# Usage:
+#   isvctl test run -f isvctl/configs/openshift/dra.yaml
+
+version: "1.0"
+
+commands:
+  openshift:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: dra_setup
+        phase: setup
+        command: "python3 ../stubs/openshift/dra/dra_setup.py"
+        timeout: 300
+
+      - name: dra_claim_test
+        phase: test
+        command: "python3 ../stubs/openshift/dra/dra_claim_test.py"
+        timeout: 300
+
+      - name: dra_scc_check
+        phase: test
+        command: "python3 ../stubs/openshift/dra/dra_scc_check.py"
+        timeout: 120
+
+      - name: teardown
+        phase: teardown
+        command: "python3 ../stubs/openshift/dra/teardown.py"
+        timeout: 60
+
+tests:
+  platform: openshift
+  description: "OpenShift DRA mode validation (GPU Operator)"
+
+  validations:
+    dra_health:
+      checks:
+        - StepSuccessCheck:
+            step: dra_setup
+        - FieldExistsCheck:
+            step: dra_setup
+            fields: ["driver_ready", "resource_class_exists"]
+
+    dra_claim:
+      checks:
+        - StepSuccessCheck:
+            step: dra_claim_test
+
+    dra_scc:
+      checks:
+        - StepSuccessCheck:
+            step: dra_scc_check
+
+  exclude:
+    markers: []

@@ -1,0 +1,84 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# OpenShift ARM/aarch64 Platform Validation
+#
+# Read-only checks for ARM-specific platform features.
+# All tests skip gracefully on x86_64 clusters.
+#
+# Validates:
+# - aarch64 architecture on nodes
+# - SMMUv3 (System MMU for device isolation)
+# - GICv4.1 (Generic Interrupt Controller for VFIO passthrough)
+# - Hugepages configuration
+# - NUMA topology
+#
+# Usage:
+#   isvctl test run -f isvctl/configs/openshift/arm.yaml
+
+version: "1.0"
+
+commands:
+  openshift:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: arch_check
+        phase: test
+        command: "python3 ../stubs/openshift/arm/arch_check.py"
+        timeout: 60
+
+      - name: smmu_check
+        phase: test
+        command: "python3 ../stubs/openshift/arm/smmu_check.py"
+        timeout: 120
+
+      - name: gicv4_check
+        phase: test
+        command: "python3 ../stubs/openshift/arm/gicv4_check.py"
+        timeout: 120
+
+      - name: hugepage_check
+        phase: test
+        command: "python3 ../stubs/openshift/arm/hugepage_check.py"
+        timeout: 60
+
+      - name: topology_check
+        phase: test
+        command: "python3 ../stubs/openshift/arm/topology_check.py"
+        timeout: 120
+
+tests:
+  platform: openshift
+  description: "OpenShift ARM/aarch64 platform validation"
+
+  validations:
+    architecture:
+      checks:
+        - StepSuccessCheck:
+            step: arch_check
+    smmu:
+      checks:
+        - StepSuccessCheck:
+            step: smmu_check
+    gic:
+      checks:
+        - StepSuccessCheck:
+            step: gicv4_check
+    hugepages:
+      checks:
+        - StepSuccessCheck:
+            step: hugepage_check
+    topology:
+      checks:
+        - StepSuccessCheck:
+            step: topology_check
+
+  exclude:
+    markers: []

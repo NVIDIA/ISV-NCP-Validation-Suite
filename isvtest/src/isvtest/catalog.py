@@ -36,6 +36,19 @@ PLATFORM_CONFIGS: dict[str, list[str]] = {
     "CARBIDE_IMAGE_REGISTRY": ["carbide/image-registry.yaml"],
     "CARBIDE_BARE_METAL": ["carbide/bm.yaml"],
     "CARBIDE_IAM": ["carbide/iam.yaml"],
+    # OpenShift platform — platform-specific validations
+    "OPENSHIFT_KAAS": ["openshift/kaas.yaml"],
+    "OPENSHIFT_IAM": ["openshift/iam.yaml"],
+    "OPENSHIFT_NETWORK": ["openshift/network.yaml"],
+    "OPENSHIFT_STORAGE": ["openshift/storage.yaml"],
+    "OPENSHIFT_VM": ["openshift/vm.yaml"],
+    "OPENSHIFT_MACHINESET": ["openshift/machineset.yaml"],
+    "OPENSHIFT_SECURITY": ["openshift/security.yaml"],
+    "OPENSHIFT_GPU_HEALTH": ["openshift/gpu-health.yaml"],
+    "OPENSHIFT_DRA": ["openshift/dra.yaml"],
+    "OPENSHIFT_COMPUTEDOMAIN": ["openshift/computedomain.yaml"],
+    "OPENSHIFT_ARM": ["openshift/arm.yaml"],
+    "OPENSHIFT_HOSTED": ["openshift/hosted-provision.yaml"],
 }
 
 

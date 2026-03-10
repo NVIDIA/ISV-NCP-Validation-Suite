@@ -8,226 +8,39 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-# Bare Metal (BMaaS) Validation - Template Configuration
+# Bare Metal (BMaaS) Validation - Template
 #
-# This is a PROVIDER-AGNOSTIC template for testing bare-metal GPU instance
-# lifecycle: launch -> describe -> reboot -> NIM deploy -> teardown -> verify.
-# Copy this file and the accompanying stubs/ scripts, then replace the
-# script implementations with your platform's API calls.
+# Provider-agnostic validations for bare-metal GPU instance lifecycle:
+# launch -> describe -> reboot -> NIM deploy -> teardown -> verify.
+# Pair with a provider config that supplies the commands (stubs).
 #
-# Architecture:
-#   - Scripts: Platform-specific (YOU implement these) - do all BM work
-#   - Validations: Platform-agnostic (provided) - just check JSON output
+# Usage:
+#   # Layered: template + provider
+#   isvctl test run -f isvctl/configs/templates/bm.yaml -f isvctl/configs/aws/bm.yaml
 #
-# Contract:
-#   Each script MUST print a JSON object to stdout. The validations
-#   only inspect that JSON. As long as your scripts output the right
-#   fields, the validations pass regardless of which cloud you use.
+#   # With overrides
+#   isvctl test run -f ... --set context.expected_gpus=4 --set context.expected_os=rhel
 #
-# Steps:
-#   1. launch_instance      (setup)    - Provision bare-metal GPU instance
-#   2. list_instances       (test)     - List instances, verify target exists
-#   3. describe_instance    (test)     - Describe instance state + SSH info
-#   4. reboot_instance      (test)     - Reboot instance, validate recovery
-#   5. reinstall_instance   (test)     - Reinstall OS from stock image [skip: true by default]
-#   6. deploy_nim           (test)     - Deploy NIM container via SSH
-#   7. teardown_nim         (teardown) - Stop NIM container
-#   8. teardown             (teardown) - Terminate instance
-#   9. verify_teardown      (teardown) - Confirm resources deleted
-#
-# Dev workflow (reuse existing instance):
-#   # Run 1: launch + test, keep instance alive
-#   BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/my-isv/bm.yaml
-#
-#   # Run 2+: reuse instance
-#   BM_INSTANCE_ID=<id> BM_KEY_FILE=/path/to/key.pem \
-#     BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/my-isv/bm.yaml
-#
-# Quick start:
-#   1. Copy this folder:  cp -r templates/ my-isv/
-#   2. Edit the stubs:    my-isv/stubs/bm/*.py
-#   3. Run:               uv run isvctl test run -f isvctl/configs/my-isv/bm.yaml
-#
-# See also:
-#   - AWS reference implementation: ../aws/bm.yaml + ../stubs/aws/bm/
-#   - JSON schemas: isvctl/src/isvctl/config/output_schemas.py
+# Context variables (set by provider or --set):
+#   context.expected_gpus        — Number of GPUs in the instance (default: 8)
+#   context.expected_os          — Expected OS name for SSH checks (default: ubuntu)
+#   context.max_reboot_uptime    — Max uptime in seconds after reboot (default: 600)
+#   context.gpu_stress_runtime   — GPU stress test duration in seconds (default: 30)
+#   context.gpu_stress_memory_gb — GPU stress test memory in GB (default: 16)
+#   context.training_steps       — DDP training workload steps (default: 50)
+#   context.ping_target          — Ethernet ping target (default: 8.8.8.8)
+#   context.nim_prompt           — Prompt for NIM inference check (default: What is CUDA?)
+#   context.nim_max_tokens       — Max tokens for NIM inference (default: 50)
 
 version: "1.0"
 
-commands:
-  bm:
-    phases: ["setup", "test", "teardown"]
-    steps:
-      # ─── Step 1: Launch Bare-Metal Instance ────────────────────────
-      # YOUR SCRIPT must output JSON with at minimum:
-      #   {
-      #     "success": true,
-      #     "platform": "bm",
-      #     "instance_id": "<unique-id>",
-      #     "public_ip": "<ip-address>",
-      #     "key_file": "<path-to-ssh-key>",
-      #     "vpc_id": "<network-id>",
-      #     "instance_state": "running",
-      #     "security_group_id": "<sg-id>",
-      #     "key_name": "<key-pair-name>"
-      #   }
-      - name: launch_instance
-        phase: setup
-        command: "python3 ./stubs/bm/launch_instance.py"
-        args:
-          - "--name"
-          - "isv-bm-test-gpu"
-          - "--instance-type"
-          - "{{instance_type}}"
-          - "--region"
-          - "{{region}}"
-        timeout: 1200
-
-      # ─── Step 2: List Instances ────────────────────────────────────
-      # Reuses the VM list_instances stub (generic instance listing).
-      - name: list_instances
-        phase: test
-        command: "python3 ./stubs/vm/list_instances.py"
-        args:
-          - "--vpc-id"
-          - "{{steps.launch_instance.vpc_id}}"
-          - "--instance-id"
-          - "{{steps.launch_instance.instance_id}}"
-          - "--region"
-          - "{{region}}"
-        timeout: 120
-
-      # ─── Step 3: Describe Instance ────────────────────────────────
-      # YOUR SCRIPT must output JSON with at minimum:
-      #   {
-      #     "success": true,
-      #     "platform": "bm",
-      #     "instance_id": "...",
-      #     "instance_state": "running",
-      #     "public_ip": "...",
-      #     "key_file": "..."
-      #   }
-      - name: describe_instance
-        phase: test
-        command: "python3 ./stubs/bm/describe_instance.py"
-        args:
-          - "--instance-id"
-          - "{{steps.launch_instance.instance_id}}"
-          - "--region"
-          - "{{region}}"
-          - "--key-file"
-          - "{{steps.launch_instance.key_file}}"
-        timeout: 120
-
-      # ─── Step 4: Reboot Instance ──────────────────────────────────
-      # BM-specific: longer waits for hardware POST/BIOS/OS boot.
-      # YOUR SCRIPT must output JSON with at minimum:
-      #   {
-      #     "success": true,
-      #     "platform": "bm",
-      #     "instance_id": "...",
-      #     "instance_state": "running",
-      #     "public_ip": "...",
-      #     "key_file": "...",
-      #     "uptime_seconds": <int>,
-      #     "ssh_connectivity": true
-      #   }
-      - name: reboot_instance
-        phase: test
-        command: "python3 ./stubs/bm/reboot_instance.py"
-        args:
-          - "--instance-id"
-          - "{{steps.launch_instance.instance_id}}"
-          - "--region"
-          - "{{region}}"
-          - "--key-file"
-          - "{{steps.launch_instance.key_file}}"
-          - "--public-ip"
-          - "{{steps.launch_instance.public_ip}}"
-        timeout: 1800
-
-      # ─── Step 5: Reinstall Instance ─────────────────────────────────
-      # Reinstall the node from its configured stock OS.
-      # Skipped by default: can be very slow depending on platform.
-      # Set skip: false and implement stubs/bm/reinstall_instance.py to enable.
-      # See ../aws/bm.yaml + stubs/aws/bm/reinstall_instance.py for reference.
-      - name: reinstall_instance
-        phase: test
-        skip: true
-        command: "python3 ./stubs/bm/reinstall_instance.py"
-        args:
-          - "--instance-id"
-          - "{{steps.launch_instance.instance_id}}"
-          - "--region"
-          - "{{region}}"
-          - "--key-file"
-          - "{{steps.launch_instance.key_file}}"
-          - "--public-ip"
-          - "{{steps.launch_instance.public_ip}}"
-        timeout: 3600
-
-      # ─── Step 6: Deploy NIM Container ─────────────────────────────
-      - name: deploy_nim
-        phase: test
-        command: "python3 ./stubs/common/deploy_nim.py"
-        args:
-          - "--host"
-          - "{{steps.launch_instance.public_ip}}"
-          - "--key-file"
-          - "{{steps.launch_instance.key_file}}"
-        timeout: 1800
-
-      # ─── Step 7: Teardown NIM ─────────────────────────────────────
-      - name: teardown_nim
-        phase: teardown
-        command: "python3 ./stubs/common/teardown_nim.py"
-        args:
-          - "--host"
-          - "{{steps.launch_instance.public_ip}}"
-          - "--key-file"
-          - "{{steps.launch_instance.key_file}}"
-        timeout: 120
-
-      # ─── Step 8: Teardown Instance ────────────────────────────────
-      - name: teardown
-        phase: teardown
-        command: "python3 ./stubs/bm/teardown.py"
-        args:
-          - "--instance-id"
-          - "{{steps.launch_instance.instance_id}}"
-          - "--region"
-          - "{{region}}"
-          - "--delete-key-pair"
-          - "--delete-security-group"
-          - "{{teardown_flag}}"
-        timeout: 1800
-
-      # ─── Step 9: Verify Teardown ──────────────────────────────────
-      # Post-teardown sanitization: verify instance terminated and
-      # resources deleted.
-      - name: verify_teardown
-        phase: teardown
-        command: "python3 ./stubs/bm/verify_terminated.py"
-        args:
-          - "--instance-id"
-          - "{{steps.launch_instance.instance_id}}"
-          - "--region"
-          - "{{region}}"
-          - "--security-group-id"
-          - "{{steps.launch_instance.security_group_id}}"
-          - "--key-name"
-          - "{{steps.launch_instance.key_name}}"
-        timeout: 120
-
 tests:
   platform: bare_metal
-  cluster_name: "bm-validation"
+  cluster_name: "{{ context.cluster_name | default('bm-validation') }}"
   description: "Bare metal (BMaaS) GPU validation tests (template)"
 
   settings:
-    region: "us-west-2"
-    instance_type: "{{instance_type}}" # Supply your platform-equivalent bare-metal/GPU instance type
-    teardown_flag: "{{(env.BM_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"
+    show_skipped_tests: false
 
   # ─── Validations ─────────────────────────────────────────────────
   # These are PROVIDER-AGNOSTIC. They only check JSON field names/values.
@@ -255,13 +68,13 @@ tests:
       checks:
         - SshConnectivityCheck: {}
         - SshOsCheck:
-            expected_os: "ubuntu"
+            expected_os: "{{ context.expected_os | default('ubuntu') }}"
 
     gpu:
       step: describe_instance
       checks:
         - SshGpuCheck:
-            expected_gpus: 8
+            expected_gpus: "{{ context.expected_gpus | default('8') }}"
 
     host_os:
       step: describe_instance
@@ -273,8 +86,8 @@ tests:
       step: describe_instance
       checks:
         - SshGpuStressCheck:
-            runtime: 30
-            memory_gb: 16
+            runtime: "{{ context.gpu_stress_runtime | default('30') }}"
+            memory_gb: "{{ context.gpu_stress_memory_gb | default('16') }}"
 
     # NCCL AllReduce - validates GPU-to-GPU communication (NVLink/NVSwitch)
     nccl:
@@ -287,7 +100,7 @@ tests:
       step: describe_instance
       checks:
         - SshTrainingCheck:
-            steps: 50
+            steps: "{{ context.training_steps | default('50') }}"
 
     # Network / interconnect checks
     nvlink:
@@ -304,13 +117,13 @@ tests:
       step: describe_instance
       checks:
         - SshEthernetCheck:
-            ping_target: "8.8.8.8"
+            ping_target: "{{ context.ping_target | default('8.8.8.8') }}"
 
     reboot_checks:
       step: reboot_instance
       checks:
         - InstanceRebootCheck:
-            max_uptime: 600
+            max_uptime: "{{ context.max_reboot_uptime | default('600') }}"
 
     reboot_state:
       step: reboot_instance
@@ -323,13 +136,13 @@ tests:
       checks:
         - SshConnectivityCheck: {}
         - SshOsCheck:
-            expected_os: "ubuntu"
+            expected_os: "{{ context.expected_os | default('ubuntu') }}"
 
     reboot_gpu:
       step: reboot_instance
       checks:
         - SshGpuCheck:
-            expected_gpus: 8
+            expected_gpus: "{{ context.expected_gpus | default('8') }}"
 
     reboot_host_os:
       step: reboot_instance
@@ -348,7 +161,7 @@ tests:
       checks:
         - SshConnectivityCheck: {}
         - SshOsCheck:
-            expected_os: "ubuntu"
+            expected_os: "{{ context.expected_os | default('ubuntu') }}"
 
     reinstall_gpu:
       step: reinstall_instance
@@ -369,8 +182,8 @@ tests:
       step: deploy_nim
       checks:
         - SshNimInferenceCheck:
-            prompt: "What is CUDA?"
-            max_tokens: 50
+            prompt: "{{ context.nim_prompt | default('What is CUDA?') }}"
+            max_tokens: "{{ context.nim_max_tokens | default('50') }}"
 
     nim_teardown:
       step: teardown_nim

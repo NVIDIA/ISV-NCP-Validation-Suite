@@ -10,12 +10,22 @@
 
 """Tests for YAML merging functionality."""
 
+import copy
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from isvctl.config.merger import apply_set_value, deep_merge, merge_yaml_files, parse_set_value
+from isvctl.config.merger import (
+    _has_merge_marker,
+    _is_mergeable_list,
+    _merge_single_key_dict_lists,
+    _strip_merge_marker,
+    apply_set_value,
+    deep_merge,
+    merge_yaml_files,
+    parse_set_value,
+)
 
 
 class TestDeepMerge:
@@ -41,6 +51,22 @@ class TestDeepMerge:
         override = {"items": [4, 5]}
         result = deep_merge(base, override)
         assert result == {"items": [4, 5]}
+
+    def test_remove_string_is_literal_at_dict_level(self) -> None:
+        """__remove__ at dict level is treated as a literal string value."""
+        base = {"a": 1, "b": 2, "c": 3}
+        override = {"b": "__remove__"}
+        result = deep_merge(base, override)
+        # __remove__ only works inside strategic-merge lists, not at dict level
+        assert result == {"a": 1, "b": "__remove__", "c": 3}
+
+    def test_remove_only_in_strategic_merge_lists(self) -> None:
+        """__remove__ deletes items only within strategic-merge lists."""
+        base = {"checks": [{"A": {"p": 1}}, {"B": {"p": 2}}]}
+        override = {"checks": [{"__merge__": True}, {"B": "__remove__"}]}
+        result = deep_merge(base, override)
+        # B is removed from the list, A is kept
+        assert result == {"checks": [{"A": {"p": 1}}]}
 
     def test_original_not_modified(self) -> None:
         """Test that original dicts are not modified."""
@@ -183,3 +209,246 @@ class TestMergeYamlFiles:
 
         result = merge_yaml_files([str(file1), str(file2)])
         assert result == {"a": 1}
+
+
+class TestStrategicMerge:
+    """Tests for opt-in strategic merge of single-key dict lists.
+
+    Strategic merge is triggered by including ``{__merge__: true}`` in the
+    override list.  Without the marker, lists are replaced as before.
+    """
+
+    # -- marker helpers -------------------------------------------------------
+
+    def test_has_merge_marker(self) -> None:
+        """_has_merge_marker detects the opt-in marker."""
+        assert _has_merge_marker([{"__merge__": True}]) is True
+        assert _has_merge_marker([{"__merge__": True}, {"A": 1}]) is True
+        assert _has_merge_marker([{"A": 1}]) is False
+        assert _has_merge_marker([]) is False
+
+    def test_strip_merge_marker(self) -> None:
+        """_strip_merge_marker removes only the marker item."""
+        lst = [{"__merge__": True}, {"A": 1}, {"B": 2}]
+        assert _strip_merge_marker(lst) == [{"A": 1}, {"B": 2}]
+
+    def test_is_mergeable_list_helper(self) -> None:
+        """Direct tests for _is_mergeable_list."""
+        assert _is_mergeable_list([{"A": 1}]) is True
+        assert _is_mergeable_list([{"A": 1}, {"B": 2}]) is True
+        assert _is_mergeable_list([]) is False
+        assert _is_mergeable_list([1, 2]) is False
+        assert _is_mergeable_list(["a", "b"]) is False
+        assert _is_mergeable_list([{"A": 1, "B": 2}]) is False
+        assert _is_mergeable_list([{"A": 1}, "b"]) is False
+
+    # -- opt-in behavior via deep_merge ---------------------------------------
+
+    def test_no_marker_replaces_list(self) -> None:
+        """Without __merge__, single-key dict lists are replaced (backward compat)."""
+        base = {"checks": [{"A": {"p": 1}}, {"B": {"p": 2}}]}
+        override = {"checks": [{"A": {"p": 99}}]}
+        result = deep_merge(base, override)
+        # B is gone — full replacement
+        assert result == {"checks": [{"A": {"p": 99}}]}
+
+    def test_merge_matching_check_params(self) -> None:
+        """Core case: merge params of a matching check."""
+        base = {"checks": [{"CheckA": {"param1": 1, "param2": 2}}]}
+        override = {"checks": [{"__merge__": True}, {"CheckA": {"param2": 99}}]}
+        result = deep_merge(base, override)
+        assert result == {"checks": [{"CheckA": {"param1": 1, "param2": 99}}]}
+
+    def test_append_new_check(self) -> None:
+        """New check in override is appended to end."""
+        base = {"checks": [{"CheckA": {"p": 1}}]}
+        override = {"checks": [{"__merge__": True}, {"CheckB": {"p": 2}}]}
+        result = deep_merge(base, override)
+        assert result == {"checks": [{"CheckA": {"p": 1}}, {"CheckB": {"p": 2}}]}
+
+    def test_remove_check_via_sentinel(self) -> None:
+        """Check removed when value is '__remove__'."""
+        base = {"checks": [{"CheckA": {"p": 1}}, {"CheckB": {"p": 2}}]}
+        override = {"checks": [{"__merge__": True}, {"CheckA": "__remove__"}]}
+        result = deep_merge(base, override)
+        assert result == {"checks": [{"CheckB": {"p": 2}}]}
+
+    def test_preserve_base_order_append_new(self) -> None:
+        """Base order preserved; new items appended at end."""
+        base = {"checks": [{"A": {}}, {"B": {}}, {"C": {}}]}
+        override = {"checks": [{"__merge__": True}, {"D": {"new": True}}, {"B": {"updated": True}}]}
+        result = deep_merge(base, override)
+        assert result == {
+            "checks": [
+                {"A": {}},
+                {"B": {"updated": True}},
+                {"C": {}},
+                {"D": {"new": True}},
+            ]
+        }
+
+    def test_regular_lists_still_replaced(self) -> None:
+        """Regular lists (scalars) use replace behavior even with no marker."""
+        base = {"items": [1, 2, 3]}
+        override = {"items": [4, 5]}
+        result = deep_merge(base, override)
+        assert result == {"items": [4, 5]}
+
+    def test_marker_with_non_mergeable_base_strips_marker(self) -> None:
+        """Marker present but base not mergeable: replace with stripped list."""
+        base = {"items": [{"A": {}}, "string"]}
+        override = {"items": [{"__merge__": True}, {"B": {}}]}
+        result = deep_merge(base, override)
+        assert result == {"items": [{"B": {}}]}
+
+    def test_marker_with_multi_key_dicts_strips_marker(self) -> None:
+        """Marker present but override items have >1 key: replace with stripped list."""
+        base = {"items": [{"A": 1}]}
+        override = {"items": [{"__merge__": True}, {"C": 3, "D": 4}]}
+        result = deep_merge(base, override)
+        assert result == {"items": [{"C": 3, "D": 4}]}
+
+    def test_empty_base_list_with_marker(self) -> None:
+        """Empty base list not mergeable; marker list replaces (stripped)."""
+        base = {"items": []}
+        override = {"items": [{"__merge__": True}, {"A": {}}]}
+        result = deep_merge(base, override)
+        assert result == {"items": [{"A": {}}]}
+
+    def test_empty_dict_values_merge(self) -> None:
+        """Checks with {} values merge correctly."""
+        base = {"checks": [{"CheckA": {}}]}
+        override = {"checks": [{"__merge__": True}, {"CheckA": {"new_param": True}}]}
+        result = deep_merge(base, override)
+        assert result == {"checks": [{"CheckA": {"new_param": True}}]}
+
+    def test_variant_names_stay_separate(self) -> None:
+        """Variant names like -1b and -3b are distinct keys."""
+        base = {
+            "checks": [
+                {"Workload-1b": {"gpu": 1}},
+                {"Workload-3b": {"gpu": 4}},
+            ]
+        }
+        override = {"checks": [{"__merge__": True}, {"Workload-1b": {"gpu": 2}}]}
+        result = deep_merge(base, override)
+        assert result == {
+            "checks": [
+                {"Workload-1b": {"gpu": 2}},
+                {"Workload-3b": {"gpu": 4}},
+            ]
+        }
+
+    def test_inputs_not_mutated(self) -> None:
+        """Original base and override are not modified."""
+        base = {"checks": [{"A": {"p": 1}}, {"B": {"p": 2}}]}
+        override = {"checks": [{"__merge__": True}, {"A": {"p": 99}}, {"C": {"p": 3}}]}
+        base_copy = copy.deepcopy(base)
+        override_copy = copy.deepcopy(override)
+        deep_merge(base, override)
+        assert base == base_copy
+        assert override == override_copy
+
+    def test_remove_nonexistent_check_is_noop(self) -> None:
+        """Removing a check that doesn't exist in base is a no-op."""
+        base = {"checks": [{"A": {"p": 1}}]}
+        override = {"checks": [{"__merge__": True}, {"Z": "__remove__"}]}
+        result = deep_merge(base, override)
+        assert result == {"checks": [{"A": {"p": 1}}]}
+
+
+    def test_merge_marker_requires_true(self) -> None:
+        """__merge__: false should NOT trigger strategic merge."""
+        base = {"checks": [{"A": {"p": 1}}, {"B": {"p": 2}}]}
+        override = {"checks": [{"__merge__": False}, {"A": {"p": 99}}]}
+        result = deep_merge(base, override)
+        # No strategic merge — entire list is replaced (marker stripped)
+        assert result == {"checks": [{"A": {"p": 99}}]}
+
+    def test_duplicate_override_keys_deduplicated(self) -> None:
+        """Duplicate new keys in override list should only appear once."""
+        base = {"checks": [{"A": {"p": 1}}]}
+        override = {"checks": [{"__merge__": True}, {"B": {"p": 2}}, {"B": {"p": 3}}]}
+        result = deep_merge(base, override)
+        # B should appear once (first occurrence wins in override_by_key)
+        b_items = [item for item in result["checks"] if "B" in item]
+        assert len(b_items) == 1
+
+    def test_merge_marker_stripped_when_base_key_missing(self) -> None:
+        """Merge marker should not leak into result when base key doesn't exist."""
+        base = {"other": "value"}
+        override = {"checks": [{"__merge__": True}, {"A": {"p": 1}}]}
+        result = deep_merge(base, override)
+        # Marker should be stripped, only A remains
+        assert result == {"other": "value", "checks": [{"A": {"p": 1}}]}
+
+
+class TestLayeredConfigs:
+    """Integration tests for layered template + provider configs."""
+
+    CONFIGS_DIR = Path(__file__).parent.parent / "configs"
+
+    def test_template_has_no_commands(self) -> None:
+        """Templates should define validations only, no commands."""
+        template = merge_yaml_files([self.CONFIGS_DIR / "templates" / "kaas.yaml"])
+        assert "commands" not in template, "Template should not contain commands"
+        assert "tests" in template, "Template must contain tests"
+        assert "validations" in template["tests"], "Template must contain validations"
+
+    def test_layered_merge_has_both(self) -> None:
+        """Template + provider merge should have both commands and tests."""
+        merged = merge_yaml_files([
+            self.CONFIGS_DIR / "templates" / "kaas.yaml",
+            self.CONFIGS_DIR / "aws" / "eks-layered.yaml",
+        ])
+        assert "commands" in merged, "Merged config must have commands from provider"
+        assert "tests" in merged, "Merged config must have tests from template"
+        assert "kubernetes" in merged["commands"], "Commands must have kubernetes key"
+        steps = merged["commands"]["kubernetes"]["steps"]
+        assert any(s["name"] == "provision_cluster" for s in steps)
+
+    def test_context_overrides_flow_through(self) -> None:
+        """Provider context values should appear in the merged config."""
+        merged = merge_yaml_files([
+            self.CONFIGS_DIR / "templates" / "kaas.yaml",
+            self.CONFIGS_DIR / "aws" / "eks-layered.yaml",
+        ])
+        assert merged.get("context", {}).get("total_gpus") == "1"
+
+    def test_standalone_eks_still_works(self) -> None:
+        """Self-contained eks.yaml should parse with both commands and tests."""
+        standalone = merge_yaml_files([self.CONFIGS_DIR / "aws" / "eks.yaml"])
+        assert "commands" in standalone
+        assert "tests" in standalone
+        assert "validations" in standalone["tests"]
+
+    def test_layered_checks_match_standalone_structure(self) -> None:
+        """Layered and standalone should have the same validation check names."""
+        standalone = merge_yaml_files([self.CONFIGS_DIR / "aws" / "eks.yaml"])
+        layered = merge_yaml_files([
+            self.CONFIGS_DIR / "templates" / "kaas.yaml",
+            self.CONFIGS_DIR / "aws" / "eks-layered.yaml",
+        ])
+
+        def get_check_names(config: dict[str, Any]) -> set[str]:
+            names: set[str] = set()
+            for group in config.get("tests", {}).get("validations", {}).values():
+                for check in group:
+                    if isinstance(check, dict):
+                        names.update(check.keys())
+            return names
+
+        standalone_checks = get_check_names(standalone)
+        layered_checks = get_check_names(layered)
+        assert standalone_checks == layered_checks, (
+            f"Check mismatch: standalone-only={standalone_checks - layered_checks}, "
+            f"layered-only={layered_checks - standalone_checks}"
+        )
+
+    def test_all_templates_are_validation_only(self) -> None:
+        """All template YAML files should have tests but no commands."""
+        template_dir = self.CONFIGS_DIR / "templates"
+        for yaml_file in sorted(template_dir.glob("*.yaml")):
+            config = merge_yaml_files([yaml_file])
+            assert "commands" not in config, f"{yaml_file.name} should not have commands"
+            assert "tests" in config, f"{yaml_file.name} must have tests"

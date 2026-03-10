@@ -1,0 +1,71 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# AWS EKS - Layered Provider Configuration
+#
+# Supplies commands (Terraform stubs) and context overrides for the
+# kaas template. Use with the template for composable validation:
+#
+#   isvctl test run \
+#     -f isvctl/configs/templates/kaas.yaml \
+#     -f isvctl/configs/aws/eks-layered.yaml
+#
+# For a self-contained config (no template needed), use eks.yaml instead.
+#
+# Environment Variables:
+#   TF_AUTO_APPROVE     — Skip Terraform approval prompts (default: false)
+#   TF_VAR_*            — Terraform variables (region, instance types, etc.)
+#   AWS_SKIP_TEARDOWN   — Preserve resources after test (default: false)
+#   NGC_API_KEY         — NGC API key for NIM workloads
+#   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY — AWS credentials
+
+version: "1.0"
+
+# =============================================================================
+# Provider-specific commands (Terraform stubs)
+# =============================================================================
+commands:
+  kubernetes:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: provision_cluster
+        phase: setup
+        command: "../stubs/aws/eks/setup.sh"
+        timeout: 1800
+        env:
+          TF_AUTO_APPROVE: "true"
+          TF_VAR_region: "us-west-2"
+          TF_VAR_gpu_node_instance_types: '["g5.xlarge"]'
+          TF_VAR_gpu_node_desired_size: "1"
+          # Override with your IP CIDR for security (e.g., '["203.0.113.0/24"]')
+          # TF_VAR_cluster_endpoint_public_access_cidrs: '["0.0.0.0/0"]'
+
+      - name: teardown_cluster
+        phase: teardown
+        command: "../stubs/aws/eks/teardown.sh"
+        timeout: 1800
+        env:
+          TF_AUTO_APPROVE: "true"
+
+# =============================================================================
+# Context overrides for template defaults
+# =============================================================================
+# Single g5.xlarge GPU node = 1 GPU total (template defaults to 3)
+context:
+  total_gpus: "1"
+
+# =============================================================================
+# Validation overrides (optional)
+# =============================================================================
+# The template provides all checks with sensible defaults. Override only
+# what differs for this provider. Use {__merge__: true} to merge into
+# the template's check list instead of replacing it.
+tests:
+  description: "AWS EKS GPU cluster validation"

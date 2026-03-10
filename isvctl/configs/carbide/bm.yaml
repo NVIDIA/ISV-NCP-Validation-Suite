@@ -1,0 +1,146 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# Carbide Bare Metal (BMaaS) - Layered Provider Configuration
+#
+# Supplies commands (carbidecli stubs) for the bm template.
+# Tests bare-metal GPU instance lifecycle: launch, list, describe,
+# reboot, NIM deploy, teardown, and verification.
+#
+# Mapping to template concepts:
+#   launch_instance    → carbidecli instance create
+#   list_instances     → carbidecli instance list
+#   describe_instance  → carbidecli instance get
+#   reboot_instance    → carbidecli instance reboot
+#   reinstall_instance → skip (not supported by Carbide)
+#   deploy_nim         → shared NIM deploy script (SSH-based)
+#   teardown_nim       → shared NIM teardown script (SSH-based)
+#   teardown           → carbidecli instance delete
+#   verify_teardown    → carbidecli instance get (verify terminated)
+#
+# Usage:
+#   isvctl test run \
+#     -f isvctl/configs/templates/bm.yaml \
+#     -f isvctl/configs/carbide/bm.yaml
+#
+# Environment:
+#   carbidecli handles auth via config or env vars:
+#     CARBIDE_TOKEN / CARBIDE_API_KEY  — Authentication
+#     CARBIDE_ORG                      — Organization
+#     CARBIDE_SITE_ID                  — Site UUID (required)
+#     CARBIDE_OS_ID                    — Operating system UUID (required)
+#     CARBIDE_INSTANCE_TYPE            — Instance type (required)
+
+version: "1.0"
+
+commands:
+  bm:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      # Launch bare-metal GPU instance
+      - name: launch_instance
+        phase: setup
+        command: "python3 ../stubs/carbide/bm/launch_instance.py"
+        args:
+          - "--site-id"
+          - "{{ context.site_id }}"
+          - "--os-id"
+          - "{{ context.os_id }}"
+          - "--instance-type"
+          - "{{ context.instance_type }}"
+        timeout: 1200
+
+      # List instances - verify instance is visible
+      - name: list_instances
+        phase: test
+        command: "python3 ../stubs/carbide/bm/list_instances.py"
+        args:
+          - "--site-id"
+          - "{{ context.site_id }}"
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+        timeout: 120
+
+      # Describe instance - test phase anchor for SSH/GPU validations
+      - name: describe_instance
+        phase: test
+        command: "python3 ../stubs/carbide/bm/describe_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+        timeout: 120
+
+      # Reboot instance and validate recovery
+      - name: reboot_instance
+        phase: test
+        command: "python3 ../stubs/carbide/bm/reboot_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--public-ip"
+          - "{{steps.launch_instance.public_ip}}"
+        timeout: 1800
+
+      # Reinstall not supported by Carbide - always skipped
+      - name: reinstall_instance
+        phase: test
+        skip: true
+        command: "python3 ../stubs/carbide/bm/reinstall_instance.py"
+        timeout: 60
+
+      # Deploy NIM container via SSH (shared script)
+      # Requires NGC_API_KEY env var
+      - name: deploy_nim
+        phase: test
+        command: "python3 ../stubs/common/deploy_nim.py"
+        args:
+          - "--host"
+          - "{{steps.launch_instance.public_ip}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+        timeout: 1800
+
+      # Teardown NIM container via SSH (shared script)
+      - name: teardown_nim
+        phase: teardown
+        command: "python3 ../stubs/common/teardown_nim.py"
+        args:
+          - "--host"
+          - "{{steps.launch_instance.public_ip}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+        timeout: 120
+
+      # Teardown bare-metal instance
+      - name: teardown
+        phase: teardown
+        command: "python3 ../stubs/carbide/bm/teardown.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+        timeout: 600
+
+      # Verify instance is terminated
+      - name: verify_teardown
+        phase: teardown
+        command: "python3 ../stubs/carbide/bm/verify_terminated.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+        timeout: 120
+
+# Provider-specific context
+context:
+  site_id: "{{ env.CARBIDE_SITE_ID | default('') }}"
+  os_id: "{{ env.CARBIDE_OS_ID | default('') }}"
+  instance_type: "{{ env.CARBIDE_INSTANCE_TYPE | default('') }}"
+
+tests:
+  description: "Carbide bare metal (BMaaS): instance lifecycle, GPU, NIM deploy"

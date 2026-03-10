@@ -8,183 +8,34 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-# Network Validation - Template Configuration
+# Network Validation - Template
 #
-# This is a PROVIDER-AGNOSTIC template for comprehensive network testing.
-# Copy this file and the accompanying stubs/ scripts, then replace the
-# script implementations with your platform's API calls.
+# Provider-agnostic validations for comprehensive network testing:
+# VPC CRUD, subnet configuration, VPC isolation, security blocking,
+# connectivity, and traffic validation.
+# Pair with a provider config that supplies the commands (stubs).
 #
-# Architecture:
-#   - Scripts: Platform-specific (YOU implement these) - do all network work
-#   - Validations: Platform-agnostic (provided) - just check JSON output
+# Usage:
+#   # Layered: template + provider
+#   isvctl test run -f isvctl/configs/templates/network.yaml -f isvctl/configs/aws/network.yaml
 #
-# Contract:
-#   Each script MUST print a JSON object to stdout. The validations
-#   only inspect that JSON. As long as your scripts output the right
-#   fields, the validations pass regardless of which cloud you use.
+#   # With overrides
+#   isvctl test run -f ... --set context.region=eu-west-1 --set context.min_subnets=3
 #
-# Test suites:
-#   1. VPC CRUD - Create, Read, Update, Delete lifecycle
-#   2. Subnet Configuration - Multi-AZ subnet distribution
-#   3. VPC Isolation - Security boundaries between VPCs
-#   4. Security Blocking - Firewall / ACL blocking rules (negative tests)
-#   5. Connectivity - Instance network assignment
-#   6. Traffic Validation - Real ping tests between instances
-#
-# Quick start:
-#   1. Copy this folder:  cp -r templates/ my-isv/
-#   2. Edit the stubs:    my-isv/stubs/network/*.py
-#   3. Run:               uv run isvctl test run -f isvctl/configs/my-isv/network.yaml
-#
-# See also:
-#   - AWS reference implementation: ../aws/network.yaml + ../stubs/aws/network/
-#   - JSON schemas: isvctl/src/isvctl/config/output_schemas.py
+# Context variables (set by provider or --set):
+#   context.region       — Cloud region for network calls (default: us-west-2)
+#   context.min_subnets  — Minimum subnets for setup check (default: 2)
+#   context.subnet_count — Expected subnet count for subnet config test (default: 4)
 
 version: "1.0"
 
-commands:
-  network:
-    phases: ["setup", "test", "teardown"]
-    steps:
-      # ─── Setup: Create Shared VPC ──────────────────────────────────
-      # YOUR SCRIPT must output JSON with at minimum:
-      #   {
-      #     "success": true,
-      #     "platform": "network",
-      #     "network_id": "<vpc-or-network-id>",
-      #     "subnets": [{"subnet_id": "..."}],
-      #     "security_group_id": "<sg-id>"
-      #   }
-      - name: create_network
-        phase: setup
-        command: "python3 ./stubs/network/create_vpc.py"
-        args:
-          - "--name"
-          - "isv-shared-vpc"
-          - "--region"
-          - "{{region}}"
-          - "--cidr"
-          - "10.0.0.0/16"
-        timeout: 300
-
-      # ─── Test 1: VPC CRUD Operations ───────────────────────────────
-      # Self-contained test. Creates its own VPC, tests CRUD, cleans up.
-      # YOUR SCRIPT must output JSON matching the vpc_crud schema.
-      - name: vpc_crud
-        phase: test
-        command: "python3 ./stubs/network/vpc_crud_test.py"
-        args:
-          - "--region"
-          - "{{region}}"
-          - "--cidr"
-          - "10.99.0.0/16"
-        timeout: 120
-        output_schema: vpc_crud
-
-      # ─── Test 2: Subnet Configuration ──────────────────────────────
-      # Self-contained test. Creates VPC with multiple subnets, verifies.
-      # YOUR SCRIPT must output JSON matching the subnet_config schema.
-      - name: subnet_config
-        phase: test
-        command: "python3 ./stubs/network/subnet_test.py"
-        args:
-          - "--region"
-          - "{{region}}"
-          - "--cidr"
-          - "10.98.0.0/16"
-          - "--subnet-count"
-          - "4"
-        timeout: 120
-        output_schema: subnet_config
-
-      # ─── Test 3: VPC Isolation ─────────────────────────────────────
-      # Self-contained test. Creates two VPCs, verifies no cross-access.
-      # YOUR SCRIPT must output JSON matching the vpc_isolation schema.
-      - name: vpc_isolation
-        phase: test
-        command: "python3 ./stubs/network/isolation_test.py"
-        args:
-          - "--region"
-          - "{{region}}"
-          - "--cidr-a"
-          - "10.97.0.0/16"
-          - "--cidr-b"
-          - "10.96.0.0/16"
-        timeout: 120
-        output_schema: vpc_isolation
-
-      # ─── Test 4: Security Blocking ─────────────────────────────────
-      # Self-contained test. Tests firewall/ACL blocking rules.
-      # YOUR SCRIPT must output JSON matching the security_blocking schema.
-      - name: security_blocking
-        phase: test
-        command: "python3 ./stubs/network/security_test.py"
-        args:
-          - "--region"
-          - "{{region}}"
-          - "--cidr"
-          - "10.94.0.0/16"
-        timeout: 120
-        output_schema: security_blocking
-
-      # ─── Test 5: Connectivity ──────────────────────────────────────
-      # Uses the shared VPC from create_network step.
-      # YOUR SCRIPT must output JSON matching the connectivity_result schema.
-      - name: connectivity_test
-        phase: test
-        command: "python3 ./stubs/network/test_connectivity.py"
-        args:
-          - "--vpc-id"
-          - "{{steps.create_network.network_id}}"
-          - "--subnet-ids"
-          - "{{steps.create_network.subnets | map(attribute='subnet_id') | join(',')}}"
-          - "--sg-id"
-          - "{{steps.create_network.security_group_id}}"
-          - "--region"
-          - "{{region}}"
-        timeout: 600
-        output_schema: connectivity_result
-
-      # ─── Test 6: Traffic Validation ────────────────────────────────
-      # Self-contained test. Real traffic tests between instances.
-      # YOUR SCRIPT must output JSON matching the traffic_flow schema.
-      - name: traffic_validation
-        phase: test
-        command: "python3 ./stubs/network/traffic_test.py"
-        args:
-          - "--region"
-          - "{{region}}"
-          - "--cidr"
-          - "10.93.0.0/16"
-        timeout: 900
-        output_schema: traffic_flow
-
-      # ─── Teardown: Clean up shared VPC ─────────────────────────────
-      # YOUR SCRIPT must output JSON with at minimum:
-      #   {
-      #     "success": true,
-      #     "platform": "network",
-      #     "resources_deleted": [...],
-      #     "message": "..."
-      #   }
-      - name: teardown
-        phase: teardown
-        command: "python3 ./stubs/network/teardown.py"
-        args:
-          - "--vpc-id"
-          - "{{steps.create_network.network_id}}"
-          - "--region"
-          - "{{region}}"
-        timeout: 300
-        output_schema: teardown
-
 tests:
-  cluster_name: "network-validation"
+  cluster_name: "{{ context.cluster_name | default('network-validation') }}"
   description: "Network validation tests (template)"
   platform: network
 
   settings:
-    region: "us-west-2"
+    show_skipped_tests: false
 
   # ─── Validations ─────────────────────────────────────────────────
   # These are PROVIDER-AGNOSTIC. They only check JSON field names/values.
@@ -194,7 +45,7 @@ tests:
       checks:
         - NetworkProvisionedCheck:
             require_subnets: true
-            min_subnets: 2
+            min_subnets: "{{ context.min_subnets | default('2') }}"
 
     network:
       checks:
@@ -202,7 +53,7 @@ tests:
             step: vpc_crud
         - SubnetConfigCheck:
             step: subnet_config
-            min_subnets: 4
+            min_subnets: "{{ context.subnet_count | default('4') }}"
             require_multi_az: true
         - VpcIsolationCheck:
             step: vpc_isolation

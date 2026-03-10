@@ -1,0 +1,134 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# Carbide Network - Layered Provider Configuration
+#
+# Supplies commands (carbidecli stubs) for the network template.
+# Tests VPC CRUD, subnet configuration, VPC isolation, NSG security,
+# connectivity, and traffic routing.
+#
+# Mapping to template concepts:
+#   create_network      → VPC + prefix + subnet creation
+#   vpc_crud            → VPC create/get/update/delete lifecycle
+#   subnet_config       → Multi-subnet creation and verification
+#   vpc_isolation       → Two-VPC isolation verification
+#   security_blocking   → NSG rule creation and verification
+#   connectivity_test   → Subnet accessibility check
+#   traffic_validation  → VPC + subnet routing verification
+#   teardown            → Clean up all created resources
+#
+# Carbide network resources:
+#   VPC:     carbidecli vpc create/get/list/delete
+#   Prefix:  carbidecli vpc-prefix create/delete
+#   Subnet:  carbidecli subnet create/get/list/delete
+#   NSG:     carbidecli network-security-group create/get/list/delete
+#
+# Usage:
+#   isvctl test run \
+#     -f isvctl/configs/templates/network.yaml \
+#     -f isvctl/configs/carbide/network.yaml
+#
+# Environment:
+#   carbidecli handles auth via config or env vars:
+#     CARBIDE_TOKEN / CARBIDE_API_KEY — Authentication
+#     CARBIDE_ORG                     — Organization
+#     CARBIDE_SITE_ID                 — Site UUID (required)
+
+version: "1.0"
+
+commands:
+  network:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      # ─── SETUP: Create shared VPC + subnet ───────────────────────────
+      - name: create_network
+        phase: setup
+        command: "python3 ../stubs/carbide/network/create_vpc.py"
+        args:
+          - "--site-id"
+          - "{{ context.site_id }}"
+        timeout: 300
+
+      # ─── TEST: VPC CRUD lifecycle ────────────────────────────────────
+      - name: vpc_crud
+        phase: test
+        command: "python3 ../stubs/carbide/network/vpc_crud_test.py"
+        args:
+          - "--site-id"
+          - "{{ context.site_id }}"
+        timeout: 120
+        output_schema: vpc_crud
+
+      # ─── TEST: Subnet configuration ──────────────────────────────────
+      - name: subnet_config
+        phase: test
+        command: "python3 ../stubs/carbide/network/subnet_test.py"
+        args:
+          - "--site-id"
+          - "{{ context.site_id }}"
+        timeout: 120
+        output_schema: subnet_config
+
+      # ─── TEST: VPC isolation ──────────────────────────────────────────
+      - name: vpc_isolation
+        phase: test
+        command: "python3 ../stubs/carbide/network/isolation_test.py"
+        args:
+          - "--site-id"
+          - "{{ context.site_id }}"
+        timeout: 120
+        output_schema: vpc_isolation
+
+      # ─── TEST: NSG security blocking ─────────────────────────────────
+      - name: security_blocking
+        phase: test
+        command: "python3 ../stubs/carbide/network/security_test.py"
+        args:
+          - "--site-id"
+          - "{{ context.site_id }}"
+        timeout: 120
+        output_schema: security_blocking
+
+      # ─── TEST: Connectivity ───────────────────────────────────────────
+      - name: connectivity_test
+        phase: test
+        command: "python3 ../stubs/carbide/network/test_connectivity.py"
+        args:
+          - "--site-id"
+          - "{{ context.site_id }}"
+        timeout: 120
+        output_schema: connectivity_result
+
+      # ─── TEST: Traffic validation ─────────────────────────────────────
+      - name: traffic_validation
+        phase: test
+        command: "python3 ../stubs/carbide/network/traffic_test.py"
+        args:
+          - "--site-id"
+          - "{{ context.site_id }}"
+        timeout: 120
+        output_schema: traffic_flow
+
+      # ─── TEARDOWN: Clean up all resources ─────────────────────────────
+      - name: teardown
+        phase: teardown
+        command: "python3 ../stubs/carbide/network/teardown.py"
+        args:
+          - "--site-id"
+          - "{{ context.site_id }}"
+        timeout: 300
+        output_schema: teardown
+
+# Provider-specific context
+context:
+  site_id: "{{ env.CARBIDE_SITE_ID | default('') }}"
+
+tests:
+  description: "Carbide network: VPC CRUD, subnet config, isolation, NSG security, connectivity"

@@ -57,8 +57,8 @@ def _find_configs_dir() -> Path | None:
 def _extract_checks_from_config(config_path: Path) -> list[str]:
     """Extract all validation check names from a config file.
 
-    Handles both list format and group-defaults format (with 'checks' key).
-    Keeps variant names (e.g. 'K8sNimHelmWorkload-3b') as-is.
+    Handles list format, group-defaults format (with 'checks' key as list
+    or dict), and keeps variant names (e.g. 'K8sNimHelmWorkload-3b') as-is.
     """
     try:
         data = yaml.safe_load(config_path.read_text())
@@ -69,16 +69,18 @@ def _extract_checks_from_config(config_path: Path) -> list[str]:
     checks: list[str] = []
 
     for _cat, cat_config in validations.items():
-        items: list[dict] = []
         if isinstance(cat_config, dict) and "checks" in cat_config:
-            items = cat_config["checks"]
+            checks_val = cat_config["checks"]
+            if isinstance(checks_val, dict):
+                checks.extend(checks_val.keys())
+            else:
+                for check in checks_val:
+                    if isinstance(check, dict):
+                        checks.extend(check.keys())
         elif isinstance(cat_config, list):
-            items = cat_config
-
-        for check in items:
-            if isinstance(check, dict):
-                for name in check:
-                    checks.append(name)
+            for check in cat_config:
+                if isinstance(check, dict):
+                    checks.extend(check.keys())
 
     return checks
 

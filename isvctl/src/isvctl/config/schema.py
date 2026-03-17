@@ -309,7 +309,7 @@ class ValidationConfig(BaseModel):
     - `phase: teardown`: Runs after teardown steps complete
     - `phase: test`: Runs after test steps (if any exist)
 
-    Two formats are supported:
+    Three formats are supported:
 
     1. List format (each validation specifies its own step/phase):
         validations:
@@ -319,7 +319,7 @@ class ValidationConfig(BaseModel):
             - NetworkProvisionedCheck:
                 step: create_network
 
-    2. Group defaults format (step/phase apply to all checks):
+    2. Group defaults with list checks (step/phase apply to all checks):
         validations:
           credentials:
             step: test_credentials
@@ -328,6 +328,15 @@ class ValidationConfig(BaseModel):
               - StepSuccessCheck: {}
               - FieldExistsCheck:
                   field: "account_id"
+
+    3. Group defaults with dict checks (deep-merge friendly):
+        validations:
+          credentials:
+            step: test_credentials
+            checks:
+              StepSuccessCheck: {}
+              FieldExistsCheck:
+                field: "account_id"
     """
 
     model_config = ConfigDict(extra="allow")

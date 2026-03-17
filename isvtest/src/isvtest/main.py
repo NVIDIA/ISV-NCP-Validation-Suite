@@ -222,63 +222,68 @@ def _transform_validations_for_pytest(
         if category in ADAPTER_HANDLED_CATEGORIES:
             continue
 
-        # Determine format: group defaults or list
+        # Determine format: group defaults (with checks key) or flat list
         if isinstance(category_config, dict) and "checks" in category_config:
             # Group defaults format
             group_step = category_config.get("step")
             group_phase = category_config.get("phase")  # Don't default - let inference handle it
-            checks = category_config.get("checks", [])
+            checks_val = category_config.get("checks", {})
+            if isinstance(checks_val, dict):
+                # Dict-based checks: {CheckName: {params}, ...}
+                checks_iter: list[tuple[str, Any]] = list(checks_val.items())
+            else:
+                # List-based checks: [{CheckName: {params}}, ...]
+                checks_iter = [(n, p) for item in checks_val for n, p in item.items()]
         elif isinstance(category_config, list):
-            # List format
+            # List format (no group defaults)
             group_step = None
             group_phase = None
-            checks = category_config
+            checks_iter = [(n, p) for item in category_config for n, p in item.items()]
         else:
             logger.warning(f"Unknown validation format for category '{category}'")
             continue
 
-        for check in checks:
-            for name, params in check.items():
-                if params is None:
-                    params = {}
+        for name, params in checks_iter:
+            if params is None:
+                params = {}
 
-                # Apply group defaults
-                if group_step and "step" not in params:
-                    params = {"step": group_step, **params}
-                if group_phase and "phase" not in params:
-                    params = {"phase": group_phase, **params}
+            # Apply group defaults
+            if group_step and "step" not in params:
+                params = {"step": group_step, **params}
+            if group_phase and "phase" not in params:
+                params = {"phase": group_phase, **params}
 
-                # Determine validation phase (priority: explicit > infer from step > default)
-                # If a step is referenced but has no registered phase, it was skipped
-                if "phase" in params:
-                    validation_phase = params["phase"]
-                elif "step" in params:
-                    step_name = params["step"]
-                    if step_name not in step_phases:
-                        logger.info(f"Skipping validation '{name}' in [{category}]: step '{step_name}' is skipped")
-                        continue
-                    validation_phase = step_phases[step_name]
-                else:
-                    validation_phase = "test"  # Default to test phase
-
-                # Filter by phase
-                if validation_phase != phase:
+            # Determine validation phase (priority: explicit > infer from step > default)
+            # If a step is referenced but has no registered phase, it was skipped
+            if "phase" in params:
+                validation_phase = params["phase"]
+            elif "step" in params:
+                step_name = params["step"]
+                if step_name not in step_phases:
+                    logger.info(f"Skipping validation '{name}' in [{category}]: step '{step_name}' is skipped")
                     continue
+                validation_phase = step_phases[step_name]
+            else:
+                validation_phase = "test"  # Default to test phase
 
-                # Resolve step to actual step output
-                resolved_params = dict(params)
-                if "step" in resolved_params:
-                    step_name = resolved_params.pop("step")
-                    step_output = step_outputs.get(step_name, {})
-                    resolved_params["step_output"] = step_output
+            # Filter by phase
+            if validation_phase != phase:
+                continue
 
-                # Remove phase from params (not needed by validation)
-                resolved_params.pop("phase", None)
+            # Resolve step to actual step output
+            resolved_params = dict(params)
+            if "step" in resolved_params:
+                step_name = resolved_params.pop("step")
+                step_output = step_outputs.get(step_name, {})
+                resolved_params["step_output"] = step_output
 
-                # Add category for result reporting
-                resolved_params["_category"] = category
+            # Remove phase from params (not needed by validation)
+            resolved_params.pop("phase", None)
 
-                result.append({name: resolved_params})
+            # Add category for result reporting
+            resolved_params["_category"] = category
+
+            result.append({name: resolved_params})
 
     return result
 

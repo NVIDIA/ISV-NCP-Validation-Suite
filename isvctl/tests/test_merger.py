@@ -15,7 +15,12 @@ from typing import Any
 
 import pytest
 
-from isvctl.config.merger import apply_set_value, deep_merge, merge_yaml_files, parse_set_value
+from isvctl.config.merger import (
+    apply_set_value,
+    deep_merge,
+    merge_yaml_files,
+    parse_set_value,
+)
 
 
 class TestDeepMerge:
@@ -183,3 +188,205 @@ class TestMergeYamlFiles:
 
         result = merge_yaml_files([str(file1), str(file2)])
         assert result == {"a": 1}
+
+
+class TestImportDirective:
+    """Tests for the ``import:`` directive in YAML configs."""
+
+    def test_simple_import(self, tmp_path: Path) -> None:
+        """Imported file is used as the base."""
+        base = tmp_path / "base.yaml"
+        base.write_text("a: 1\nb: 2")
+        child = tmp_path / "child.yaml"
+        child.write_text("import:\n  - base.yaml\nb: 99\nc: 3")
+
+        result = merge_yaml_files([str(child)])
+        assert result == {"a": 1, "b": 99, "c": 3}
+
+    def test_import_stripped_from_result(self, tmp_path: Path) -> None:
+        """The import key must not leak into the merged output."""
+        base = tmp_path / "base.yaml"
+        base.write_text("x: 1")
+        child = tmp_path / "child.yaml"
+        child.write_text("import:\n  - base.yaml\ny: 2")
+
+        result = merge_yaml_files([str(child)])
+        assert "import" not in result
+        assert result == {"x": 1, "y": 2}
+
+    def test_relative_path_resolution(self, tmp_path: Path) -> None:
+        """Import paths are resolved relative to the importing file."""
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        base = tmp_path / "templates" / "t.yaml"
+        base.parent.mkdir()
+        base.write_text("val: from_template")
+        child = sub / "provider.yaml"
+        child.write_text("import:\n  - ../templates/t.yaml\nval: overridden")
+
+        result = merge_yaml_files([str(child)])
+        assert result == {"val": "overridden"}
+
+    def test_multiple_imports(self, tmp_path: Path) -> None:
+        """Multiple imports are merged in order, child wins."""
+        (tmp_path / "a.yaml").write_text("x: 1\ny: from_a")
+        (tmp_path / "b.yaml").write_text("y: from_b\nz: 3")
+        child = tmp_path / "child.yaml"
+        child.write_text("import:\n  - a.yaml\n  - b.yaml\nz: 99")
+
+        result = merge_yaml_files([str(child)])
+        assert result == {"x": 1, "y": "from_b", "z": 99}
+
+    def test_nested_imports(self, tmp_path: Path) -> None:
+        """Imports can themselves import other files."""
+        (tmp_path / "grandparent.yaml").write_text("a: 1")
+        (tmp_path / "parent.yaml").write_text("import:\n  - grandparent.yaml\nb: 2")
+        child = tmp_path / "child.yaml"
+        child.write_text("import:\n  - parent.yaml\nc: 3")
+
+        result = merge_yaml_files([str(child)])
+        assert result == {"a": 1, "b": 2, "c": 3}
+
+    def test_circular_import_raises(self, tmp_path: Path) -> None:
+        """Circular imports must raise ValueError."""
+        a = tmp_path / "a.yaml"
+        b = tmp_path / "b.yaml"
+        a.write_text("import:\n  - b.yaml\nx: 1")
+        b.write_text("import:\n  - a.yaml\ny: 2")
+
+        with pytest.raises(ValueError, match="Circular import"):
+            merge_yaml_files([str(a)])
+
+    def test_self_import_raises(self, tmp_path: Path) -> None:
+        """A file importing itself must raise ValueError."""
+        f = tmp_path / "self.yaml"
+        f.write_text("import:\n  - self.yaml\nx: 1")
+
+        with pytest.raises(ValueError, match="Circular import"):
+            merge_yaml_files([str(f)])
+
+    def test_import_missing_file_raises(self, tmp_path: Path) -> None:
+        """Importing a nonexistent file must raise FileNotFoundError."""
+        child = tmp_path / "child.yaml"
+        child.write_text("import:\n  - missing.yaml\nx: 1")
+
+        with pytest.raises(FileNotFoundError):
+            merge_yaml_files([str(child)])
+
+    def test_import_with_f_flag_merge(self, tmp_path: Path) -> None:
+        """Import + additional -f file are merged correctly."""
+        (tmp_path / "template.yaml").write_text("a: 1\nb: 2")
+        provider = tmp_path / "provider.yaml"
+        provider.write_text("import:\n  - template.yaml\nb: 99")
+        extra = tmp_path / "extra.yaml"
+        extra.write_text("c: 3")
+
+        result = merge_yaml_files([str(provider), str(extra)])
+        assert result == {"a": 1, "b": 99, "c": 3}
+
+    def test_no_import_key_unchanged(self, tmp_path: Path) -> None:
+        """Files without import: work exactly as before."""
+        f = tmp_path / "plain.yaml"
+        f.write_text("a: 1\nb: 2")
+
+        result = merge_yaml_files([str(f)])
+        assert result == {"a": 1, "b": 2}
+
+    def test_import_single_string(self, tmp_path: Path) -> None:
+        """import: can be a single string instead of a list."""
+        (tmp_path / "base.yaml").write_text("x: 1")
+        child = tmp_path / "child.yaml"
+        child.write_text("import: base.yaml\ny: 2")
+
+        result = merge_yaml_files([str(child)])
+        assert result == {"x": 1, "y": 2}
+
+
+class TestDictChecksDeepMerge:
+    """Tests for dict-based checks merging via deep_merge."""
+
+    def test_override_single_check_param(self) -> None:
+        """Provider can override one check's param without affecting others."""
+        template = {
+            "tests": {
+                "validations": {
+                    "ssh": {
+                        "step": "describe_instance",
+                        "checks": {
+                            "SshConnectivityCheck": {},
+                            "SshOsCheck": {"expected_os": "ubuntu"},
+                        },
+                    }
+                }
+            }
+        }
+        provider = {
+            "tests": {
+                "validations": {
+                    "ssh": {
+                        "checks": {
+                            "SshOsCheck": {"expected_os": "rhel"},
+                        }
+                    }
+                }
+            }
+        }
+        result = deep_merge(template, provider)
+        checks = result["tests"]["validations"]["ssh"]["checks"]
+        assert checks["SshConnectivityCheck"] == {}
+        assert checks["SshOsCheck"] == {"expected_os": "rhel"}
+        assert result["tests"]["validations"]["ssh"]["step"] == "describe_instance"
+
+    def test_add_new_check(self) -> None:
+        """Provider can add a new check to an existing group."""
+        template = {"tests": {"validations": {"gpu": {"checks": {"SshGpuCheck": {"expected_gpus": 8}}}}}}
+        provider = {"tests": {"validations": {"gpu": {"checks": {"SshGpuStressCheck": {"runtime": 30}}}}}}
+        result = deep_merge(template, provider)
+        checks = result["tests"]["validations"]["gpu"]["checks"]
+        assert "SshGpuCheck" in checks
+        assert "SshGpuStressCheck" in checks
+
+    def test_add_new_validation_group(self) -> None:
+        """Provider can add an entirely new validation group."""
+        template = {"tests": {"validations": {"ssh": {"checks": {"SshConnectivityCheck": {}}}}}}
+        provider = {
+            "tests": {"validations": {"image_installed": {"step": "verify_image", "checks": {"StepSuccessCheck": {}}}}}
+        }
+        result = deep_merge(template, provider)
+        assert "ssh" in result["tests"]["validations"]
+        assert "image_installed" in result["tests"]["validations"]
+
+    def test_template_untouched(self) -> None:
+        """deep_merge must not mutate the template."""
+        template = {"tests": {"validations": {"ssh": {"checks": {"SshOsCheck": {"expected_os": "ubuntu"}}}}}}
+        import copy
+
+        original = copy.deepcopy(template)
+        provider = {"tests": {"validations": {"ssh": {"checks": {"SshOsCheck": {"expected_os": "rhel"}}}}}}
+        deep_merge(template, provider)
+        assert template == original
+
+
+class TestImportEndToEnd:
+    """Integration test using real config files to validate the import approach."""
+
+    CONFIGS_DIR = Path(__file__).parent.parent / "configs"
+
+    def test_aws_iam_inherits_template_validations(self) -> None:
+        """aws/iam.yaml imports templates/iam.yaml and gets its validations."""
+        result = merge_yaml_files([self.CONFIGS_DIR / "aws" / "iam.yaml"])
+
+        assert "commands" in result, "AWS provider must supply commands"
+        assert "tests" in result, "Merged config must have tests"
+        validations = result["tests"]["validations"]
+        assert "setup_checks" in validations
+        assert "credentials" in validations
+        assert "teardown_checks" in validations
+        assert result["tests"]["cluster_name"] == "aws-iam-validation"
+        assert result["tests"]["platform"] == "iam"
+
+    def test_aws_iam_commands_override_template(self) -> None:
+        """AWS commands replace the template's placeholder stubs."""
+        result = merge_yaml_files([self.CONFIGS_DIR / "aws" / "iam.yaml"])
+        steps = result["commands"]["iam"]["steps"]
+        assert any("aws/iam" in s["command"] for s in steps)

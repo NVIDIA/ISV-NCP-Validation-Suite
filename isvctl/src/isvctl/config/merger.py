@@ -14,13 +14,20 @@ This module provides deep-merge functionality for combining multiple YAML
 configuration files, similar to Helm's --values flag behavior.
 
 Later files override earlier ones. The --set flag can override individual values.
+
+Files may declare an ``import:`` key with a list of paths (resolved relative
+to the importing file) that are loaded and merged as a base before the
+importing file's own content is applied on top.
 """
 
 import copy
+import logging
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -102,10 +109,71 @@ def apply_set_value(config: dict[str, Any], path_parts: list[str], value: Any) -
     current[path_parts[-1]] = value
 
 
-def merge_yaml_files(file_paths: list[str], set_values: list[str] | None = None) -> dict[str, Any]:
+def _load_yaml_with_imports(
+    path: Path,
+    _visited: set[str] | None = None,
+) -> dict[str, Any]:
+    """Load a YAML file and recursively resolve its ``import:`` directives.
+
+    Imported files are merged in order to form a base, then the importing
+    file's own content is deep-merged on top.  Paths in ``import:`` are
+    resolved relative to the importing file's directory.
+
+    Args:
+        path: Path to the YAML file.
+        _visited: Tracks resolved paths to detect circular imports.
+
+    Returns:
+        Merged dictionary with ``import`` key stripped.
+
+    Raises:
+        FileNotFoundError: If the file or an imported file doesn't exist.
+        ValueError: If a circular import is detected.
+    """
+    if _visited is None:
+        _visited = set()
+
+    resolved = str(path.resolve())
+    if resolved in _visited:
+        raise ValueError(f"Circular import detected: {path}")
+    _visited.add(resolved)
+
+    if not path.exists():
+        raise FileNotFoundError(f"Configuration file not found: {path}")
+
+    with open(path) as f:
+        content = yaml.safe_load(f)
+
+    if content is None:
+        return {}
+    if not isinstance(content, dict):
+        raise ValueError(f"Configuration file must contain a YAML mapping, not {type(content).__name__}: {path}")
+
+    import_list = content.pop("import", None)
+    if not import_list:
+        return content
+
+    if not isinstance(import_list, list):
+        import_list = [import_list]
+
+    # Merge all imported files to form the base
+    base: dict[str, Any] = {}
+    for imp in import_list:
+        imp_path = (path.parent / imp).resolve()
+        logger.debug("Resolving import %s -> %s", imp, imp_path)
+        imported = _load_yaml_with_imports(Path(imp_path), _visited)
+        base = deep_merge(base, imported)
+
+    # The importing file's content wins over the base
+    return deep_merge(base, content)
+
+
+def merge_yaml_files(file_paths: list[str | Path], set_values: list[str] | None = None) -> dict[str, Any]:
     """Merge multiple YAML files with optional --set overrides.
 
     Files are merged in order - later files override earlier ones.
+    Each file may contain an ``import:`` key listing other YAML files
+    to load as a base (paths resolved relative to the importing file).
     --set values are applied after all files are merged.
 
     Args:
@@ -122,18 +190,7 @@ def merge_yaml_files(file_paths: list[str], set_values: list[str] | None = None)
     result: dict[str, Any] = {}
 
     for file_path in file_paths:
-        path = Path(file_path)
-        if not path.exists():
-            raise FileNotFoundError(f"Configuration file not found: {file_path}")
-
-        with open(path) as f:
-            content = yaml.safe_load(f)
-
-        if content is not None and not isinstance(content, dict):
-            raise ValueError(
-                f"Configuration file must contain a YAML mapping, not {type(content).__name__}: {file_path}"
-            )
-
+        content = _load_yaml_with_imports(Path(file_path))
         if content:
             result = deep_merge(result, content)
 

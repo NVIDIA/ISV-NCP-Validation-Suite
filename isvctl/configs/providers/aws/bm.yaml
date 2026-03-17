@@ -10,25 +10,22 @@
 
 # AWS Bare Metal (BMaaS) Validation Configuration
 #
-# Architecture:
-#   - Scripts (AWS-specific): launch_instance.py, describe_instance.py, teardown.py (use boto3)
-#   - Scripts (shared): deploy_nim.py, teardown_nim.py (paramiko)
-#   - Validations (platform-agnostic): Defined in tests.validations
+# Imports validations from the provider-agnostic BM canonical config.
+# This file only provides AWS-specific commands (boto3 stubs), settings,
+# and validation overrides (expected_gpus, image registry checks).
 #
 # Steps:
-#   1. launch_instance - Provisions bare-metal EC2, outputs IP/key (setup)
-#   2. list_instances - Lists instances in VPC, verifies target exists (test)
-#   3. describe_instance - Describes instance state, passes SSH info (test)
-#   4. reboot_instance - Reboots instance, validates recovery (test)
-#   5. reinstall_instance - Reinstalls OS from stock AMI (test) [skip: true, ~30-45 min on AWS metal]
-#   6. deploy_nim - Deploys NIM container via SSH (test)
-#   7. teardown_nim - Stops NIM container via SSH (teardown)
-#   8. teardown - Terminates bare-metal EC2 (teardown)
-#   9. verify_teardown - Confirms instance terminated, resources deleted (teardown)
-#
-# Validation timing is inferred from step's phase.
-# Test validations bind to test-phase steps so teardown always runs
-# even if tests fail.
+#   1. launch_instance - boto3: Provisions bare-metal EC2, outputs IP/key (setup)
+#   2. list_instances - boto3: Lists instances in VPC, verifies target exists (test)
+#   3. describe_instance - boto3: Describes instance state, passes SSH info (test)
+#   4. verify_image - boto3: Verifies OS image installed on BM instance (test)
+#   5. verify_config - boto3: Verifies install config can provision BM (test)
+#   6. reboot_instance - boto3: Reboots instance, validates recovery (test)
+#   7. reinstall_instance - boto3: Reinstalls OS from stock AMI (test) [skip: true]
+#   8. deploy_nim - paramiko: Deploys NIM container via SSH (test)
+#   9. teardown_nim - paramiko: Stops NIM container via SSH (teardown)
+#  10. teardown - boto3: Terminates bare-metal EC2 (teardown)
+#  11. verify_teardown - boto3: Confirms instance terminated (teardown)
 #
 # Dev workflow (reuse existing instance):
 #   # Run 1: launch + test, keep instance alive
@@ -45,6 +42,9 @@
 # Usage:
 #   uv run isvctl test run -f isvctl/configs/aws/bm.yaml
 
+import:
+  - ../../tests/bm.yaml
+
 version: "1.0"
 
 commands:
@@ -55,7 +55,7 @@ commands:
       # Set AWS_BM_INSTANCE_ID + AWS_BM_KEY_FILE to reuse an existing instance
       - name: launch_instance
         phase: setup
-        command: "python3 ../stubs/aws/bm/launch_instance.py"
+        command: "python3 ../../stubs/aws/bm/launch_instance.py"
         args:
           - "--name"
           - "isv-bm-test-gpu"
@@ -69,7 +69,7 @@ commands:
       # Reuses VM script (generic EC2 API)
       - name: list_instances
         phase: test
-        command: "python3 ../stubs/aws/vm/list_instances.py"
+        command: "python3 ../../stubs/aws/vm/list_instances.py"
         args:
           - "--vpc-id"
           - "{{steps.launch_instance.vpc_id}}"
@@ -82,7 +82,7 @@ commands:
       # Describe instance - test phase anchor for SSH/GPU validations
       - name: describe_instance
         phase: test
-        command: "python3 ../stubs/aws/bm/describe_instance.py"
+        command: "python3 ../../stubs/aws/bm/describe_instance.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -95,7 +95,7 @@ commands:
       # Verify OS image installed on BM instance
       - name: verify_image
         phase: test
-        command: "python3 ../stubs/aws/image-registry/verify_image_installed.py"
+        command: "python3 ../../stubs/aws/image-registry/verify_image_installed.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -106,7 +106,7 @@ commands:
       # Verify install config can provision BM
       - name: verify_config
         phase: test
-        command: "python3 ../stubs/aws/image-registry/verify_config_installable.py"
+        command: "python3 ../../stubs/aws/image-registry/verify_config_installable.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -118,7 +118,7 @@ commands:
       # BM-specific: longer waits for hardware POST/BIOS/OS boot
       - name: reboot_instance
         phase: test
-        command: "python3 ../stubs/aws/bm/reboot_instance.py"
+        command: "python3 ../../stubs/aws/bm/reboot_instance.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -137,7 +137,7 @@ commands:
       - name: reinstall_instance
         phase: test
         skip: true
-        command: "python3 ../stubs/aws/bm/reinstall_instance.py"
+        command: "python3 ../../stubs/aws/bm/reinstall_instance.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -153,7 +153,7 @@ commands:
       # Requires NGC_API_KEY env var
       - name: deploy_nim
         phase: test
-        command: "python3 ../stubs/common/deploy_nim.py"
+        command: "python3 ../../stubs/common/deploy_nim.py"
         args:
           - "--host"
           - "{{steps.launch_instance.public_ip}}"
@@ -164,7 +164,7 @@ commands:
       # Teardown NIM container via SSH (shared script)
       - name: teardown_nim
         phase: teardown
-        command: "python3 ../stubs/common/teardown_nim.py"
+        command: "python3 ../../stubs/common/teardown_nim.py"
         args:
           - "--host"
           - "{{steps.launch_instance.public_ip}}"
@@ -176,7 +176,7 @@ commands:
       # Set AWS_BM_SKIP_TEARDOWN=true to keep the instance alive
       - name: teardown
         phase: teardown
-        command: "python3 ../stubs/aws/bm/teardown.py"
+        command: "python3 ../../stubs/aws/bm/teardown.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -190,7 +190,7 @@ commands:
       # Post-teardown sanitization: verify instance terminated and resources deleted
       - name: verify_teardown
         phase: teardown
-        command: "python3 ../stubs/aws/bm/verify_terminated.py"
+        command: "python3 ../../stubs/aws/bm/verify_terminated.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -203,7 +203,6 @@ commands:
         timeout: 120
 
 tests:
-  platform: bare_metal
   cluster_name: "aws-bm-validation"
   description: "AWS Bare Metal (BMaaS) validation tests"
 
@@ -212,194 +211,53 @@ tests:
     instance_type: "g4dn.metal"
     teardown_flag: "{{(env.AWS_BM_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"
 
+  # Overrides only - all other validations inherited from ../bm.yaml
   validations:
-    # Setup phase - only check provisioning succeeded
-    setup_checks:
-      step: launch_instance
-      checks:
-        - InstanceStateCheck:
-            expected_state: "running"
-
-    # Test phase: list instances
-    list_instances:
-      step: list_instances
-      checks:
-        - InstanceListCheck:
-            min_count: 1
-
-    # Test phase: instance info
-    instance_info:
-      step: describe_instance
-      checks:
-        - InstanceStateCheck:
-            expected_state: "running"
-
-    # Test phase: SSH access
-    ssh:
-      step: describe_instance
-      checks:
-        - SshConnectivityCheck: {}
-        - SshOsCheck:
-            expected_os: "ubuntu"
-
-    # Test phase: GPU hardware
-    gpu:
-      step: describe_instance
-      checks:
-        - SshGpuCheck:
-            expected_gpus: 8
-
-    # Test phase: host software stack
-    host_os:
-      step: describe_instance
-      checks:
-        - SshHostSoftwareCheck: {}
-
-    # GPU stress test - PyTorch matrix multiplications on all GPUs
+    # GPU stress - AWS metal has 8 GPUs
     gpu_stress:
       step: describe_instance
       checks:
-        - SshGpuStressCheck:
-            runtime: 30
-            memory_gb: 16
-            expected_gpus: 8
+        SshGpuStressCheck:
+          runtime: 30
+          memory_gb: 16
+          expected_gpus: 8
 
-    # NCCL AllReduce - validates GPU-to-GPU communication (NVLink/NVSwitch)
+    # NCCL - AWS metal has 8 GPUs
     nccl:
       step: describe_instance
       checks:
-        - SshNcclCheck:
-            expected_gpus: 8
+        SshNcclCheck:
+          expected_gpus: 8
 
-    # Training workload - validates full training stack (forward/backward/optimizer)
+    # Training - AWS metal has 8 GPUs
     training:
       step: describe_instance
       checks:
-        - SshTrainingCheck:
-            steps: 50
-            expected_gpus: 8
+        SshTrainingCheck:
+          steps: 50
+          expected_gpus: 8
 
-    # Network / interconnect checks
+    # NVLink - AWS metal has 8 GPUs
     nvlink:
       step: describe_instance
       checks:
-        - SshNvlinkCheck:
-            expected_gpus: 8
+        SshNvlinkCheck:
+          expected_gpus: 8
 
-    infiniband:
-      step: describe_instance
-      checks:
-        - SshInfiniBandCheck: {}
-
-    ethernet:
-      step: describe_instance
-      checks:
-        - SshEthernetCheck:
-            ping_target: "8.8.8.8"
-
-    # Test phase: image registry validations
+    # AWS-specific: verify OS image installed on BM instance
     image_installed:
       step: verify_image
       checks:
-        - StepSuccessCheck: {}
-        - FieldExistsCheck:
-            fields: ["instance_id", "image_id", "image_name", "instance_state"]
-        - InstanceStateCheck:
-            expected_state: "running"
+        StepSuccessCheck: {}
+        FieldExistsCheck:
+          fields: ["instance_id", "image_id", "image_name", "instance_state"]
+        InstanceStateCheck:
+          expected_state: "running"
 
+    # AWS-specific: verify install config can provision BM
     config_installable:
       step: verify_config
       checks:
-        - StepSuccessCheck: {}
-        - FieldExistsCheck:
-            fields: ["config_id", "config_name", "dry_run_passed"]
-
-    # Test phase: reboot validations
-    reboot_checks:
-      step: reboot_instance
-      checks:
-        - InstanceRebootCheck:
-            max_uptime: 600
-
-    reboot_state:
-      step: reboot_instance
-      checks:
-        - InstanceStateCheck:
-            expected_state: "running"
-
-    reboot_ssh:
-      step: reboot_instance
-      checks:
-        - SshConnectivityCheck: {}
-        - SshOsCheck:
-            expected_os: "ubuntu"
-
-    reboot_gpu:
-      step: reboot_instance
-      checks:
-        - SshGpuCheck:
-            expected_gpus: 8
-
-    reboot_host_os:
-      step: reboot_instance
-      checks:
-        - SshHostSoftwareCheck: {}
-
-    # Reinstall validations (skipped when reinstall_instance step is skipped)
-    reinstall_state:
-      step: reinstall_instance
-      checks:
-        - InstanceStateCheck:
-            expected_state: "running"
-
-    reinstall_ssh:
-      step: reinstall_instance
-      checks:
-        - SshConnectivityCheck: {}
-        - SshOsCheck:
-            expected_os: "ubuntu"
-
-    reinstall_gpu:
-      step: reinstall_instance
-      checks:
-        - SshGpuCheck:
-            expected_gpus: 8
-
-    # Test phase: NIM inference validations
-    nim_health:
-      step: deploy_nim
-      checks:
-        - SshNimHealthCheck: {}
-
-    nim_models:
-      step: deploy_nim
-      checks:
-        - SshNimModelCheck: {}
-
-    nim_inference:
-      step: deploy_nim
-      checks:
-        - SshNimInferenceCheck:
-            prompt: "What is CUDA?"
-            max_tokens: 50
-
-    # Teardown phase: NIM cleanup
-    nim_teardown:
-      step: teardown_nim
-      checks:
-        - StepSuccessCheck: {}
-
-    # Teardown phase: instance cleanup
-    teardown_checks:
-      step: teardown
-      checks:
-        - StepSuccessCheck: {}
-
-    # Teardown phase: sanitization - verify resources actually deleted
-    sanitization:
-      step: verify_teardown
-      checks:
-        - StepSuccessCheck: {}
-
-  exclude:
-    markers: []
+        StepSuccessCheck: {}
+        FieldExistsCheck:
+          fields: ["config_id", "config_name", "dry_run_passed"]

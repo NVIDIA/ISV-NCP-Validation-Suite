@@ -8,12 +8,10 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-# VM (Virtual Machine) Validation - Template Configuration
+# VM (Virtual Machine) Validation - Canonical Configuration
 #
-# This is a PROVIDER-AGNOSTIC template for testing GPU virtual machine
-# lifecycle: launch -> verify -> reboot -> NIM deploy -> teardown.
-# Copy this file and the accompanying stubs/ scripts, then replace the
-# script implementations with your platform's API calls.
+# THE canonical VM test suite. Provider configs import this file and
+# override commands with platform-specific stubs.
 #
 # Architecture:
 #   - Scripts: Platform-specific (YOU implement these) - do all VM work
@@ -32,10 +30,11 @@
 #   5. teardown_nim     (teardown) - Stop NIM container via SSH
 #   6. teardown         (teardown) - Terminate VM and cleanup
 #
-# Quick start:
-#   1. Copy this folder:  cp -r templates/ my-isv/
-#   2. Edit the stubs:    my-isv/stubs/vm/*.py
-#   3. Run:               uv run isvctl test run -f isvctl/configs/my-isv/vm.yaml
+# Quick start (new provider):
+#   1. Create your provider folder: mkdir -p isvctl/configs/providers/my-isv/
+#   2. Create providers/my-isv/vm.yaml with: import: ../../tests/vm.yaml
+#   3. Override commands with your platform stubs
+#   4. Run: uv run isvctl test run -f isvctl/configs/providers/my-isv/vm.yaml
 #
 # See also:
 #   - AWS reference implementation: ../aws/vm.yaml + ../stubs/aws/vm/
@@ -62,7 +61,7 @@ commands:
       #   }
       - name: launch_instance
         phase: setup
-        command: "python3 ./stubs/vm/launch_instance.py"
+        command: "python3 ../stubs/vm/launch_instance.py"
         args:
           - "--name"
           - "isv-test-gpu"
@@ -82,7 +81,7 @@ commands:
       #   }
       - name: list_instances
         phase: test
-        command: "python3 ./stubs/vm/list_instances.py"
+        command: "python3 ../stubs/vm/list_instances.py"
         args:
           - "--vpc-id"
           - "{{steps.launch_instance.vpc_id}}"
@@ -106,7 +105,7 @@ commands:
       #   }
       - name: reboot_instance
         phase: test
-        command: "python3 ./stubs/vm/reboot_instance.py"
+        command: "python3 ../stubs/vm/reboot_instance.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -123,7 +122,7 @@ commands:
       # See stubs/common/deploy_nim.py for the JSON contract.
       - name: deploy_nim
         phase: test
-        command: "python3 ./stubs/common/deploy_nim.py"
+        command: "python3 ../stubs/common/deploy_nim.py"
         args:
           - "--host"
           - "{{steps.launch_instance.public_ip}}"
@@ -134,7 +133,7 @@ commands:
       # ─── Step 5: Teardown NIM ─────────────────────────────────────
       - name: teardown_nim
         phase: teardown
-        command: "python3 ./stubs/common/teardown_nim.py"
+        command: "python3 ../stubs/common/teardown_nim.py"
         args:
           - "--host"
           - "{{steps.launch_instance.public_ip}}"
@@ -152,7 +151,7 @@ commands:
       #   }
       - name: teardown
         phase: teardown
-        command: "python3 ./stubs/vm/teardown.py"
+        command: "python3 ../stubs/vm/teardown.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -165,7 +164,7 @@ commands:
 tests:
   platform: vm
   cluster_name: "vm-validation"
-  description: "VM (virtual machine) GPU validation tests (template)"
+  description: "VM (virtual machine) GPU validation tests"
 
   settings:
     region: "us-west-2"
@@ -177,95 +176,95 @@ tests:
     setup_checks:
       step: launch_instance
       checks:
-        - InstanceStateCheck:
-            expected_state: "running"
+        InstanceStateCheck:
+          expected_state: "running"
 
     list_instances:
       step: list_instances
       checks:
-        - InstanceListCheck:
-            min_count: 1
+        InstanceListCheck:
+          min_count: 1
 
     ssh:
       step: launch_instance
       checks:
-        - SshConnectivityCheck: {}
-        - SshOsCheck:
-            expected_os: "ubuntu"
+        SshConnectivityCheck: {}
+        SshOsCheck:
+          expected_os: "ubuntu"
 
     gpu:
       step: launch_instance
       checks:
-        - SshGpuCheck:
-            expected_gpus: 1
+        SshGpuCheck:
+          expected_gpus: 1
 
     host_os:
       step: launch_instance
       checks:
-        - SshVcpuPinningCheck: {}
-        - SshPciBusCheck:
-            expected_gpus: 1
-        - SshHostSoftwareCheck: {}
+        SshVcpuPinningCheck: {}
+        SshPciBusCheck:
+          expected_gpus: 1
+        SshHostSoftwareCheck: {}
 
     reboot_checks:
       step: reboot_instance
       checks:
-        - InstanceRebootCheck:
-            max_uptime: 600
+        InstanceRebootCheck:
+          max_uptime: 600
 
     reboot_state:
       step: reboot_instance
       checks:
-        - InstanceStateCheck:
-            expected_state: "running"
+        InstanceStateCheck:
+          expected_state: "running"
 
     reboot_ssh:
       step: reboot_instance
       checks:
-        - SshConnectivityCheck: {}
-        - SshOsCheck:
-            expected_os: "ubuntu"
+        SshConnectivityCheck: {}
+        SshOsCheck:
+          expected_os: "ubuntu"
 
     reboot_gpu:
       step: reboot_instance
       checks:
-        - SshGpuCheck:
-            expected_gpus: 1
+        SshGpuCheck:
+          expected_gpus: 1
 
     reboot_host_os:
       step: reboot_instance
       checks:
-        - SshVcpuPinningCheck: {}
-        - SshPciBusCheck:
-            expected_gpus: 1
-        - SshHostSoftwareCheck: {}
+        SshVcpuPinningCheck: {}
+        SshPciBusCheck:
+          expected_gpus: 1
+        SshHostSoftwareCheck: {}
 
     nim_health:
       step: deploy_nim
       checks:
-        - SshNimHealthCheck: {}
+        SshNimHealthCheck: {}
 
     nim_models:
       step: deploy_nim
       checks:
-        - SshNimModelCheck: {}
+        SshNimModelCheck: {}
 
     nim_inference:
       step: deploy_nim
       checks:
-        - SshNimInferenceCheck:
-            prompt: "What is CUDA?"
-            max_tokens: 50
+        SshNimInferenceCheck:
+          prompt: "What is CUDA?"
+          max_tokens: 50
 
     nim_teardown:
       step: teardown_nim
       checks:
-        - StepSuccessCheck: {}
+        StepSuccessCheck: {}
 
     teardown_checks:
       step: teardown
       checks:
-        - StepSuccessCheck: {}
+        StepSuccessCheck: {}
 
   exclude:
     markers: []

@@ -8,12 +8,10 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-# Image Registry Validation - Template Configuration
+# Image Registry Validation - Canonical Configuration
 #
-# This is a PROVIDER-AGNOSTIC template for testing image registry lifecycle:
-#   - OS image management: upload, import, launch VM, teardown
-#   - OS install configuration CRUD (create, read, update, delete)
-#   - BMaaS provisioning from images and install configs
+# THE canonical image registry test suite. Provider configs import this
+# file and override commands with platform-specific stubs.
 #
 # Architecture:
 #   - Scripts: Platform-specific (YOU implement these) - handle cloud operations
@@ -37,10 +35,11 @@
 #   (install_image_bm, install_config_bm) are in ../aws/bm.yaml instead of
 #   here, as verify_image and verify_config steps within the BM lifecycle.
 #
-# Quick start:
-#   1. Copy this folder:  cp -r templates/ my-isv/
-#   2. Edit the stubs:    my-isv/stubs/image-registry/*.py
-#   3. Run:               uv run isvctl test run -f isvctl/configs/my-isv/image-registry.yaml
+# Quick start (new provider):
+#   1. Create your provider folder: mkdir -p isvctl/configs/providers/my-isv/
+#   2. Create providers/my-isv/image-registry.yaml with: import: ../../tests/image-registry.yaml
+#   3. Override commands with your platform stubs
+#   4. Run: uv run isvctl test run -f isvctl/configs/providers/my-isv/image-registry.yaml
 #
 # See also:
 #   - AWS reference implementation: ../aws/image-registry.yaml + ../stubs/aws/image-registry/
@@ -63,7 +62,7 @@ commands:
       #   }
       - name: upload_image
         phase: setup
-        command: "python3 ./stubs/image-registry/upload_image.py"
+        command: "python3 ../stubs/image-registry/upload_image.py"
         args:
           - "--image-url"
           - "{{image_url}}"
@@ -88,7 +87,7 @@ commands:
       #   }
       - name: launch_instance
         phase: test
-        command: "python3 ./stubs/image-registry/launch_instance.py"
+        command: "python3 ../stubs/image-registry/launch_instance.py"
         args:
           - "--image-id"
           - "{{steps.upload_image.image_id}}"
@@ -115,7 +114,7 @@ commands:
       #   }
       - name: crud_install_config
         phase: test
-        command: "python3 ./stubs/image-registry/crud_install_config.py"
+        command: "python3 ../stubs/image-registry/crud_install_config.py"
         args:
           - "--region"
           - "{{region}}"
@@ -132,7 +131,7 @@ commands:
       #   }
       - name: install_image_bm
         phase: test
-        command: "python3 ./stubs/image-registry/install_image_bm.py"
+        command: "python3 ../stubs/image-registry/install_image_bm.py"
         args:
           - "--image-id"
           - "{{steps.upload_image.image_id}}"
@@ -151,7 +150,7 @@ commands:
       #   }
       - name: install_config_bm
         phase: test
-        command: "python3 ./stubs/image-registry/install_config_bm.py"
+        command: "python3 ../stubs/image-registry/install_config_bm.py"
         args:
           - "--config-id"
           - "{{steps.crud_install_config.config_id}}"
@@ -164,7 +163,7 @@ commands:
       # configs, storage, keys, security groups.
       - name: teardown
         phase: teardown
-        command: "python3 ./stubs/image-registry/teardown.py"
+        command: "python3 ../stubs/image-registry/teardown.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -187,7 +186,7 @@ commands:
 
 tests:
   cluster_name: "image-registry-validation"
-  description: "Image registry validation tests (template)"
+  description: "Image registry validation tests"
   platform: image_registry
 
   settings:
@@ -204,59 +203,59 @@ tests:
     image_upload:
       step: upload_image
       checks:
-        - StepSuccessCheck: {}
-        - FieldExistsCheck:
-            fields: ["image_id", "storage_bucket", "disk_ids"]
+        StepSuccessCheck: {}
+        FieldExistsCheck:
+          fields: ["image_id", "storage_bucket", "disk_ids"]
 
     # --- VM Launch from Image ---
     vm_from_image:
       step: launch_instance
       checks:
-        - StepSuccessCheck: {}
-        - FieldExistsCheck:
-            fields: ["instance_id", "public_ip", "key_path"]
-        - InstanceStateCheck:
-            expected_state: "running"
+        StepSuccessCheck: {}
+        FieldExistsCheck:
+          fields: ["instance_id", "public_ip", "key_path"]
+        InstanceStateCheck:
+          expected_state: "running"
 
     vm_ssh:
       step: launch_instance
       checks:
-        - SshConnectivityCheck: {}
-        - SshOsCheck:
-            expected_os: "ubuntu"
+        SshConnectivityCheck: {}
+        SshOsCheck:
+          expected_os: "ubuntu"
 
     # --- OS Install Config CRUD ---
     install_config_crud:
       step: crud_install_config
       checks:
-        - StepSuccessCheck: {}
-        - FieldExistsCheck:
-            fields: ["config_id", "config_name", "operations"]
+        StepSuccessCheck: {}
+        FieldExistsCheck:
+          fields: ["config_id", "config_name", "operations"]
 
     # --- OS Image on BMaaS ---
     bm_from_image:
       step: install_image_bm
       checks:
-        - StepSuccessCheck: {}
-        - FieldExistsCheck:
-            fields: ["instance_id", "image_id", "instance_state"]
-        - InstanceStateCheck:
-            expected_state: "running"
+        StepSuccessCheck: {}
+        FieldExistsCheck:
+          fields: ["instance_id", "image_id", "instance_state"]
+        InstanceStateCheck:
+          expected_state: "running"
 
     # --- OS Install Config on BMaaS ---
     bm_from_config:
       step: install_config_bm
       checks:
-        - StepSuccessCheck: {}
-        - FieldExistsCheck:
-            fields: ["instance_id", "config_id", "instance_state"]
-        - InstanceStateCheck:
-            expected_state: "running"
+        StepSuccessCheck: {}
+        FieldExistsCheck:
+          fields: ["instance_id", "config_id", "instance_state"]
+        InstanceStateCheck:
+          expected_state: "running"
 
     teardown_checks:
       step: teardown
       checks:
-        - StepSuccessCheck: {}
+        StepSuccessCheck: {}
 
   exclude:
     markers: []

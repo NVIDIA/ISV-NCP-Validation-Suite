@@ -8,16 +8,14 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-# IAM User Lifecycle Validation - Template Configuration
+# IAM User Lifecycle Validation - Canonical Configuration
 #
-# This is a PROVIDER-AGNOSTIC template for testing user account
-# create -> verify -> delete lifecycle. Copy this file and the
-# accompanying stubs/ scripts, then replace the script implementations
-# with your platform's API calls.
+# THE canonical IAM test suite. Provider configs import this file and
+# override commands with platform-specific stubs.
 #
 # Architecture:
-#   - Scripts: Platform-specific (YOU implement these) - do all IAM work
-#   - Validations: Platform-agnostic (provided) - just check JSON output
+#   - Scripts: Platform-specific (providers implement these) - do all IAM work
+#   - Validations: Platform-agnostic (defined here) - just check JSON output
 #
 # Contract:
 #   Each script MUST print a JSON object to stdout. The validations
@@ -29,13 +27,14 @@
 #   2. test_credentials (test) - Verify the credentials work, output JSON
 #   3. teardown     (teardown) - Delete the user, output JSON
 #
-# Quick start:
-#   1. Copy this folder:  cp -r templates/ my-isv/
-#   2. Edit the stubs:    my-isv/stubs/iam/create_user.py (etc.)
-#   3. Run:               uv run isvctl test run -f isvctl/configs/my-isv/iam.yaml
+# Quick start (new provider):
+#   1. Create your provider folder: mkdir -p isvctl/configs/providers/my-isv/
+#   2. Create providers/my-isv/iam.yaml with: import: ../../tests/iam.yaml
+#   3. Override commands with your platform stubs
+#   4. Run: uv run isvctl test run -f isvctl/configs/providers/my-isv/iam.yaml
 #
 # See also:
-#   - AWS reference implementation: ../aws/iam.yaml + ../stubs/aws/iam/
+#   - AWS reference implementation: aws/iam.yaml + stubs/aws/iam/
 #   - JSON schemas: isvctl/src/isvctl/config/output_schemas.py
 
 version: "1.0"
@@ -56,7 +55,7 @@ commands:
       #   }
       - name: create_user
         phase: setup
-        command: "python3 ./stubs/iam/create_user.py"
+        command: "python3 ../stubs/iam/create_user.py"
         args:
           - "--username"
           - "isv-test-user"
@@ -78,7 +77,7 @@ commands:
       # the create_user step output. Adjust arg names to match your script.
       - name: test_credentials
         phase: test
-        command: "python3 ./stubs/iam/test_credentials.py"
+        command: "python3 ../stubs/iam/test_credentials.py"
         args:
           - "--username"
           - "{{steps.create_user.username}}"
@@ -99,7 +98,7 @@ commands:
       #   }
       - name: teardown
         phase: teardown
-        command: "python3 ./stubs/iam/delete_user.py"
+        command: "python3 ../stubs/iam/delete_user.py"
         args:
           - "--username"
           - "{{steps.create_user.username}}"
@@ -108,7 +107,7 @@ commands:
 
 tests:
   cluster_name: "iam-validation"
-  description: "IAM user lifecycle validation (template)"
+  description: "IAM user lifecycle validation"
   platform: iam
 
   settings:
@@ -123,21 +122,21 @@ tests:
     setup_checks:
       step: create_user
       checks:
-        - FieldExistsCheck:
-            fields: ["username", "access_key_id"]
-        - StepSuccessCheck: {}
+        FieldExistsCheck:
+          fields: ["username", "access_key_id"]
+        StepSuccessCheck: {}
 
     credentials:
       step: test_credentials
       checks:
-        - FieldExistsCheck:
-            field: "account_id"
-        - StepSuccessCheck: {}
+        FieldExistsCheck:
+          field: "account_id"
+        StepSuccessCheck: {}
 
     teardown_checks:
       step: teardown
       checks:
-        - StepSuccessCheck: {}
+        StepSuccessCheck: {}
 
   exclude:
     markers: []

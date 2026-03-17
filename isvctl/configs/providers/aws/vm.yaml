@@ -1,0 +1,118 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# AWS VM (EC2) Validation Configuration
+#
+# Imports validations from the provider-agnostic VM canonical config.
+# This file only provides AWS-specific commands (boto3 stubs) and settings.
+#
+# Steps:
+#   1. launch_instance - boto3: Provisions EC2, outputs IP/key (setup)
+#   2. list_instances - boto3: Lists instances in VPC (test)
+#   3. reboot_instance - boto3: Reboots EC2, validates recovery (test)
+#   4. deploy_nim - paramiko: Deploys NIM container via SSH (test)
+#   5. teardown_nim - paramiko: Stops NIM container via SSH (teardown)
+#   6. teardown - boto3: Terminates EC2 (teardown)
+#
+# Usage:
+#   uv run isvctl test run -f isvctl/configs/aws/vm.yaml
+
+import:
+  - ../../tests/vm.yaml
+
+version: "1.0"
+
+commands:
+  vm:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      # AWS-specific: Launch instance (boto3)
+      - name: launch_instance
+        phase: setup
+        command: "python3 ../../stubs/aws/vm/launch_instance.py"
+        args:
+          - "--name"
+          - "isv-test-gpu"
+          - "--instance-type"
+          - "{{instance_type}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 600
+
+      # AWS-specific: List instances in VPC (boto3)
+      - name: list_instances
+        phase: test
+        command: "python3 ../../stubs/aws/vm/list_instances.py"
+        args:
+          - "--vpc-id"
+          - "{{steps.launch_instance.vpc_id}}"
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 120
+
+      # AWS-specific: Reboot instance and validate recovery (boto3)
+      - name: reboot_instance
+        phase: test
+        command: "python3 ../../stubs/aws/vm/reboot_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+          - "--public-ip"
+          - "{{steps.launch_instance.public_ip}}"
+        timeout: 600
+
+      # Shared: Deploy NIM container via SSH (paramiko)
+      - name: deploy_nim
+        phase: test
+        command: "python3 ../../stubs/common/deploy_nim.py"
+        args:
+          - "--host"
+          - "{{steps.launch_instance.public_ip}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+        timeout: 1800
+
+      # Shared: Teardown NIM container via SSH (paramiko)
+      - name: teardown_nim
+        phase: teardown
+        command: "python3 ../../stubs/common/teardown_nim.py"
+        args:
+          - "--host"
+          - "{{steps.launch_instance.public_ip}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+        timeout: 120
+
+      # AWS-specific: Teardown (boto3)
+      - name: teardown
+        phase: teardown
+        command: "python3 ../../stubs/aws/vm/teardown.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+          - "--delete-key-pair"
+          - "--delete-security-group"
+        timeout: 600
+
+tests:
+  cluster_name: "aws-vm-validation"
+  description: "AWS VM (EC2) validation tests"
+
+  settings:
+    region: "us-west-2"
+    instance_type: "g5.xlarge"

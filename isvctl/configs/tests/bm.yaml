@@ -8,12 +8,10 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-# Bare Metal (BMaaS) Validation - Template Configuration
+# Bare Metal (BMaaS) Validation - Canonical Configuration
 #
-# This is a PROVIDER-AGNOSTIC template for testing bare-metal GPU instance
-# lifecycle: launch -> describe -> reboot -> NIM deploy -> teardown -> verify.
-# Copy this file and the accompanying stubs/ scripts, then replace the
-# script implementations with your platform's API calls.
+# THE canonical bare-metal test suite. Provider configs import this file
+# and override commands with platform-specific stubs.
 #
 # Architecture:
 #   - Scripts: Platform-specific (YOU implement these) - do all BM work
@@ -43,10 +41,11 @@
 #   BM_INSTANCE_ID=<id> BM_KEY_FILE=/path/to/key.pem \
 #     BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/my-isv/bm.yaml
 #
-# Quick start:
-#   1. Copy this folder:  cp -r templates/ my-isv/
-#   2. Edit the stubs:    my-isv/stubs/bm/*.py
-#   3. Run:               uv run isvctl test run -f isvctl/configs/my-isv/bm.yaml
+# Quick start (new provider):
+#   1. Create your provider folder: mkdir -p isvctl/configs/providers/my-isv/
+#   2. Create providers/my-isv/bm.yaml with: import: ../../tests/bm.yaml
+#   3. Override commands with your platform stubs
+#   4. Run: uv run isvctl test run -f isvctl/configs/providers/my-isv/bm.yaml
 #
 # See also:
 #   - AWS reference implementation: ../aws/bm.yaml + ../stubs/aws/bm/
@@ -73,7 +72,7 @@ commands:
       #   }
       - name: launch_instance
         phase: setup
-        command: "python3 ./stubs/bm/launch_instance.py"
+        command: "python3 ../stubs/bm/launch_instance.py"
         args:
           - "--name"
           - "isv-bm-test-gpu"
@@ -87,7 +86,7 @@ commands:
       # Reuses the VM list_instances stub (generic instance listing).
       - name: list_instances
         phase: test
-        command: "python3 ./stubs/vm/list_instances.py"
+        command: "python3 ../stubs/vm/list_instances.py"
         args:
           - "--vpc-id"
           - "{{steps.launch_instance.vpc_id}}"
@@ -109,7 +108,7 @@ commands:
       #   }
       - name: describe_instance
         phase: test
-        command: "python3 ./stubs/bm/describe_instance.py"
+        command: "python3 ../stubs/bm/describe_instance.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -134,7 +133,7 @@ commands:
       #   }
       - name: reboot_instance
         phase: test
-        command: "python3 ./stubs/bm/reboot_instance.py"
+        command: "python3 ../stubs/bm/reboot_instance.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -154,7 +153,7 @@ commands:
       - name: reinstall_instance
         phase: test
         skip: true
-        command: "python3 ./stubs/bm/reinstall_instance.py"
+        command: "python3 ../stubs/bm/reinstall_instance.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -169,7 +168,7 @@ commands:
       # ─── Step 6: Deploy NIM Container ─────────────────────────────
       - name: deploy_nim
         phase: test
-        command: "python3 ./stubs/common/deploy_nim.py"
+        command: "python3 ../stubs/common/deploy_nim.py"
         args:
           - "--host"
           - "{{steps.launch_instance.public_ip}}"
@@ -180,7 +179,7 @@ commands:
       # ─── Step 7: Teardown NIM ─────────────────────────────────────
       - name: teardown_nim
         phase: teardown
-        command: "python3 ./stubs/common/teardown_nim.py"
+        command: "python3 ../stubs/common/teardown_nim.py"
         args:
           - "--host"
           - "{{steps.launch_instance.public_ip}}"
@@ -191,7 +190,7 @@ commands:
       # ─── Step 8: Teardown Instance ────────────────────────────────
       - name: teardown
         phase: teardown
-        command: "python3 ./stubs/bm/teardown.py"
+        command: "python3 ../stubs/bm/teardown.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -207,7 +206,7 @@ commands:
       # resources deleted.
       - name: verify_teardown
         phase: teardown
-        command: "python3 ./stubs/bm/verify_terminated.py"
+        command: "python3 ../stubs/bm/verify_terminated.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -222,7 +221,7 @@ commands:
 tests:
   platform: bare_metal
   cluster_name: "bm-validation"
-  description: "Bare metal (BMaaS) GPU validation tests (template)"
+  description: "Bare metal (BMaaS) GPU validation tests"
 
   settings:
     region: "us-west-2"
@@ -235,157 +234,171 @@ tests:
     setup_checks:
       step: launch_instance
       checks:
-        - InstanceStateCheck:
-            expected_state: "running"
+        InstanceStateCheck:
+          expected_state: "running"
 
     list_instances:
       step: list_instances
       checks:
-        - InstanceListCheck:
-            min_count: 1
+        InstanceListCheck:
+          min_count: 1
 
     instance_info:
       step: describe_instance
       checks:
-        - InstanceStateCheck:
-            expected_state: "running"
+        InstanceStateCheck:
+          expected_state: "running"
 
     ssh:
       step: describe_instance
       checks:
-        - SshConnectivityCheck: {}
-        - SshOsCheck:
-            expected_os: "ubuntu"
+        SshConnectivityCheck: {}
+        SshOsCheck:
+          expected_os: "ubuntu"
 
     gpu:
       step: describe_instance
       checks:
-        - SshGpuCheck:
-            expected_gpus: 8
+        SshGpuCheck:
+          expected_gpus: 8
 
     host_os:
       step: describe_instance
       checks:
-        - SshHostSoftwareCheck: {}
+        SshHostSoftwareCheck: {}
+
+    # Host-level GPU hardware checks (driver, CUDA, GPU detection)
+    host_gpu:
+      step: describe_instance
+      checks:
+        BmDriverVersion:
+          min_version: "580.0"
+        BmCudaVersion:
+          min_version: "12.0"
+        BmGpuDetection:
+          expected_count: 8
+        BmGpuHealth: {}
+        BmGpuComputeCapability:
+          expected_compute_capability: "8.0"
 
     # GPU stress test - PyTorch matrix multiplications on all GPUs
     gpu_stress:
       step: describe_instance
       checks:
-        - SshGpuStressCheck:
-            runtime: 30
-            memory_gb: 16
+        SshGpuStressCheck:
+          runtime: 30
+          memory_gb: 16
 
     # NCCL AllReduce - validates GPU-to-GPU communication (NVLink/NVSwitch)
     nccl:
       step: describe_instance
       checks:
-        - SshNcclCheck: {}
+        SshNcclCheck: {}
 
     # DDP training workload - validates full training stack
     training:
       step: describe_instance
       checks:
-        - SshTrainingCheck:
-            steps: 50
+        SshTrainingCheck:
+          steps: 50
 
     # Network / interconnect checks
     nvlink:
       step: describe_instance
       checks:
-        - SshNvlinkCheck: {}
+        SshNvlinkCheck: {}
 
     infiniband:
       step: describe_instance
       checks:
-        - SshInfiniBandCheck: {}
+        SshInfiniBandCheck: {}
 
     ethernet:
       step: describe_instance
       checks:
-        - SshEthernetCheck:
-            ping_target: "8.8.8.8"
+        SshEthernetCheck:
+          ping_target: "8.8.8.8"
 
     reboot_checks:
       step: reboot_instance
       checks:
-        - InstanceRebootCheck:
-            max_uptime: 600
+        InstanceRebootCheck:
+          max_uptime: 600
 
     reboot_state:
       step: reboot_instance
       checks:
-        - InstanceStateCheck:
-            expected_state: "running"
+        InstanceStateCheck:
+          expected_state: "running"
 
     reboot_ssh:
       step: reboot_instance
       checks:
-        - SshConnectivityCheck: {}
-        - SshOsCheck:
-            expected_os: "ubuntu"
+        SshConnectivityCheck: {}
+        SshOsCheck:
+          expected_os: "ubuntu"
 
     reboot_gpu:
       step: reboot_instance
       checks:
-        - SshGpuCheck:
-            expected_gpus: 8
+        SshGpuCheck:
+          expected_gpus: 8
 
     reboot_host_os:
       step: reboot_instance
       checks:
-        - SshHostSoftwareCheck: {}
+        SshHostSoftwareCheck: {}
 
     # Reinstall validations (skipped when reinstall_instance step is skipped)
     reinstall_state:
       step: reinstall_instance
       checks:
-        - InstanceStateCheck:
-            expected_state: "running"
+        InstanceStateCheck:
+          expected_state: "running"
 
     reinstall_ssh:
       step: reinstall_instance
       checks:
-        - SshConnectivityCheck: {}
-        - SshOsCheck:
-            expected_os: "ubuntu"
+        SshConnectivityCheck: {}
+        SshOsCheck:
+          expected_os: "ubuntu"
 
     reinstall_gpu:
       step: reinstall_instance
       checks:
-        - SshGpuCheck: {}
+        SshGpuCheck: {}
 
     nim_health:
       step: deploy_nim
       checks:
-        - SshNimHealthCheck: {}
+        SshNimHealthCheck: {}
 
     nim_models:
       step: deploy_nim
       checks:
-        - SshNimModelCheck: {}
+        SshNimModelCheck: {}
 
     nim_inference:
       step: deploy_nim
       checks:
-        - SshNimInferenceCheck:
-            prompt: "What is CUDA?"
-            max_tokens: 50
+        SshNimInferenceCheck:
+          prompt: "What is CUDA?"
+          max_tokens: 50
 
     nim_teardown:
       step: teardown_nim
       checks:
-        - StepSuccessCheck: {}
+        StepSuccessCheck: {}
 
     teardown_checks:
       step: teardown
       checks:
-        - StepSuccessCheck: {}
+        StepSuccessCheck: {}
 
     sanitization:
       step: verify_teardown
       checks:
-        - StepSuccessCheck: {}
+        StepSuccessCheck: {}
 
   exclude:
     markers: []

@@ -1,0 +1,88 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# MicroK8s Cluster Validation Configuration
+# Imports the canonical K8s test suite and adds bare-metal host checks
+# for local development and single-node testing.
+#
+# Usage:
+#   isvctl test run -f isvctl/configs/providers/microk8s.yaml
+#   isvctl test run -f isvctl/configs/providers/microk8s.yaml -- -v -s
+
+import: ../tests/k8s.yaml
+
+version: "1.0"
+
+commands:
+  kubernetes:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: setup
+        phase: setup
+        command: "../stubs/microk8s/setup.sh"
+        timeout: 60
+      - name: teardown
+        phase: teardown
+        command: "../stubs/microk8s/teardown.sh"
+        timeout: 30
+
+tests:
+  description: "MicroK8s local validation"
+
+  settings:
+    show_skipped_tests: true
+
+  validations:
+    # Host-level GPU checks (not in k8s.yaml)
+    bare_metal:
+      checks:
+        BmDriverVersion:
+          min_version: "580.0"
+        BmCudaVersion:
+          min_version: "12.0"
+        BmGpuDetection:
+          expected_count: "{{ steps.setup.kubernetes.gpu_per_node | default(1, true) }}"
+        BmGpuHealth: {}
+        BmGpuComputeCapability:
+          expected_compute_capability: "8.0"
+
+    # Override K8s defaults for single-node
+    kubernetes:
+      checks:
+        K8sNodeCountCheck:
+          count: "{{ steps.setup.kubernetes.node_count | default(1, true) }}"
+        K8sGpuPodAccessCheck:
+          total_gpu_count: "{{ steps.setup.kubernetes.gpu_node_count | default(1, true) }}"
+        K8sGpuCapacityCheck:
+          expected_per_node: "{{ steps.setup.kubernetes.gpu_per_node | default(1, true) }}"
+          expected_total: "{{ steps.setup.kubernetes.total_gpus | default(1, true) }}"
+        K8sDriverVersionCheck:
+          driver_version: "{{ steps.setup.kubernetes.driver_version | default('580.126.09') }}"
+        K8sGpuOperatorNamespaceCheck:
+          namespace: "{{ steps.setup.kubernetes.gpu_operator_namespace | default('gpu-operator-resources') }}"
+        K8sGpuOperatorPodsCheck:
+          namespace: "{{ steps.setup.kubernetes.gpu_operator_namespace | default('gpu-operator-resources') }}"
+        K8sMigConfigCheck:
+          require_mig: false
+          expected_labels:
+            "nvidia.com/mig.capable": "false"
+            "nvidia.com/mig.strategy": "single"
+
+    # ReFrame checks (not in k8s.yaml)
+    reframe:
+      checks:
+        CPUInfoCheck: {}
+        GpuMemoryCheck: {}
+
+  exclude:
+    markers:
+      - slow
+      - workload
+      - reframe

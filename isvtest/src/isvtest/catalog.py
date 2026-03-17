@@ -32,14 +32,14 @@ logger = logging.getLogger(__name__)
 # Configs that define the canonical test list per platform.
 # Relative to the isvctl/configs/ directory.
 PLATFORM_CONFIGS: dict[str, list[str]] = {
-    "KUBERNETES": ["k8s.yaml"],
-    "SLURM": ["slurm.yaml"],
-    "BARE_METAL": ["templates/bm.yaml"],
-    "CONTROL_PLANE": ["templates/control-plane.yaml"],
-    "IAM": ["templates/iam.yaml"],
-    "NETWORK": ["templates/network.yaml"],
-    "VM": ["templates/vm.yaml"],
-    "IMAGE_REGISTRY": ["templates/image-registry.yaml"],
+    "KUBERNETES": ["tests/k8s.yaml"],
+    "SLURM": ["tests/slurm.yaml"],
+    "BARE_METAL": ["tests/bm.yaml"],
+    "CONTROL_PLANE": ["tests/control-plane.yaml"],
+    "IAM": ["tests/iam.yaml"],
+    "NETWORK": ["tests/network.yaml"],
+    "VM": ["tests/vm.yaml"],
+    "IMAGE_REGISTRY": ["tests/image-registry.yaml"],
 }
 
 

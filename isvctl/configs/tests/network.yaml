@@ -8,11 +8,10 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-# Network Validation - Template Configuration
+# Network Validation - Canonical Configuration
 #
-# This is a PROVIDER-AGNOSTIC template for comprehensive network testing.
-# Copy this file and the accompanying stubs/ scripts, then replace the
-# script implementations with your platform's API calls.
+# THE canonical network test suite. Provider configs import this file
+# and override commands with platform-specific stubs.
 #
 # Architecture:
 #   - Scripts: Platform-specific (YOU implement these) - do all network work
@@ -31,10 +30,11 @@
 #   5. Connectivity - Instance network assignment
 #   6. Traffic Validation - Real ping tests between instances
 #
-# Quick start:
-#   1. Copy this folder:  cp -r templates/ my-isv/
-#   2. Edit the stubs:    my-isv/stubs/network/*.py
-#   3. Run:               uv run isvctl test run -f isvctl/configs/my-isv/network.yaml
+# Quick start (new provider):
+#   1. Create your provider folder: mkdir -p isvctl/configs/providers/my-isv/
+#   2. Create providers/my-isv/network.yaml with: import: ../../tests/network.yaml
+#   3. Override commands with your platform stubs
+#   4. Run: uv run isvctl test run -f isvctl/configs/providers/my-isv/network.yaml
 #
 # See also:
 #   - AWS reference implementation: ../aws/network.yaml + ../stubs/aws/network/
@@ -57,7 +57,7 @@ commands:
       #   }
       - name: create_network
         phase: setup
-        command: "python3 ./stubs/network/create_vpc.py"
+        command: "python3 ../stubs/network/create_vpc.py"
         args:
           - "--name"
           - "isv-shared-vpc"
@@ -72,7 +72,7 @@ commands:
       # YOUR SCRIPT must output JSON matching the vpc_crud schema.
       - name: vpc_crud
         phase: test
-        command: "python3 ./stubs/network/vpc_crud_test.py"
+        command: "python3 ../stubs/network/vpc_crud_test.py"
         args:
           - "--region"
           - "{{region}}"
@@ -86,7 +86,7 @@ commands:
       # YOUR SCRIPT must output JSON matching the subnet_config schema.
       - name: subnet_config
         phase: test
-        command: "python3 ./stubs/network/subnet_test.py"
+        command: "python3 ../stubs/network/subnet_test.py"
         args:
           - "--region"
           - "{{region}}"
@@ -102,7 +102,7 @@ commands:
       # YOUR SCRIPT must output JSON matching the vpc_isolation schema.
       - name: vpc_isolation
         phase: test
-        command: "python3 ./stubs/network/isolation_test.py"
+        command: "python3 ../stubs/network/isolation_test.py"
         args:
           - "--region"
           - "{{region}}"
@@ -118,7 +118,7 @@ commands:
       # YOUR SCRIPT must output JSON matching the security_blocking schema.
       - name: security_blocking
         phase: test
-        command: "python3 ./stubs/network/security_test.py"
+        command: "python3 ../stubs/network/security_test.py"
         args:
           - "--region"
           - "{{region}}"
@@ -132,7 +132,7 @@ commands:
       # YOUR SCRIPT must output JSON matching the connectivity_result schema.
       - name: connectivity_test
         phase: test
-        command: "python3 ./stubs/network/test_connectivity.py"
+        command: "python3 ../stubs/network/test_connectivity.py"
         args:
           - "--vpc-id"
           - "{{steps.create_network.network_id}}"
@@ -150,7 +150,7 @@ commands:
       # YOUR SCRIPT must output JSON matching the traffic_flow schema.
       - name: traffic_validation
         phase: test
-        command: "python3 ./stubs/network/traffic_test.py"
+        command: "python3 ../stubs/network/traffic_test.py"
         args:
           - "--region"
           - "{{region}}"
@@ -169,7 +169,7 @@ commands:
       #   }
       - name: teardown
         phase: teardown
-        command: "python3 ./stubs/network/teardown.py"
+        command: "python3 ../stubs/network/teardown.py"
         args:
           - "--vpc-id"
           - "{{steps.create_network.network_id}}"
@@ -180,7 +180,7 @@ commands:
 
 tests:
   cluster_name: "network-validation"
-  description: "Network validation tests (template)"
+  description: "Network validation tests"
   platform: network
 
   settings:
@@ -192,31 +192,31 @@ tests:
     setup_checks:
       step: create_network
       checks:
-        - NetworkProvisionedCheck:
-            require_subnets: true
-            min_subnets: 2
+        NetworkProvisionedCheck:
+          require_subnets: true
+          min_subnets: 2
 
     network:
       checks:
-        - VpcCrudCheck:
-            step: vpc_crud
-        - SubnetConfigCheck:
-            step: subnet_config
-            min_subnets: 4
-            require_multi_az: true
-        - VpcIsolationCheck:
-            step: vpc_isolation
-        - SecurityBlockingCheck:
-            step: security_blocking
-        - NetworkConnectivityCheck:
-            step: connectivity_test
-        - TrafficFlowCheck:
-            step: traffic_validation
+        VpcCrudCheck:
+          step: vpc_crud
+        SubnetConfigCheck:
+          step: subnet_config
+          min_subnets: 4
+          require_multi_az: true
+        VpcIsolationCheck:
+          step: vpc_isolation
+        SecurityBlockingCheck:
+          step: security_blocking
+        NetworkConnectivityCheck:
+          step: connectivity_test
+        TrafficFlowCheck:
+          step: traffic_validation
 
     teardown_checks:
       step: teardown
       checks:
-        - StepSuccessCheck: {}
+        StepSuccessCheck: {}
 
   exclude:
     markers: []

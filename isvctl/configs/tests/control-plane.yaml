@@ -8,12 +8,10 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-# Control Plane Validation - Template Configuration
+# Control Plane Validation - Canonical Configuration
 #
-# This is a PROVIDER-AGNOSTIC template for testing cloud control plane
-# operations: API health, access key lifecycle, and tenant management.
-# Copy this file and the accompanying stubs/ scripts, then replace the
-# script implementations with your platform's API calls.
+# THE canonical control plane test suite. Provider configs import this
+# file and override commands with platform-specific stubs.
 #
 # Architecture:
 #   - Scripts: Platform-specific (YOU implement these) - CRUD operations
@@ -29,10 +27,11 @@
 #   2. Access Key Lifecycle - Create, authenticate, disable, verify rejection, delete
 #   3. Tenant Lifecycle - Create, list, get info, delete
 #
-# Quick start:
-#   1. Copy this folder:  cp -r templates/ my-isv/
-#   2. Edit the stubs:    my-isv/stubs/control-plane/*.py
-#   3. Run:               uv run isvctl test run -f isvctl/configs/my-isv/control-plane.yaml
+# Quick start (new provider):
+#   1. Create your provider folder: mkdir -p isvctl/configs/providers/my-isv/
+#   2. Create providers/my-isv/control-plane.yaml with: import: ../../tests/control-plane.yaml
+#   3. Override commands with your platform stubs
+#   4. Run: uv run isvctl test run -f isvctl/configs/providers/my-isv/control-plane.yaml
 #
 # See also:
 #   - AWS reference implementation: ../aws/control-plane.yaml + ../stubs/aws/control-plane/
@@ -56,7 +55,7 @@ commands:
       #   }
       - name: check_api
         phase: setup
-        command: "python3 ./stubs/control-plane/check_api.py"
+        command: "python3 ../stubs/control-plane/check_api.py"
         args: ["--region", "{{region}}", "--services", "{{services}}"]
         timeout: 120
 
@@ -73,7 +72,7 @@ commands:
       #   }
       - name: create_access_key
         phase: setup
-        command: "python3 ./stubs/control-plane/create_access_key.py"
+        command: "python3 ../stubs/control-plane/create_access_key.py"
         args: ["--region", "{{region}}"]
         timeout: 60
 
@@ -86,7 +85,7 @@ commands:
       #   }
       - name: create_tenant
         phase: setup
-        command: "python3 ./stubs/control-plane/create_tenant.py"
+        command: "python3 ../stubs/control-plane/create_tenant.py"
         args: ["--region", "{{region}}"]
         timeout: 60
 
@@ -95,7 +94,7 @@ commands:
       # ═══════════════════════════════════════════════════════════════
       - name: test_access_key
         phase: test
-        command: "python3 ./stubs/control-plane/test_access_key.py"
+        command: "python3 ../stubs/control-plane/test_access_key.py"
         args:
           - "--access-key-id"
           - "{{steps.create_access_key.access_key_id}}"
@@ -108,7 +107,7 @@ commands:
 
       - name: disable_access_key
         phase: test
-        command: "python3 ./stubs/control-plane/disable_access_key.py"
+        command: "python3 ../stubs/control-plane/disable_access_key.py"
         args:
           - "--username"
           - "{{steps.create_access_key.username}}"
@@ -120,7 +119,7 @@ commands:
 
       - name: verify_key_rejected
         phase: test
-        command: "python3 ./stubs/control-plane/verify_key_rejected.py"
+        command: "python3 ../stubs/control-plane/verify_key_rejected.py"
         args:
           - "--access-key-id"
           - "{{steps.create_access_key.access_key_id}}"
@@ -136,7 +135,7 @@ commands:
       # ═══════════════════════════════════════════════════════════════
       - name: list_tenants
         phase: test
-        command: "python3 ./stubs/control-plane/list_tenants.py"
+        command: "python3 ../stubs/control-plane/list_tenants.py"
         args:
           - "--region"
           - "{{region}}"
@@ -146,7 +145,7 @@ commands:
 
       - name: get_tenant
         phase: test
-        command: "python3 ./stubs/control-plane/get_tenant.py"
+        command: "python3 ../stubs/control-plane/get_tenant.py"
         args:
           - "--group-name"
           - "{{steps.create_tenant.tenant_name}}"
@@ -159,7 +158,7 @@ commands:
       # ═══════════════════════════════════════════════════════════════
       - name: delete_access_key
         phase: teardown
-        command: "python3 ./stubs/control-plane/delete_access_key.py"
+        command: "python3 ../stubs/control-plane/delete_access_key.py"
         args:
           - "--username"
           - "{{steps.create_access_key.username}}"
@@ -170,7 +169,7 @@ commands:
 
       - name: delete_tenant
         phase: teardown
-        command: "python3 ./stubs/control-plane/delete_tenant.py"
+        command: "python3 ../stubs/control-plane/delete_tenant.py"
         args:
           - "--group-name"
           - "{{steps.create_tenant.tenant_name}}"
@@ -182,7 +181,7 @@ commands:
 tests:
   platform: control_plane
   cluster_name: "control-plane-validation"
-  description: "Control plane: API health, access key lifecycle, tenant lifecycle (template)"
+  description: "Control plane: API health, access key lifecycle, tenant lifecycle"
 
   settings:
     region: "us-west-2"
@@ -194,41 +193,41 @@ tests:
     api_health:
       step: check_api
       checks:
-        - FieldExistsCheck:
-            fields: ["account_id", "tests"]
-        - FieldValueCheck:
-            field: "success"
-            expected: true
+        FieldExistsCheck:
+          fields: ["account_id", "tests"]
+        FieldValueCheck:
+          field: "success"
+          expected: true
 
     setup_checks:
       checks:
-        - AccessKeyCreatedCheck:
-            step: create_access_key
-        - TenantCreatedCheck:
-            step: create_tenant
+        AccessKeyCreatedCheck:
+          step: create_access_key
+        TenantCreatedCheck:
+          step: create_tenant
 
     access_key_lifecycle:
       checks:
-        - AccessKeyAuthenticatedCheck:
-            step: test_access_key
-        - AccessKeyDisabledCheck:
-            step: disable_access_key
-        - AccessKeyRejectedCheck:
-            step: verify_key_rejected
+        AccessKeyAuthenticatedCheck:
+          step: test_access_key
+        AccessKeyDisabledCheck:
+          step: disable_access_key
+        AccessKeyRejectedCheck:
+          step: verify_key_rejected
 
     tenant_lifecycle:
       checks:
-        - TenantListedCheck:
-            step: list_tenants
-        - TenantInfoCheck:
-            step: get_tenant
+        TenantListedCheck:
+          step: list_tenants
+        TenantInfoCheck:
+          step: get_tenant
 
     teardown_checks:
       checks:
-        - StepSuccessCheck:
-            step: delete_access_key
-        - StepSuccessCheck:
-            step: delete_tenant
+        StepSuccessCheck-delete_access_key:
+          step: delete_access_key
+        StepSuccessCheck-delete_tenant:
+          step: delete_tenant
 
   exclude:
     markers: []

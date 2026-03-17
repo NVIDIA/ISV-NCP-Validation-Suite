@@ -50,22 +50,22 @@ Pre-built configs are provided in `isvctl/configs/`:
 
 | Config | Description |
 | ------ | ----------- |
-| `aws/control-plane.yaml` | AWS API health, access key lifecycle, tenant management |
-| `aws/network.yaml` | AWS VPC network validation (6 test suites) |
-| `aws/vm.yaml` | AWS EC2 GPU instance tests |
-| `aws/iam.yaml` | AWS IAM user lifecycle |
-| `aws/eks.yaml` | AWS EKS with GPU nodes |
-| `k8s.yaml` | Standard Kubernetes cluster |
-| `slurm.yaml` | Slurm HPC cluster |
+| `providers/aws/control-plane.yaml` | AWS API health, access key lifecycle, tenant management |
+| `providers/aws/network.yaml` | AWS VPC network validation (6 test suites) |
+| `providers/aws/vm.yaml` | AWS EC2 GPU instance tests |
+| `providers/aws/iam.yaml` | AWS IAM user lifecycle |
+| `providers/aws/eks.yaml` | AWS EKS with GPU nodes |
+| `tests/k8s.yaml` | Standard Kubernetes cluster |
+| `tests/slurm.yaml` | Slurm HPC cluster |
 
 ## Basic Usage
 
 ```bash
 # Run a config
-isvctl test run -f isvctl/configs/aws/control-plane.yaml
+isvctl test run -f isvctl/configs/providers/aws/control-plane.yaml
 
 # Merge multiple configs (later files override earlier ones)
-isvctl test run -f isvctl/configs/aws/eks.yaml -f my-overrides.yaml
+isvctl test run -f isvctl/configs/providers/aws/eks.yaml -f my-overrides.yaml
 
 # Verbose output (shows script output on failure)
 isvctl test run -f config.yaml -v

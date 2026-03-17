@@ -61,7 +61,7 @@ export EKS_CLUSTER_NAME=$(terraform output -raw cluster_name)
 export NGC_API_KEY=nvapi-XXXXX  # Your NGC API key
 
 cd ../../../../..  # Back to repo root
-uv run isvctl test run -f isvctl/configs/aws/eks.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml
 ```
 
 ## Configuration

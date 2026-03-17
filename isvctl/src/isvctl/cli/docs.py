@@ -158,7 +158,7 @@ def tests(
     Examples:
         isvctl docs tests                          # All tests by category
         isvctl docs tests -m kubernetes            # Only kubernetes tests
-        isvctl docs tests -f isvctl/configs/k8s.yaml  # Tests from config file
+        isvctl docs tests -f isvctl/configs/tests/k8s.yaml  # Tests from config file
         isvctl docs tests --flat                   # Flat alphabetical list
         isvctl docs tests -i SshGpuStressCheck     # Detailed info for a test
     """

@@ -12,8 +12,8 @@
 # For HPC clusters with Slurm workload manager
 #
 # Usage:
-#   isvctl test run -f isvctl/configs/slurm.yaml
-#   isvctl test run -f isvctl/configs/slurm.yaml -- -v -s
+#   isvctl test run -f isvctl/configs/tests/slurm.yaml
+#   isvctl test run -f isvctl/configs/tests/slurm.yaml -- -v -s
 
 version: "1.0"
 

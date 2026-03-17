@@ -11,7 +11,7 @@
 """Main CLI entry point for nv-isv-test.
 
 Note: For cluster lifecycle management, use isvctl instead:
-    isvctl test run -f isvctl/configs/k8s.yaml
+    isvctl test run -f isvctl/configs/tests/k8s.yaml
 """
 
 import json
@@ -512,7 +512,7 @@ def callback(
     """NVIDIA ISV Lab validation tests.
 
     For full cluster lifecycle management, use isvctl:
-        isvctl test run -f isvctl/configs/k8s.yaml
+        isvctl test run -f isvctl/configs/tests/k8s.yaml
     """
     if ctx.invoked_subcommand is None:
         ctx.invoke(test_cmd)

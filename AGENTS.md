@@ -57,13 +57,13 @@ make clean          # Clean build artifacts and test outputs
 
 ```bash
 # isvctl - Main entry point for cluster validation
-uv run isvctl test run -f isvctl/configs/k8s.yaml
-uv run isvctl test run -f isvctl/configs/slurm.yaml -- -v -s -k "test_name"
-uv run isvctl test run -f isvctl/configs/aws/eks.yaml      # AWS EKS validation
-uv run isvctl test run -f isvctl/configs/aws/network.yaml  # AWS Network validation
+uv run isvctl test run -f isvctl/configs/tests/k8s.yaml
+uv run isvctl test run -f isvctl/configs/tests/slurm.yaml -- -v -s -k "test_name"
+uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml      # AWS EKS validation
+uv run isvctl test run -f isvctl/configs/providers/aws/network.yaml  # AWS Network validation
 
 # Remote deployment
-uv run isvctl deploy run <target-ip> -f isvctl/configs/k8s.yaml
+uv run isvctl deploy run <target-ip> -f isvctl/configs/tests/k8s.yaml
 uv run isvctl deploy run <target-ip> -j <jumphost> -u ubuntu -f config.yaml
 
 # isvreporter - Upload test results to ISV Lab Service
@@ -113,7 +113,7 @@ Config (YAML) -> Script (any language) -> JSON output -> Validations (assertions
   - `transfer.py` - SCP file transfer with jumphost proxy
 - `cleaner/` - Resource cleanup operations
 
-**Configuration Files**: Located in `isvctl/configs/`
+**Configuration Files**: Located in `isvctl/configs/tests/` (test definitions) and `isvctl/configs/providers/` (provider implementations)
 
 - Configs define step-based commands with phases and validations
 - Support Jinja2 templating: `"{{steps.create_network.vpc_id}}"`, `"{{region}}"`
@@ -345,7 +345,7 @@ tests:
 - Workspace root `pyproject.toml` defines workspace members
 - Each package has its own `pyproject.toml` with dependencies
 - All source code in `src/` subdirectory per package
-- Config files in `isvctl/configs/`
+- Config files in `isvctl/configs/tests/` (test definitions) and `isvctl/configs/providers/` (provider implementations)
 - ISV stubs (scripts) in `isvctl/configs/stubs/`
 - Shared AWS utilities in `isvctl/configs/stubs/aws/common/`
 - Schemas in `isvctl/schemas/` (JSON Schema files)

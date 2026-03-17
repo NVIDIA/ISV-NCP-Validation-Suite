@@ -32,29 +32,29 @@ uv run isvctl --help
 
 ```bash
 # AWS control plane validation
-uv run isvctl test run -f isvctl/configs/aws/control-plane.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/control-plane.yaml
 
 # AWS network validation
-uv run isvctl test run -f isvctl/configs/aws/network.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/network.yaml
 
 # Kubernetes cluster
-uv run isvctl test run -f isvctl/configs/k8s.yaml
+uv run isvctl test run -f isvctl/configs/tests/k8s.yaml
 
 # Local MicroK8s
-uv run isvctl test run -f isvctl/configs/microk8s.yaml
+uv run isvctl test run -f isvctl/configs/providers/microk8s.yaml
 
 # Slurm cluster
-uv run isvctl test run -f isvctl/configs/slurm.yaml
+uv run isvctl test run -f isvctl/configs/tests/slurm.yaml
 ```
 
 **From installed wheel:**
 
 ```bash
 # Kubernetes
-isvctl test run -f configs/k8s.yaml
+isvctl test run -f configs/tests/k8s.yaml
 
 # Slurm (may require sudo for docker access)
-sudo -E env "PATH=$PATH" isvctl test run -f configs/slurm.yaml
+sudo -E env "PATH=$PATH" isvctl test run -f configs/tests/slurm.yaml
 ```
 
 > **Note:** Slurm tests using docker containers may require `sudo` if the Slurm user
@@ -65,19 +65,19 @@ sudo -E env "PATH=$PATH" isvctl test run -f configs/slurm.yaml
 
 ```bash
 # Verbose output (shows script output on failure)
-isvctl test run -f configs/k8s.yaml -v
+isvctl test run -f configs/tests/k8s.yaml -v
 
 # Pass extra pytest args
-isvctl test run -f configs/k8s.yaml -- -v -s -k "NodeCount"
+isvctl test run -f configs/tests/k8s.yaml -- -v -s -k "NodeCount"
 
 # Upload results to ISV Lab Service
-isvctl test run -f configs/k8s.yaml --lab-id 35
+isvctl test run -f configs/tests/k8s.yaml --lab-id 35
 
 # With ISV software version metadata
-isvctl test run -f configs/k8s.yaml --lab-id 35 --isv-software-version "2.1.0-rc3"
+isvctl test run -f configs/tests/k8s.yaml --lab-id 35 --isv-software-version "2.1.0-rc3"
 
 # Dry run (validate config without executing)
-isvctl test run -f configs/k8s.yaml --dry-run
+isvctl test run -f configs/tests/k8s.yaml --dry-run
 ```
 
 When you use `--lab-id`, the same process creates the test run (shown as STARTED in the portal) and, after all phases complete, updates it to SUCCESS or FAILED. **If the process is killed, times out, or hangs before that update, the run stays STARTED.** See [Troubleshooting: Test runs stuck in STARTED](guides/troubleshooting-started-tests.md) for causes and fixes.
@@ -87,10 +87,10 @@ When you use `--lab-id`, the same process creates the test run (shown as STARTED
 Deploy and run tests on a remote machine:
 
 ```bash
-uv run isvctl deploy run <target-ip> -f isvctl/configs/k8s.yaml
+uv run isvctl deploy run <target-ip> -f isvctl/configs/tests/k8s.yaml
 
 # With jumphost for air-gapped environments
-uv run isvctl deploy run <target-ip> -j <jumphost>:<port> -u ubuntu -f isvctl/configs/k8s.yaml
+uv run isvctl deploy run <target-ip> -j <jumphost>:<port> -u ubuntu -f isvctl/configs/tests/k8s.yaml
 ```
 
 See [Remote Deployment Guide](guides/remote-deployment.md) for details.
@@ -110,7 +110,7 @@ See [Remote Deployment Guide](guides/remote-deployment.md) for details.
 
 ## Next Steps
 
-- [Validation Templates](../isvctl/configs/templates/README.md) - Adding your own platform? Start here
+- [Validation Templates](../isvctl/configs/tests/README.md) - Adding your own platform? Start here
 - [AWS Reference Implementation](references/aws.md) - Working AWS examples to study
 - [Configuration Guide](guides/configuration.md) - Config file format and options
 - [External Validation Guide](guides/external-validation-guide.md) - Custom validations without modifying the repo

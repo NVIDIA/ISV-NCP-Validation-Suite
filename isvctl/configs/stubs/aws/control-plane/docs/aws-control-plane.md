@@ -193,7 +193,7 @@ export AWS_SESSION_TOKEN=...
 uv sync
 
 # Run control plane validation
-uv run isvctl test run -f isvctl/configs/aws/control-plane.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/control-plane.yaml
 ```
 
 **Duration**: ~30 seconds
@@ -233,7 +233,7 @@ ORCHESTRATION RESULTS
 ## Configuration
 
 ```yaml
-# isvctl/configs/aws/control-plane.yaml
+# isvctl/configs/providers/aws/control-plane.yaml
 version: "1.0"
 
 commands:

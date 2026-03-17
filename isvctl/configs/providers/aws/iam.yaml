@@ -19,7 +19,7 @@
 #   3. teardown - boto3: Deletes user (teardown)
 #
 # Usage:
-#   uv run isvctl test run -f isvctl/configs/aws/iam.yaml
+#   uv run isvctl test run -f isvctl/configs/providers/aws/iam.yaml
 
 import:
   - ../../tests/iam.yaml

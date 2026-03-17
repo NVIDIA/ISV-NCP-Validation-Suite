@@ -24,7 +24,7 @@
 #   4. teardown - boto3: Cleans up all resources (teardown)
 #
 # Usage:
-#   uv run isvctl test run -f isvctl/configs/aws/image-registry.yaml
+#   uv run isvctl test run -f isvctl/configs/providers/aws/image-registry.yaml
 #
 # Environment Variables:
 #   - AWS_REGION: AWS region (default: us-west-2)

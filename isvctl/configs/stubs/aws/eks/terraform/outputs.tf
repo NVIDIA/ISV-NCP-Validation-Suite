@@ -112,7 +112,7 @@ output "run_tests" {
     export NGC_API_KEY=nvapi-XXXXX  # Replace with your NGC API key
 
     # Run tests
-    uv run isvctl test run -f isvctl/configs/aws/eks.yaml
+    uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml
   EOT
 }
 

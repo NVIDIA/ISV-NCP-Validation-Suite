@@ -38,16 +38,16 @@ Same as VM validation. See [AWS VM Guide](../../vm/docs/aws-vm.md) for the full 
 
 ```bash
 # Run all tests (provisions g4dn.metal by default)
-uv run isvctl test run -f isvctl/configs/aws/bm.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/bm.yaml
 
 # Verbose output
-uv run isvctl test run -f isvctl/configs/aws/bm.yaml -- -v -s
+uv run isvctl test run -f isvctl/configs/providers/aws/bm.yaml -- -v -s
 
 # Run only SSH tests
-uv run isvctl test run -f isvctl/configs/aws/bm.yaml -- -k "Ssh"
+uv run isvctl test run -f isvctl/configs/providers/aws/bm.yaml -- -k "Ssh"
 
 # Run only reboot validations
-uv run isvctl test run -f isvctl/configs/aws/bm.yaml -- -k "reboot"
+uv run isvctl test run -f isvctl/configs/providers/aws/bm.yaml -- -k "reboot"
 ```
 
 ## Dev Workflow (Instance Reuse)
@@ -58,15 +58,15 @@ between runs.
 
 ```bash
 # Run 1: launch + test, keep instance alive
-AWS_BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/aws/bm.yaml -- -v -s
+AWS_BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/providers/aws/bm.yaml -- -v -s
 
 # Run 2+: reuse existing instance (get instance ID from run 1 output)
 AWS_BM_INSTANCE_ID=i-xxx AWS_BM_KEY_FILE=/tmp/isv-bm-test-key.pem \
-  AWS_BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/aws/bm.yaml -- -v -s
+  AWS_BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/providers/aws/bm.yaml -- -v -s
 
 # Final: teardown (unset skip flag)
 AWS_BM_INSTANCE_ID=i-xxx AWS_BM_KEY_FILE=/tmp/isv-bm-test-key.pem \
-  uv run isvctl test run -f isvctl/configs/aws/bm.yaml -- -v -s
+  uv run isvctl test run -f isvctl/configs/providers/aws/bm.yaml -- -v -s
 ```
 
 ## Settings

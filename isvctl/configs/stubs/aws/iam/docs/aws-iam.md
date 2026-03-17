@@ -51,10 +51,10 @@ The IAM validation framework tests user CRUD operations:
 
 ```bash
 # Run AWS IAM validations (requires AWS credentials)
-uv run isvctl test run -f isvctl/configs/aws/iam.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/iam.yaml
 
 # Run with mock provider (no AWS credentials needed)
-uv run isvctl test run -f isvctl/configs/aws/iam.yaml -- -k "IamUserLifecycleCheck" --provider mock
+uv run isvctl test run -f isvctl/configs/providers/aws/iam.yaml -- -k "IamUserLifecycleCheck" --provider mock
 ```
 
 ## Environment Variables
@@ -106,12 +106,12 @@ Note: The resource restriction (`isv-test-*`) limits operations to test users on
 ## For Other Providers
 
 To implement IAM validation for a different provider,
-**start with the template**: [`configs/templates/`](../../../../templates/README.md) contains
+**start with the template**: [`configs/tests/`](../../../../templates/README.md) contains
 a provider-agnostic `iam.yaml` and skeleton stub scripts you can copy and fill in.
 
 ```bash
 # Quickest path: copy the template, implement the stubs
-cp -r isvctl/configs/templates/ isvctl/configs/my-isv/
+cp -r isvctl/configs/tests/ isvctl/configs/my-isv/
 # Edit: my-isv/stubs/iam/create_user.py, test_credentials.py, delete_user.py
 uv run isvctl test run -f isvctl/configs/my-isv/iam.yaml
 ```

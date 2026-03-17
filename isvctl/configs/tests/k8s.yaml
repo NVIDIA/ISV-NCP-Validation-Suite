@@ -13,9 +13,9 @@
 # K8S_PROVIDER is auto-detected (microk8s vs kubectl)
 #
 # Usage:
-#   isvctl test run -f isvctl/configs/k8s.yaml
-#   isvctl test run -f isvctl/configs/k8s.yaml --phase test  # Skip setup/teardown
-#   isvctl test run -f isvctl/configs/k8s.yaml -- -v -s -k "K8sNodeCountCheck"
+#   isvctl test run -f isvctl/configs/tests/k8s.yaml
+#   isvctl test run -f isvctl/configs/tests/k8s.yaml --phase test  # Skip setup/teardown
+#   isvctl test run -f isvctl/configs/tests/k8s.yaml -- -v -s -k "K8sNodeCountCheck"
 
 version: "1.0"
 

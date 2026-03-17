@@ -137,10 +137,10 @@ Integration tests require access to a real cluster:
 
 ```bash
 # Run K8s integration tests (requires kubectl access)
-uv run isvctl test run -f isvctl/configs/k8s.yaml
+uv run isvctl test run -f isvctl/configs/tests/k8s.yaml
 
 # Run with MicroK8s locally
-uv run isvctl test run -f isvctl/configs/microk8s.yaml
+uv run isvctl test run -f isvctl/configs/providers/microk8s.yaml
 ```
 
 See [Local Development Guide](guides/local-development.md) for MicroK8s setup.

@@ -34,7 +34,7 @@ if [ "$AWS_SKIP_TEARDOWN" = "true" ]; then
     echo "Your EKS cluster and resources are still running." >&2
     echo "" >&2
     echo "To destroy resources, run without AWS_SKIP_TEARDOWN:" >&2
-    echo "  uv run isvctl test run -f isvctl/configs/aws/eks.yaml --phase teardown" >&2
+    echo "  uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml --phase teardown" >&2
     echo "" >&2
     echo "Or manually:" >&2
     echo "  cd isvctl/configs/stubs/aws/eks/terraform" >&2

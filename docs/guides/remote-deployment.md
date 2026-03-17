@@ -34,7 +34,7 @@ Environment variables required by tests must be set on the local machine - they 
 
 ```bash
 # Deploy and run tests on remote machine
-uv run isvctl deploy run <target-ip> -f isvctl/configs/k8s.yaml
+uv run isvctl deploy run <target-ip> -f isvctl/configs/tests/k8s.yaml
 ```
 
 ### With Jumphost
@@ -43,10 +43,10 @@ For air-gapped environments, use a jumphost/bastion server:
 
 ```bash
 # -j accepts <jumphost> or [user@]<jumphost> with optional :<port>
-uv run isvctl deploy run <target-ip> -j <jumphost[:port]> -u ubuntu -f isvctl/configs/k8s.yaml
+uv run isvctl deploy run <target-ip> -j <jumphost[:port]> -u ubuntu -f isvctl/configs/tests/k8s.yaml
 
 # Example with user and custom port:
-uv run isvctl deploy run 10.0.0.10 -j ubuntu@bastion.example.com:2222 -u ubuntu -f isvctl/configs/k8s.yaml
+uv run isvctl deploy run 10.0.0.10 -j ubuntu@bastion.example.com:2222 -u ubuntu -f isvctl/configs/tests/k8s.yaml
 ```
 
 ### With Config Overrides
@@ -54,7 +54,7 @@ uv run isvctl deploy run 10.0.0.10 -j ubuntu@bastion.example.com:2222 -u ubuntu 
 Later config files override earlier ones:
 
 ```bash
-uv run isvctl deploy run <target-ip> -f isvctl/configs/k8s.yaml -f isvctl/configs/k8s-overrides.yaml
+uv run isvctl deploy run <target-ip> -f isvctl/configs/tests/k8s.yaml -f isvctl/configs/k8s-overrides.yaml
 ```
 
 ### With Pytest Arguments
@@ -62,7 +62,7 @@ uv run isvctl deploy run <target-ip> -f isvctl/configs/k8s.yaml -f isvctl/config
 Pass extra pytest arguments after `--`:
 
 ```bash
-uv run isvctl deploy run <target-ip> -f isvctl/configs/slurm.yaml -- -v -s -k "test_name"
+uv run isvctl deploy run <target-ip> -f isvctl/configs/tests/slurm.yaml -- -v -s -k "test_name"
 ```
 
 ### With ISV Lab Service Integration
@@ -70,7 +70,7 @@ uv run isvctl deploy run <target-ip> -f isvctl/configs/slurm.yaml -- -v -s -k "t
 Upload results to the ISV Lab Service:
 
 ```bash
-uv run isvctl deploy run <target-ip> -f isvctl/configs/k8s.yaml --lab-id 35 --isv-software-version "2.1.0-rc3"
+uv run isvctl deploy run <target-ip> -f isvctl/configs/tests/k8s.yaml --lab-id 35 --isv-software-version "2.1.0-rc3"
 ```
 
 ## Command Options
@@ -94,7 +94,7 @@ For Slurm tests that use docker, ensure the remote user is in the docker group o
 
 ```bash
 # If docker requires sudo on the remote host
-sudo -E env "PATH=$PATH" isvctl test run -f configs/slurm.yaml
+sudo -E env "PATH=$PATH" isvctl test run -f configs/tests/slurm.yaml
 ```
 
 ### Kubernetes

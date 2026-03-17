@@ -4,7 +4,7 @@
 > `isvtest` is the internal validation engine used by `isvctl`.
 >
 > ```bash
-> isvctl test run -f isvctl/configs/k8s.yaml
+> isvctl test run -f isvctl/configs/tests/k8s.yaml
 > ```
 
 A validation framework for NVIDIA ISV Lab environments supporting Kubernetes clusters, Slurm HPC systems, and bare metal servers.
@@ -16,7 +16,7 @@ A validation framework for NVIDIA ISV Lab environments supporting Kubernetes clu
 uv sync
 
 # Use via isvctl (recommended)
-isvctl test run -f isvctl/configs/k8s.yaml
+isvctl test run -f isvctl/configs/tests/k8s.yaml
 ```
 
 ## Architecture

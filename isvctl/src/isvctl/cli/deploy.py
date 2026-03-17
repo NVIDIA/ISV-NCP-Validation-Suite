@@ -237,11 +237,11 @@ def run(
     extracts and runs the validation tests, then downloads results.
 
     Examples:
-        isvctl deploy run 192.168.1.100 -f isvctl/configs/k8s.yaml
+        isvctl deploy run 192.168.1.100 -f isvctl/configs/tests/k8s.yaml
 
-        isvctl deploy run 7.243.33.191 -j 202.56.94.106:2260 -u ubuntu -f isvctl/configs/k8s.yaml
+        isvctl deploy run 7.243.33.191 -j 202.56.94.106:2260 -u ubuntu -f isvctl/configs/tests/k8s.yaml
 
-        isvctl deploy run 192.168.1.100 -f isvctl/configs/slurm.yaml -- -v -s -k "test_name"
+        isvctl deploy run 192.168.1.100 -f isvctl/configs/tests/slurm.yaml -- -v -s -k "test_name"
     """
     setup_logging(verbose)
 

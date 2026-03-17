@@ -25,16 +25,16 @@ uv run isvctl --help
 
 ```bash
 # Validate a Kubernetes cluster
-isvctl test run -f isvctl/configs/k8s.yaml
+isvctl test run -f isvctl/configs/tests/k8s.yaml
 
 # Validate a local MicroK8s
-isvctl test run -f isvctl/configs/microk8s.yaml
+isvctl test run -f isvctl/configs/providers/microk8s.yaml
 
 # Validate a Slurm cluster
-isvctl test run -f isvctl/configs/slurm.yaml
+isvctl test run -f isvctl/configs/tests/slurm.yaml
 
 # Pass extra pytest args
-isvctl test run -f isvctl/configs/k8s.yaml -- -v -s -k "NodeCount"
+isvctl test run -f isvctl/configs/tests/k8s.yaml -- -v -s -k "NodeCount"
 ```
 
 ## Directory Structure
@@ -42,9 +42,8 @@ isvctl test run -f isvctl/configs/k8s.yaml -- -v -s -k "NodeCount"
 ```text
 isvctl/
 ├── configs/           # Unified configuration files
-│   ├── k8s.yaml      # Multi-node Kubernetes
-│   ├── microk8s.yaml # Single-node local MicroK8s
-│   └── slurm.yaml    # HPC Slurm cluster
+│   ├── tests/        # Test configs (k8s.yaml, slurm.yaml, bm.yaml)
+│   └── providers/    # Provider configs (microk8s.yaml, aws/)
 ├── stubs/            # Inventory and lifecycle scripts
 │   ├── k8s/
 │   │   ├── setup.sh       # Queries cluster via kubectl
@@ -66,16 +65,16 @@ isvctl/
 
 ```bash
 # Full lifecycle: setup (query inventory) -> test -> teardown
-isvctl test run -f isvctl/configs/k8s.yaml
+isvctl test run -f isvctl/configs/tests/k8s.yaml
 
 # Run only the test phase (skip inventory query)
-isvctl test run -f isvctl/configs/k8s.yaml --phase test
+isvctl test run -f isvctl/configs/tests/k8s.yaml --phase test
 
 # Dry run - validate config without executing
-isvctl test run -f isvctl/configs/k8s.yaml --dry-run
+isvctl test run -f isvctl/configs/tests/k8s.yaml --dry-run
 
 # Verbose with pytest options
-isvctl test run -f isvctl/configs/k8s.yaml -- -v -s --tb=short
+isvctl test run -f isvctl/configs/tests/k8s.yaml -- -v -s --tb=short
 ```
 
 ### Merge Multiple Configs
@@ -94,7 +93,7 @@ isvctl test run -f config.yaml --set context.node_count=8
 
 ```bash
 # Check configuration syntax and schema
-isvctl test validate -f isvctl/configs/k8s.yaml
+isvctl test validate -f isvctl/configs/tests/k8s.yaml
 ```
 
 ## Configuration Schema
@@ -206,10 +205,10 @@ See [Remote Deployment Guide](../guides/remote-deployment.md) for full details.
 
 ```bash
 # Deploy and run tests on remote machine
-uv run isvctl deploy run 192.168.1.100 -u ubuntu -f isvctl/configs/k8s.yaml
+uv run isvctl deploy run 192.168.1.100 -u ubuntu -f isvctl/configs/tests/k8s.yaml
 
 # With jumphost
-uv run isvctl deploy run 192.168.1.100 -j jumphost.example.com -u ubuntu -f isvctl/configs/k8s.yaml
+uv run isvctl deploy run 192.168.1.100 -j jumphost.example.com -u ubuntu -f isvctl/configs/tests/k8s.yaml
 ```
 
 ## Development

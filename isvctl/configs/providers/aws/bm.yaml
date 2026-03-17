@@ -29,18 +29,18 @@
 #
 # Dev workflow (reuse existing instance):
 #   # Run 1: launch + test, keep instance alive
-#   AWS_BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/aws/bm.yaml
+#   AWS_BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/providers/aws/bm.yaml
 #
 #   # Run 2+: reuse instance, iterate on tests
 #   AWS_BM_INSTANCE_ID=i-xxx AWS_BM_KEY_FILE=/tmp/isv-bm-test-key.pem \
-#     AWS_BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/aws/bm.yaml
+#     AWS_BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/providers/aws/bm.yaml
 #
 #   # Final: teardown
 #   AWS_BM_INSTANCE_ID=i-xxx AWS_BM_KEY_FILE=/tmp/isv-bm-test-key.pem \
-#     uv run isvctl test run -f isvctl/configs/aws/bm.yaml
+#     uv run isvctl test run -f isvctl/configs/providers/aws/bm.yaml
 #
 # Usage:
-#   uv run isvctl test run -f isvctl/configs/aws/bm.yaml
+#   uv run isvctl test run -f isvctl/configs/providers/aws/bm.yaml
 
 import:
   - ../../tests/bm.yaml

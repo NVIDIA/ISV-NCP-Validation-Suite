@@ -19,14 +19,14 @@ Validation and management tools for NVIDIA ISV Lab environments.
 Start from the **provider-agnostic templates** — copy, implement the stub scripts for your cloud/platform, and run:
 
 ```bash
-cp -r isvctl/configs/templates/ isvctl/configs/my-isv/
+cp -r isvctl/configs/tests/ isvctl/configs/my-isv/
 # Edit the stub scripts for your platform
 uv run isvctl test run -f isvctl/configs/my-isv/vm.yaml
 ```
 
-Templates are available for: [IAM](isvctl/configs/templates/iam.yaml) | [Network](isvctl/configs/templates/network.yaml) | [VM](isvctl/configs/templates/vm.yaml) | [Bare Metal](isvctl/configs/templates/bm.yaml) | [Kubernetes](isvctl/configs/templates/kaas.yaml) | [Control Plane](isvctl/configs/templates/control-plane.yaml) | [Image Registry](isvctl/configs/templates/image-registry.yaml)
+Templates are available for: [IAM](isvctl/configs/tests/iam.yaml) | [Network](isvctl/configs/tests/network.yaml) | [VM](isvctl/configs/tests/vm.yaml) | [Bare Metal](isvctl/configs/tests/bm.yaml) | [Kubernetes](isvctl/configs/tests/kaas.yaml) | [Control Plane](isvctl/configs/tests/control-plane.yaml) | [Image Registry](isvctl/configs/tests/image-registry.yaml)
 
-See the [Templates README](isvctl/configs/templates/README.md) for the full guide, and the [AWS Reference Implementation](docs/references/aws.md) as a working example.
+See the [Templates README](isvctl/configs/tests/README.md) for the full guide, and the [AWS Reference Implementation](docs/references/aws.md) as a working example.
 
 ## Prerequisites
 
@@ -41,9 +41,9 @@ cd ISV-NCP-Validation-Suite
 uv sync
 
 # Run validation tests
-uv run isvctl test run -f isvctl/configs/k8s.yaml       # Kubernetes
-uv run isvctl test run -f isvctl/configs/microk8s.yaml  # MicroK8s
-uv run isvctl test run -f isvctl/configs/slurm.yaml     # Slurm
+uv run isvctl test run -f isvctl/configs/tests/k8s.yaml       # Kubernetes
+uv run isvctl test run -f isvctl/configs/providers/microk8s.yaml  # MicroK8s
+uv run isvctl test run -f isvctl/configs/tests/slurm.yaml     # Slurm
 ```
 
 ## Documentation
@@ -61,7 +61,7 @@ See [docs/](docs/) for full documentation:
 
 ### References
 
-- [Validation Templates](isvctl/configs/templates/README.md) - Provider-agnostic templates for adding your platform
+- [Validation Templates](isvctl/configs/tests/README.md) - Provider-agnostic templates for adding your platform
 - [AWS Reference Implementation](docs/references/aws.md) - Working AWS examples for all validation domains
 
 ### Package Reference

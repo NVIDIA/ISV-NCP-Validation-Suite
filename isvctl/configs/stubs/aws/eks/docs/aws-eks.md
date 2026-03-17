@@ -82,7 +82,7 @@ uv sync
 # Run full validation (setup -> test -> teardown)
 # This runs all three phases: setup provisions/queries cluster, test runs validations
 NGC_API_KEY=nvapi-XXXXX \
-  uv run isvctl test run -f isvctl/configs/aws/eks.yaml
+  uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml
 ```
 
 > **Note**: By default, teardown runs automatically to clean up resources. Set `AWS_SKIP_TEARDOWN=true` to preserve resources after testing. The setup phase is idempotent - if the cluster already exists, it will skip provisioning and just generate inventory. See [Teardown](#phase-3-teardown) for details.
@@ -116,7 +116,7 @@ Even if your cluster already exists, you must run setup to generate the inventor
 #### Run Setup Only
 
 ```bash
-uv run isvctl test run -f isvctl/configs/aws/eks.yaml --phase setup
+uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml --phase setup
 ```
 
 #### Customize Infrastructure
@@ -128,7 +128,7 @@ Override Terraform variables via environment:
 TF_VAR_region=us-east-1 \
 TF_VAR_gpu_node_instance_types='["p4d.24xlarge"]' \
 TF_VAR_gpu_node_desired_size=2 \
-  uv run isvctl test run -f isvctl/configs/aws/eks.yaml --phase setup
+  uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml --phase setup
 ```
 
 Or create a custom config file:
@@ -149,7 +149,7 @@ commands:
 ```
 
 ```bash
-uv run isvctl test run -f isvctl/configs/aws/eks.yaml -f my-aws-config.yaml --phase setup
+uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml -f my-aws-config.yaml --phase setup
 ```
 
 #### Available Terraform Variables
@@ -191,10 +191,10 @@ The test phase runs validation checks and workloads.
 
 ```bash
 # Runs: setup -> test -> teardown
-uv run isvctl test run -f isvctl/configs/aws/eks.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml
 
 # To preserve resources, skip teardown:
-AWS_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/aws/eks.yaml
+AWS_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml
 ```
 
 #### Run Phases Separately
@@ -203,10 +203,10 @@ If you need to run phases individually:
 
 ```bash
 # First run setup (generates inventory, skips provisioning if cluster exists)
-uv run isvctl test run -f isvctl/configs/aws/eks.yaml --phase setup
+uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml --phase setup
 
 # Then run tests (uses inventory from previous setup)
-uv run isvctl test run -f isvctl/configs/aws/eks.yaml --phase test
+uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml --phase test
 ```
 
 > **Note**: The `--phase` option only accepts one value at a time. To run setup and test together without teardown, use `AWS_SKIP_TEARDOWN=true` and omit `--phase`.
@@ -231,16 +231,16 @@ uv run isvctl test run -f isvctl/configs/aws/eks.yaml --phase test
 
 ```bash
 # Run only node checks (runs all phases, but filters tests)
-uv run isvctl test run -f isvctl/configs/aws/eks.yaml -- -k "Node"
+uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml -- -k "Node"
 
 # Run GPU operator checks
-uv run isvctl test run -f isvctl/configs/aws/eks.yaml -- -k "GpuOperator"
+uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml -- -k "GpuOperator"
 
 # Include workloads (long-running)
-uv run isvctl test run -f isvctl/configs/aws/eks.yaml -- -m "workload"
+uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml -- -m "workload"
 
 # Verbose output
-uv run isvctl test run -f isvctl/configs/aws/eks.yaml -- -v -s
+uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml -- -v -s
 ```
 
 #### AWS VPC Network Tests (Separate Config)
@@ -249,13 +249,13 @@ VPC network tests run independently without requiring an EKS cluster:
 
 ```bash
 # Run all AWS network tests
-uv run isvctl test run -f isvctl/configs/aws/network.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/network.yaml
 
 # Run VPC CRUD test only
-uv run isvctl test run -f isvctl/configs/aws/network.yaml -- -k "AwsVpcCrud"
+uv run isvctl test run -f isvctl/configs/providers/aws/network.yaml -- -k "AwsVpcCrud"
 
 # Run subnet/connectivity tests with existing VPC
-AWS_VPC_ID=vpc-xxxxx uv run isvctl test run -f isvctl/configs/aws/network.yaml
+AWS_VPC_ID=vpc-xxxxx uv run isvctl test run -f isvctl/configs/providers/aws/network.yaml
 ```
 
 #### Test Output
@@ -290,7 +290,7 @@ aws ce get-cost-and-usage \
 
 ```bash
 # Option 1: Via isvctl (recommended) - teardown runs by default
-uv run isvctl test run -f isvctl/configs/aws/eks.yaml --phase teardown
+uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml --phase teardown
 
 # Option 2: Direct Terraform
 cd isvctl/configs/stubs/aws/eks/terraform
@@ -308,7 +308,7 @@ AWS infrastructure was NOT destroyed.
 Your EKS cluster and resources are still running.
 
 To destroy resources, run without AWS_SKIP_TEARDOWN:
-  uv run isvctl test run -f isvctl/configs/aws/eks.yaml --phase teardown
+  uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml --phase teardown
 ```
 
 ---
@@ -331,7 +331,7 @@ export TF_VAR_gpu_node_desired_size=1
 # Setup detects existing cluster and skips provisioning if it exists
 # Teardown runs by default (set AWS_SKIP_TEARDOWN=true to preserve resources)
 echo "=== RUNNING VALIDATION (setup -> test -> teardown) ==="
-uv run isvctl test run -f isvctl/configs/aws/eks.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml
 
 echo "=== VALIDATION COMPLETE ==="
 ```

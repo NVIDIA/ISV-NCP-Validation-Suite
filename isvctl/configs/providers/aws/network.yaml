@@ -22,11 +22,11 @@
 #   6. Traffic Validation - Real ping tests via SSM
 #
 # Usage:
-#   uv run isvctl test run -f isvctl/configs/aws/network.yaml
+#   uv run isvctl test run -f isvctl/configs/providers/aws/network.yaml
 #
 # Run specific tests:
-#   uv run isvctl test run -f isvctl/configs/aws/network.yaml -- -k "vpc_crud"
-#   uv run isvctl test run -f isvctl/configs/aws/network.yaml -- -k "isolation"
+#   uv run isvctl test run -f isvctl/configs/providers/aws/network.yaml -- -k "vpc_crud"
+#   uv run isvctl test run -f isvctl/configs/providers/aws/network.yaml -- -k "isolation"
 #
 # Estimated runtime: ~10-12 minutes for all tests
 

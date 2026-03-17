@@ -22,7 +22,7 @@
 #   6. teardown - boto3: Terminates EC2 (teardown)
 #
 # Usage:
-#   uv run isvctl test run -f isvctl/configs/aws/vm.yaml
+#   uv run isvctl test run -f isvctl/configs/providers/aws/vm.yaml
 
 import:
   - ../../tests/vm.yaml

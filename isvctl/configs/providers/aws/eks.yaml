@@ -14,13 +14,13 @@
 #
 # Usage:
 #   # Provision cluster and run tests
-#   TF_AUTO_APPROVE=true uv run isvctl test run -f isvctl/configs/aws/eks.yaml
+#   TF_AUTO_APPROVE=true uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml
 #
 #   # Run tests only (skip setup/teardown)
-#   uv run isvctl test run -f isvctl/configs/aws/eks.yaml --phase test
+#   uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml --phase test
 #
 #   # Skip teardown (preserve resources)
-#   AWS_SKIP_TEARDOWN=true TF_AUTO_APPROVE=true uv run isvctl test run -f isvctl/configs/aws/eks.yaml
+#   AWS_SKIP_TEARDOWN=true TF_AUTO_APPROVE=true uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml
 #
 # Environment Variables:
 #   - TF_AUTO_APPROVE: Set to "true" to skip Terraform approval prompts (default: false)

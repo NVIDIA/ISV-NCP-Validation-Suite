@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Annotated, TextIO
 
 import typer
+import yaml
 from isvtest.catalog import build_catalog, get_catalog_version
 
 from isvctl.cli import setup_logging
@@ -195,12 +196,15 @@ def run(
         typer.echo(f"Failed to load configuration: {e}", err=True)
         raise typer.Exit(code=1)
 
-    # Count imports by scanning raw YAML for import: keys
+    # Count imports by parsing each file's top-level keys
     import_count = 0
     for p in config_files:
-        raw = p.read_text(encoding="utf-8")
-        if "\nimport:" in raw or raw.startswith("import:"):
-            import_count += 1
+        try:
+            data = yaml.safe_load(p.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and "import" in data:
+                import_count += 1
+        except Exception:
+            pass
     parts = []
     if len(config_files) > 1:
         parts.append(f"{len(config_files)} files")
@@ -318,8 +322,6 @@ def run(
                     catalog_entries = build_catalog()
                     catalog_version = get_catalog_version()
                     typer.echo(f"Built test catalog: {len(catalog_entries)} tests (version: {catalog_version})")
-                    output_dir = Path("_output")
-                    output_dir.mkdir(parents=True, exist_ok=True)
                     catalog_path = output_dir / "test_catalog.json"
                     catalog_path.write_text(
                         json.dumps({"isvTestVersion": catalog_version, "entries": catalog_entries}, indent=2)

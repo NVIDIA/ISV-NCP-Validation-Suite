@@ -156,12 +156,16 @@ def _load_yaml_with_imports(
     if not isinstance(import_list, list):
         import_list = [import_list]
 
-    # Merge all imported files to form the base
+    # Merge all imported files to form the base.
+    # Pass a copy of _visited to each sibling so diamond dependencies
+    # (two imports sharing a common base) are not falsely flagged as cycles.
+    # Cycle detection still works because each recursive call sees its own
+    # ancestors (the copy includes everything on the current call stack).
     base: dict[str, Any] = {}
     for imp in import_list:
         imp_path = (path.parent / imp).resolve()
         logger.debug("Resolving import %s -> %s", imp, imp_path)
-        imported = _load_yaml_with_imports(Path(imp_path), _visited)
+        imported = _load_yaml_with_imports(Path(imp_path), _visited.copy())
         base = deep_merge(base, imported)
 
     # The importing file's content wins over the base

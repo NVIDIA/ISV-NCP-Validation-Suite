@@ -54,7 +54,7 @@ uv run isvctl deploy run 10.0.0.10 -j ubuntu@bastion.example.com:2222 -u ubuntu 
 Later config files override earlier ones:
 
 ```bash
-uv run isvctl deploy run <target-ip> -f isvctl/configs/tests/k8s.yaml -f isvctl/configs/k8s-overrides.yaml
+uv run isvctl deploy run <target-ip> -f isvctl/configs/tests/k8s.yaml -f my-overrides.yaml
 ```
 
 ### With Pytest Arguments

@@ -247,6 +247,17 @@ class TestImportDirective:
         result = merge_yaml_files([str(child)])
         assert result == {"a": 1, "b": 2, "c": 3}
 
+    def test_diamond_dependency(self, tmp_path: Path) -> None:
+        """Two siblings importing the same file (diamond) must not raise."""
+        (tmp_path / "common.yaml").write_text("shared: 1")
+        (tmp_path / "a.yaml").write_text("import:\n  - common.yaml\na: 2")
+        (tmp_path / "b.yaml").write_text("import:\n  - common.yaml\nb: 3")
+        child = tmp_path / "child.yaml"
+        child.write_text("import:\n  - a.yaml\n  - b.yaml\nc: 4")
+
+        result = merge_yaml_files([str(child)])
+        assert result == {"shared": 1, "a": 2, "b": 3, "c": 4}
+
     def test_circular_import_raises(self, tmp_path: Path) -> None:
         """Circular imports must raise ValueError."""
         a = tmp_path / "a.yaml"

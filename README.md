@@ -24,7 +24,7 @@ cp -r isvctl/configs/tests/ isvctl/configs/my-isv/
 uv run isvctl test run -f isvctl/configs/my-isv/vm.yaml
 ```
 
-Templates are available for: [IAM](isvctl/configs/tests/iam.yaml) | [Network](isvctl/configs/tests/network.yaml) | [VM](isvctl/configs/tests/vm.yaml) | [Bare Metal](isvctl/configs/tests/bm.yaml) | [Kubernetes](isvctl/configs/tests/kaas.yaml) | [Control Plane](isvctl/configs/tests/control-plane.yaml) | [Image Registry](isvctl/configs/tests/image-registry.yaml)
+Templates are available for: [IAM](isvctl/configs/tests/iam.yaml) | [Network](isvctl/configs/tests/network.yaml) | [VM](isvctl/configs/tests/vm.yaml) | [Bare Metal](isvctl/configs/tests/bm.yaml) | [Kubernetes](isvctl/configs/tests/k8s.yaml) | [Control Plane](isvctl/configs/tests/control-plane.yaml) | [Image Registry](isvctl/configs/tests/image-registry.yaml)
 
 See the [Templates README](isvctl/configs/tests/README.md) for the full guide, and the [AWS Reference Implementation](docs/references/aws.md) as a working example.
 

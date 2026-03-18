@@ -29,7 +29,7 @@ Usage:
     python install_config_bm.py --config-id cfg-xxx --region us-west-2
 
 AWS reference implementation:
-    ../../../stubs/aws/image-registry/install_config_bm.py
+    ../aws/image-registry/install_config_bm.py
 """
 
 import argparse

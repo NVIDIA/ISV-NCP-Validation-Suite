@@ -32,7 +32,7 @@ Usage:
     python launch_instance.py --image-id <image-id> --instance-type g4dn.xlarge --region us-west-2
 
 AWS reference implementation:
-    ../../../stubs/aws/image-registry/launch_instance.py
+    ../aws/image-registry/launch_instance.py
 """
 
 import argparse

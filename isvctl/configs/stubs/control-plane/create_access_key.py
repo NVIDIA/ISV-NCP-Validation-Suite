@@ -28,7 +28,7 @@ Usage:
     python create_access_key.py --region us-west-2
 
 AWS reference implementation:
-    ../../../stubs/aws/control-plane/create_access_key.py
+    ../aws/control-plane/create_access_key.py
 """
 
 import argparse

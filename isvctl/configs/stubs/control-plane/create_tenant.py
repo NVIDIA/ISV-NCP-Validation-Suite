@@ -28,7 +28,7 @@ Usage:
     python create_tenant.py --region us-west-2
 
 AWS reference implementation:
-    ../../../stubs/aws/control-plane/create_tenant.py
+    ../aws/control-plane/create_tenant.py
 """
 
 import argparse

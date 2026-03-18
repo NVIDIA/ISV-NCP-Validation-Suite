@@ -37,7 +37,7 @@ Usage:
     python launch_instance.py --name isv-test-gpu --instance-type g5.xlarge --region us-west-2
 
 Reference implementation (AWS):
-    ../../../stubs/aws/vm/launch_instance.py
+    ../aws/vm/launch_instance.py
 """
 
 import argparse

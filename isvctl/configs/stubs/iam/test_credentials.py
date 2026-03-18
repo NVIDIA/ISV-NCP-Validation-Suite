@@ -33,7 +33,7 @@ Usage:
     python test_credentials.py --username test-user \\
         --credential-id AKID... --credential-secret SECRET...
 
-Reference implementation: ../../../stubs/aws/iam/test_credentials.py
+Reference implementation: ../aws/iam/test_credentials.py
 """
 
 import argparse
@@ -46,11 +46,12 @@ def main() -> int:
     parser.add_argument("--username", required=True, help="Username to test")
     parser.add_argument("--credential-id", required=True, help="Credential / API key ID")
     parser.add_argument("--credential-secret", required=True, help="Credential secret")
-    _ = parser.parse_args()
+    args = parser.parse_args()  # noqa: F841
 
     result: dict = {
         "success": False,
         "platform": "iam",
+        "account_id": "",
         "tests": {},
     }
 

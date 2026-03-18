@@ -32,7 +32,7 @@ Usage:
         --delete-key-pair --delete-security-group
 
 Reference implementation (AWS):
-    ../../../stubs/aws/vm/teardown.py
+    ../aws/vm/teardown.py
 """
 
 import argparse

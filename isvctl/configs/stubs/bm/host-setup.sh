@@ -29,7 +29,7 @@ CUDA_VERSION="unknown"
 # Check nvidia-smi is available
 if command -v nvidia-smi &> /dev/null; then
     # Get GPU count by listing indices (more portable than --query-gpu=count)
-    GPU_COUNT=$(nvidia-smi --query-gpu=index --format=csv,noheader 2>/dev/null | wc -l || echo "0")
+    GPU_COUNT=$(nvidia-smi --query-gpu=index --format=csv,noheader 2>/dev/null | wc -l | tr -d ' ' || echo "0")
 
     # Get driver version
     DRIVER_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 || echo "unknown")

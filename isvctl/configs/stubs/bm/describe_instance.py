@@ -35,7 +35,7 @@ On failure, set "success": false and include an "error" field.
 Usage:
     python describe_instance.py --instance-id <id> --region us-west-2 --key-file /tmp/key.pem
 
-Reference implementation: ../../../stubs/aws/bm/describe_instance.py
+Reference implementation: ../aws/bm/describe_instance.py
 """
 
 import argparse

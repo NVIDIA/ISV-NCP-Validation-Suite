@@ -27,7 +27,7 @@ Usage:
     python disable_access_key.py --username testuser --access-key-id AKID
 
 AWS reference implementation:
-    ../../../stubs/aws/control-plane/disable_access_key.py
+    ../aws/control-plane/disable_access_key.py
 """
 
 import argparse

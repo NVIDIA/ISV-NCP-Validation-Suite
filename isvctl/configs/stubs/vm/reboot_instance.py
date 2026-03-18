@@ -36,7 +36,7 @@ Usage:
         --key-file /tmp/key.pem --public-ip 54.x.x.x
 
 Reference implementation (AWS):
-    ../../../stubs/aws/vm/reboot_instance.py
+    ../aws/vm/reboot_instance.py
 """
 
 import argparse

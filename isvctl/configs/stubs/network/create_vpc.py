@@ -40,7 +40,7 @@ On failure, set "success": false and include an "error" field:
 Usage:
     python create_vpc.py --name isv-shared-vpc --region us-west-2 --cidr 10.0.0.0/16
 
-Reference implementation: ../../../stubs/aws/network/create_vpc.py
+Reference implementation: ../aws/network/create_vpc.py
 """
 
 import argparse

@@ -141,7 +141,7 @@ def _load_yaml_with_imports(
     if not path.exists():
         raise FileNotFoundError(f"Configuration file not found: {path}")
 
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         content = yaml.safe_load(f)
 
     if content is None:

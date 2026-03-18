@@ -16,15 +16,15 @@ Each template has a corresponding AWS config and scripts that show exactly how t
 
 ## Available Modules
 
-| Domain | Config | Scripts | Docs | Template |
-|--------|--------|---------|------|----------|
-| **IAM** | [`aws/iam.yaml`](../../isvctl/configs/providers/aws/iam.yaml) | [`stubs/aws/iam/`](../../isvctl/configs/stubs/aws/iam/) | [Guide](../../isvctl/configs/stubs/aws/iam/docs/aws-iam.md) | [`templates/iam.yaml`](../../isvctl/configs/tests/iam.yaml) |
-| **Network** | [`aws/network.yaml`](../../isvctl/configs/providers/aws/network.yaml) | [`stubs/aws/network/`](../../isvctl/configs/stubs/aws/network/) | [Guide](../../isvctl/configs/stubs/aws/network/docs/aws-network.md) | [`templates/network.yaml`](../../isvctl/configs/tests/network.yaml) |
-| **VM** | [`aws/vm.yaml`](../../isvctl/configs/providers/aws/vm.yaml) | [`stubs/aws/vm/`](../../isvctl/configs/stubs/aws/vm/) | [Guide](../../isvctl/configs/stubs/aws/vm/docs/aws-vm.md) | [`templates/vm.yaml`](../../isvctl/configs/tests/vm.yaml) |
-| **Bare Metal** | [`aws/bm.yaml`](../../isvctl/configs/providers/aws/bm.yaml) | [`stubs/aws/bm/`](../../isvctl/configs/stubs/aws/bm/) | [Guide](../../isvctl/configs/stubs/aws/bm/docs/aws-bm.md) | [`templates/bm.yaml`](../../isvctl/configs/tests/bm.yaml) |
-| **EKS** | [`aws/eks.yaml`](../../isvctl/configs/providers/aws/eks.yaml) | [`stubs/aws/eks/`](../../isvctl/configs/stubs/aws/eks/) | [Guide](../../isvctl/configs/stubs/aws/eks/docs/aws-eks.md) | [`templates/kaas.yaml`](../../isvctl/configs/tests/kaas.yaml) |
-| **Control Plane** | [`aws/control-plane.yaml`](../../isvctl/configs/providers/aws/control-plane.yaml) | [`stubs/aws/control-plane/`](../../isvctl/configs/stubs/aws/control-plane/) | [Guide](../../isvctl/configs/stubs/aws/control-plane/docs/aws-control-plane.md) | [`templates/control-plane.yaml`](../../isvctl/configs/tests/control-plane.yaml) |
-| **Image Registry** | [`aws/image-registry.yaml`](../../isvctl/configs/providers/aws/image-registry.yaml) | [`stubs/aws/image-registry/`](../../isvctl/configs/stubs/aws/image-registry/) | [Guide](../../isvctl/configs/stubs/aws/image-registry/docs/aws-image-registry.md) | [`templates/image-registry.yaml`](../../isvctl/configs/tests/image-registry.yaml) |
+| Domain | Config | Scripts | Docs | Test Suite |
+|--------|--------|---------|------|------------|
+| **IAM** | [`providers/aws/iam.yaml`](../../isvctl/configs/providers/aws/iam.yaml) | [`stubs/aws/iam/`](../../isvctl/configs/stubs/aws/iam/) | [Guide](../../isvctl/configs/stubs/aws/iam/docs/aws-iam.md) | [`tests/iam.yaml`](../../isvctl/configs/tests/iam.yaml) |
+| **Network** | [`providers/aws/network.yaml`](../../isvctl/configs/providers/aws/network.yaml) | [`stubs/aws/network/`](../../isvctl/configs/stubs/aws/network/) | [Guide](../../isvctl/configs/stubs/aws/network/docs/aws-network.md) | [`tests/network.yaml`](../../isvctl/configs/tests/network.yaml) |
+| **VM** | [`providers/aws/vm.yaml`](../../isvctl/configs/providers/aws/vm.yaml) | [`stubs/aws/vm/`](../../isvctl/configs/stubs/aws/vm/) | [Guide](../../isvctl/configs/stubs/aws/vm/docs/aws-vm.md) | [`tests/vm.yaml`](../../isvctl/configs/tests/vm.yaml) |
+| **Bare Metal** | [`providers/aws/bm.yaml`](../../isvctl/configs/providers/aws/bm.yaml) | [`stubs/aws/bm/`](../../isvctl/configs/stubs/aws/bm/) | [Guide](../../isvctl/configs/stubs/aws/bm/docs/aws-bm.md) | [`tests/bm.yaml`](../../isvctl/configs/tests/bm.yaml) |
+| **EKS** | [`providers/aws/eks.yaml`](../../isvctl/configs/providers/aws/eks.yaml) | [`stubs/aws/eks/`](../../isvctl/configs/stubs/aws/eks/) | [Guide](../../isvctl/configs/stubs/aws/eks/docs/aws-eks.md) | [`tests/k8s.yaml`](../../isvctl/configs/tests/k8s.yaml) |
+| **Control Plane** | [`providers/aws/control-plane.yaml`](../../isvctl/configs/providers/aws/control-plane.yaml) | [`stubs/aws/control-plane/`](../../isvctl/configs/stubs/aws/control-plane/) | [Guide](../../isvctl/configs/stubs/aws/control-plane/docs/aws-control-plane.md) | [`tests/control-plane.yaml`](../../isvctl/configs/tests/control-plane.yaml) |
+| **Image Registry** | [`providers/aws/image-registry.yaml`](../../isvctl/configs/providers/aws/image-registry.yaml) | [`stubs/aws/image-registry/`](../../isvctl/configs/stubs/aws/image-registry/) | [Guide](../../isvctl/configs/stubs/aws/image-registry/docs/aws-image-registry.md) | [`tests/image-registry.yaml`](../../isvctl/configs/tests/image-registry.yaml) |
 
 Shared AWS utilities (error handling, EC2/VPC helpers) are in [`stubs/aws/common/`](../../isvctl/configs/stubs/aws/common/).
 

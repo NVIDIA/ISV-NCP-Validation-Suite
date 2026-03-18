@@ -36,7 +36,7 @@ Usage:
     python crud_install_config.py --region us-west-2
 
 AWS reference implementation:
-    ../../../stubs/aws/image-registry/upload_image.py (similar pattern)
+    ../aws/image-registry/upload_image.py (similar pattern)
 """
 
 import argparse

@@ -46,7 +46,7 @@ Usage:
     # Reuse existing instance:
     BM_INSTANCE_ID=i-xxx BM_KEY_FILE=/tmp/key.pem python launch_instance.py
 
-Reference implementation: ../../../stubs/aws/bm/launch_instance.py
+Reference implementation: ../aws/bm/launch_instance.py
 """
 
 import argparse

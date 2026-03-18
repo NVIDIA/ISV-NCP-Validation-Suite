@@ -41,7 +41,7 @@ Usage:
     python teardown.py --vpc-id vpc-abc123 --region us-west-2
     python teardown.py --vpc-id vpc-abc123 --region us-west-2 --skip-destroy
 
-Reference implementation: ../../../stubs/aws/network/teardown.py
+Reference implementation: ../aws/network/teardown.py
 """
 
 import argparse

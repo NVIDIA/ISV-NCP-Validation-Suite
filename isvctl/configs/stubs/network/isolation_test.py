@@ -42,7 +42,7 @@ On failure, set "success": false and include an "error" field.
 Usage:
     python isolation_test.py --region us-west-2 --cidr-a 10.97.0.0/16 --cidr-b 10.96.0.0/16
 
-Reference implementation: ../../../stubs/aws/network/isolation_test.py
+Reference implementation: ../aws/network/isolation_test.py
 """
 
 import argparse

@@ -40,7 +40,7 @@ Usage:
     python verify_terminated.py --instance-id <id> --region us-west-2 \
         --security-group-id <sg-id> --key-name <key-name>
 
-Reference implementation: ../../../stubs/aws/bm/verify_terminated.py
+Reference implementation: ../aws/bm/verify_terminated.py
 """
 
 import argparse

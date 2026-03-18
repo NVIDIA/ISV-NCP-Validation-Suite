@@ -28,7 +28,7 @@ Usage:
     python verify_key_rejected.py --access-key-id AKID --secret-access-key SECRET --region us-west-2
 
 AWS reference implementation:
-    ../../../stubs/aws/control-plane/verify_key_rejected.py
+    ../aws/control-plane/verify_key_rejected.py
 """
 
 import argparse

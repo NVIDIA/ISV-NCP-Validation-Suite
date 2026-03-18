@@ -27,7 +27,7 @@ Usage:
     python delete_tenant.py --group-name my-tenant --region us-west-2
 
 AWS reference implementation:
-    ../../../stubs/aws/control-plane/delete_tenant.py
+    ../aws/control-plane/delete_tenant.py
 """
 
 import argparse

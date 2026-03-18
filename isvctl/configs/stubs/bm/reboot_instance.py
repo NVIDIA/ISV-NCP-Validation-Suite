@@ -38,7 +38,7 @@ Usage:
     python reboot_instance.py --instance-id <id> --region us-west-2 \
         --key-file /tmp/key.pem --public-ip 54.x.x.x
 
-Reference implementation: ../../../stubs/aws/bm/reboot_instance.py
+Reference implementation: ../aws/bm/reboot_instance.py
 """
 
 import argparse

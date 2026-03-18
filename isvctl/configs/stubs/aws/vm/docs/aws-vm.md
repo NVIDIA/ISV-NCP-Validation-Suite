@@ -93,7 +93,7 @@ uv run isvctl test run -f isvctl/configs/providers/aws/vm.yaml -v -- -v -s  # ve
 
 ## Configuration
 
-Full config: [`isvctl/configs/providers/aws/vm.yaml`](../../../aws/vm.yaml)
+Full config: [`isvctl/configs/providers/aws/vm.yaml`](../../../../providers/aws/vm.yaml)
 
 ### Settings
 

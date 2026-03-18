@@ -31,7 +31,7 @@ Usage:
     python list_instances.py --vpc-id vpc-xxx --instance-id i-xxx --region us-west-2
 
 Reference implementation (AWS):
-    ../../../stubs/aws/vm/list_instances.py
+    ../aws/vm/list_instances.py
 """
 
 import argparse

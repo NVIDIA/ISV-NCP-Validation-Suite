@@ -27,7 +27,7 @@ Usage:
     python test_access_key.py --access-key-id AKID --secret-access-key SECRET --region us-west-2
 
 AWS reference implementation:
-    ../../../stubs/aws/control-plane/test_access_key.py
+    ../aws/control-plane/test_access_key.py
 """
 
 import argparse

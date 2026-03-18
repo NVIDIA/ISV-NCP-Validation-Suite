@@ -31,7 +31,7 @@ Usage:
     python check_api.py --region us-west-2 --services compute,storage,identity
 
 AWS reference implementation:
-    ../../../stubs/aws/control-plane/check_api.py
+    ../aws/control-plane/check_api.py
 """
 
 import argparse

@@ -106,7 +106,7 @@ Note: The resource restriction (`isv-test-*`) limits operations to test users on
 ## For Other Providers
 
 To implement IAM validation for a different provider,
-**start with the template**: [`configs/tests/`](../../../../templates/README.md) contains
+**start with the template**: [`configs/tests/`](../../../../tests/) contains
 a provider-agnostic `iam.yaml` and skeleton stub scripts you can copy and fill in.
 
 ```bash

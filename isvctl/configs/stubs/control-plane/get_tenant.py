@@ -28,7 +28,7 @@ Usage:
     python get_tenant.py --group-name my-tenant --region us-west-2
 
 AWS reference implementation:
-    ../../../stubs/aws/control-plane/get_tenant.py
+    ../aws/control-plane/get_tenant.py
 """
 
 import argparse

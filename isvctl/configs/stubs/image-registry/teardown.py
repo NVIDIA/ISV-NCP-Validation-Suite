@@ -32,7 +32,7 @@ Usage:
     Pass --skip-destroy to skip actual deletion (dry-run).
 
 AWS reference implementation:
-    ../../../stubs/aws/image-registry/teardown.py
+    ../aws/image-registry/teardown.py
 """
 
 import argparse

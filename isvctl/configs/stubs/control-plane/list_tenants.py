@@ -27,7 +27,7 @@ Usage:
     python list_tenants.py --region us-west-2 --target-group my-tenant
 
 AWS reference implementation:
-    ../../../stubs/aws/control-plane/list_tenants.py
+    ../aws/control-plane/list_tenants.py
 """
 
 import argparse

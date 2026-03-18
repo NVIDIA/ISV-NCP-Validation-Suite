@@ -47,7 +47,7 @@ On failure, set "success": false and include an "error" field.
 Usage:
     python vpc_crud_test.py --region us-west-2 --cidr 10.99.0.0/16
 
-Reference implementation: ../../../stubs/aws/network/vpc_crud_test.py
+Reference implementation: ../aws/network/vpc_crud_test.py
 """
 
 import argparse

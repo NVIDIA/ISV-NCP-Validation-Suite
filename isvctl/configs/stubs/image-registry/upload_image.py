@@ -29,7 +29,7 @@ Usage:
     python upload_image.py --image-url <url> --image-format vmdk --region us-west-2
 
 AWS reference implementation:
-    ../../../stubs/aws/image-registry/upload_image.py
+    ../aws/image-registry/upload_image.py
 """
 
 import argparse

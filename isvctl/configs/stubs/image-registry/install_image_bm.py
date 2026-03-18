@@ -28,7 +28,7 @@ Usage:
     python install_image_bm.py --image-id img-xxx --region us-west-2
 
 AWS reference implementation:
-    ../../../stubs/aws/image-registry/install_image_bm.py
+    ../aws/image-registry/install_image_bm.py
 """
 
 import argparse

@@ -36,7 +36,7 @@ On failure, set "success": false and include an "error" field:
 Usage:
     python create_user.py --username isv-test-user
 
-Reference implementation: ../../../stubs/aws/iam/create_user.py
+Reference implementation: ../aws/iam/create_user.py
 """
 
 import argparse

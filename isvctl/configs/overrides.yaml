@@ -1,0 +1,30 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# Override Example
+#
+# Merge this on top of any test config to customize behavior.
+# Copy this file, uncomment what you need, and pass it as a second -f flag.
+#
+# Usage:
+#   isvctl test run -f isvctl/configs/tests/k8s.yaml -f isvctl/configs/overrides.yaml
+#   isvctl test run -f isvctl/configs/providers/microk8s.yaml -f isvctl/configs/overrides.yaml
+
+# Exclude specific tests by name
+tests:
+  exclude:
+    tests: []
+    # - K8sNodeCountCheck
+    # - K8sNcclWorkload
+
+    # Exclude by marker (e.g., skip slow or workload tests)
+    markers: []
+    # - slow
+    # - workload

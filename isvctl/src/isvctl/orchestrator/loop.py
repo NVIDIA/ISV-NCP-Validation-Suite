@@ -265,10 +265,12 @@ class Orchestrator:
         if self.config.tests and self.config.tests.validations:
             all_validations = self.config.tests.validations
 
-        # Get exclude markers for filtering validation categories
+        # Get exclude config for filtering validations
         exclude_markers: list[str] = []
+        exclude_tests: list[str] = []
         if self.config.tests and self.config.tests.exclude:
             exclude_markers = self.config.tests.exclude.get("markers", [])
+            exclude_tests = self.config.tests.exclude.get("tests", [])
 
         phase_results: list[PhaseResult] = []
         overall_success = True
@@ -347,6 +349,7 @@ class Orchestrator:
                     all_validations,
                     self.context,
                     exclude_markers=exclude_markers,
+                    exclude_tests=exclude_tests,
                     settings=test_settings,
                     extra_pytest_args=self._extra_pytest_args,
                     verbose=self._verbose,

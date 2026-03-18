@@ -168,7 +168,10 @@ def _load_yaml_with_imports(
     return deep_merge(base, content)
 
 
-def merge_yaml_files(file_paths: list[str | Path], set_values: list[str] | None = None) -> dict[str, Any]:
+def merge_yaml_files(
+    file_paths: list[str | Path],
+    set_values: list[str] | None = None,
+) -> dict[str, Any]:
     """Merge multiple YAML files with optional --set overrides.
 
     Files are merged in order - later files override earlier ones.

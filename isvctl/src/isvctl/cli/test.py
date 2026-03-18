@@ -188,13 +188,26 @@ def run(
     if color:
         extra_pytest_args.extend([f"--color={color}"])
 
-    # Merge all YAML files
-    typer.echo(f"Merging {len(config_files)} configuration file(s)...")
+    # Load and merge YAML files (resolving import: directives)
     try:
         merged_config = merge_yaml_files([str(p) for p in config_files], set_values or [])
     except Exception as e:
-        typer.echo(f"Failed to merge configuration files: {e}", err=True)
+        typer.echo(f"Failed to load configuration: {e}", err=True)
         raise typer.Exit(code=1)
+
+    # Count imports by scanning raw YAML for import: keys
+    import_count = 0
+    for p in config_files:
+        raw = p.read_text(encoding="utf-8")
+        if "\nimport:" in raw or raw.startswith("import:"):
+            import_count += 1
+    parts = []
+    if len(config_files) > 1:
+        parts.append(f"{len(config_files)} files")
+    if import_count:
+        parts.append(f"{import_count} import{'s' if import_count > 1 else ''}")
+    if parts:
+        typer.echo(f"Loaded configuration ({', '.join(parts)}).")
 
     # Validate against schema
     typer.echo("Validating configuration...")

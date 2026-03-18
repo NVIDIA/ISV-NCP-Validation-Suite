@@ -40,6 +40,7 @@ def run_validations_via_pytest(
     phase: str = "test",
     extra_pytest_args: list[str] | None = None,
     exclude_markers: list[str] | None = None,
+    exclude_tests: list[str] | None = None,
     settings: dict[str, Any] | None = None,
     verbose: bool = False,
     junitxml: str | None = None,
@@ -110,9 +111,14 @@ def run_validations_via_pytest(
         "inventory": inventory,
     }
 
-    # Include exclude markers so conftest.py can filter tests by marker
+    # Include exclude config so conftest.py can filter tests
+    exclude_config: dict[str, list[str]] = {}
     if exclude_markers:
-        temp_config["exclude"] = {"markers": exclude_markers}
+        exclude_config["markers"] = exclude_markers
+    if exclude_tests:
+        exclude_config["tests"] = exclude_tests
+    if exclude_config:
+        temp_config["exclude"] = exclude_config
 
     # Include settings (e.g., show_skipped_tests)
     if settings:

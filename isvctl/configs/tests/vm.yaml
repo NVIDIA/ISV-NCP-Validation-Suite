@@ -25,10 +25,12 @@
 # Steps:
 #   1. launch_instance  (setup)    - Provision GPU VM, output IP/key
 #   2. list_instances   (test)     - List instances, verify target exists
-#   3. reboot_instance  (test)     - Reboot VM, validate recovery
-#   4. deploy_nim       (test)     - Deploy NIM container via SSH
-#   5. teardown_nim     (teardown) - Stop NIM container via SSH
-#   6. teardown         (teardown) - Terminate VM and cleanup
+#   3. stop_instance    (test)     - Stop VM, verify stopped state
+#   4. start_instance   (test)     - Start stopped VM, verify recovery
+#   5. reboot_instance  (test)     - Reboot VM, validate recovery
+#   6. deploy_nim       (test)     - Deploy NIM container via SSH
+#   7. teardown_nim     (teardown) - Stop NIM container via SSH
+#   8. teardown         (teardown) - Terminate VM and cleanup
 #
 # Quick start (new provider):
 #   1. Create your provider folder: mkdir -p isvctl/configs/providers/my-isv/
@@ -91,7 +93,52 @@ commands:
           - "{{region}}"
         timeout: 120
 
-      # ─── Step 3: Reboot Instance ──────────────────────────────────
+      # ─── Step 3: Stop Instance ────────────────────────────────────
+      # YOUR SCRIPT must output JSON with at minimum:
+      #   {
+      #     "success": true,
+      #     "platform": "vm",
+      #     "instance_id": "...",
+      #     "state": "stopped",
+      #     "stop_initiated": true
+      #   }
+      - name: stop_instance
+        phase: test
+        command: "python3 ../stubs/vm/stop_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 300
+
+      # ─── Step 4: Start Instance ───────────────────────────────────
+      # YOUR SCRIPT must output JSON with at minimum:
+      #   {
+      #     "success": true,
+      #     "platform": "vm",
+      #     "instance_id": "...",
+      #     "state": "running",
+      #     "public_ip": "...",
+      #     "key_file": "...",
+      #     "start_initiated": true,
+      #     "ssh_ready": true
+      #   }
+      - name: start_instance
+        phase: test
+        command: "python3 ../stubs/vm/start_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+          - "--public-ip"
+          - "{{steps.launch_instance.public_ip}}"
+        timeout: 300
+
+      # ─── Step 5: Reboot Instance ──────────────────────────────────
       # YOUR SCRIPT must output JSON with at minimum:
       #   {
       #     "success": true,
@@ -205,6 +252,29 @@ tests:
         SshPciBusCheck:
           expected_gpus: 1
         SshHostSoftwareCheck: {}
+
+    stop_checks:
+      step: stop_instance
+      checks:
+        InstanceStopCheck: {}
+
+    start_checks:
+      step: start_instance
+      checks:
+        InstanceStartCheck: {}
+
+    start_ssh:
+      step: start_instance
+      checks:
+        SshConnectivityCheck: {}
+        SshOsCheck:
+          expected_os: "ubuntu"
+
+    start_gpu:
+      step: start_instance
+      checks:
+        SshGpuCheck:
+          expected_gpus: 1
 
     reboot_checks:
       step: reboot_instance

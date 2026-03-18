@@ -156,6 +156,93 @@ class InstanceCreatedCheck(BaseValidation):
         )
 
 
+class InstanceStopCheck(BaseValidation):
+    """Validate that an instance was stopped successfully (not destroyed).
+
+    Checks the stop step output for:
+    - stop_initiated: True (API call succeeded)
+    - state: "stopped" (instance reached stopped state)
+
+    Config:
+        step_output: The stop step output to check
+
+    Step output (from stop_instance.py):
+        instance_id: Instance identifier
+        stop_initiated: Whether stop API call succeeded
+        state: Instance state after stop
+    """
+
+    description: ClassVar[str] = "Check instance stopped successfully without being destroyed"
+    markers: ClassVar[list[str]] = ["vm"]
+
+    def run(self) -> None:
+        step_output = self.config.get("step_output", {})
+
+        instance_id = step_output.get("instance_id")
+        if not instance_id:
+            self.set_failed("No 'instance_id' in step output")
+            return
+
+        stop_initiated = step_output.get("stop_initiated", False)
+        if not stop_initiated:
+            self.set_failed(f"Stop was not initiated for {instance_id}")
+            return
+
+        state = step_output.get("state")
+        if state != "stopped":
+            self.set_failed(f"Instance {instance_id} state: expected stopped, got {state}")
+            return
+
+        self.set_passed(f"Instance {instance_id} stopped successfully (state={state})")
+
+
+class InstanceStartCheck(BaseValidation):
+    """Validate that a stopped instance was started successfully.
+
+    Checks the start step output for:
+    - start_initiated: True (API call succeeded)
+    - state: "running" (instance recovered)
+    - ssh_ready: True (SSH connectivity restored)
+
+    Config:
+        step_output: The start step output to check
+
+    Step output (from start_instance.py):
+        instance_id: Instance identifier
+        start_initiated: Whether start API call succeeded
+        state: Instance state after start
+        ssh_ready: Whether SSH is accessible after start
+    """
+
+    description: ClassVar[str] = "Check stopped instance started successfully"
+    markers: ClassVar[list[str]] = ["vm"]
+
+    def run(self) -> None:
+        step_output = self.config.get("step_output", {})
+
+        instance_id = step_output.get("instance_id")
+        if not instance_id:
+            self.set_failed("No 'instance_id' in step output")
+            return
+
+        start_initiated = step_output.get("start_initiated", False)
+        if not start_initiated:
+            self.set_failed(f"Start was not initiated for {instance_id}")
+            return
+
+        state = step_output.get("state")
+        if state != "running":
+            self.set_failed(f"Instance {instance_id} not running after start: {state}")
+            return
+
+        ssh_ready = step_output.get("ssh_ready", False)
+        if not ssh_ready:
+            self.set_failed(f"SSH not ready after start for {instance_id}")
+            return
+
+        self.set_passed(f"Instance {instance_id} started successfully (state={state})")
+
+
 class InstanceListCheck(BaseValidation):
     """Validate instance list from a VPC.
 

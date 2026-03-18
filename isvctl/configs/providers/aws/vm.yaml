@@ -16,8 +16,10 @@
 # Steps:
 #   1. launch_instance - boto3: Provisions EC2, outputs IP/key (setup)
 #   2. list_instances - boto3: Lists instances in VPC (test)
-#   3. reboot_instance - boto3: Reboots EC2, validates recovery (test)
-#   4. deploy_nim - paramiko: Deploys NIM container via SSH (test)
+#   3. stop_instance - boto3: Stops EC2, verifies stopped state (test)
+#   4. start_instance - boto3: Starts stopped EC2, verifies recovery (test)
+#   5. reboot_instance - boto3: Reboots EC2, validates recovery (test)
+#   6. deploy_nim - paramiko: Deploys NIM container via SSH (test)
 #   5. teardown_nim - paramiko: Stops NIM container via SSH (teardown)
 #   6. teardown - boto3: Terminates EC2 (teardown)
 #
@@ -58,6 +60,32 @@ commands:
           - "--region"
           - "{{region}}"
         timeout: 120
+
+      # AWS-specific: Stop instance and verify stopped state (boto3)
+      - name: stop_instance
+        phase: test
+        command: "python3 ../../stubs/aws/vm/stop_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 300
+
+      # AWS-specific: Start stopped instance and verify recovery (boto3)
+      - name: start_instance
+        phase: test
+        command: "python3 ../../stubs/aws/vm/start_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+          - "--public-ip"
+          - "{{steps.launch_instance.public_ip}}"
+        timeout: 300
 
       # AWS-specific: Reboot instance and validate recovery (boto3)
       - name: reboot_instance

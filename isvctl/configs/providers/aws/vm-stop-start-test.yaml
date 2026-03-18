@@ -1,0 +1,86 @@
+# AWS VM Stop/Start Test Configuration
+#
+# Minimal config for iterating on stop/start only.
+# Skips reboot, NIM deploy/teardown to keep runs fast.
+#
+# Steps: launch_instance -> list_instances -> stop_instance -> start_instance -> teardown
+#
+# Usage:
+#   uv run isvctl test run -f isvctl/configs/providers/aws/vm-stop-start-test.yaml
+
+import:
+  - ../../tests/vm.yaml
+
+version: "1.0"
+
+commands:
+  vm:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: launch_instance
+        phase: setup
+        command: "python3 ../../stubs/aws/vm/launch_instance.py"
+        args:
+          - "--name"
+          - "isv-test-gpu"
+          - "--instance-type"
+          - "{{instance_type}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 600
+
+      - name: list_instances
+        phase: test
+        command: "python3 ../../stubs/aws/vm/list_instances.py"
+        args:
+          - "--vpc-id"
+          - "{{steps.launch_instance.vpc_id}}"
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 120
+
+      - name: stop_instance
+        phase: test
+        command: "python3 ../../stubs/aws/vm/stop_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 300
+
+      - name: start_instance
+        phase: test
+        command: "python3 ../../stubs/aws/vm/start_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+          - "--public-ip"
+          - "{{steps.launch_instance.public_ip}}"
+        timeout: 300
+
+      - name: teardown
+        phase: teardown
+        command: "python3 ../../stubs/aws/vm/teardown.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+          - "--delete-key-pair"
+          - "--delete-security-group"
+        timeout: 600
+
+tests:
+  cluster_name: "aws-vm-stop-start-test"
+  description: "AWS VM stop/start validation tests (no reboot or NIM)"
+
+  settings:
+    region: "us-west-2"
+    instance_type: "g5.xlarge"

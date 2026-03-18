@@ -279,7 +279,9 @@ def run(
 
     # Run orchestration with log file capture (like deploy run uses `tee pytest-output.log`)
     orchestrator = Orchestrator(config, working_dir=effective_working_dir)
-    log_file_path = effective_working_dir / "pytest-output.log"
+    output_dir = effective_working_dir / "_output"
+    output_dir.mkdir(exist_ok=True)
+    log_file_path = output_dir / "pytest-output.log"
 
     # Build test catalog early so it runs inside the TeeWriter context
     # (avoids logging errors from stale stream references after the log file closes)
@@ -325,10 +327,12 @@ def run(
     # Update test run after tests complete
     if upload_results and test_run_id and lab_id:
         typer.echo("Uploading test results to ISV Lab Service...")
-        # Look for junit XML in current directory or working directory
-        junit_path = Path("junit-validation.xml")
+        # Look for junit XML in _output, working directory, or current directory
+        junit_path = output_dir / "junit-validation.xml"
         if not junit_path.exists():
             junit_path = effective_working_dir / "junit-validation.xml"
+        if not junit_path.exists():
+            junit_path = Path("junit-validation.xml")
 
         if update_test_run(
             lab_id=lab_id,

@@ -497,15 +497,18 @@ exit ${{TEST_RESULT:-1}}
         # Step 6: Download results (always download to working_dir)
         typer.echo(typer.style("==>", fg=typer.colors.GREEN) + " Copying test results from remote machine...")
 
-        # Download log file
-        local_log = working_dir / "pytest-output.log"
+        # Download results to _output/
+        output_dir = working_dir / "_output"
+        output_dir.mkdir(exist_ok=True)
+
+        local_log = output_dir / "pytest-output.log"
         if scp.download_optional(f"{effective_remote_dir}/pytest-output.log", local_log):
             typer.echo(typer.style("==>", fg=typer.colors.GREEN) + f" Test log copied to {local_log}")
         else:
             typer.echo(typer.style("Warning:", fg=typer.colors.YELLOW) + " Failed to copy test log from remote")
 
         # Download JUnit XML
-        local_junit: Path | None = working_dir / "junit-validation.xml"
+        local_junit: Path | None = output_dir / "junit-validation.xml"
         if scp.download_optional(f"{effective_remote_dir}/junit-validation.xml", local_junit):
             typer.echo(typer.style("==>", fg=typer.colors.GREEN) + f" JUnit XML copied to {local_junit}")
         else:

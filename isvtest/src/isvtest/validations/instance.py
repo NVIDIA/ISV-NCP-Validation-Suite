@@ -228,7 +228,7 @@ class InstanceStopCheck(BaseValidation):
     """
 
     description: ClassVar[str] = "Check instance stopped successfully without being destroyed"
-    markers: ClassVar[list[str]] = ["vm"]
+    markers: ClassVar[list[str]] = ["bare_metal"]
 
     def run(self) -> None:
         step_output = self.config.get("step_output", {})
@@ -260,7 +260,7 @@ class InstanceStartCheck(BaseValidation):
     """
 
     description: ClassVar[str] = "Check stopped instance started successfully"
-    markers: ClassVar[list[str]] = ["vm"]
+    markers: ClassVar[list[str]] = ["bare_metal"]
 
     def run(self) -> None:
         step_output = self.config.get("step_output", {})

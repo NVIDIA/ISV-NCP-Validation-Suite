@@ -20,6 +20,7 @@ this script performs the equivalent manually:
   5. Attach the new volume as root
   6. Start the instance
   7. Wait for status checks + SSH
+  8. Delete old root volume (post-success cleanup)
 
 Usage:
     python reinstall_instance.py --instance-id i-xxx --region us-west-2 \
@@ -263,14 +264,7 @@ def main() -> int:
         attach_waiter.wait(VolumeIds=[new_volume_id])
         print("  New volume attached", file=sys.stderr)
 
-        # Step 7: Delete old volume
-        print(f"Deleting old volume {old_volume_id}...", file=sys.stderr)
-        try:
-            ec2.delete_volume(VolumeId=old_volume_id)
-        except ClientError as e:
-            print(f"  Warning: could not delete old volume: {e}", file=sys.stderr)
-
-        # Step 8: Start the instance
+        # Step 7: Start the instance
         print(f"Starting instance {args.instance_id}...", file=sys.stderr)
         ec2.start_instances(InstanceIds=[args.instance_id])
 
@@ -288,7 +282,7 @@ def main() -> int:
         )
         print("  Instance status checks passed", file=sys.stderr)
 
-        # Step 9: Get updated instance details
+        # Step 8: Get updated instance details
         instances = ec2.describe_instances(InstanceIds=[args.instance_id])
         instance = instances["Reservations"][0]["Instances"][0]
 
@@ -298,7 +292,7 @@ def main() -> int:
 
         public_ip = result["public_ip"] or args.public_ip
 
-        # Step 10: Wait for SSH
+        # Step 9: Wait for SSH
         print("Waiting for SSH after reinstall...", file=sys.stderr)
         ssh_ready = wait_for_ssh(public_ip, args.ssh_user, args.key_file)
         result["ssh_ready"] = ssh_ready
@@ -310,6 +304,15 @@ def main() -> int:
 
         result["success"] = True
         print("Reinstall completed successfully!", file=sys.stderr)
+
+        # Step 10: Clean up old root volume (post-success only)
+        if old_volume_id:
+            print(f"Cleaning up old volume {old_volume_id}...", file=sys.stderr)
+            try:
+                ec2.delete_volume(VolumeId=old_volume_id)
+                print("  Old volume deleted", file=sys.stderr)
+            except ClientError as e:
+                print(f"  Warning: could not delete old volume: {e}", file=sys.stderr)
 
     except Exception as e:
         result["error"] = str(e)

@@ -24,7 +24,7 @@ from isvtest.tests.test_validations import (
 from isvtest.tests.test_validations import (
     test_validation as run_validation_entry_point,
 )
-from isvtest.validations.instance import InstanceListCheck
+from isvtest.validations.instance import InstanceListCheck, InstanceStartCheck, InstanceStopCheck
 from isvtest.validations.nim import SshNimHealthCheck, SshNimInferenceCheck, SshNimModelCheck
 
 
@@ -330,6 +330,131 @@ class TestInstanceListCheck:
         )
         result = v.execute()
         assert result["passed"] is True
+
+
+class TestInstanceStopCheck:
+    """Tests for InstanceStopCheck validation."""
+
+    def test_stopped_successfully(self) -> None:
+        v = InstanceStopCheck(
+            config={
+                "step_output": {
+                    "instance_id": "i-abc123",
+                    "stop_initiated": True,
+                    "state": "stopped",
+                },
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is True
+        assert "i-abc123" in result["output"]
+        assert "stopped" in result["output"]
+
+    def test_missing_instance_id(self) -> None:
+        v = InstanceStopCheck(config={"step_output": {"stop_initiated": True, "state": "stopped"}})
+        result = v.execute()
+        assert result["passed"] is False
+        assert "instance_id" in result["error"]
+
+    def test_stop_not_initiated(self) -> None:
+        v = InstanceStopCheck(
+            config={
+                "step_output": {
+                    "instance_id": "i-abc123",
+                    "stop_initiated": False,
+                    "state": "stopped",
+                },
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is False
+        assert "not initiated" in result["error"]
+
+    def test_wrong_state(self) -> None:
+        v = InstanceStopCheck(
+            config={
+                "step_output": {
+                    "instance_id": "i-abc123",
+                    "stop_initiated": True,
+                    "state": "running",
+                },
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is False
+        assert "stopped" in result["error"]
+        assert "running" in result["error"]
+
+
+class TestInstanceStartCheck:
+    """Tests for InstanceStartCheck validation."""
+
+    def test_started_successfully(self) -> None:
+        v = InstanceStartCheck(
+            config={
+                "step_output": {
+                    "instance_id": "i-abc123",
+                    "start_initiated": True,
+                    "state": "running",
+                    "ssh_ready": True,
+                },
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is True
+        assert "i-abc123" in result["output"]
+        assert "running" in result["output"]
+
+    def test_missing_instance_id(self) -> None:
+        v = InstanceStartCheck(config={"step_output": {"start_initiated": True, "state": "running", "ssh_ready": True}})
+        result = v.execute()
+        assert result["passed"] is False
+        assert "instance_id" in result["error"]
+
+    def test_start_not_initiated(self) -> None:
+        v = InstanceStartCheck(
+            config={
+                "step_output": {
+                    "instance_id": "i-abc123",
+                    "start_initiated": False,
+                    "state": "running",
+                    "ssh_ready": True,
+                },
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is False
+        assert "not initiated" in result["error"]
+
+    def test_wrong_state(self) -> None:
+        v = InstanceStartCheck(
+            config={
+                "step_output": {
+                    "instance_id": "i-abc123",
+                    "start_initiated": True,
+                    "state": "stopped",
+                    "ssh_ready": True,
+                },
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is False
+        assert "stopped" in result["error"]
+
+    def test_ssh_not_ready(self) -> None:
+        v = InstanceStartCheck(
+            config={
+                "step_output": {
+                    "instance_id": "i-abc123",
+                    "start_initiated": True,
+                    "state": "running",
+                    "ssh_ready": False,
+                },
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is False
+        assert "SSH" in result["error"]
 
 
 def _mock_ssh_run(responses: dict[str, tuple[int, str, str]]):

@@ -96,6 +96,8 @@ def main() -> int:
         # ║    result["success"] = info.state == "running"               ║
         # ╚══════════════════════════════════════════════════════════════╝
 
+        result["instance_id"] = instance_id
+        result["key_file"] = _key_file
         result["error"] = "Not implemented - replace with your platform's instance describe logic"
         print(json.dumps(result, indent=2))
         return 0 if result["success"] else 1

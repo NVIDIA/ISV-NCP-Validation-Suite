@@ -271,6 +271,13 @@ tests:
           steps: 50
           expected_gpus: 8
 
+    # Start GPU - AWS metal has 8 GPUs
+    start_gpu:
+      step: start_instance
+      checks:
+        SshGpuCheck:
+          expected_gpus: 8
+
     # NVLink - AWS metal has 8 GPUs
     nvlink:
       step: describe_instance

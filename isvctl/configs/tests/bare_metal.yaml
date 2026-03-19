@@ -194,7 +194,7 @@ commands:
           - "{{steps.launch_instance.public_ip}}"
         timeout: 1800
 
-      # ─── Step 5: Reinstall Instance ─────────────────────────────────
+      # ─── Step 7: Reinstall Instance ─────────────────────────────────
       # Reinstall the node from its configured stock OS.
       # Skipped by default: can be very slow depending on platform.
       # Set skip: false and implement stubs/bare_metal/reinstall_instance.py to enable.
@@ -214,7 +214,7 @@ commands:
           - "{{steps.launch_instance.public_ip}}"
         timeout: 3600
 
-      # ─── Step 6: Deploy NIM Container ─────────────────────────────
+      # ─── Step 8: Deploy NIM Container ─────────────────────────────
       # Uses post-reboot IP/key since reboot may reassign the public IP
       - name: deploy_nim
         phase: test
@@ -226,7 +226,7 @@ commands:
           - "{{steps.reboot_instance.key_file}}"
         timeout: 1800
 
-      # ─── Step 7: Teardown NIM ─────────────────────────────────────
+      # ─── Step 9: Teardown NIM ─────────────────────────────────────
       # Uses post-reboot IP/key to match what deploy_nim used
       - name: teardown_nim
         phase: teardown
@@ -238,7 +238,7 @@ commands:
           - "{{steps.reboot_instance.key_file}}"
         timeout: 120
 
-      # ─── Step 8: Teardown Instance ────────────────────────────────
+      # ─── Step 10: Teardown Instance ───────────────────────────────
       - name: teardown
         phase: teardown
         command: "python3 ../stubs/bare_metal/teardown.py"
@@ -252,7 +252,7 @@ commands:
           - "{{teardown_flag}}"
         timeout: 1800
 
-      # ─── Step 9: Verify Teardown ──────────────────────────────────
+      # ─── Step 11: Verify Teardown ─────────────────────────────────
       # Post-teardown sanitization: verify instance terminated and
       # resources deleted.
       - name: verify_teardown
@@ -376,8 +376,7 @@ tests:
     start_gpu:
       step: start_instance
       checks:
-        SshGpuCheck:
-          expected_gpus: 8
+        SshGpuCheck: {}
 
     reboot_checks:
       step: reboot_instance

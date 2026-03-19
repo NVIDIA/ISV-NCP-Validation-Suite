@@ -44,6 +44,8 @@ import sys
 import time
 from typing import Any
 
+import boto3
+
 
 def wait_for_ssh(
     host: str,
@@ -108,8 +110,6 @@ def main() -> int:
     parser.add_argument("--public-ip", required=True, help="Instance public IP")
     parser.add_argument("--ssh-user", default="ubuntu", help="SSH username")
     args = parser.parse_args()
-
-    import boto3
 
     ec2 = boto3.client("ec2", region_name=args.region)
 

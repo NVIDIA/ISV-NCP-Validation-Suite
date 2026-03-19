@@ -48,6 +48,7 @@ from isvtest.validations.instance import (
     InstanceStartCheck,
     InstanceStateCheck,
     InstanceStopCheck,
+    InstanceTagCheck,
 )
 from isvtest.validations.network import (
     NetworkConnectivityCheck,
@@ -63,6 +64,7 @@ from isvtest.validations.nim import (
     SshNimInferenceCheck,
     SshNimModelCheck,
 )
+from isvtest.validations.ssh import SshCloudInitCheck
 
 __all__ = [
     "AccessKeyAuthenticatedCheck",
@@ -79,12 +81,14 @@ __all__ = [
     "InstanceStartCheck",
     "InstanceStateCheck",
     "InstanceStopCheck",
+    "InstanceTagCheck",
     "NetworkConnectivityCheck",
     "NetworkProvisionedCheck",
     "NodeCountCheck",
     "PerformanceCheck",
     "SchemaValidation",
     "SecurityBlockingCheck",
+    "SshCloudInitCheck",
     "SshNimHealthCheck",
     "SshNimInferenceCheck",
     "SshNimModelCheck",

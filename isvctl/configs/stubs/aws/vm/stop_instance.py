@@ -34,6 +34,8 @@ import os
 import sys
 from typing import Any
 
+import boto3
+
 
 def main() -> int:
     """Stop an EC2 instance and wait for it to reach stopped state.
@@ -45,8 +47,6 @@ def main() -> int:
     parser.add_argument("--instance-id", required=True, help="EC2 instance ID")
     parser.add_argument("--region", default=os.environ.get("AWS_REGION", "us-west-2"))
     args = parser.parse_args()
-
-    import boto3
 
     ec2 = boto3.client("ec2", region_name=args.region)
 
@@ -60,12 +60,21 @@ def main() -> int:
 
     try:
         # ============================================================
-        # Step 1: Verify instance is currently running
+        # Step 1: Verify instance state
         # ============================================================
-        print("Verifying instance is running before stop...", file=sys.stderr)
+        print("Checking instance state before stop...", file=sys.stderr)
         instances = ec2.describe_instances(InstanceIds=[args.instance_id])
         instance = instances["Reservations"][0]["Instances"][0]
         current_state = instance["State"]["Name"]
+
+        if current_state == "stopped":
+            # Already stopped — idempotent no-op
+            result["state"] = current_state
+            result["stop_initiated"] = True
+            result["success"] = True
+            print(f"  Instance {args.instance_id} already stopped (no-op)", file=sys.stderr)
+            print(json.dumps(result, indent=2))
+            return 0
 
         if current_state != "running":
             result["error"] = f"Instance is {current_state}, expected running"

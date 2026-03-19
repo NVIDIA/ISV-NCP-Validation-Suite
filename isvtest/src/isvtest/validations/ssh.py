@@ -1829,3 +1829,76 @@ class SshContainerRuntimeCheck(BaseValidation):
 
         except Exception as e:
             self.set_failed(f"Container check failed: {e}")
+
+
+# =============================================================================
+# Cloud-init and Instance Metadata Validations
+# =============================================================================
+
+
+class SshCloudInitCheck(BaseValidation):
+    """Validate cloud-init completed and instance metadata service is reachable.
+
+    Checks two things via SSH:
+    - cloud-init status: must be "done" (proves cloud-init ran to completion)
+    - metadata service: 169.254.169.254 must be reachable (proves link-local
+      metadata works, required for cloud-init and instance identity)
+
+    Config:
+        host, key_file, user: SSH connection details
+        metadata_url: Metadata endpoint to probe (default: http://169.254.169.254/latest/meta-data/)
+    """
+
+    description: ClassVar[str] = "Validates cloud-init completed and metadata service is reachable"
+    timeout: ClassVar[int] = 120
+    markers: ClassVar[list[str]] = ["ssh", "vm"]
+
+    def run(self) -> None:
+        try:
+            import paramiko  # noqa: F401
+        except ImportError:
+            self.set_failed("paramiko not installed")
+            return
+
+        ssh_cfg = get_ssh_config(self.config, self.config.get("inventory", {}))
+        host = ssh_cfg["ssh_host"]
+        user = ssh_cfg["ssh_user"]
+        key_path = ssh_cfg["ssh_key_path"]
+        metadata_url = self.config.get("metadata_url", "http://169.254.169.254/latest/meta-data/")
+
+        if not host or not key_path:
+            self.set_failed("Missing host or key_file")
+            return
+
+        try:
+            ssh = get_ssh_client(host, user, key_path)
+
+            # Check cloud-init status
+            exit_code, stdout, _ = run_ssh_command(ssh, "cloud-init status 2>/dev/null || echo 'not_found'")
+            if "not_found" in stdout:
+                self.report_subtest("cloud_init", True, "cloud-init not present (skipped)")
+            else:
+                done = "done" in stdout.lower()
+                self.report_subtest("cloud_init", done, stdout.strip())
+
+            # Check metadata service reachability
+            curl_cmd = f"curl -s -o /dev/null -w '%{{http_code}}' --max-time 5 {metadata_url}"
+            exit_code, stdout, _ = run_ssh_command(ssh, curl_cmd)
+            http_code = stdout.strip()
+            metadata_ok = exit_code == 0 and http_code in ("200", "301")
+            self.report_subtest(
+                "metadata_service",
+                metadata_ok,
+                f"HTTP {http_code}" if http_code else "unreachable",
+            )
+
+            ssh.close()
+
+            failed = get_failed_subtests(self._subtest_results)
+            if failed:
+                self.set_failed(f"cloud-init subtests failed: {', '.join(failed)}")
+            else:
+                self.set_passed(f"cloud-init and metadata service OK on {host}")
+
+        except Exception as e:
+            self.set_failed(f"cloud-init check failed: {e}")

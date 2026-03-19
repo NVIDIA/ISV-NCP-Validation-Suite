@@ -243,6 +243,49 @@ class InstanceStartCheck(BaseValidation):
         self.set_passed(f"Instance {instance_id} started successfully (state={state})")
 
 
+class InstanceTagCheck(BaseValidation):
+    """Validate that user-defined tags are present on an instance.
+
+    Config:
+        step_output: The describe_tags step output
+        required_keys: List of tag keys that must be present (default: [])
+
+    Step output:
+        instance_id: Instance identifier
+        tags: Dict of tag key→value pairs
+        tag_count: Number of tags
+    """
+
+    description: ClassVar[str] = "Check instance tags are present"
+    markers: ClassVar[list[str]] = ["vm"]
+
+    def run(self) -> None:
+        step_output = self.config.get("step_output", {})
+        required_keys = self.config.get("required_keys", [])
+
+        instance_id = step_output.get("instance_id")
+        if not instance_id:
+            self.set_failed("No 'instance_id' in step output")
+            return
+
+        tags = step_output.get("tags")
+        if tags is None:
+            self.set_failed(f"No 'tags' in step output for {instance_id}")
+            return
+
+        if not tags:
+            self.set_failed(f"Instance {instance_id} has no tags")
+            return
+
+        missing = [k for k in required_keys if k not in tags]
+        if missing:
+            self.set_failed(f"Instance {instance_id} missing required tags: {missing}")
+            return
+
+        tag_count = step_output.get("tag_count", len(tags))
+        self.set_passed(f"Instance {instance_id} has {tag_count} tag(s): {list(tags.keys())}")
+
+
 class InstanceListCheck(BaseValidation):
     """Validate instance list from a VPC.
 

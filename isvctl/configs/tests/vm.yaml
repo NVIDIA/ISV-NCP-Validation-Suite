@@ -25,12 +25,13 @@
 # Steps:
 #   1. launch_instance  (setup)    - Provision GPU VM, output IP/key
 #   2. list_instances   (test)     - List instances, verify target exists
-#   3. stop_instance    (test)     - Stop VM, verify stopped state
-#   4. start_instance   (test)     - Start stopped VM, verify recovery
-#   5. reboot_instance  (test)     - Reboot VM, validate recovery
-#   6. deploy_nim       (test)     - Deploy NIM container via SSH
-#   7. teardown_nim     (teardown) - Stop NIM container via SSH
-#   8. teardown         (teardown) - Terminate VM and cleanup
+#   3. verify_tags      (test)     - Verify user-defined tags on instance
+#   4. stop_instance    (test)     - Stop VM, verify stopped state
+#   5. start_instance   (test)     - Start stopped VM, verify recovery
+#   6. reboot_instance  (test)     - Reboot VM, validate recovery
+#   7. deploy_nim       (test)     - Deploy NIM container via SSH
+#   8. teardown_nim     (teardown) - Stop NIM container via SSH
+#   9. teardown         (teardown) - Terminate VM and cleanup
 #
 # Quick start (new provider):
 #   1. Create your provider folder: mkdir -p isvctl/configs/providers/my-isv/
@@ -93,7 +94,26 @@ commands:
           - "{{region}}"
         timeout: 120
 
-      # ─── Step 3: Stop Instance ────────────────────────────────────
+      # ─── Step 3: Verify Tags ──────────────────────────────────────
+      # YOUR SCRIPT must output JSON with at minimum:
+      #   {
+      #     "success": true,
+      #     "platform": "vm",
+      #     "instance_id": "<id>",
+      #     "tags": {"Name": "...", ...},
+      #     "tag_count": <int>
+      #   }
+      - name: verify_tags
+        phase: test
+        command: "python3 ../stubs/vm/describe_tags.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 60
+
+      # ─── Step 4: Stop Instance ────────────────────────────────────
       # YOUR SCRIPT must output JSON with at minimum:
       #   {
       #     "success": true,
@@ -110,7 +130,7 @@ commands:
           - "{{steps.launch_instance.instance_id}}"
           - "--region"
           - "{{region}}"
-        timeout: 300
+        timeout: 600
 
       # ─── Step 4: Start Instance ───────────────────────────────────
       # YOUR SCRIPT must output JSON with at minimum:
@@ -164,28 +184,29 @@ commands:
           - "{{steps.launch_instance.public_ip}}"
         timeout: 600
 
-      # ─── Step 4: Deploy NIM Container ─────────────────────────────
-      # Shared script - deploys NIM inference container via SSH.
+      # ─── Step 7: Deploy NIM Container ─────────────────────────────
+      # Uses post-reboot IP/key since reboot may reassign the public IP.
       # See stubs/common/deploy_nim.py for the JSON contract.
       - name: deploy_nim
         phase: test
         command: "python3 ../stubs/common/deploy_nim.py"
         args:
           - "--host"
-          - "{{steps.launch_instance.public_ip}}"
+          - "{{steps.reboot_instance.public_ip}}"
           - "--key-file"
-          - "{{steps.launch_instance.key_file}}"
+          - "{{steps.reboot_instance.key_file}}"
         timeout: 1800
 
-      # ─── Step 5: Teardown NIM ─────────────────────────────────────
+      # ─── Step 8: Teardown NIM ─────────────────────────────────────
+      # Uses post-reboot IP/key to match what deploy_nim used.
       - name: teardown_nim
         phase: teardown
         command: "python3 ../stubs/common/teardown_nim.py"
         args:
           - "--host"
-          - "{{steps.launch_instance.public_ip}}"
+          - "{{steps.reboot_instance.public_ip}}"
           - "--key-file"
-          - "{{steps.launch_instance.key_file}}"
+          - "{{steps.reboot_instance.key_file}}"
         timeout: 120
 
       # ─── Step 6: Teardown Instance ────────────────────────────────
@@ -206,6 +227,7 @@ commands:
           - "{{region}}"
           - "--delete-key-pair"
           - "--delete-security-group"
+          - "{{teardown_flag}}"
         timeout: 600
 
 tests:
@@ -216,6 +238,7 @@ tests:
   settings:
     region: "us-west-2"
     instance_type: "g5.xlarge"
+    teardown_flag: "{{(env.VM_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"
 
   # ─── Validations ─────────────────────────────────────────────────
   # These are PROVIDER-AGNOSTIC. They only check JSON field names/values.
@@ -252,6 +275,17 @@ tests:
         SshPciBusCheck:
           expected_gpus: 1
         SshHostSoftwareCheck: {}
+
+    tags:
+      step: verify_tags
+      checks:
+        InstanceTagCheck:
+          required_keys: ["Name", "CreatedBy"]
+
+    cloud_init:
+      step: launch_instance
+      checks:
+        SshCloudInitCheck: {}
 
     stop_checks:
       step: stop_instance

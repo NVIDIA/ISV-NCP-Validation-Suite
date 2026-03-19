@@ -104,12 +104,78 @@ def get_gpu_ami(ec2: Any, instance_type: str) -> str | None:
     return images[0]["ImageId"] if images else None
 
 
+def reuse_existing_instance(region: str) -> int:
+    """Describe an existing instance instead of launching a new one.
+
+    Used when AWS_VM_INSTANCE_ID and AWS_VM_KEY_FILE are set.
+
+    Args:
+        region: AWS region for the EC2 client.
+
+    Returns:
+        0 on success, 1 on failure
+    """
+    instance_id = os.environ["AWS_VM_INSTANCE_ID"]
+    key_file = os.environ["AWS_VM_KEY_FILE"]
+
+    print(f"Reusing existing instance {instance_id}", file=sys.stderr)
+
+    ec2 = boto3.client("ec2", region_name=region)
+    result: dict[str, Any] = {
+        "success": False,
+        "platform": "vm",
+        "instance_id": instance_id,
+        "region": region,
+        "key_file": key_file,
+        "reused": True,
+    }
+
+    try:
+        instances = ec2.describe_instances(InstanceIds=[instance_id])
+        instance = instances["Reservations"][0]["Instances"][0]
+
+        state = instance["State"]["Name"]
+
+        # Start the instance if it's stopped
+        if state == "stopped":
+            print(f"  Instance {instance_id} is stopped — starting it...", file=sys.stderr)
+            ec2.start_instances(InstanceIds=[instance_id])
+            waiter = ec2.get_waiter("instance_status_ok")
+            waiter.wait(InstanceIds=[instance_id], WaiterConfig={"Delay": 15, "MaxAttempts": 40})
+            instances = ec2.describe_instances(InstanceIds=[instance_id])
+            instance = instances["Reservations"][0]["Instances"][0]
+            state = instance["State"]["Name"]
+            print(f"  Instance {instance_id} is now {state}", file=sys.stderr)
+
+        result["state"] = state
+        result["instance_type"] = instance.get("InstanceType")
+        result["public_ip"] = instance.get("PublicIpAddress")
+        result["private_ip"] = instance.get("PrivateIpAddress")
+        result["vpc_id"] = instance.get("VpcId")
+        result["subnet_id"] = instance.get("SubnetId")
+        result["key_name"] = instance.get("KeyName")
+        result["security_group_id"] = (instance.get("SecurityGroups") or [{}])[0].get("GroupId")
+        result["availability_zone"] = instance.get("Placement", {}).get("AvailabilityZone")
+        result["success"] = state == "running"
+
+        if not result["success"]:
+            result["error"] = f"Instance {instance_id} is {state}, expected running"
+    except Exception as e:
+        result["error"] = str(e)
+
+    print(json.dumps(result, indent=2))
+    return 0 if result["success"] else 1
+
+
 def main() -> int:
     """Launch a GPU-enabled EC2 instance for VM testing.
 
-    Parses command-line arguments, creates necessary resources (key pair,
-    security group), selects an appropriate AMI based on instance type
-    architecture, and launches the instance with fallback subnet logic.
+    If AWS_VM_INSTANCE_ID and AWS_VM_KEY_FILE are set, skips launching
+    and describes the existing instance instead (dev workflow).
+
+    Otherwise, parses command-line arguments, creates necessary resources
+    (key pair, security group), selects an appropriate AMI based on instance
+    type architecture, and launches the instance with fallback subnet logic.
 
     Returns:
         0 on success, 1 on failure
@@ -123,6 +189,10 @@ def main() -> int:
     parser.add_argument("--ami-id", help="AMI ID (auto-detects GPU AMI if not specified)")
     parser.add_argument("--key-name", default="isv-test-key", help="EC2 key pair name")
     args = parser.parse_args()
+
+    # Reuse existing instance if env vars are set
+    if os.environ.get("AWS_VM_INSTANCE_ID") and os.environ.get("AWS_VM_KEY_FILE"):
+        return reuse_existing_instance(args.region)
 
     ec2 = boto3.client("ec2", region_name=args.region)
 

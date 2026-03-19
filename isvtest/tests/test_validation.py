@@ -24,7 +24,12 @@ from isvtest.tests.test_validations import (
 from isvtest.tests.test_validations import (
     test_validation as run_validation_entry_point,
 )
-from isvtest.validations.instance import InstanceListCheck, InstanceStartCheck, InstanceStopCheck
+from isvtest.validations.instance import (
+    InstanceListCheck,
+    InstanceStartCheck,
+    InstanceStopCheck,
+    InstanceTagCheck,
+)
 from isvtest.validations.nim import SshNimHealthCheck, SshNimInferenceCheck, SshNimModelCheck
 
 
@@ -455,6 +460,80 @@ class TestInstanceStartCheck:
         result = v.execute()
         assert result["passed"] is False
         assert "SSH" in result["error"]
+
+
+class TestInstanceTagCheck:
+    """Tests for InstanceTagCheck validation."""
+
+    def test_tags_present(self) -> None:
+        v = InstanceTagCheck(
+            config={
+                "step_output": {
+                    "instance_id": "i-abc123",
+                    "tags": {"Name": "isv-test-gpu", "CreatedBy": "isvtest"},
+                    "tag_count": 2,
+                },
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is True
+        assert "i-abc123" in result["output"]
+        assert "2" in result["output"]
+
+    def test_required_keys_present(self) -> None:
+        v = InstanceTagCheck(
+            config={
+                "step_output": {
+                    "instance_id": "i-abc123",
+                    "tags": {"Name": "isv-test-gpu", "CreatedBy": "isvtest"},
+                    "tag_count": 2,
+                },
+                "required_keys": ["Name", "CreatedBy"],
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is True
+
+    def test_required_key_missing(self) -> None:
+        v = InstanceTagCheck(
+            config={
+                "step_output": {
+                    "instance_id": "i-abc123",
+                    "tags": {"Name": "isv-test-gpu"},
+                    "tag_count": 1,
+                },
+                "required_keys": ["Name", "CreatedBy"],
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is False
+        assert "CreatedBy" in result["error"]
+
+    def test_no_tags(self) -> None:
+        v = InstanceTagCheck(
+            config={
+                "step_output": {
+                    "instance_id": "i-abc123",
+                    "tags": {},
+                    "tag_count": 0,
+                },
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is False
+        assert "no tags" in result["error"].lower()
+
+    def test_missing_instance_id(self) -> None:
+        v = InstanceTagCheck(config={"step_output": {"tags": {"Name": "test"}, "tag_count": 1}})
+        result = v.execute()
+        assert result["passed"] is False
+        assert "instance_id" in result["error"]
+
+    def test_missing_tags_key(self) -> None:
+        v = InstanceTagCheck(config={"step_output": {"instance_id": "i-abc123"}})
+        result = v.execute()
+        assert result["passed"] is False
+        assert "tags" in result["error"]
 
 
 def _mock_ssh_run(responses: dict[str, tuple[int, str, str]]):

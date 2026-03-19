@@ -61,6 +61,17 @@ commands:
           - "{{region}}"
         timeout: 120
 
+      # AWS-specific: Verify tags on instance (boto3)
+      - name: verify_tags
+        phase: test
+        command: "python3 ../../stubs/aws/vm/describe_tags.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 60
+
       # AWS-specific: Stop instance and verify stopped state (boto3)
       - name: stop_instance
         phase: test
@@ -70,7 +81,7 @@ commands:
           - "{{steps.launch_instance.instance_id}}"
           - "--region"
           - "{{region}}"
-        timeout: 300
+        timeout: 600
 
       # AWS-specific: Start stopped instance and verify recovery (boto3)
       - name: start_instance
@@ -103,25 +114,27 @@ commands:
         timeout: 600
 
       # Shared: Deploy NIM container via SSH (paramiko)
+      # Uses post-reboot IP/key since reboot may reassign the public IP
       - name: deploy_nim
         phase: test
         command: "python3 ../../stubs/common/deploy_nim.py"
         args:
           - "--host"
-          - "{{steps.launch_instance.public_ip}}"
+          - "{{steps.reboot_instance.public_ip}}"
           - "--key-file"
-          - "{{steps.launch_instance.key_file}}"
+          - "{{steps.reboot_instance.key_file}}"
         timeout: 1800
 
       # Shared: Teardown NIM container via SSH (paramiko)
+      # Uses post-reboot IP/key to match what deploy_nim used
       - name: teardown_nim
         phase: teardown
         command: "python3 ../../stubs/common/teardown_nim.py"
         args:
           - "--host"
-          - "{{steps.launch_instance.public_ip}}"
+          - "{{steps.reboot_instance.public_ip}}"
           - "--key-file"
-          - "{{steps.launch_instance.key_file}}"
+          - "{{steps.reboot_instance.key_file}}"
         timeout: 120
 
       # AWS-specific: Teardown (boto3)
@@ -135,6 +148,7 @@ commands:
           - "{{region}}"
           - "--delete-key-pair"
           - "--delete-security-group"
+          - "{{teardown_flag}}"
         timeout: 600
 
 tests:
@@ -144,3 +158,4 @@ tests:
   settings:
     region: "us-west-2"
     instance_type: "g5.xlarge"
+    teardown_flag: "{{(env.AWS_VM_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"

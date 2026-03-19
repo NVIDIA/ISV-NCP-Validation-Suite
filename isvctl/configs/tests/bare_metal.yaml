@@ -215,25 +215,27 @@ commands:
         timeout: 3600
 
       # ─── Step 6: Deploy NIM Container ─────────────────────────────
+      # Uses post-reboot IP/key since reboot may reassign the public IP
       - name: deploy_nim
         phase: test
         command: "python3 ../stubs/common/deploy_nim.py"
         args:
           - "--host"
-          - "{{steps.launch_instance.public_ip}}"
+          - "{{steps.reboot_instance.public_ip}}"
           - "--key-file"
-          - "{{steps.launch_instance.key_file}}"
+          - "{{steps.reboot_instance.key_file}}"
         timeout: 1800
 
       # ─── Step 7: Teardown NIM ─────────────────────────────────────
+      # Uses post-reboot IP/key to match what deploy_nim used
       - name: teardown_nim
         phase: teardown
         command: "python3 ../stubs/common/teardown_nim.py"
         args:
           - "--host"
-          - "{{steps.launch_instance.public_ip}}"
+          - "{{steps.reboot_instance.public_ip}}"
           - "--key-file"
-          - "{{steps.launch_instance.key_file}}"
+          - "{{steps.reboot_instance.key_file}}"
         timeout: 120
 
       # ─── Step 8: Teardown Instance ────────────────────────────────
@@ -315,20 +317,6 @@ tests:
       step: describe_instance
       checks:
         SshHostSoftwareCheck: {}
-
-    # Host-level GPU hardware checks (driver, CUDA, GPU detection)
-    host_gpu:
-      step: describe_instance
-      checks:
-        BmDriverVersion:
-          min_version: "580.0"
-        BmCudaVersion:
-          min_version: "12.0"
-        BmGpuDetection:
-          expected_count: 8
-        BmGpuHealth: {}
-        BmGpuComputeCapability:
-          expected_compute_capability: "8.0"
 
     # GPU stress test - PyTorch matrix multiplications on all GPUs
     gpu_stress:

@@ -44,7 +44,10 @@ from isvtest.validations.iam import (
 from isvtest.validations.instance import (
     InstanceCreatedCheck,
     InstanceListCheck,
+    InstanceRebootCheck,
+    InstanceStartCheck,
     InstanceStateCheck,
+    InstanceStopCheck,
 )
 from isvtest.validations.network import (
     NetworkConnectivityCheck,
@@ -72,7 +75,10 @@ __all__ = [
     "GpuOperatorInstalledCheck",
     "InstanceCreatedCheck",
     "InstanceListCheck",
+    "InstanceRebootCheck",
+    "InstanceStartCheck",
     "InstanceStateCheck",
+    "InstanceStopCheck",
     "NetworkConnectivityCheck",
     "NetworkProvisionedCheck",
     "NodeCountCheck",

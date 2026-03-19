@@ -183,25 +183,27 @@ commands:
 
       # Deploy NIM container via SSH (shared script)
       # Requires NGC_API_KEY env var
+      # Uses post-reboot IP/key since reboot may reassign the public IP
       - name: deploy_nim
         phase: test
         command: "python3 ../../stubs/common/deploy_nim.py"
         args:
           - "--host"
-          - "{{steps.launch_instance.public_ip}}"
+          - "{{steps.reboot_instance.public_ip}}"
           - "--key-file"
-          - "{{steps.launch_instance.key_file}}"
+          - "{{steps.reboot_instance.key_file}}"
         timeout: 1800
 
       # Teardown NIM container via SSH (shared script)
+      # Uses post-reboot IP/key to match what deploy_nim used
       - name: teardown_nim
         phase: teardown
         command: "python3 ../../stubs/common/teardown_nim.py"
         args:
           - "--host"
-          - "{{steps.launch_instance.public_ip}}"
+          - "{{steps.reboot_instance.public_ip}}"
           - "--key-file"
-          - "{{steps.launch_instance.key_file}}"
+          - "{{steps.reboot_instance.key_file}}"
         timeout: 120
 
       # Teardown bare-metal instance (boto3)

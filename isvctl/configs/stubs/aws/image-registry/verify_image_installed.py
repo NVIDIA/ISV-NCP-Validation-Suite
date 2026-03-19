@@ -73,6 +73,7 @@ def main() -> int:
     instance = reservations[0]["Instances"][0]
     ami_id = instance.get("ImageId", "")
     result["instance_state"] = instance["State"]["Name"]
+    result["state"] = result["instance_state"]
     result["instance_type"] = instance.get("InstanceType", "")
     result["image_id"] = ami_id
 

@@ -17,45 +17,48 @@
 # Steps:
 #   1. launch_instance - boto3: Provisions bare-metal EC2, outputs IP/key (setup)
 #   2. list_instances - boto3: Lists instances in VPC, verifies target exists (test)
-#   3. describe_instance - boto3: Describes instance state, passes SSH info (test)
-#   4. verify_image - boto3: Verifies OS image installed on BM instance (test)
-#   5. verify_config - boto3: Verifies install config can provision BM (test)
-#   6. reboot_instance - boto3: Reboots instance, validates recovery (test)
-#   7. reinstall_instance - boto3: Reinstalls OS from stock AMI (test) [skip: true]
-#   8. deploy_nim - paramiko: Deploys NIM container via SSH (test)
-#   9. teardown_nim - paramiko: Stops NIM container via SSH (teardown)
-#  10. teardown - boto3: Terminates bare-metal EC2 (teardown)
-#  11. verify_teardown - boto3: Confirms instance terminated (teardown)
+#   3. verify_image - boto3: Verifies OS image installed on BM instance (test)
+#   4. verify_config - boto3: Verifies install config can provision BM (test)
+#   5. stop_instance - boto3: Powers off BM node, verifies stopped state (test)
+#   6. start_instance - boto3: Powers on BM node, verifies recovery (test)
+#   7. describe_instance - boto3: Describes post-start state, passes SSH info (test)
+#                          (runs after start so IP is current)
+#   8. reboot_instance - boto3: Reboots instance, validates recovery (test)
+#   9. reinstall_instance - boto3: Reinstalls OS from stock AMI (test) [skip: true]
+#  10. deploy_nim - paramiko: Deploys NIM container via SSH (test)
+#  11. teardown_nim - paramiko: Stops NIM container via SSH (teardown)
+#  12. teardown - boto3: Terminates bare-metal EC2 (teardown)
+#  13. verify_teardown - boto3: Confirms instance terminated (teardown)
 #
 # Dev workflow (reuse existing instance):
 #   # Run 1: launch + test, keep instance alive
-#   AWS_BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/providers/aws/bm.yaml
+#   AWS_BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/providers/aws/bare_metal.yaml
 #
 #   # Run 2+: reuse instance, iterate on tests
 #   AWS_BM_INSTANCE_ID=i-xxx AWS_BM_KEY_FILE=/tmp/isv-bm-test-key.pem \
-#     AWS_BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/providers/aws/bm.yaml
+#     AWS_BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/providers/aws/bare_metal.yaml
 #
 #   # Final: teardown
 #   AWS_BM_INSTANCE_ID=i-xxx AWS_BM_KEY_FILE=/tmp/isv-bm-test-key.pem \
-#     uv run isvctl test run -f isvctl/configs/providers/aws/bm.yaml
+#     uv run isvctl test run -f isvctl/configs/providers/aws/bare_metal.yaml
 #
 # Usage:
-#   uv run isvctl test run -f isvctl/configs/providers/aws/bm.yaml
+#   uv run isvctl test run -f isvctl/configs/providers/aws/bare_metal.yaml
 
 import:
-  - ../../tests/bm.yaml
+  - ../../tests/bare_metal.yaml
 
 version: "1.0"
 
 commands:
-  bm:
+  bare_metal:
     phases: ["setup", "test", "teardown"]
     steps:
       # Launch bare-metal GPU instance (boto3)
       # Set AWS_BM_INSTANCE_ID + AWS_BM_KEY_FILE to reuse an existing instance
       - name: launch_instance
         phase: setup
-        command: "python3 ../../stubs/aws/bm/launch_instance.py"
+        command: "python3 ../../stubs/aws/bare_metal/launch_instance.py"
         args:
           - "--name"
           - "isv-bm-test-gpu"
@@ -77,19 +80,6 @@ commands:
           - "{{steps.launch_instance.instance_id}}"
           - "--region"
           - "{{region}}"
-        timeout: 120
-
-      # Describe instance - test phase anchor for SSH/GPU validations
-      - name: describe_instance
-        phase: test
-        command: "python3 ../../stubs/aws/bm/describe_instance.py"
-        args:
-          - "--instance-id"
-          - "{{steps.launch_instance.instance_id}}"
-          - "--region"
-          - "{{region}}"
-          - "--key-file"
-          - "{{steps.launch_instance.key_file}}"
         timeout: 120
 
       # Verify OS image installed on BM instance
@@ -114,11 +104,53 @@ commands:
           - "{{region}}"
         timeout: 120
 
+      # Stop BM node and verify powered-off state (boto3)
+      # BM-specific: longer waiter timeout for full hardware power-down
+      - name: stop_instance
+        phase: test
+        command: "python3 ../../stubs/aws/bare_metal/stop_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 1800
+
+      # Start stopped BM node and verify recovery (boto3)
+      # BM-specific: longer waiter timeout for POST/BIOS/OS boot cycle
+      - name: start_instance
+        phase: test
+        command: "python3 ../../stubs/aws/bare_metal/start_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+          - "--public-ip"
+          - "{{steps.launch_instance.public_ip}}"
+        timeout: 1800
+
+      # Describe post-start instance state - SSH/GPU validation anchor
+      # Runs after start_instance so the IP is current (stop/start may reassign it)
+      - name: describe_instance
+        phase: test
+        command: "python3 ../../stubs/aws/bare_metal/describe_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+        timeout: 120
+
       # Reboot instance and validate recovery
       # BM-specific: longer waits for hardware POST/BIOS/OS boot
       - name: reboot_instance
         phase: test
-        command: "python3 ../../stubs/aws/bm/reboot_instance.py"
+        command: "python3 ../../stubs/aws/bare_metal/reboot_instance.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -137,7 +169,7 @@ commands:
       - name: reinstall_instance
         phase: test
         skip: true
-        command: "python3 ../../stubs/aws/bm/reinstall_instance.py"
+        command: "python3 ../../stubs/aws/bare_metal/reinstall_instance.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -176,7 +208,7 @@ commands:
       # Set AWS_BM_SKIP_TEARDOWN=true to keep the instance alive
       - name: teardown
         phase: teardown
-        command: "python3 ../../stubs/aws/bm/teardown.py"
+        command: "python3 ../../stubs/aws/bare_metal/teardown.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -190,7 +222,7 @@ commands:
       # Post-teardown sanitization: verify instance terminated and resources deleted
       - name: verify_teardown
         phase: teardown
-        command: "python3 ../../stubs/aws/bm/verify_terminated.py"
+        command: "python3 ../../stubs/aws/bare_metal/verify_terminated.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -211,7 +243,7 @@ tests:
     instance_type: "g4dn.metal"
     teardown_flag: "{{(env.AWS_BM_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"
 
-  # Overrides only - all other validations inherited from ../bm.yaml
+  # Overrides only - all other validations inherited from ../bare_metal.yaml
   validations:
     # GPU stress - AWS metal has 8 GPUs
     gpu_stress:

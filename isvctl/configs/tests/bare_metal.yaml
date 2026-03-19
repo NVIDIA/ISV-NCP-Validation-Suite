@@ -25,36 +25,39 @@
 # Steps:
 #   1. launch_instance      (setup)    - Provision bare-metal GPU instance
 #   2. list_instances       (test)     - List instances, verify target exists
-#   3. describe_instance    (test)     - Describe instance state + SSH info
-#   4. reboot_instance      (test)     - Reboot instance, validate recovery
-#   5. reinstall_instance   (test)     - Reinstall OS from stock image [skip: true by default]
-#   6. deploy_nim           (test)     - Deploy NIM container via SSH
-#   7. teardown_nim         (teardown) - Stop NIM container
-#   8. teardown             (teardown) - Terminate instance
-#   9. verify_teardown      (teardown) - Confirm resources deleted
+#   3. stop_instance        (test)     - Power off node, verify stopped state
+#   4. start_instance       (test)     - Power on node, verify recovery
+#   5. describe_instance    (test)     - Describe post-start state + SSH info
+#                                        (runs after start so IP is current)
+#   6. reboot_instance      (test)     - Reboot instance, validate recovery
+#   7. reinstall_instance   (test)     - Reinstall OS from stock image [skip: true by default]
+#   8. deploy_nim           (test)     - Deploy NIM container via SSH
+#   9. teardown_nim         (teardown) - Stop NIM container
+#  10. teardown             (teardown) - Terminate instance
+#  11. verify_teardown      (teardown) - Confirm resources deleted
 #
 # Dev workflow (reuse existing instance):
 #   # Run 1: launch + test, keep instance alive
-#   BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/my-isv/bm.yaml
+#   BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/my-isv/bare_metal.yaml
 #
 #   # Run 2+: reuse instance
 #   BM_INSTANCE_ID=<id> BM_KEY_FILE=/path/to/key.pem \
-#     BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/my-isv/bm.yaml
+#     BM_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/my-isv/bare_metal.yaml
 #
 # Quick start (new provider):
 #   1. Create your provider folder: mkdir -p isvctl/configs/providers/my-isv/
-#   2. Create providers/my-isv/bm.yaml with: import: ../../tests/bm.yaml
+#   2. Create providers/my-isv/bare_metal.yaml with: import: ../../tests/bare_metal.yaml
 #   3. Override commands with your platform stubs
-#   4. Run: uv run isvctl test run -f isvctl/configs/providers/my-isv/bm.yaml
+#   4. Run: uv run isvctl test run -f isvctl/configs/providers/my-isv/bare_metal.yaml
 #
 # See also:
-#   - AWS reference implementation: ../aws/bm.yaml + ../stubs/aws/bm/
+#   - AWS reference implementation: ../aws/bare_metal.yaml + ../stubs/aws/bare_metal/
 #   - JSON schemas: isvctl/src/isvctl/config/output_schemas.py
 
 version: "1.0"
 
 commands:
-  bm:
+  bare_metal:
     phases: ["setup", "test", "teardown"]
     steps:
       # ─── Step 1: Launch Bare-Metal Instance ────────────────────────
@@ -72,7 +75,7 @@ commands:
       #   }
       - name: launch_instance
         phase: setup
-        command: "python3 ../stubs/bm/launch_instance.py"
+        command: "python3 ../stubs/bare_metal/launch_instance.py"
         args:
           - "--name"
           - "isv-bm-test-gpu"
@@ -96,7 +99,53 @@ commands:
           - "{{region}}"
         timeout: 120
 
-      # ─── Step 3: Describe Instance ────────────────────────────────
+      # ─── Step 3: Stop Instance ────────────────────────────────────
+      # YOUR SCRIPT must output JSON with at minimum:
+      #   {
+      #     "success": true,
+      #     "platform": "bm",
+      #     "instance_id": "...",
+      #     "state": "stopped",
+      #     "stop_initiated": true
+      #   }
+      - name: stop_instance
+        phase: test
+        command: "python3 ../stubs/bare_metal/stop_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 1800
+
+      # ─── Step 4: Start Instance ───────────────────────────────────
+      # YOUR SCRIPT must output JSON with at minimum:
+      #   {
+      #     "success": true,
+      #     "platform": "bm",
+      #     "instance_id": "...",
+      #     "state": "running",
+      #     "public_ip": "...",
+      #     "key_file": "...",
+      #     "start_initiated": true,
+      #     "ssh_ready": true
+      #   }
+      - name: start_instance
+        phase: test
+        command: "python3 ../stubs/bare_metal/start_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+          - "--public-ip"
+          - "{{steps.launch_instance.public_ip}}"
+        timeout: 1800
+
+      # ─── Step 5: Describe Instance ────────────────────────────────
+      # Runs AFTER start_instance so the IP is current (stop/start may reassign it).
       # YOUR SCRIPT must output JSON with at minimum:
       #   {
       #     "success": true,
@@ -108,7 +157,7 @@ commands:
       #   }
       - name: describe_instance
         phase: test
-        command: "python3 ../stubs/bm/describe_instance.py"
+        command: "python3 ../stubs/bare_metal/describe_instance.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -118,7 +167,7 @@ commands:
           - "{{steps.launch_instance.key_file}}"
         timeout: 120
 
-      # ─── Step 4: Reboot Instance ──────────────────────────────────
+      # ─── Step 6: Reboot Instance ──────────────────────────────────
       # BM-specific: longer waits for hardware POST/BIOS/OS boot.
       # YOUR SCRIPT must output JSON with at minimum:
       #   {
@@ -133,7 +182,7 @@ commands:
       #   }
       - name: reboot_instance
         phase: test
-        command: "python3 ../stubs/bm/reboot_instance.py"
+        command: "python3 ../stubs/bare_metal/reboot_instance.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -148,12 +197,12 @@ commands:
       # ─── Step 5: Reinstall Instance ─────────────────────────────────
       # Reinstall the node from its configured stock OS.
       # Skipped by default: can be very slow depending on platform.
-      # Set skip: false and implement stubs/bm/reinstall_instance.py to enable.
-      # See ../aws/bm.yaml + stubs/aws/bm/reinstall_instance.py for reference.
+      # Set skip: false and implement stubs/bare_metal/reinstall_instance.py to enable.
+      # See ../aws/bare_metal.yaml + stubs/aws/bare_metal/reinstall_instance.py for reference.
       - name: reinstall_instance
         phase: test
         skip: true
-        command: "python3 ../stubs/bm/reinstall_instance.py"
+        command: "python3 ../stubs/bare_metal/reinstall_instance.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -190,7 +239,7 @@ commands:
       # ─── Step 8: Teardown Instance ────────────────────────────────
       - name: teardown
         phase: teardown
-        command: "python3 ../stubs/bm/teardown.py"
+        command: "python3 ../stubs/bare_metal/teardown.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -206,7 +255,7 @@ commands:
       # resources deleted.
       - name: verify_teardown
         phase: teardown
-        command: "python3 ../stubs/bm/verify_terminated.py"
+        command: "python3 ../stubs/bare_metal/verify_terminated.py"
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -318,6 +367,29 @@ tests:
       checks:
         SshEthernetCheck:
           ping_target: "8.8.8.8"
+
+    stop_checks:
+      step: stop_instance
+      checks:
+        InstanceStopCheck: {}
+
+    start_checks:
+      step: start_instance
+      checks:
+        InstanceStartCheck: {}
+
+    start_ssh:
+      step: start_instance
+      checks:
+        SshConnectivityCheck: {}
+        SshOsCheck:
+          expected_os: "ubuntu"
+
+    start_gpu:
+      step: start_instance
+      checks:
+        SshGpuCheck:
+          expected_gpus: 8
 
     reboot_checks:
       step: reboot_instance

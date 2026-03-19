@@ -29,6 +29,8 @@
 #   4. Security Blocking - Firewall / ACL blocking rules (negative tests)
 #   5. Connectivity - Instance network assignment
 #   6. Traffic Validation - Real ping tests between instances
+#   7. VPC IP Config - DHCP options, subnet CIDRs, auto-assign IP (DDI)
+#   8. DHCP IP Management - DHCP lease, IP match, DNS options via SSH (DDI)
 #
 # Quick start (new provider):
 #   1. Create your provider folder: mkdir -p isvctl/configs/providers/my-isv/
@@ -159,6 +161,42 @@ commands:
         timeout: 900
         output_schema: traffic_flow
 
+      # ─── Test 7: VPC IP Configuration (DDI) ──────────────────────────
+      # Uses the shared VPC from create_network step.
+      # YOUR SCRIPT must output JSON with: cidr, subnets (with
+      # auto_assign_public_ip, available_ips), dhcp_options (with
+      # domain_name_servers, domain_name).
+      - name: vpc_ip_config
+        phase: test
+        command: "python3 ../stubs/network/vpc_ip_config_test.py"
+        args:
+          - "--vpc-id"
+          - "{{steps.create_network.network_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 120
+        output_schema: vpc_ip_config
+
+      # ─── Test 8: DHCP IP Management (DDI) ────────────────────────────
+      # Uses the shared VPC from create_network step.
+      # Launches an instance and outputs SSH details for DhcpIpManagementCheck.
+      # YOUR SCRIPT must output JSON with: public_ip, private_ip,
+      # key_file, ssh_user.
+      - name: dhcp_ip_test
+        phase: test
+        command: "python3 ../stubs/network/dhcp_ip_test.py"
+        args:
+          - "--vpc-id"
+          - "{{steps.create_network.network_id}}"
+          - "--subnet-id"
+          - "{{steps.create_network.subnets[0].subnet_id}}"
+          - "--sg-id"
+          - "{{steps.create_network.security_group_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 300
+        output_schema: dhcp_ip
+
       # ─── Teardown: Clean up shared VPC ─────────────────────────────
       # YOUR SCRIPT must output JSON with at minimum:
       #   {
@@ -212,6 +250,10 @@ tests:
           step: connectivity_test
         TrafficFlowCheck:
           step: traffic_validation
+        VpcIpConfigCheck:
+          step: vpc_ip_config
+        DhcpIpManagementCheck:
+          step: dhcp_ip_test
 
     teardown_checks:
       step: teardown

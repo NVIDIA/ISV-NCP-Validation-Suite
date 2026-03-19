@@ -101,6 +101,11 @@ STEP_SCHEMA_MAPPING: dict[str, str | None] = {
     "connectivity_test": "connectivity_result",
     "launch_instances": "instance_launch",
     "launch_test_instances": "instance_launch",
+    # DDI (DNS/DHCP/IP Management) test operations
+    "vpc_ip_config": "vpc_ip_config",
+    "vpc_ip_config_test": "vpc_ip_config",
+    "dhcp_ip_test": "dhcp_ip",
+    "dhcp_ip": "dhcp_ip",
     # ISO/Image import operations (provider-agnostic)
     "upload_image": "iso_import",
     "import_image": "iso_import",
@@ -596,6 +601,64 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
                 },
                 "description": "Launched instances",
             },
+        },
+        "additionalProperties": True,
+    },
+    # =========================================================================
+    # DDI (DNS/DHCP/IP Management) Schemas
+    # =========================================================================
+    "vpc_ip_config": {
+        "type": "object",
+        "required": ["success", "platform"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "network_id": {"type": "string", "description": "VPC/Network identifier"},
+            "cidr": {"type": "string", "description": "VPC CIDR block"},
+            "subnets": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "subnet_id": {"type": "string"},
+                        "cidr": {"type": "string"},
+                        "az": {"type": "string"},
+                        "auto_assign_public_ip": {"type": "boolean"},
+                        "available_ips": {"type": "integer"},
+                    },
+                },
+                "description": "Subnet configurations with IP details",
+            },
+            "dhcp_options": {
+                "type": "object",
+                "properties": {
+                    "dhcp_options_id": {"type": "string"},
+                    "domain_name": {"type": "string"},
+                    "domain_name_servers": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "ntp_servers": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+                "description": "DHCP options configuration",
+            },
+        },
+        "additionalProperties": True,
+    },
+    "dhcp_ip": {
+        "type": "object",
+        "required": ["success", "platform"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "test_name": {"type": "string", "description": "Always 'dhcp_ip'"},
+            "public_ip": {"type": ["string", "null"], "description": "SSH target address"},
+            "private_ip": {"type": ["string", "null"], "description": "Expected private IP"},
+            "key_file": {"type": ["string", "null"], "description": "SSH private key path"},
+            "key_name": {"type": ["string", "null"], "description": "Key pair name"},
+            "ssh_user": {"type": "string", "description": "SSH username"},
+            "instance_id": {"type": ["string", "null"], "description": "Instance identifier"},
         },
         "additionalProperties": True,
     },

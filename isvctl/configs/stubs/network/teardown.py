@@ -12,11 +12,13 @@
 """Teardown VPC / virtual network - TEMPLATE (replace with your platform implementation).
 
 This script is called during the "teardown" phase. It must:
-  1. Delete all subnets in the VPC
-  2. Delete all security groups (except platform default, if any)
-  3. Detach and delete internet gateways
-  4. Delete the VPC itself
-  5. Print a JSON object to stdout
+  1. Terminate all instances in the VPC (wait for termination)
+  2. Delete key pairs created by test scripts (e.g., isv-dhcp-test-key)
+  3. Delete all subnets in the VPC
+  4. Delete all security groups (except platform default, if any)
+  5. Detach and delete internet gateways
+  6. Delete the VPC itself
+  7. Print a JSON object to stdout
 
 The script should be IDEMPOTENT - if a resource is already deleted, skip
 it and continue with the rest.

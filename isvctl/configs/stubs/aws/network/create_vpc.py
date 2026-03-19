@@ -21,12 +21,20 @@ Output JSON:
     "network_id": "vpc-xxx",
     "cidr": "10.0.0.0/16",
     "subnets": [
-        {"subnet_id": "subnet-xxx", "cidr": "10.0.1.0/24", "az": "us-west-2a"},
-        {"subnet_id": "subnet-yyy", "cidr": "10.0.2.0/24", "az": "us-west-2b"}
+        {"subnet_id": "subnet-xxx", "cidr": "10.0.1.0/24", "az": "us-west-2a",
+         "auto_assign_public_ip": true, "available_ips": 251},
+        {"subnet_id": "subnet-yyy", "cidr": "10.0.2.0/24", "az": "us-west-2b",
+         "auto_assign_public_ip": true, "available_ips": 251}
     ],
     "internet_gateway_id": "igw-xxx",
     "route_table_id": "rtb-xxx",
-    "security_group_id": "sg-xxx"
+    "security_group_id": "sg-xxx",
+    "dhcp_options": {
+        "dhcp_options_id": "dopt-xxx",
+        "domain_name": "ec2.internal",
+        "domain_name_servers": ["AmazonProvidedDNS"],
+        "ntp_servers": []
+    }
 }
 """
 
@@ -55,6 +63,7 @@ def create_vpc(ec2: Any, name: str, cidr: str) -> dict[str, Any]:
         "internet_gateway_id": None,
         "route_table_id": None,
         "security_group_id": None,
+        "dhcp_options": None,
     }
 
     tag_suffix = str(uuid.uuid4())[:8]
@@ -116,11 +125,17 @@ def create_vpc(ec2: Any, name: str, cidr: str) -> dict[str, Any]:
             # Enable auto-assign public IP
             ec2.modify_subnet_attribute(SubnetId=subnet_id, MapPublicIpOnLaunch={"Value": True})
 
+            # Describe subnet to get available IP count
+            desc = ec2.describe_subnets(SubnetIds=[subnet_id])
+            available_ips = desc["Subnets"][0].get("AvailableIpAddressCount", 0)
+
             result["subnets"].append(
                 {
                     "subnet_id": subnet_id,
                     "cidr": subnet_cidr,
                     "az": az,
+                    "auto_assign_public_ip": True,
+                    "available_ips": available_ips,
                 }
             )
 
@@ -175,6 +190,35 @@ def create_vpc(ec2: Any, name: str, cidr: str) -> dict[str, Any]:
                 },
             ],
         )
+
+        # Collect DHCP options for VPC
+        vpc_desc = ec2.describe_vpcs(VpcIds=[vpc_id])
+        dhcp_options_id = vpc_desc["Vpcs"][0].get("DhcpOptionsId")
+        if dhcp_options_id and dhcp_options_id != "default":
+            dhcp_resp = ec2.describe_dhcp_options(DhcpOptionsIds=[dhcp_options_id])
+            dhcp_cfg = dhcp_resp["DhcpOptions"][0].get("DhcpConfigurations", [])
+            dhcp_info: dict[str, Any] = {
+                "dhcp_options_id": dhcp_options_id,
+                "domain_name": None,
+                "domain_name_servers": [],
+                "ntp_servers": [],
+            }
+            for cfg in dhcp_cfg:
+                vals = [v["Value"] for v in cfg.get("Values", [])]
+                if cfg["Key"] == "domain-name":
+                    dhcp_info["domain_name"] = vals[0] if vals else None
+                elif cfg["Key"] == "domain-name-servers":
+                    dhcp_info["domain_name_servers"] = vals
+                elif cfg["Key"] == "ntp-servers":
+                    dhcp_info["ntp_servers"] = vals
+            result["dhcp_options"] = dhcp_info
+        else:
+            result["dhcp_options"] = {
+                "dhcp_options_id": dhcp_options_id or "default",
+                "domain_name": "ec2.internal",
+                "domain_name_servers": ["AmazonProvidedDNS"],
+                "ntp_servers": [],
+            }
 
         result["success"] = True
 

@@ -22,12 +22,18 @@ Required JSON output fields:
     "success": true,                       # boolean - did the operation succeed?
     "platform": "network",                 # string  - always "network"
     "network_id": "vpc-abc123",            # string  - VPC / network identifier
+    "cidr": "10.0.0.0/16",                # string  - the CIDR block assigned
     "subnets": [                           # list    - created subnets
-      {"subnet_id": "subnet-abc123"},
-      {"subnet_id": "subnet-def456"}
+      {"subnet_id": "subnet-abc123", "cidr": "10.0.1.0/24", "az": "us-west-2a",
+       "auto_assign_public_ip": true, "available_ips": 251}
     ],
     "security_group_id": "sg-abc123",      # string  - default security group ID
-    "cidr_block": "10.0.0.0/16"            # string  - the CIDR block assigned
+    "dhcp_options": {                      # object  - DHCP options configuration
+      "dhcp_options_id": "dopt-abc",       # string  - DHCP options set ID
+      "domain_name": "ec2.internal",       # string  - domain name
+      "domain_name_servers": ["..."],      # list    - DNS servers
+      "ntp_servers": []                    # list    - NTP servers (may be empty)
+    }
   }
 
 On failure, set "success": false and include an "error" field:
@@ -59,9 +65,10 @@ def main() -> int:
         "success": False,
         "platform": "network",
         "network_id": "",
+        "cidr": args.cidr,
         "subnets": [],
         "security_group_id": "",
-        "cidr_block": args.cidr,
+        "dhcp_options": None,
     }
 
     # ╔══════════════════════════════════════════════════════════════════╗

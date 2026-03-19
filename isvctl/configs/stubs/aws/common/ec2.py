@@ -153,6 +153,10 @@ def create_key_pair(
         raise RuntimeError(f"Failed to create key pair '{key_name}': {e}") from e
 
     key_dir.mkdir(parents=True, exist_ok=True)
+    # Remove stale key file if it exists (PEM files are 0400/read-only)
+    if key_path.exists():
+        key_path.chmod(0o600)
+        key_path.unlink()
     key_path.write_text(response["KeyMaterial"])
     key_path.chmod(0o400)
     print(f"Created key pair: {key_name}", file=sys.stderr)

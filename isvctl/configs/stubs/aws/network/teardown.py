@@ -34,6 +34,7 @@ import json
 import os
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
@@ -67,10 +68,30 @@ def delete_with_retry(func, resource_type: str, max_retries: int = 5, **kwargs) 
     return False
 
 
+def cleanup_key_pairs(ec2: Any, key_names: list[str]) -> list[str]:
+    """Delete key pairs by exact name (AWS + local PEM files)."""
+    deleted = []
+    for key_name in key_names:
+        try:
+            ec2.describe_key_pairs(KeyNames=[key_name])
+            ec2.delete_key_pair(KeyName=key_name)
+            deleted.append(key_name)
+        except ClientError as e:
+            if e.response["Error"]["Code"] != "InvalidKeyPair.NotFound":
+                raise
+        # Clean up local PEM file (0400 permissions require chmod first)
+        pem_path = Path(f"/tmp/{key_name}.pem")
+        if pem_path.exists():
+            pem_path.chmod(0o600)
+            pem_path.unlink()
+    return deleted
+
+
 def teardown_vpc(ec2: Any, vpc_id: str) -> dict[str, Any]:
     """Delete VPC and all associated resources."""
     deleted = {
         "instances": [],
+        "key_pairs": [],
         "security_groups": [],
         "subnets": [],
         "route_tables": [],
@@ -78,7 +99,7 @@ def teardown_vpc(ec2: Any, vpc_id: str) -> dict[str, Any]:
         "vpc": None,
     }
 
-    # Terminate all instances in VPC
+    # Terminate all instances in VPC and collect their key names
     instances = ec2.describe_instances(
         Filters=[
             {"Name": "vpc-id", "Values": [vpc_id]},
@@ -86,15 +107,22 @@ def teardown_vpc(ec2: Any, vpc_id: str) -> dict[str, Any]:
         ]
     )
     instance_ids = []
+    instance_key_names: set[str] = set()
     for reservation in instances["Reservations"]:
         for instance in reservation["Instances"]:
             instance_ids.append(instance["InstanceId"])
+            if instance.get("KeyName"):
+                instance_key_names.add(instance["KeyName"])
 
     if instance_ids:
         ec2.terminate_instances(InstanceIds=instance_ids)
         waiter = ec2.get_waiter("instance_terminated")
         waiter.wait(InstanceIds=instance_ids)
         deleted["instances"] = instance_ids
+
+    # Clean up key pairs that were used by terminated instances
+    if instance_key_names:
+        deleted["key_pairs"] = cleanup_key_pairs(ec2, list(instance_key_names))
 
     # Delete security groups (except default)
     sgs = ec2.describe_security_groups(Filters=[{"Name": "vpc-id", "Values": [vpc_id]}])
@@ -179,11 +207,11 @@ def main() -> int:
         "deleted": {},
     }
 
-    # Check both flag and environment variable
-    skip_destroy = args.skip_destroy or os.environ.get("AWS_NETWORK_TEARDOWN_ENABLED", "").lower() != "true"
+    # Skip only if explicitly requested via flag or env var
+    skip_destroy = args.skip_destroy or os.environ.get("AWS_NETWORK_SKIP_TEARDOWN", "").lower() == "true"
     if skip_destroy:
         result["success"] = True
-        result["message"] = "Destroy skipped (set AWS_NETWORK_TEARDOWN_ENABLED=true to enable)"
+        result["message"] = "Destroy skipped (--skip-destroy flag or AWS_NETWORK_SKIP_TEARDOWN=true)"
         print(json.dumps(result, indent=2))
         return 0
 

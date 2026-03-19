@@ -47,12 +47,14 @@ from isvtest.validations.instance import (
     InstanceStateCheck,
 )
 from isvtest.validations.network import (
+    DhcpIpManagementCheck,
     NetworkConnectivityCheck,
     NetworkProvisionedCheck,
     SecurityBlockingCheck,
     SubnetConfigCheck,
     TrafficFlowCheck,
     VpcCrudCheck,
+    VpcIpConfigCheck,
     VpcIsolationCheck,
 )
 from isvtest.validations.nim import (
@@ -67,6 +69,7 @@ __all__ = [
     "AccessKeyDisabledCheck",
     "AccessKeyRejectedCheck",
     "ClusterHealthCheck",
+    "DhcpIpManagementCheck",
     "FieldExistsCheck",
     "FieldValueCheck",
     "GpuOperatorInstalledCheck",
@@ -89,5 +92,6 @@ __all__ = [
     "TenantListedCheck",
     "TrafficFlowCheck",
     "VpcCrudCheck",
+    "VpcIpConfigCheck",
     "VpcIsolationCheck",
 ]

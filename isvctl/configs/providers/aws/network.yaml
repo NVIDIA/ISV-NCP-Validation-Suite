@@ -13,13 +13,15 @@
 # Imports validations from the provider-agnostic network canonical config.
 # This file only provides AWS-specific commands (boto3 stubs) and settings.
 #
-# Comprehensive network testing with 6 test suites:
+# Comprehensive network testing with 8 test suites:
 #   1. VPC CRUD - Create, Read, Update, Delete VPC lifecycle
 #   2. Subnet Configuration - Multi-AZ subnet distribution
 #   3. VPC Isolation - Security boundaries between VPCs
 #   4. Security Blocking - SG/NACL blocking rules (negative tests)
 #   5. Connectivity - Instance network assignment
 #   6. Traffic Validation - Real ping tests via SSM
+#   7. VPC IP Config - DHCP options, subnet CIDRs, auto-assign IP (DDI)
+#   8. DHCP IP Management - DHCP lease, IP match, DNS options via SSH (DDI)
 #
 # Usage:
 #   uv run isvctl test run -f isvctl/configs/providers/aws/network.yaml
@@ -131,6 +133,34 @@ commands:
           - "10.93.0.0/16"
         timeout: 900
         output_schema: traffic_flow
+
+      # Test 7: VPC IP Configuration (DDI) (~10s)
+      - name: vpc_ip_config
+        phase: test
+        command: "python3 ../../stubs/aws/network/vpc_ip_config_test.py"
+        args:
+          - "--vpc-id"
+          - "{{steps.create_network.network_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 120
+        output_schema: vpc_ip_config
+
+      # Test 8: DHCP IP Management (DDI) (~3 min)
+      - name: dhcp_ip_test
+        phase: test
+        command: "python3 ../../stubs/aws/network/dhcp_ip_test.py"
+        args:
+          - "--vpc-id"
+          - "{{steps.create_network.network_id}}"
+          - "--subnet-id"
+          - "{{steps.create_network.subnets[0].subnet_id}}"
+          - "--sg-id"
+          - "{{steps.create_network.security_group_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 300
+        output_schema: dhcp_ip
 
       # Teardown: Clean up shared VPC from create_network
       - name: teardown

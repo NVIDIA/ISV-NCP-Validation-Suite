@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Fix git safe directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -41,7 +41,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Fix git safe directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"

@@ -240,15 +240,19 @@ def get_amazon_linux_ami(ec2: Any) -> str | None:
     Returns:
         AMI ID or None if not found.
     """
-    response = ec2.describe_images(
-        Owners=["amazon"],
-        Filters=[
-            {"Name": "name", "Values": ["amzn2-ami-hvm-*-x86_64-gp2"]},
-            {"Name": "state", "Values": ["available"]},
-        ],
-    )
-    images = sorted(response["Images"], key=lambda x: x["CreationDate"], reverse=True)
-    return images[0]["ImageId"] if images else None
+    try:
+        response = ec2.describe_images(
+            Owners=["amazon"],
+            Filters=[
+                {"Name": "name", "Values": ["amzn2-ami-hvm-*-x86_64-gp2"]},
+                {"Name": "state", "Values": ["available"]},
+            ],
+        )
+        images = sorted(response["Images"], key=lambda x: x["CreationDate"], reverse=True)
+        return images[0]["ImageId"] if images else None
+    except ClientError as e:
+        print(f"Warning: Could not get Amazon Linux AMI: {e}", file=sys.stderr)
+        return None
 
 
 def get_architecture_for_instance_type(instance_type: str) -> str:

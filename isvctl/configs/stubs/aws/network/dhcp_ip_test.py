@@ -35,8 +35,10 @@ Output JSON:
 import argparse
 import json
 import os
+import socket
 import sys
 import time
+import uuid
 from typing import Any
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
@@ -123,8 +125,6 @@ def launch_instance(
 
 def wait_for_ssh(public_ip: str, timeout: int = 120) -> bool:
     """Wait for SSH port to become reachable (simple TCP check)."""
-    import socket
-
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
@@ -149,7 +149,7 @@ def main() -> int:
 
     ec2 = boto3.client("ec2", region_name=args.region)
 
-    key_name = f"{KEY_NAME_PREFIX}-{__import__('uuid').uuid4().hex[:8]}"
+    key_name = f"{KEY_NAME_PREFIX}-{uuid.uuid4().hex[:8]}"
 
     result: dict[str, Any] = {
         "success": False,

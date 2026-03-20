@@ -584,7 +584,7 @@ class VpcIpConfigCheck(BaseValidation):
             return
 
         min_ips = self.config.get("min_ips_per_subnet", 16)
-        subnet_nets: list[ipaddress.IPv4Network] = []
+        subnet_nets: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
         errors: list[str] = []
 
         for sub in subnets:
@@ -595,14 +595,26 @@ class VpcIpConfigCheck(BaseValidation):
                 errors.append(f"Invalid subnet CIDR: {cidr_str}")
                 continue
 
-            # Check within VPC range
-            if not subnet_net.subnet_of(vpc_net):
-                errors.append(f"{cidr_str} not within VPC {vpc_cidr_str}")
+            # Check within VPC range (subnet_of requires matching IPv4/IPv6)
+            if isinstance(subnet_net, ipaddress.IPv4Network) and isinstance(vpc_net, ipaddress.IPv4Network):
+                if not subnet_net.subnet_of(vpc_net):
+                    errors.append(f"{cidr_str} not within VPC {vpc_cidr_str}")
+            elif isinstance(subnet_net, ipaddress.IPv6Network) and isinstance(vpc_net, ipaddress.IPv6Network):
+                if not subnet_net.subnet_of(vpc_net):
+                    errors.append(f"{cidr_str} not within VPC {vpc_cidr_str}")
+            else:
+                errors.append(
+                    f"{cidr_str} address family does not match VPC {vpc_cidr_str}",
+                )
 
-            # Check overlap with previously seen subnets
+            # Check overlap with previously seen subnets (same address family only)
             for existing in subnet_nets:
-                if subnet_net.overlaps(existing):
-                    errors.append(f"{cidr_str} overlaps {existing}")
+                if isinstance(subnet_net, ipaddress.IPv4Network) and isinstance(existing, ipaddress.IPv4Network):
+                    if subnet_net.overlaps(existing):
+                        errors.append(f"{cidr_str} overlaps {existing}")
+                elif isinstance(subnet_net, ipaddress.IPv6Network) and isinstance(existing, ipaddress.IPv6Network):
+                    if subnet_net.overlaps(existing):
+                        errors.append(f"{cidr_str} overlaps {existing}")
 
             # Check IP capacity
             available = sub.get("available_ips", subnet_net.num_addresses - 5)

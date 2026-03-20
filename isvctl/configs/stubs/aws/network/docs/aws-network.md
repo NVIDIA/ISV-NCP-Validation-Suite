@@ -338,7 +338,7 @@ tests:
 | `AWS_ACCESS_KEY_ID` | AWS access key | From AWS config |
 | `AWS_SECRET_ACCESS_KEY` | AWS secret key | From AWS config |
 | `AWS_SESSION_TOKEN` | STS session token | None |
-| `AWS_NETWORK_SKIP_TEARDOWN` | Disable/ VPC teardown | `false` |
+| `AWS_NETWORK_SKIP_TEARDOWN` | Skip VPC teardown | `false` |
 
 ## Example Output
 

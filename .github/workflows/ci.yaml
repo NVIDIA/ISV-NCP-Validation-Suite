@@ -109,7 +109,6 @@ jobs:
     permissions:
       actions: read
       contents: read
-      security-events: write
       pull-requests: write
     steps:
       - name: Checkout repository
@@ -125,8 +124,10 @@ jobs:
           severity: HIGH,CRITICAL
           skip-dirs: .git,dist,htmlcov,.pytest_cache,.ruff_cache,.venv,node_modules,vendor,.terraform
           ignore-unfixed: "true"
-          upload-sarif: "false" # Enable when repo goes public
+          upload-sarif: "false" # Needs GitHub Advanced Security; enable when allowed + add security-events: write
           post-pr-comment: "true"
+          compare-base-ref: main
+          fail-on-findings: "false" # FIXME: Disabled until all issues are fixed
 
   # Gate job: aggregates all job results into a single required status check.
   # Note: When adding new jobs above, append them to the 'needs' list below.

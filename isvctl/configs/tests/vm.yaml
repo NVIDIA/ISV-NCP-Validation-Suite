@@ -184,7 +184,27 @@ commands:
           - "{{steps.launch_instance.public_ip}}"
         timeout: 600
 
-      # ─── Step 7: Deploy NIM Container ─────────────────────────────
+      # ─── Step 7: Serial Console Access ──────────────────────────────
+      # YOUR SCRIPT must output JSON with at minimum:
+      #   {
+      #     "success": true,
+      #     "platform": "vm",
+      #     "instance_id": "<id>",
+      #     "console_available": true,
+      #     "serial_access_enabled": true,
+      #     "output_length": 4096
+      #   }
+      - name: serial_console
+        phase: test
+        command: "python3 ../stubs/vm/serial_console.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 60
+
+      # ─── Step 8: Deploy NIM Container ─────────────────────────────
       # Uses post-reboot IP/key since reboot may reassign the public IP.
       # See stubs/common/deploy_nim.py for the JSON contract.
       - name: deploy_nim
@@ -197,7 +217,7 @@ commands:
           - "{{steps.reboot_instance.key_file}}"
         timeout: 1800
 
-      # ─── Step 8: Teardown NIM ─────────────────────────────────────
+      # ─── Step 9: Teardown NIM ─────────────────────────────────────
       # Uses post-reboot IP/key to match what deploy_nim used.
       - name: teardown_nim
         phase: teardown
@@ -209,7 +229,7 @@ commands:
           - "{{steps.reboot_instance.key_file}}"
         timeout: 120
 
-      # ─── Step 9: Teardown Instance ────────────────────────────────
+      # ─── Step 10: Teardown Instance ───────────────────────────────
       # YOUR SCRIPT must output JSON with at minimum:
       #   {
       #     "success": true,
@@ -342,6 +362,11 @@ tests:
         SshPciBusCheck:
           expected_gpus: 1
         SshHostSoftwareCheck: {}
+
+    serial_console:
+      step: serial_console
+      checks:
+        SerialConsoleCheck: {}
 
     nim_health:
       step: deploy_nim

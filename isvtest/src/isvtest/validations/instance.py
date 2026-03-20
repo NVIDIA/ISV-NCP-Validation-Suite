@@ -286,6 +286,55 @@ class InstanceTagCheck(BaseValidation):
         self.set_passed(f"Instance {instance_id} has {tag_count} tag(s): {list(tags.keys())}")
 
 
+class SerialConsoleCheck(BaseValidation):
+    """Validate serial console access for an instance (read-only).
+
+    Passes if serial console access is enabled at the account level OR
+    console output was successfully retrieved. Nitro-based instances
+    often return empty console output but still support serial console
+    access via EC2 Instance Connect.
+
+    Config:
+        step_output: The serial_console step output
+
+    Step output:
+        instance_id: Instance identifier
+        console_available: Whether console output was retrieved
+        serial_access_enabled: Whether serial console access is enabled at account level
+        output_length: Length of console output in characters
+    """
+
+    description: ClassVar[str] = "Check serial console access"
+    markers: ClassVar[list[str]] = ["vm"]
+
+    def run(self) -> None:
+        step_output = self.config.get("step_output", {})
+
+        instance_id = step_output.get("instance_id")
+        if not instance_id:
+            self.set_failed("No 'instance_id' in step output")
+            return
+
+        console_available = step_output.get("console_available", False)
+        serial_access = step_output.get("serial_access_enabled", False)
+        output_length = step_output.get("output_length", 0)
+
+        if not console_available and not serial_access:
+            error = step_output.get("error", "no console output and serial access not enabled")
+            self.set_failed(f"Serial console not accessible for {instance_id}: {error}")
+            return
+
+        details = []
+        if serial_access:
+            details.append("serial access enabled")
+        if console_available:
+            details.append(f"{output_length} chars of output")
+        else:
+            details.append("no output (Nitro instance)")
+
+        self.set_passed(f"Serial console available for {instance_id} ({', '.join(details)})")
+
+
 class InstanceListCheck(BaseValidation):
     """Validate instance list from a VPC.
 

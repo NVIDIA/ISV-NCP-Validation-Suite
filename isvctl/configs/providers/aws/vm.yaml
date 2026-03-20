@@ -113,6 +113,17 @@ commands:
           - "{{steps.launch_instance.public_ip}}"
         timeout: 600
 
+      # AWS-specific: Serial console output (boto3)
+      - name: serial_console
+        phase: test
+        command: "python3 ../../stubs/aws/vm/serial_console.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 60
+
       # Shared: Deploy NIM container via SSH (paramiko)
       # Uses post-reboot IP/key since reboot may reassign the public IP
       - name: deploy_nim

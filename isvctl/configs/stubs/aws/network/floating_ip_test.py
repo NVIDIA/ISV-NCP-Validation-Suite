@@ -119,7 +119,9 @@ def verify_eip_not_on_instance(ec2: Any, instance_id: str, eip: str) -> dict[str
     return result
 
 
-def reassociate_eip_timed(ec2: Any, allocation_id: str, target_instance_id: str) -> dict[str, Any]:
+def reassociate_eip_timed(
+    ec2: Any, allocation_id: str, target_instance_id: str, max_seconds: int = MAX_SWITCH_SECONDS
+) -> dict[str, Any]:
     """Reassociate an EIP to a different instance and measure the switch time."""
     result: dict[str, Any] = {"passed": False}
 
@@ -134,11 +136,11 @@ def reassociate_eip_timed(ec2: Any, allocation_id: str, target_instance_id: str)
 
         result["switch_seconds"] = round(elapsed, 2)
 
-        if elapsed <= MAX_SWITCH_SECONDS:
+        if elapsed <= max_seconds:
             result["passed"] = True
-            result["message"] = f"EIP switched in {elapsed:.2f}s (limit: {MAX_SWITCH_SECONDS}s)"
+            result["message"] = f"EIP switched in {elapsed:.2f}s (limit: {max_seconds}s)"
         else:
-            result["error"] = f"Switch took {elapsed:.2f}s, exceeds {MAX_SWITCH_SECONDS}s limit"
+            result["error"] = f"Switch took {elapsed:.2f}s, exceeds {max_seconds}s limit"
     except ClientError as e:
         result["error"] = str(e)
 
@@ -175,6 +177,7 @@ def main() -> int:
     allocation_id = None
     igw_id = None
     rtb_id = None
+    rtb_assoc_id = None
 
     try:
         # Setup: VPC, subnet, IGW, security group, two instances
@@ -204,7 +207,8 @@ def main() -> int:
         rtb = ec2.create_route_table(VpcId=vpc_id)
         rtb_id = rtb["RouteTable"]["RouteTableId"]
         ec2.create_route(RouteTableId=rtb_id, DestinationCidrBlock="0.0.0.0/0", GatewayId=igw_id)
-        ec2.associate_route_table(RouteTableId=rtb_id, SubnetId=subnet_id)
+        assoc = ec2.associate_route_table(RouteTableId=rtb_id, SubnetId=subnet_id)
+        rtb_assoc_id = assoc["AssociationId"]
 
         sg = ec2.create_security_group(
             GroupName=f"isv-floating-ip-sg-{suffix}",
@@ -262,7 +266,7 @@ def main() -> int:
         result["tests"]["verify_on_a"] = verify_a
 
         # Test 4: Reassociate to B (timed)
-        reassoc = reassociate_eip_timed(ec2, allocation_id, instance_b)
+        reassoc = reassociate_eip_timed(ec2, allocation_id, instance_b, args.max_switch_seconds)
         result["tests"]["reassociate_to_b"] = reassoc
 
         time.sleep(3)
@@ -305,6 +309,11 @@ def main() -> int:
         if sg_id:
             try:
                 ec2.delete_security_group(GroupId=sg_id)
+            except ClientError:
+                pass
+        if rtb_assoc_id:
+            try:
+                ec2.disassociate_route_table(AssociationId=rtb_assoc_id)
             except ClientError:
                 pass
         if rtb_id:

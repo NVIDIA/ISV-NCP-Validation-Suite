@@ -129,6 +129,10 @@ jobs:
           compare-base-ref: main
           fail-on-findings: "false" # FIXME: Disabled until all issues are fixed
 
+  # ============================================================================
+  # PIPELINE STATUS
+  # ============================================================================
+
   # Gate job: aggregates all job results into a single required status check.
   # Note: When adding new jobs above, append them to the 'needs' list below.
   pipeline-status:

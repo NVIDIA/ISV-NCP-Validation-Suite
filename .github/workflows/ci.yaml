@@ -57,7 +57,7 @@ jobs:
   # ============================================================================
 
   security-secret-scan:
-    name: Secret Scan with TruffleHog
+    name: Secret Scan (TruffleHog)
     runs-on: linux-amd64-cpu4
     timeout-minutes: 30
     permissions:
@@ -78,7 +78,7 @@ jobs:
           fail-on-findings: "true"
 
   security-codeql-scan:
-    name: CodeQL Security Analysis
+    name: Security Analysis (CodeQL)
     runs-on: linux-amd64-cpu4
     timeout-minutes: 360
     permissions:
@@ -103,7 +103,7 @@ jobs:
           fail-on-severity: "error" # Only fail on critical/high severity issues
 
   security-trivy-scan:
-    name: Trivy Vulnerability Scan
+    name: Vulnerability Scan (Trivy)
     runs-on: linux-amd64-cpu4
     timeout-minutes: 30
     permissions:
@@ -127,7 +127,7 @@ jobs:
           ignore-unfixed: "true"
           upload-sarif: "true"
           post-pr-comment: "true"
-          # fail-on-findings: "false" # FIXME: Disabled until all issues are fixed
+          fail-on-findings: "false" # FIXME: Disabled until all issues are fixed
 
   # Gate job: aggregates all job results into a single required status check.
   # Note: When adding new jobs above, append them to the 'needs' list below.

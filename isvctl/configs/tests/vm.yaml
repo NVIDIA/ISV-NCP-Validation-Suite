@@ -199,6 +199,7 @@ commands:
         command: "python3 ../stubs/vm/serial_console.py"
         args:
           - "--instance-id"
+          # instance_id is stable across reboots; no need to use post-reboot step output
           - "{{steps.launch_instance.instance_id}}"
           - "--region"
           - "{{region}}"

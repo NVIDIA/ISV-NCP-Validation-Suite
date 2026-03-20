@@ -52,13 +52,94 @@ jobs:
       - name: Run tests
         run: make test
 
+  # Security scans (NVIDIA dsx-github-actions composites; same pattern as ncx-infra-controller-core).
+  security-secret-scan:
+    name: Secret Scan (TruffleHog)
+    runs-on: linux-amd64-cpu4
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Run TruffleHog Scan
+        uses: NVIDIA/dsx-github-actions/.github/actions/trufflehog-scan@9a9ce3a7770a8b53d2726afa920be3276bc3ddd7
+        with:
+          extra-args: "--results=verified,unknown --only-verified"
+          post-pr-comment: "true"
+          fail-on-findings: "true"
+
+  security-codeql-scan:
+    name: CodeQL (Python)
+    runs-on: linux-amd64-cpu4
+    timeout-minutes: 360
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Run CodeQL Scan
+        uses: NVIDIA/dsx-github-actions/.github/actions/codeql-scan@55d1e0af17fb4431edaca19fbd5c78fecd29d18a
+        with:
+          languages: python
+          build-mode: none
+          category: /language:python
+          # Set true when GitHub Advanced Security / code scanning upload is enabled for the repo.
+          upload-sarif: "false"
+          post-pr-comment: "true"
+          fail-on-findings: "true"
+          fail-on-severity: error
+
+  security-trivy-scan:
+    name: Vulnerability Scan (Trivy)
+    runs-on: linux-amd64-cpu4
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Run Trivy Scan
+        uses: NVIDIA/dsx-github-actions/.github/actions/trivy-scan@495fc76167e3d265f817c1fdc00b7b9275436418
+        with:
+          scan-type: fs
+          scan-ref: .
+          vuln-type: os,library
+          scanners: vuln,secret,misconfig,license
+          severity: HIGH,CRITICAL
+          skip-dirs: .git,dist,htmlcov,.pytest_cache,.ruff_cache,.venv,node_modules,vendor
+          ignore-unfixed: "true"
+          upload-sarif: "true"
+          post-pr-comment: "true"
+          # Enable after dependency/CVE baseline is acceptable (many Python lockfiles report HIGH until upgraded).
+          fail-on-findings: "false"
+          compare-base-ref: main
+
   # Gate job: aggregates all job results into a single required status check.
   # Note: When adding new jobs above, append them to the 'needs' list below.
   pipeline-status:
     name: Pipeline Status
     runs-on: linux-amd64-cpu4
     if: always()
-    needs: [pre-commit, test]
+    needs:
+      - pre-commit
+      - test
+      - security-secret-scan
+      - security-codeql-scan
+      - security-trivy-scan
     steps:
       - name: Check Pipeline Status
         run: |

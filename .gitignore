@@ -25,3 +25,6 @@ perflogs/
 
 # Portable archive
 isv-ncp-validation-suite*.tar.gz
+
+# Trivy local / CI artifact (default output name)
+*.sarif

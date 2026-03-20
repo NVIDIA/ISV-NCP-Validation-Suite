@@ -129,6 +129,10 @@ jobs:
           compare-base-ref: main
           fail-on-findings: "false" # FIXME: Disabled until all issues are fixed
 
+      - name: Trivy finding details (job summary)
+        if: always()
+        run: make security-trivy-detail
+
   # ============================================================================
   # PIPELINE STATUS
   # ============================================================================

@@ -117,5 +117,5 @@ clean: ## Clean build artifacts and test outputs
 
 update-spdx-headers: ## Update SPDX headers in all packages
 	@echo "Updating SPDX headers in all packages..."
-	uv run python scripts/add_spdx_headers.py; \
+	@uv run python scripts/add_spdx_headers.py
 	@echo "✅ SPDX headers updated!"

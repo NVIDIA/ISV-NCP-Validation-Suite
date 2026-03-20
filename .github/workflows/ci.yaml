@@ -95,7 +95,7 @@ jobs:
           category: /language:python
           # Set true when GitHub Advanced Security / code scanning upload is enabled for the repo.
           upload-sarif: "false"
-          post-pr-comment: "true"
+          post-pr-comment: "false"
           fail-on-findings: "true"
           fail-on-severity: error
 

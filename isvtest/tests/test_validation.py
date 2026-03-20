@@ -30,6 +30,13 @@ from isvtest.validations.instance import (
     InstanceStopCheck,
     InstanceTagCheck,
 )
+from isvtest.validations.network import (
+    ByoipCheck,
+    FloatingIpCheck,
+    LocalizedDnsCheck,
+    StablePrivateIpCheck,
+    VpcPeeringCheck,
+)
 from isvtest.validations.nim import SshNimHealthCheck, SshNimInferenceCheck, SshNimModelCheck
 
 
@@ -795,6 +802,210 @@ class TestSshNimModelCheck:
         result = v.execute()
         assert result["passed"] is False
         assert "failed" in result["error"]
+
+
+def _sdn_step_output(tests: dict) -> dict:
+    """Build a step_output dict for SDN tests."""
+    return {"step_output": {"success": True, "platform": "network", "tests": tests}}
+
+
+class TestByoipCheck:
+    """Tests for ByoipCheck validation."""
+
+    def test_all_passed(self) -> None:
+        tests = {
+            "custom_cidr_create": {"passed": True, "vpc_id": "vpc-aaa", "cidr": "100.64.0.0/16"},
+            "custom_cidr_verify": {"passed": True},
+            "standard_cidr_create": {"passed": True},
+            "no_conflict": {"passed": True},
+            "custom_cidr_subnet": {"passed": True, "subnet_id": "subnet-aaa"},
+        }
+        v = ByoipCheck(config=_sdn_step_output(tests))
+        result = v.execute()
+        assert result["passed"] is True
+        assert "100.64.0.0/16" in result["output"]
+
+    def test_custom_cidr_failed(self) -> None:
+        tests = {
+            "custom_cidr_create": {"passed": False, "error": "CIDR rejected"},
+            "custom_cidr_verify": {"passed": False},
+            "standard_cidr_create": {"passed": False},
+            "no_conflict": {"passed": False},
+            "custom_cidr_subnet": {"passed": False},
+        }
+        v = ByoipCheck(config=_sdn_step_output(tests))
+        result = v.execute()
+        assert result["passed"] is False
+        assert "custom_cidr_create" in result["error"]
+
+    def test_empty_tests(self) -> None:
+        v = ByoipCheck(config={"step_output": {}})
+        result = v.execute()
+        assert result["passed"] is False
+        assert "tests" in result["error"]
+
+
+class TestStablePrivateIpCheck:
+    """Tests for StablePrivateIpCheck validation."""
+
+    def test_ip_stable(self) -> None:
+        tests = {
+            "create_instance": {"passed": True, "instance_id": "i-xxx"},
+            "record_ip": {"passed": True, "private_ip": "10.91.1.5"},
+            "stop_instance": {"passed": True},
+            "start_instance": {"passed": True},
+            "ip_unchanged": {"passed": True, "ip_before": "10.91.1.5", "ip_after": "10.91.1.5"},
+        }
+        v = StablePrivateIpCheck(config=_sdn_step_output(tests))
+        result = v.execute()
+        assert result["passed"] is True
+        assert "10.91.1.5" in result["output"]
+
+    def test_ip_changed(self) -> None:
+        tests = {
+            "create_instance": {"passed": True},
+            "record_ip": {"passed": True, "private_ip": "10.91.1.5"},
+            "stop_instance": {"passed": True},
+            "start_instance": {"passed": True},
+            "ip_unchanged": {"passed": False, "error": "IP changed from 10.91.1.5 to 10.91.1.99"},
+        }
+        v = StablePrivateIpCheck(config=_sdn_step_output(tests))
+        result = v.execute()
+        assert result["passed"] is False
+        assert "ip_unchanged" in result["error"]
+
+    def test_empty_tests(self) -> None:
+        v = StablePrivateIpCheck(config={"step_output": {}})
+        result = v.execute()
+        assert result["passed"] is False
+
+
+class TestFloatingIpCheck:
+    """Tests for FloatingIpCheck validation."""
+
+    def test_fast_switch(self) -> None:
+        tests = {
+            "allocate_eip": {"passed": True, "allocation_id": "eipalloc-xxx", "public_ip": "54.1.2.3"},
+            "associate_to_a": {"passed": True},
+            "verify_on_a": {"passed": True},
+            "reassociate_to_b": {"passed": True, "switch_seconds": 1.78},
+            "verify_on_b": {"passed": True},
+            "verify_not_on_a": {"passed": True},
+        }
+        v = FloatingIpCheck(config=_sdn_step_output(tests))
+        result = v.execute()
+        assert result["passed"] is True
+        assert "1.78" in result["output"]
+
+    def test_slow_switch(self) -> None:
+        tests = {
+            "allocate_eip": {"passed": True, "public_ip": "54.1.2.3"},
+            "associate_to_a": {"passed": True},
+            "verify_on_a": {"passed": True},
+            "reassociate_to_b": {"passed": True, "switch_seconds": 15.0},
+            "verify_on_b": {"passed": True},
+            "verify_not_on_a": {"passed": True},
+        }
+        v = FloatingIpCheck(config={**_sdn_step_output(tests), "max_switch_seconds": 10})
+        result = v.execute()
+        assert result["passed"] is False
+        assert "15.0" in result["error"]
+
+    def test_eip_not_removed(self) -> None:
+        tests = {
+            "allocate_eip": {"passed": True, "public_ip": "54.1.2.3"},
+            "associate_to_a": {"passed": True},
+            "verify_on_a": {"passed": True},
+            "reassociate_to_b": {"passed": True, "switch_seconds": 2.0},
+            "verify_on_b": {"passed": True},
+            "verify_not_on_a": {"passed": False, "error": "EIP still on instance A"},
+        }
+        v = FloatingIpCheck(config=_sdn_step_output(tests))
+        result = v.execute()
+        assert result["passed"] is False
+        assert "verify_not_on_a" in result["error"]
+
+    def test_empty_tests(self) -> None:
+        v = FloatingIpCheck(config={"step_output": {}})
+        result = v.execute()
+        assert result["passed"] is False
+
+
+class TestLocalizedDnsCheck:
+    """Tests for LocalizedDnsCheck validation."""
+
+    def test_all_passed(self) -> None:
+        tests = {
+            "create_vpc_with_dns": {"passed": True, "vpc_id": "vpc-xxx"},
+            "create_hosted_zone": {"passed": True, "zone_id": "/hostedzone/Zxxx"},
+            "create_dns_record": {"passed": True, "fqdn": "storage.internal.isv.test"},
+            "verify_dns_settings": {"passed": True},
+            "resolve_record": {"passed": True, "resolved_ip": "10.89.1.100"},
+        }
+        v = LocalizedDnsCheck(config=_sdn_step_output(tests))
+        result = v.execute()
+        assert result["passed"] is True
+        assert "storage.internal.isv.test" in result["output"]
+        assert "10.89.1.100" in result["output"]
+
+    def test_resolve_failed(self) -> None:
+        tests = {
+            "create_vpc_with_dns": {"passed": True},
+            "create_hosted_zone": {"passed": True},
+            "create_dns_record": {"passed": True, "fqdn": "storage.internal.isv.test"},
+            "verify_dns_settings": {"passed": True},
+            "resolve_record": {"passed": False, "error": "Record not found"},
+        }
+        v = LocalizedDnsCheck(config=_sdn_step_output(tests))
+        result = v.execute()
+        assert result["passed"] is False
+        assert "resolve_record" in result["error"]
+
+    def test_empty_tests(self) -> None:
+        v = LocalizedDnsCheck(config={"step_output": {}})
+        result = v.execute()
+        assert result["passed"] is False
+
+
+class TestVpcPeeringCheck:
+    """Tests for VpcPeeringCheck validation."""
+
+    def test_peering_active(self) -> None:
+        tests = {
+            "create_vpc_a": {"passed": True, "vpc_id": "vpc-aaa"},
+            "create_vpc_b": {"passed": True, "vpc_id": "vpc-bbb"},
+            "create_peering": {"passed": True, "peering_id": "pcx-xxx"},
+            "accept_peering": {"passed": True},
+            "add_routes": {"passed": True},
+            "peering_active": {"passed": True, "status": "active"},
+        }
+        config = _sdn_step_output(tests)
+        config["step_output"]["vpc_a"] = {"id": "vpc-aaa", "cidr": "10.88.0.0/16"}
+        config["step_output"]["vpc_b"] = {"id": "vpc-bbb", "cidr": "10.87.0.0/16"}
+        v = VpcPeeringCheck(config=config)
+        result = v.execute()
+        assert result["passed"] is True
+        assert "vpc-aaa" in result["output"]
+        assert "vpc-bbb" in result["output"]
+
+    def test_peering_failed(self) -> None:
+        tests = {
+            "create_vpc_a": {"passed": True},
+            "create_vpc_b": {"passed": True},
+            "create_peering": {"passed": True},
+            "accept_peering": {"passed": False, "error": "Timeout waiting for active"},
+            "add_routes": {"passed": False},
+            "peering_active": {"passed": False},
+        }
+        v = VpcPeeringCheck(config=_sdn_step_output(tests))
+        result = v.execute()
+        assert result["passed"] is False
+        assert "accept_peering" in result["error"]
+
+    def test_empty_tests(self) -> None:
+        v = VpcPeeringCheck(config={"step_output": {}})
+        result = v.execute()
+        assert result["passed"] is False
 
 
 class TestValidationResultCapture:

@@ -81,6 +81,7 @@ def accept_peering(ec2: Any, peering_id: str) -> dict[str, Any]:
         ec2.accept_vpc_peering_connection(VpcPeeringConnectionId=peering_id)
 
         # Wait for active state
+        status = None
         for _ in range(30):
             response = ec2.describe_vpc_peering_connections(VpcPeeringConnectionIds=[peering_id])
             status = response["VpcPeeringConnections"][0]["Status"]["Code"]

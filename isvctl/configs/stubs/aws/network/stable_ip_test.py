@@ -43,21 +43,9 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
 
 import boto3
 from botocore.exceptions import ClientError
+from common.ec2 import get_amazon_linux_ami
 from common.errors import handle_aws_errors
 from common.vpc import create_test_vpc, delete_vpc
-
-
-def get_amazon_linux_ami(ec2: Any) -> str | None:
-    """Get latest Amazon Linux 2 AMI."""
-    response = ec2.describe_images(
-        Owners=["amazon"],
-        Filters=[
-            {"Name": "name", "Values": ["amzn2-ami-hvm-*-x86_64-gp2"]},
-            {"Name": "state", "Values": ["available"]},
-        ],
-    )
-    images = sorted(response["Images"], key=lambda x: x["CreationDate"], reverse=True)
-    return images[0]["ImageId"] if images else None
 
 
 def create_instance(ec2: Any, subnet_id: str, sg_id: str, name: str) -> dict[str, Any]:

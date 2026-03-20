@@ -44,23 +44,11 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
 
 import boto3
 from botocore.exceptions import ClientError
+from common.ec2 import get_amazon_linux_ami
 from common.errors import handle_aws_errors
 from common.vpc import create_test_vpc, delete_vpc
 
 MAX_SWITCH_SECONDS = 10
-
-
-def get_amazon_linux_ami(ec2: Any) -> str | None:
-    """Get latest Amazon Linux 2 AMI."""
-    response = ec2.describe_images(
-        Owners=["amazon"],
-        Filters=[
-            {"Name": "name", "Values": ["amzn2-ami-hvm-*-x86_64-gp2"]},
-            {"Name": "state", "Values": ["available"]},
-        ],
-    )
-    images = sorted(response["Images"], key=lambda x: x["CreationDate"], reverse=True)
-    return images[0]["ImageId"] if images else None
 
 
 def allocate_eip(ec2: Any) -> dict[str, Any]:
@@ -186,6 +174,7 @@ def main() -> int:
     instance_ids: list[str] = []
     allocation_id = None
     igw_id = None
+    rtb_id = None
 
     try:
         # Setup: VPC, subnet, IGW, security group, two instances
@@ -316,6 +305,11 @@ def main() -> int:
         if sg_id:
             try:
                 ec2.delete_security_group(GroupId=sg_id)
+            except ClientError:
+                pass
+        if rtb_id:
+            try:
+                ec2.delete_route_table(RouteTableId=rtb_id)
             except ClientError:
                 pass
         if subnet_id:

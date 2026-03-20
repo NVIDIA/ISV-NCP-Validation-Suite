@@ -47,7 +47,6 @@ from common.errors import handle_aws_errors
 from common.vpc import delete_vpc
 
 INTERNAL_DOMAIN = "internal.isv.test"
-STORAGE_RECORD = f"storage.{INTERNAL_DOMAIN}"
 
 
 def create_vpc_with_dns(ec2: Any, cidr: str, name: str) -> dict[str, Any]:
@@ -212,6 +211,8 @@ def main() -> int:
     route53 = boto3.client("route53", region_name=args.region)
     suffix = str(uuid.uuid4())[:8]
 
+    storage_record = f"storage.{args.domain}"
+
     # Private endpoint IP within the VPC CIDR
     target_ip = args.cidr.replace(".0.0/16", ".1.100")
 
@@ -241,7 +242,7 @@ def main() -> int:
         zone_id = zone_result["zone_id"]
 
         # Test 3: Create DNS record
-        record_result = create_dns_record(route53, zone_id, STORAGE_RECORD, target_ip)
+        record_result = create_dns_record(route53, zone_id, storage_record, target_ip)
         result["tests"]["create_dns_record"] = record_result
 
         # Test 4: Verify DNS settings on VPC
@@ -252,7 +253,7 @@ def main() -> int:
         time.sleep(5)
 
         # Test 5: Resolve the record
-        resolve_result = resolve_record(route53, zone_id, STORAGE_RECORD, target_ip)
+        resolve_result = resolve_record(route53, zone_id, storage_record, target_ip)
         result["tests"]["resolve_record"] = resolve_result
 
         all_passed = all(t.get("passed", False) for t in result["tests"].values())
@@ -272,7 +273,7 @@ def main() -> int:
                             {
                                 "Action": "DELETE",
                                 "ResourceRecordSet": {
-                                    "Name": STORAGE_RECORD,
+                                    "Name": storage_record,
                                     "Type": "A",
                                     "TTL": 60,
                                     "ResourceRecords": [{"Value": target_ip}],

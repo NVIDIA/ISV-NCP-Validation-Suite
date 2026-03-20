@@ -664,3 +664,236 @@ class VpcIpConfigCheck(BaseValidation):
                 False,
                 "No subnets have auto_assign_public_ip enabled",
             )
+
+
+class ByoipCheck(BaseValidation):
+    """Validate Bring-Your-Own-IP (BYOIP) with non-conflicting custom CIDRs.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        tests: dict with custom_cidr_create, custom_cidr_verify,
+               standard_cidr_create, no_conflict, custom_cidr_subnet
+    """
+
+    description: ClassVar[str] = "Check BYOIP support"
+    markers: ClassVar[list[str]] = ["network"]
+
+    def run(self) -> None:
+        step_output = self.config.get("step_output", {})
+        tests = step_output.get("tests", {})
+
+        if not tests:
+            self.set_failed("No 'tests' in step output")
+            return
+
+        required = [
+            "custom_cidr_create",
+            "custom_cidr_verify",
+            "standard_cidr_create",
+            "no_conflict",
+            "custom_cidr_subnet",
+        ]
+        failed = []
+
+        for test_name in required:
+            test_result = tests.get(test_name, {})
+            if not test_result.get("passed"):
+                error = test_result.get("error", "test not found")
+                failed.append(f"{test_name}: {error}")
+
+        if failed:
+            self.set_failed(f"BYOIP tests failed: {'; '.join(failed)}")
+        else:
+            cidr = tests.get("custom_cidr_create", {}).get("cidr", "N/A")
+            self.set_passed(f"BYOIP validated with custom CIDR {cidr}")
+
+
+class StablePrivateIpCheck(BaseValidation):
+    """Validate private IP stability across instance stop/start.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        tests: dict with create_instance, record_ip, stop_instance,
+               start_instance, ip_unchanged
+    """
+
+    description: ClassVar[str] = "Check private IP stability"
+    markers: ClassVar[list[str]] = ["network"]
+
+    def run(self) -> None:
+        step_output = self.config.get("step_output", {})
+        tests = step_output.get("tests", {})
+
+        if not tests:
+            self.set_failed("No 'tests' in step output")
+            return
+
+        required = [
+            "create_instance",
+            "record_ip",
+            "stop_instance",
+            "start_instance",
+            "ip_unchanged",
+        ]
+        failed = []
+
+        for test_name in required:
+            test_result = tests.get(test_name, {})
+            if not test_result.get("passed"):
+                error = test_result.get("error", "test not found")
+                failed.append(f"{test_name}: {error}")
+
+        if failed:
+            self.set_failed(f"Stable IP tests failed: {'; '.join(failed)}")
+        else:
+            ip_result = tests.get("ip_unchanged", {})
+            ip = ip_result.get("ip_before", "N/A")
+            self.set_passed(f"Private IP {ip} stable across stop/start")
+
+
+class FloatingIpCheck(BaseValidation):
+    """Validate floating IP can be atomically switched between instances.
+
+    Config:
+        step_output: The step output to check
+        max_switch_seconds: Maximum allowed switch time (default: 10)
+
+    Step output:
+        tests: dict with allocate_eip, associate_to_a, verify_on_a,
+               reassociate_to_b, verify_on_b, verify_not_on_a
+    """
+
+    description: ClassVar[str] = "Check floating IP switch"
+    markers: ClassVar[list[str]] = ["network"]
+
+    def run(self) -> None:
+        step_output = self.config.get("step_output", {})
+        tests = step_output.get("tests", {})
+        max_seconds = self.config.get("max_switch_seconds", 10)
+
+        if not tests:
+            self.set_failed("No 'tests' in step output")
+            return
+
+        required = [
+            "allocate_eip",
+            "associate_to_a",
+            "verify_on_a",
+            "reassociate_to_b",
+            "verify_on_b",
+            "verify_not_on_a",
+        ]
+        failed = []
+
+        for test_name in required:
+            test_result = tests.get(test_name, {})
+            if not test_result.get("passed"):
+                error = test_result.get("error", "test not found")
+                failed.append(f"{test_name}: {error}")
+
+        # Extra check: switch time
+        switch_time = tests.get("reassociate_to_b", {}).get("switch_seconds")
+        if switch_time is not None and switch_time > max_seconds:
+            failed.append(f"reassociate_to_b: switch took {switch_time}s, limit is {max_seconds}s")
+
+        if failed:
+            self.set_failed(f"Floating IP tests failed: {'; '.join(failed)}")
+        else:
+            eip = tests.get("allocate_eip", {}).get("public_ip", "N/A")
+            self.set_passed(f"Floating IP {eip} switched in {switch_time}s (limit: {max_seconds}s)")
+
+
+class LocalizedDnsCheck(BaseValidation):
+    """Validate localized DNS with custom internal domain resolution.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        tests: dict with create_vpc_with_dns, create_hosted_zone,
+               create_dns_record, verify_dns_settings, resolve_record
+    """
+
+    description: ClassVar[str] = "Check localized DNS"
+    markers: ClassVar[list[str]] = ["network"]
+
+    def run(self) -> None:
+        step_output = self.config.get("step_output", {})
+        tests = step_output.get("tests", {})
+
+        if not tests:
+            self.set_failed("No 'tests' in step output")
+            return
+
+        required = [
+            "create_vpc_with_dns",
+            "create_hosted_zone",
+            "create_dns_record",
+            "verify_dns_settings",
+            "resolve_record",
+        ]
+        failed = []
+
+        for test_name in required:
+            test_result = tests.get(test_name, {})
+            if not test_result.get("passed"):
+                error = test_result.get("error", "test not found")
+                failed.append(f"{test_name}: {error}")
+
+        if failed:
+            self.set_failed(f"DNS tests failed: {'; '.join(failed)}")
+        else:
+            fqdn = tests.get("create_dns_record", {}).get("fqdn", "N/A")
+            resolved = tests.get("resolve_record", {}).get("resolved_ip", "N/A")
+            self.set_passed(f"DNS resolution: {fqdn} -> {resolved}")
+
+
+class VpcPeeringCheck(BaseValidation):
+    """Validate VPC peering - create peering, add routes, verify connectivity.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        tests: dict with create_vpc_a, create_vpc_b, create_peering,
+               accept_peering, add_routes, peering_active
+        vpc_a, vpc_b: VPC info
+    """
+
+    description: ClassVar[str] = "Check VPC peering"
+    markers: ClassVar[list[str]] = ["network"]
+
+    def run(self) -> None:
+        step_output = self.config.get("step_output", {})
+        tests = step_output.get("tests", {})
+
+        if not tests:
+            self.set_failed("No 'tests' in step output")
+            return
+
+        required = [
+            "create_vpc_a",
+            "create_vpc_b",
+            "create_peering",
+            "accept_peering",
+            "add_routes",
+            "peering_active",
+        ]
+        failed = []
+
+        for test_name in required:
+            test_result = tests.get(test_name, {})
+            if not test_result.get("passed"):
+                error = test_result.get("error", "test not found")
+                failed.append(f"{test_name}: {error}")
+
+        if failed:
+            self.set_failed(f"Peering tests failed: {'; '.join(failed)}")
+        else:
+            vpc_a = step_output.get("vpc_a", {}).get("id", "?")
+            vpc_b = step_output.get("vpc_b", {}).get("id", "?")
+            self.set_passed(f"VPC peering active: {vpc_a} <-> {vpc_b}")

@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+"""Localized DNS test - TEMPLATE (replace with your platform implementation).
+
+This script is called during the "test" phase. It is SELF-CONTAINED:
+  1. Create a VPC with DNS support enabled
+  2. Create a private DNS zone associated with the VPC
+  3. Create a DNS A record pointing to a private endpoint
+  4. Verify DNS settings are correct
+  5. Verify the record resolves correctly
+  6. Clean up all resources
+  7. Print a JSON object to stdout
+
+Required JSON output fields:
+  {
+    "success": true,
+    "platform": "network",
+    "tests": {
+      "create_vpc_with_dns": {"passed": true, "vpc_id": "..."},
+      "create_hosted_zone": {"passed": true, "zone_id": "..."},
+      "create_dns_record": {"passed": true, "fqdn": "storage.internal.isv.test"},
+      "verify_dns_settings": {"passed": true},
+      "resolve_record": {"passed": true, "resolved_ip": "..."}
+    }
+  }
+
+Usage:
+    python dns_test.py --region us-west-2 --cidr 10.89.0.0/16
+
+Reference implementation: ../aws/network/dns_test.py
+"""
+
+import argparse
+import json
+import sys
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Localized DNS test (template)")
+    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--cidr", default="10.89.0.0/16", help="CIDR for test VPC")
+    parser.add_argument("--domain", default="internal.isv.test", help="Internal domain")
+    args = parser.parse_args()  # noqa: F841
+
+    result: dict = {
+        "success": False,
+        "platform": "network",
+        "tests": {
+            "create_vpc_with_dns": {"passed": False},
+            "create_hosted_zone": {"passed": False},
+            "create_dns_record": {"passed": False},
+            "verify_dns_settings": {"passed": False},
+            "resolve_record": {"passed": False},
+        },
+    }
+
+    # TODO: Replace with your platform's localized DNS implementation
+    result["error"] = "Not implemented - replace with your platform's localized DNS test logic"
+    print(json.dumps(result, indent=2))
+
+    return 0 if result["success"] else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

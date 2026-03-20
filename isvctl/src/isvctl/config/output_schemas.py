@@ -112,6 +112,17 @@ STEP_SCHEMA_MAPPING: dict[str, str | None] = {
     "upload_iso": "iso_import",
     "import_iso": "iso_import",
     "create_image": "iso_import",
+    # SDN Controller test operations
+    "byoip_test": "byoip",
+    "byoip_validation": "byoip",
+    "stable_ip_test": "stable_ip",
+    "stable_ip_validation": "stable_ip",
+    "floating_ip_test": "floating_ip",
+    "floating_ip_validation": "floating_ip",
+    "dns_test": "localized_dns",
+    "dns_validation": "localized_dns",
+    "peering_test": "vpc_peering",
+    "peering_validation": "vpc_peering",
 }
 
 # Common fields present in all outputs
@@ -605,7 +616,7 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
         "additionalProperties": True,
     },
     # =========================================================================
-    # DDI (DNS/DHCP/IP Management) Schemas
+    # DDI (DNS/DHCP/IP Management) and SDN controller schemas
     # =========================================================================
     "vpc_ip_config": {
         "type": "object",
@@ -659,6 +670,111 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
             "key_name": {"type": ["string", "null"], "description": "Key pair name"},
             "ssh_user": {"type": "string", "description": "SSH username"},
             "instance_id": {"type": ["string", "null"], "description": "Instance identifier"},
+        },
+        "additionalProperties": True,
+    },
+    "byoip": {
+        "type": "object",
+        "required": ["success", "platform"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "tests": {
+                "type": "object",
+                "properties": {
+                    "custom_cidr_create": {"type": "object"},
+                    "custom_cidr_verify": {"type": "object"},
+                    "standard_cidr_create": {"type": "object"},
+                    "no_conflict": {"type": "object"},
+                    "custom_cidr_subnet": {"type": "object"},
+                },
+                "description": "BYOIP test results",
+            },
+        },
+        "additionalProperties": True,
+    },
+    "stable_ip": {
+        "type": "object",
+        "required": ["success", "platform"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "tests": {
+                "type": "object",
+                "properties": {
+                    "create_instance": {"type": "object"},
+                    "record_ip": {"type": "object"},
+                    "stop_instance": {"type": "object"},
+                    "start_instance": {"type": "object"},
+                    "ip_unchanged": {"type": "object"},
+                },
+                "description": "Stable private IP test results",
+            },
+        },
+        "additionalProperties": True,
+    },
+    "floating_ip": {
+        "type": "object",
+        "required": ["success", "platform"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "tests": {
+                "type": "object",
+                "properties": {
+                    "allocate_eip": {"type": "object"},
+                    "associate_to_a": {"type": "object"},
+                    "verify_on_a": {"type": "object"},
+                    "reassociate_to_b": {"type": "object"},
+                    "verify_on_b": {"type": "object"},
+                    "verify_not_on_a": {"type": "object"},
+                },
+                "description": "Floating IP test results",
+            },
+        },
+        "additionalProperties": True,
+    },
+    "localized_dns": {
+        "type": "object",
+        "required": ["success", "platform"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "tests": {
+                "type": "object",
+                "properties": {
+                    "create_vpc_with_dns": {"type": "object"},
+                    "create_hosted_zone": {"type": "object"},
+                    "create_dns_record": {"type": "object"},
+                    "verify_dns_settings": {"type": "object"},
+                    "resolve_record": {"type": "object"},
+                },
+                "description": "Localized DNS test results",
+            },
+        },
+        "additionalProperties": True,
+    },
+    "vpc_peering": {
+        "type": "object",
+        "required": ["success", "platform"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "tests": {
+                "type": "object",
+                "properties": {
+                    "create_vpc_a": {"type": "object"},
+                    "create_vpc_b": {"type": "object"},
+                    "create_peering": {"type": "object"},
+                    "accept_peering": {"type": "object"},
+                    "add_routes": {"type": "object"},
+                    "peering_active": {"type": "object"},
+                },
+                "description": "VPC peering test results",
+            },
+            "vpc_a": {
+                "type": "object",
+                "properties": {"id": {"type": "string"}, "cidr": {"type": "string"}},
+            },
+            "vpc_b": {
+                "type": "object",
+                "properties": {"id": {"type": "string"}, "cidr": {"type": "string"}},
+            },
         },
         "additionalProperties": True,
     },

@@ -32,3 +32,10 @@ dev = [
 
 [tool.uv.workspace]
 members = ["isvctl", "isvtest", "isvreporter"]
+
+# Pin transitive deps with known HIGH CVEs until upstream minimums catch up (Trivy / uv.lock).
+[tool.uv]
+override-dependencies = [
+    "cryptography>=46.0.5",
+    "pyasn1>=0.6.3",
+]

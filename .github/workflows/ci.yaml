@@ -123,11 +123,10 @@ jobs:
           vuln-type: os,library
           scanners: vuln,secret,misconfig,license
           severity: HIGH,CRITICAL
-          skip-dirs: .git,dist,htmlcov,.pytest_cache,.ruff_cache,.venv,node_modules,vendor
+          skip-dirs: .git,dist,htmlcov,.pytest_cache,.ruff_cache,.venv,node_modules,vendor,.terraform
           ignore-unfixed: "true"
-          upload-sarif: "true"
+          upload-sarif: "false" # Enable when repo goes public
           post-pr-comment: "true"
-          fail-on-findings: "false" # FIXME: Disabled until all issues are fixed
 
   # Gate job: aggregates all job results into a single required status check.
   # Note: When adding new jobs above, append them to the 'needs' list below.

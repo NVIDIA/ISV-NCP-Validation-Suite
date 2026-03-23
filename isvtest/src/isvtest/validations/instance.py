@@ -16,6 +16,7 @@ Validations for EC2 instances, virtual machines, and compute resources.
 from typing import ClassVar
 
 from isvtest.core.validation import BaseValidation
+from isvtest.validations.generic import check_operations_passed
 
 
 class InstanceStateCheck(BaseValidation):
@@ -361,8 +362,6 @@ class TopologyPlacementCheck(BaseValidation):
     markers: ClassVar[list[str]] = ["bm"]
 
     def run(self) -> None:
-        from isvtest.validations.generic import check_operations_passed
-
         step_output = self.config.get("step_output", {})
 
         instance_id = step_output.get("instance_id")

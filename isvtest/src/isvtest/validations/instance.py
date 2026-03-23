@@ -305,7 +305,7 @@ class SerialConsoleCheck(BaseValidation):
     """
 
     description: ClassVar[str] = "Check serial console access"
-    markers: ClassVar[list[str]] = ["vm"]
+    markers: ClassVar[list[str]] = ["vm", "bm"]
 
     def run(self) -> None:
         step_output = self.config.get("step_output", {})
@@ -344,6 +344,7 @@ class TopologyPlacementCheck(BaseValidation):
 
     Checks that the platform supports placement groups (or equivalent
     topology-aware scheduling) and that all placement operations passed.
+    Delegates operations checking to ``CrudOperationsCheck``.
 
     Config:
         step_output: The topology_placement step output
@@ -360,6 +361,8 @@ class TopologyPlacementCheck(BaseValidation):
     markers: ClassVar[list[str]] = ["bm"]
 
     def run(self) -> None:
+        from isvtest.validations.generic import check_operations_passed
+
         step_output = self.config.get("step_output", {})
 
         instance_id = step_output.get("instance_id")
@@ -377,9 +380,9 @@ class TopologyPlacementCheck(BaseValidation):
             return
 
         ops = step_output.get("operations", {})
-        failed_ops = [name for name, op in ops.items() if not op.get("passed")]
-        if failed_ops:
-            self.set_failed(f"Placement operations failed: {', '.join(failed_ops)}")
+        _, failed = check_operations_passed(ops)
+        if failed:
+            self.set_failed(f"Placement operations failed: {', '.join(failed)}")
             return
 
         details = [f"AZ={az}", f"strategy={strategy}"]

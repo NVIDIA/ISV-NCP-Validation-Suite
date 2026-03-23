@@ -14,7 +14,7 @@ These validations work with any step output and provide basic field checking,
 schema validation, and common success/failure patterns.
 """
 
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from isvtest.core.validation import BaseValidation
 
@@ -223,6 +223,32 @@ class StepSuccessCheck(BaseValidation):
             self.set_failed("No 'success' or 'status' in step output")
 
 
+def check_operations_passed(ops: dict[str, Any], expected: list[str] | None = None) -> tuple[list[str], list[str]]:
+    """Check which operations in an operations dict passed or failed.
+
+    Args:
+        ops: Dict of operation name -> {"passed": bool, ...}
+        expected: List of operation names to check (defaults to all keys)
+
+    Returns:
+        Tuple of (passed_names, failed_descriptions)
+    """
+    if expected is None:
+        expected = list(ops.keys())
+
+    failed = []
+    passed = []
+    for op_name in expected:
+        op = ops.get(op_name, {})
+        if op.get("passed"):
+            passed.append(op_name)
+        else:
+            error = op.get("error", "not passed")
+            failed.append(f"{op_name}: {error}")
+
+    return passed, failed
+
+
 class CrudOperationsCheck(BaseValidation):
     """Validate that all CRUD operations in a step output passed.
 
@@ -246,18 +272,7 @@ class CrudOperationsCheck(BaseValidation):
             self.set_failed("No 'operations' dict in step output")
             return
 
-        if not expected_ops:
-            expected_ops = list(ops.keys())
-
-        failed = []
-        passed = []
-        for op_name in expected_ops:
-            op = ops.get(op_name, {})
-            if op.get("passed"):
-                passed.append(op_name)
-            else:
-                error = op.get("error", "not passed")
-                failed.append(f"{op_name}: {error}")
+        passed, failed = check_operations_passed(ops, expected_ops or None)
 
         if failed:
             self.set_failed(f"CRUD operations failed: {'; '.join(failed)}")

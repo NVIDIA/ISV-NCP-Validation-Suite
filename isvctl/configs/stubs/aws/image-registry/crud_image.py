@@ -36,9 +36,10 @@ import json
 import os
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
-sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import boto3
 from botocore.exceptions import ClientError

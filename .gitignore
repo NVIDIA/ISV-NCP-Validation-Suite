@@ -26,5 +26,8 @@ perflogs/
 # Portable archive
 isv-ncp-validation-suite*.tar.gz
 
+# Terraform local artifacts
+**/.terraform/
+
 # Trivy local / CI artifact (default output name)
 *.sarif

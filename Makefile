@@ -43,14 +43,15 @@ format: ## Format code with ruff on all packages
 		(cd $$pkg && uvx ruff format src/) || exit 1; \
 	done
 
-security-trivy: ## Trivy fs scan (HIGH/CRITICAL; Docker). Writes $(TRIVY_SARIF), prints per-finding summary; --exit-code 0 (like CI fail-on-findings false)
+security-trivy: ## Trivy fs scan (HIGH/CRITICAL; Docker). Writes $(TRIVY_SARIF), prints per-finding summary; fails on un-ignored findings
 	@command -v docker >/dev/null 2>&1 || { echo "docker not found; install Docker to run local security scans"; exit 1; }
 	docker run --rm -v "$(CURDIR):/repo" -w /repo $(TRIVY_IMAGE) fs \
 		--severity HIGH,CRITICAL \
 		--ignore-unfixed \
 		--skip-dirs "$(SECURITY_SKIP_DIRS)" \
+		--ignorefile /repo/.trivyignore.yaml \
 		--scanners vuln,secret,misconfig,license \
-		--exit-code 0 \
+		--exit-code 1 \
 		--format sarif \
 		--output "/repo/$(TRIVY_SARIF)" \
 		/repo

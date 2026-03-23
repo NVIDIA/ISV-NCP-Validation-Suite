@@ -110,6 +110,8 @@ jobs:
       actions: read
       contents: read
       pull-requests: write
+    env:
+      TRIVY_IGNOREFILE: .trivyignore.yaml
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -127,7 +129,7 @@ jobs:
           upload-sarif: "false" # Needs GitHub Advanced Security; enable when allowed + add security-events: write
           post-pr-comment: "true"
           compare-base-ref: main
-          fail-on-findings: "false" # FIXME: Disabled until all issues are fixed
+          fail-on-findings: "true"
 
       - name: Trivy finding details (job summary)
         if: always()

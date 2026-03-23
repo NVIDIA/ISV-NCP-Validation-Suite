@@ -19,9 +19,10 @@
 #
 # Steps:
 #   1. upload_image - boto3: Downloads VMDK, uploads to S3, imports as AMI (setup)
-#   2. launch_instance - boto3: Creates GPU instance from imported image (test)
-#   3. crud_install_config - boto3: EC2 Launch Template lifecycle (test)
-#   4. teardown - boto3: Cleans up all resources (teardown)
+#   2. crud_image - boto3: Get, list, copy, delete AMI lifecycle (test)
+#   3. launch_instance - boto3: Creates GPU instance from imported image (test)
+#   4. crud_install_config - boto3: EC2 Launch Template lifecycle (test)
+#   5. teardown - boto3: Cleans up all resources (teardown)
 #
 # Usage:
 #   uv run isvctl test run -f isvctl/configs/providers/aws/image-registry.yaml
@@ -62,7 +63,18 @@ commands:
           - "{{region}}"
         timeout: 3600
 
-      # Step 2: Launch GPU instance from imported image
+      # Step 2: CRUD image operations (get, list, copy, delete)
+      - name: crud_image
+        phase: test
+        command: "python3 ../../stubs/aws/image-registry/crud_image.py"
+        args:
+          - "--image-id"
+          - "{{steps.upload_image.image_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 600
+
+      # Step 3: Launch GPU instance from imported image
       - name: launch_instance
         phase: test
         command: "python3 ../../stubs/aws/image-registry/launch_instance.py"
@@ -75,7 +87,7 @@ commands:
           - "{{region}}"
         timeout: 600
 
-      # Step 3: CRUD OS install config (EC2 Launch Template lifecycle)
+      # Step 4: CRUD OS install config (EC2 Launch Template lifecycle)
       - name: crud_install_config
         phase: test
         command: "python3 ../../stubs/aws/image-registry/crud_install_config.py"
@@ -84,7 +96,7 @@ commands:
           - "{{region}}"
         timeout: 120
 
-      # Step 4: Cleanup all resources
+      # Step 5: Cleanup all resources
       - name: teardown
         phase: teardown
         command: "python3 ../../stubs/aws/image-registry/teardown.py"

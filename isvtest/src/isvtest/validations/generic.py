@@ -221,3 +221,45 @@ class StepSuccessCheck(BaseValidation):
             self.set_failed(f"Step failed: {error}" if error else "Step failed")
         else:
             self.set_failed("No 'success' or 'status' in step output")
+
+
+class CrudOperationsCheck(BaseValidation):
+    """Validate that all CRUD operations in a step output passed.
+
+    Checks the ``operations`` dict in step output and verifies each
+    expected operation has ``passed: true``.
+
+    Config:
+        step_output: The step output containing an ``operations`` dict
+        operations: List of operation names to check (e.g. ["get", "list", "create", "delete"])
+    """
+
+    description: ClassVar[str] = "Check all CRUD operations passed"
+    markers: ClassVar[list[str]] = []
+
+    def run(self) -> None:
+        step_output = self.config.get("step_output", {})
+        expected_ops = self.config.get("operations", [])
+
+        ops = step_output.get("operations")
+        if not isinstance(ops, dict):
+            self.set_failed("No 'operations' dict in step output")
+            return
+
+        if not expected_ops:
+            expected_ops = list(ops.keys())
+
+        failed = []
+        passed = []
+        for op_name in expected_ops:
+            op = ops.get(op_name, {})
+            if op.get("passed"):
+                passed.append(op_name)
+            else:
+                error = op.get("error", "not passed")
+                failed.append(f"{op_name}: {error}")
+
+        if failed:
+            self.set_failed(f"CRUD operations failed: {'; '.join(failed)}")
+        else:
+            self.set_passed(f"All CRUD operations passed: {', '.join(passed)}")

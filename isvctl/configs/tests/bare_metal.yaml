@@ -25,16 +25,18 @@
 # Steps:
 #   1. launch_instance      (setup)    - Provision bare-metal GPU instance
 #   2. list_instances       (test)     - List instances, verify target exists
-#   3. stop_instance        (test)     - Power off node, verify stopped state
-#   4. start_instance       (test)     - Power on node, verify recovery
-#   5. describe_instance    (test)     - Describe post-start state + SSH info
+#   3. topology_placement   (test)     - Validate topology-based placement support
+#   4. serial_console       (test)     - Retrieve serial console output (read-only)
+#   5. stop_instance        (test)     - Power off node, verify stopped state
+#   6. start_instance       (test)     - Power on node, verify recovery
+#   7. describe_instance    (test)     - Describe post-start state + SSH info
 #                                        (runs after start so IP is current)
-#   6. reboot_instance      (test)     - Reboot instance, validate recovery
-#   7. reinstall_instance   (test)     - Reinstall OS from stock image [skip: true by default]
-#   8. deploy_nim           (test)     - Deploy NIM container via SSH
-#   9. teardown_nim         (teardown) - Stop NIM container
-#  10. teardown             (teardown) - Terminate instance
-#  11. verify_teardown      (teardown) - Confirm resources deleted
+#   8. reboot_instance      (test)     - Reboot instance, validate recovery
+#   9. reinstall_instance   (test)     - Reinstall OS from stock image [skip: true by default]
+#  10. deploy_nim           (test)     - Deploy NIM container via SSH
+#  11. teardown_nim         (teardown) - Stop NIM container
+#  12. teardown             (teardown) - Terminate instance
+#  13. verify_teardown      (teardown) - Confirm resources deleted
 #
 # Dev workflow (reuse existing instance):
 #   # Run 1: launch + test, keep instance alive
@@ -99,7 +101,54 @@ commands:
           - "{{region}}"
         timeout: 120
 
-      # ─── Step 3: Stop Instance ────────────────────────────────────
+      # ─── Step 3: Topology Placement ──────────────────────────────
+      # YOUR SCRIPT must validate topology-based placement support.
+      #   {
+      #     "success": true,
+      #     "platform": "bm",
+      #     "instance_id": "...",
+      #     "placement_supported": true,
+      #     "availability_zone": "us-west-2a",
+      #     "placement_group": "...",
+      #     "placement_strategy": "cluster",
+      #     "operations": {
+      #       "create_group":    {"passed": true},
+      #       "verify_instance": {"passed": true},
+      #       "describe_group":  {"passed": true},
+      #       "delete_group":    {"passed": true}
+      #     }
+      #   }
+      - name: topology_placement
+        phase: test
+        command: "python3 ../stubs/bare_metal/topology_placement.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 120
+
+      # ─── Step 4: Serial Console Access ──────────────────────────────
+      # YOUR SCRIPT must output JSON with at minimum:
+      #   {
+      #     "success": true,
+      #     "platform": "bm",
+      #     "instance_id": "...",
+      #     "console_available": true,
+      #     "serial_access_enabled": true,
+      #     "output_length": 4096
+      #   }
+      - name: serial_console
+        phase: test
+        command: "python3 ../stubs/bare_metal/serial_console.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 60
+
+      # ─── Step 5: Stop Instance ────────────────────────────────────
       # YOUR SCRIPT must output JSON with at minimum:
       #   {
       #     "success": true,
@@ -118,7 +167,7 @@ commands:
           - "{{region}}"
         timeout: 1800
 
-      # ─── Step 4: Start Instance ───────────────────────────────────
+      # ─── Step 6: Start Instance ───────────────────────────────────
       # YOUR SCRIPT must output JSON with at minimum:
       #   {
       #     "success": true,
@@ -142,9 +191,9 @@ commands:
           - "{{steps.launch_instance.key_file}}"
           - "--public-ip"
           - "{{steps.launch_instance.public_ip}}"
-        timeout: 1800
+        timeout: 2700
 
-      # ─── Step 5: Describe Instance ────────────────────────────────
+      # ─── Step 7: Describe Instance ────────────────────────────────
       # Runs AFTER start_instance so the IP is current (stop/start may reassign it).
       # YOUR SCRIPT must output JSON with at minimum:
       #   {
@@ -167,7 +216,7 @@ commands:
           - "{{steps.launch_instance.key_file}}"
         timeout: 120
 
-      # ─── Step 6: Reboot Instance ──────────────────────────────────
+      # ─── Step 8: Reboot Instance ──────────────────────────────────
       # BM-specific: longer waits for hardware POST/BIOS/OS boot.
       # YOUR SCRIPT must output JSON with at minimum:
       #   {
@@ -194,7 +243,7 @@ commands:
           - "{{steps.launch_instance.public_ip}}"
         timeout: 1800
 
-      # ─── Step 7: Reinstall Instance ─────────────────────────────────
+      # ─── Step 9: Reinstall Instance ─────────────────────────────────
       # Reinstall the node from its configured stock OS.
       # Skipped by default: can be very slow depending on platform.
       # Set skip: false and implement stubs/bare_metal/reinstall_instance.py to enable.
@@ -214,7 +263,7 @@ commands:
           - "{{steps.launch_instance.public_ip}}"
         timeout: 3600
 
-      # ─── Step 8: Deploy NIM Container ─────────────────────────────
+      # ─── Step 10: Deploy NIM Container ────────────────────────────
       # Uses post-reboot IP/key since reboot may reassign the public IP
       - name: deploy_nim
         phase: test
@@ -226,7 +275,7 @@ commands:
           - "{{steps.reboot_instance.key_file}}"
         timeout: 1800
 
-      # ─── Step 9: Teardown NIM ─────────────────────────────────────
+      # ─── Step 11: Teardown NIM ────────────────────────────────────
       # Uses post-reboot IP/key to match what deploy_nim used
       - name: teardown_nim
         phase: teardown
@@ -238,7 +287,7 @@ commands:
           - "{{steps.reboot_instance.key_file}}"
         timeout: 120
 
-      # ─── Step 10: Teardown Instance ───────────────────────────────
+      # ─── Step 12: Teardown Instance ───────────────────────────────
       - name: teardown
         phase: teardown
         command: "python3 ../stubs/bare_metal/teardown.py"
@@ -252,7 +301,7 @@ commands:
           - "{{teardown_flag}}"
         timeout: 1800
 
-      # ─── Step 11: Verify Teardown ─────────────────────────────────
+      # ─── Step 13: Verify Teardown ─────────────────────────────────
       # Post-teardown sanitization: verify instance terminated and
       # resources deleted.
       - name: verify_teardown
@@ -293,6 +342,22 @@ tests:
       checks:
         InstanceListCheck:
           min_count: 1
+
+    topology_placement:
+      step: topology_placement
+      checks:
+        StepSuccessCheck: {}
+        TopologyPlacementCheck: {}
+
+    serial_console:
+      step: serial_console
+      checks:
+        SerialConsoleCheck: {}
+
+    cloud_init:
+      step: launch_instance
+      checks:
+        SshCloudInitCheck: {}
 
     instance_info:
       step: describe_instance

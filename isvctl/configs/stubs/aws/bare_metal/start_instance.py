@@ -155,7 +155,7 @@ def main() -> int:
         waiter = ec2.get_waiter("instance_status_ok")
         waiter.wait(
             InstanceIds=[args.instance_id],
-            WaiterConfig={"Delay": 30, "MaxAttempts": 60},  # up to 30 min
+            WaiterConfig={"Delay": 30, "MaxAttempts": 90},  # up to 45 min
         )
         print("  Instance status checks passed", file=sys.stderr)
 

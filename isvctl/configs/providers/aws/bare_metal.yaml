@@ -17,18 +17,20 @@
 # Steps:
 #   1. launch_instance - boto3: Provisions bare-metal EC2, outputs IP/key (setup)
 #   2. list_instances - boto3: Lists instances in VPC, verifies target exists (test)
-#   3. verify_image - boto3: Verifies OS image installed on BM instance (test)
-#   4. verify_config - boto3: Verifies install config can provision BM (test)
-#   5. stop_instance - boto3: Powers off BM node, verifies stopped state (test)
-#   6. start_instance - boto3: Powers on BM node, verifies recovery (test)
-#   7. describe_instance - boto3: Describes post-start state, passes SSH info (test)
+#   3. topology_placement - boto3: Validates placement group support (test)
+#   4. serial_console - boto3: Retrieves serial console output (test)
+#   5. verify_image - boto3: Verifies OS image installed on BM instance (test)
+#   6. verify_config - boto3: Verifies install config can provision BM (test)
+#   7. stop_instance - boto3: Powers off BM node, verifies stopped state (test)
+#   8. start_instance - boto3: Powers on BM node, verifies recovery (test)
+#   9. describe_instance - boto3: Describes post-start state, passes SSH info (test)
 #                          (runs after start so IP is current)
-#   8. reboot_instance - boto3: Reboots instance, validates recovery (test)
-#   9. reinstall_instance - boto3: Reinstalls OS from stock AMI (test) [skip: true]
-#  10. deploy_nim - paramiko: Deploys NIM container via SSH (test)
-#  11. teardown_nim - paramiko: Stops NIM container via SSH (teardown)
-#  12. teardown - boto3: Terminates bare-metal EC2 (teardown)
-#  13. verify_teardown - boto3: Confirms instance terminated (teardown)
+#  10. reboot_instance - boto3: Reboots instance, validates recovery (test)
+#  11. reinstall_instance - boto3: Reinstalls OS from stock AMI (test) [skip: true]
+#  12. deploy_nim - paramiko: Deploys NIM container via SSH (test)
+#  13. teardown_nim - paramiko: Stops NIM container via SSH (teardown)
+#  14. teardown - boto3: Terminates bare-metal EC2 (teardown)
+#  15. verify_teardown - boto3: Confirms instance terminated (teardown)
 #
 # Dev workflow (reuse existing instance):
 #   # Run 1: launch + test, keep instance alive
@@ -82,6 +84,28 @@ commands:
           - "{{region}}"
         timeout: 120
 
+      # Topology-based placement validation (boto3)
+      - name: topology_placement
+        phase: test
+        command: "python3 ../../stubs/aws/bare_metal/topology_placement.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 120
+
+      # Serial console output (boto3)
+      - name: serial_console
+        phase: test
+        command: "python3 ../../stubs/aws/bare_metal/serial_console.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 60
+
       # Verify OS image installed on BM instance
       - name: verify_image
         phase: test
@@ -130,7 +154,7 @@ commands:
           - "{{steps.launch_instance.key_file}}"
           - "--public-ip"
           - "{{steps.launch_instance.public_ip}}"
-        timeout: 1800
+        timeout: 2700
 
       # Describe post-start instance state - SSH/GPU validation anchor
       # Runs after start_instance so the IP is current (stop/start may reassign it)

@@ -1,10 +1,10 @@
 # Trivy Ignore Configuration
-# Format: https://aquasecurity.github.io/trivy/latest/docs/configuration/filtering/#trivyignoreyaml
+# Format: https://trivy.dev/docs/latest/configuration/filtering/#trivyignoreyaml
 #
 # All entries are reviewed and accepted misconfiguration findings.
 # CI enforces fail-on-findings: true — any NEW finding will break the pipeline.
 #
-# Why no 'paths' scoping:  Trivy resolves Terraform module sources and reports
+# Why no 'paths' scoping: Trivy resolves Terraform module sources and reports
 # findings against virtual paths (e.g. terraform-aws-modules/eks/aws/main.tf)
 # that vary between local runs (.terraform/ present) and CI (clean checkout).
 # These check IDs are specific to Kubernetes manifests and Terraform configs;
@@ -45,12 +45,12 @@ misconfigurations:
   # AWS-0104 — Security group rule allows unrestricted egress
   #
   # Affected files:
-  #   isvctl/configs/stubs/aws/eks/terraform/main.tf  (EFS security group)
+  #   isvctl/configs/stubs/aws/eks/terraform/main.tf   (EFS security group)
   #   terraform-aws-modules/eks/aws/main.tf            (resolved module source)
   #   terraform-aws-modules/eks/aws/node_groups.tf     (resolved module source)
   #
   # All Terraform in this repository provisions ephemeral infrastructure
-  # for ISV validation testing, not production environments.  The
+  # for ISV validation testing, not production environments. The
   # terraform-aws-modules/eks findings originate in third-party module
   # source code resolved by Trivy; access and CIDR settings are controlled
   # through our input variables, not the module source.
@@ -58,16 +58,16 @@ misconfigurations:
 
   - id: AVD-AWS-0040
     statement: >
-      Third-party terraform-aws-modules/eks module.  Cluster access visibility
+      Third-party terraform-aws-modules/eks module. Cluster access visibility
       is controlled through our input variables.
 
   - id: AVD-AWS-0041
     statement: >
-      Third-party terraform-aws-modules/eks module.  CIDR allow-lists are
+      Third-party terraform-aws-modules/eks module. CIDR allow-lists are
       controlled through our input variables.
 
   - id: AVD-AWS-0104
     statement: >
       EFS security group egress 0.0.0.0/0 is required for mount targets to
-      reach AWS services.  This is ephemeral test infrastructure.  The matching
+      reach AWS services. This is ephemeral test infrastructure. The matching
       finding in terraform-aws-modules/eks is third-party module code.

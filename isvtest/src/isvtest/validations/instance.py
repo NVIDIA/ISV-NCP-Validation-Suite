@@ -306,7 +306,7 @@ class SerialConsoleCheck(BaseValidation):
     """
 
     description: ClassVar[str] = "Check serial console access"
-    markers: ClassVar[list[str]] = ["vm", "bm"]
+    markers: ClassVar[list[str]] = ["vm", "bare_metal"]
 
     def run(self) -> None:
         step_output = self.config.get("step_output", {})
@@ -359,7 +359,7 @@ class TopologyPlacementCheck(BaseValidation):
     """
 
     description: ClassVar[str] = "Check topology-based placement support"
-    markers: ClassVar[list[str]] = ["bm"]
+    markers: ClassVar[list[str]] = ["bare_metal"]
 
     def run(self) -> None:
         step_output = self.config.get("step_output", {})

@@ -5,6 +5,7 @@ Handles Python, Shell, YAML, and Terraform files.
 Preserves shebangs and skips files that already have SPDX headers.
 """
 
+import argparse
 import os
 import sys
 from pathlib import Path
@@ -111,14 +112,48 @@ def add_header(filepath: Path) -> bool:
     return True
 
 
+def check_headers(files: list[Path]) -> int:
+    """Check files for missing SPDX headers without modifying them. Returns count of missing."""
+    missing = 0
+    for fpath in files:
+        rel = fpath.relative_to(REPO_ROOT)
+        try:
+            content = fpath.read_text(encoding="utf-8")
+            if not has_spdx_header(content):
+                missing += 1
+                print(f"  ! {rel} — missing SPDX header")
+        except Exception as e:
+            missing += 1
+            print(f"  ! {rel} ERROR: {e}", file=sys.stderr)
+    return missing
+
+
 def main() -> int:
-    """Add SPDX headers to all source files."""
+    """Add SPDX headers to all source files, or check with --check."""
+    parser = argparse.ArgumentParser(description="Manage SPDX license headers.")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Check for missing headers without modifying files (exit 1 if any are missing).",
+    )
+    args = parser.parse_args()
+
     files = find_files()
+    print(f"Found {len(files)} source files to check\n")
+
+    if args.check:
+        missing = check_headers(files)
+        if missing:
+            print(
+                f"\n{missing} file(s) missing SPDX headers. Run 'make update-spdx-headers' to fix."
+            )
+            return 1
+        print("\nAll files have SPDX headers.")
+        return 0
+
     modified = 0
     skipped = 0
     errors = 0
-
-    print(f"Found {len(files)} source files to check\n")
 
     for fpath in files:
         rel = fpath.relative_to(REPO_ROOT)

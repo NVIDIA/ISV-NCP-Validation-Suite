@@ -4,12 +4,13 @@
 PACKAGES := isvctl isvreporter isvtest
 BUMP_SCRIPT := scripts/bump-version.py
 
-# Align with .github/workflows/ci.yaml security-trivy-scan (filesystem scan). Requires Docker.
-TRIVY_IMAGE ?= aquasec/trivy:latest
+# DISABLED (2026-03-24): Trivy supply chain compromise — see GHSA-69fq-xp46-6x23.
+# Do NOT pull aquasec/trivy images from Docker Hub until Aqua Security regains control.
+# When re-enabling, pin by digest and verify against a trusted source (GitHub release, not Docker Hub).
+# TRIVY_IMAGE ?= aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c  # 0.69.3 (last known-good release)
 TRUFFLEHOG_IMAGE ?= trufflesecurity/trufflehog:latest
 SECURITY_SKIP_DIRS := .git,dist,htmlcov,.pytest_cache,.ruff_cache,.venv,node_modules,vendor,.terraform
-# SARIF path written by CI dsx trivy-scan / aquasecurity/trivy-action (default filename).
-TRIVY_SARIF ?= vulnerability-scan-results.sarif
+# TRIVY_SARIF ?= vulnerability-scan-results.sarif
 
 help: ## Show this help message
 	@echo "Available targets:"
@@ -43,31 +44,20 @@ format: ## Format code with ruff on all packages
 		(cd $$pkg && uvx ruff format src/) || exit 1; \
 	done
 
-security-trivy: ## Trivy fs scan (HIGH/CRITICAL; Docker). Writes $(TRIVY_SARIF), prints per-finding summary; fails on un-ignored findings
-	@command -v docker >/dev/null 2>&1 || { echo "docker not found; install Docker to run local security scans"; exit 1; }
-	docker run --rm -v "$(CURDIR):/repo" -w /repo $(TRIVY_IMAGE) fs \
-		--severity HIGH,CRITICAL \
-		--ignore-unfixed \
-		--skip-dirs "$(SECURITY_SKIP_DIRS)" \
-		--ignorefile /repo/.trivyignore.yaml \
-		--scanners vuln,secret,misconfig,license \
-		--exit-code 1 \
-		--format sarif \
-		--output "/repo/$(TRIVY_SARIF)" \
-		/repo
-	@echo ""
-	@echo "=== Per-finding summary (same as: make security-trivy-detail) ==="
-	@$(MAKE) security-trivy-detail
-
-security-trivy-detail: ## List each finding from $(TRIVY_SARIF) (jq). Run after security-trivy or CI; GITHUB_STEP_SUMMARY appends in Actions
-	@./scripts/trivy-sarif-summary.sh "$(TRIVY_SARIF)"
+# DISABLED (2026-03-24): Trivy supply chain compromise — see GHSA-69fq-xp46-6x23.
+# security-trivy: ## Trivy fs scan (HIGH/CRITICAL; Docker). Writes $(TRIVY_SARIF), prints per-finding summary; fails on un-ignored findings
+# security-trivy-detail: ## List each finding from $(TRIVY_SARIF) (jq)
+security-trivy security-trivy-detail:
+	@echo "ERROR: Trivy targets are disabled due to active supply chain compromise (GHSA-69fq-xp46-6x23)." >&2
+	@echo "See: https://github.com/advisories/GHSA-69fq-xp46-6x23" >&2
+	@exit 1
 
 security-trufflehog: ## Run TruffleHog secret scan (Docker; verified/unknown, --only-verified). Exits non-zero if verified secrets are found
 	@command -v docker >/dev/null 2>&1 || { echo "docker not found; install Docker to run local security scans"; exit 1; }
 	docker run --rm -v "$(CURDIR):/work" -w /work $(TRUFFLEHOG_IMAGE) filesystem /work \
 		--results=verified,unknown --only-verified --fail
 
-ci-security: security-trivy security-trufflehog ## Run local equivalents of CI Trivy + TruffleHog (not CodeQL; use GitHub Actions or install CodeQL CLI)
+ci-security: security-trufflehog ## Run local equivalents of CI security scans (Trivy disabled — GHSA-69fq-xp46-6x23)
 
 test: ## Run tests for all packages
 	@for pkg in $(PACKAGES); do \

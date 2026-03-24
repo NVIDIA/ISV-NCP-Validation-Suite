@@ -24,4 +24,4 @@ Welcome to the documentation for NVIDIA ISV NCP Validation Suite - a collection 
 
 ### Contributing
 
-- [Contributing](contributing.md) - Development setup and contribution guidelines
+- [Contributing](../CONTRIBUTING.md) - Development setup and contribution guidelines

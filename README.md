@@ -79,7 +79,7 @@ make lint      # Run linting
 make build     # Build all packages
 ```
 
-See [Contributing](docs/contributing.md) for development setup and guidelines.
+See [Contributing](CONTRIBUTING.md) for development setup and guidelines.
 
 ## Environment Variables
 
@@ -91,6 +91,11 @@ See [Contributing](docs/contributing.md) for development setup and guidelines.
 | `ISV_CLIENT_SECRET` | Required for ISV Lab Service uploads |
 | `NGC_API_KEY` | Required for NIM model benchmarks |
 
+## Security
+
+Report vulnerabilities via the [NVIDIA Security Vulnerability Submission Form](https://www.nvidia.com/object/submit-security-vulnerability.html) or email psirt@nvidia.com. **Do not open a public GitHub issue for security vulnerabilities.** See [SECURITY.md](SECURITY.md) for details.
+
 ## License
 
-See [LICENSE](LICENSE) for license information.
+This project is licensed under the [Apache License 2.0](LICENSE).
+This project will download and install additional third-party open source software projects. Review the license terms of these open source projects before use.

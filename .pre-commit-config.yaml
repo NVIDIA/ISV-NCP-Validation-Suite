@@ -33,3 +33,10 @@ repos:
         language: system
         pass_filenames: false
         types: [markdown]
+
+      - id: check-spdx-headers
+        name: Check SPDX license headers
+        entry: python3 scripts/add_spdx_headers.py --check
+        language: system
+        pass_filenames: false
+        types_or: [python, shell, yaml]

@@ -38,4 +38,5 @@ members = ["isvctl", "isvtest", "isvreporter"]
 override-dependencies = [
     "cryptography>=46.0.5",
     "pyasn1>=0.6.3",
+    "requests>=2.32.5",
 ]

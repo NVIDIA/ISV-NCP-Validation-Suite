@@ -24,3 +24,12 @@ repos:
     rev: v0.20.0
     hooks:
       - id: yamlfmt
+
+  - repo: local
+    hooks:
+      - id: check-md-links
+        name: Check markdown relative links
+        entry: python3 scripts/check_md_links.py
+        language: system
+        pass_filenames: false
+        types: [markdown]

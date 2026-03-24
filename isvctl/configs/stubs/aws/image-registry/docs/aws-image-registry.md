@@ -494,5 +494,5 @@ qemu-img convert -f qcow2 -O raw image.qcow2 image.raw
 
 - [AWS VM Validation Guide](../../vm/docs/aws-vm.md) - EC2 GPU instance tests
 - [AWS Network Validation Guide](../../network/docs/aws-network.md) - VPC and network tests
-- [Configuration Guide](../../../../../docs/guides/configuration.md) - Config file options
-- [isvctl Documentation](../../../../../docs/packages/isvctl.md) - CLI reference
+- [Configuration Guide](../../../../../../docs/guides/configuration.md) - Config file options
+- [isvctl Documentation](../../../../../../docs/packages/isvctl.md) - CLI reference

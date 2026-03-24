@@ -363,5 +363,5 @@ aws ec2 delete-key-pair --key-name isv-test-key
 
 - [AWS EKS Validation Guide](../../eks/docs/aws-eks.md) - Kubernetes cluster tests
 - [AWS Network Validation Guide](../../network/docs/aws-network.md) - VPC and network tests
-- [Configuration Guide](../../../../../docs/guides/configuration.md) - Config file options
-- [isvctl Documentation](../../../../../docs/packages/isvctl.md) - CLI reference
+- [Configuration Guide](../../../../../../docs/guides/configuration.md) - Config file options
+- [isvctl Documentation](../../../../../../docs/packages/isvctl.md) - CLI reference

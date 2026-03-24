@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 PLATFORM_CONFIGS: dict[str, list[str]] = {
     "KUBERNETES": ["tests/k8s.yaml"],
     "SLURM": ["tests/slurm.yaml"],
-    "BARE_METAL": ["tests/bm.yaml"],
+    "BARE_METAL": ["tests/bare_metal.yaml"],
     "CONTROL_PLANE": ["tests/control-plane.yaml"],
     "IAM": ["tests/iam.yaml"],
     "NETWORK": ["tests/network.yaml"],

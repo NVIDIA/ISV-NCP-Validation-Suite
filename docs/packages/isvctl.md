@@ -42,7 +42,7 @@ isvctl test run -f isvctl/configs/tests/k8s.yaml -- -v -s -k "NodeCount"
 ```text
 isvctl/
 ├── configs/           # Unified configuration files
-│   ├── tests/        # Test configs (k8s.yaml, slurm.yaml, bm.yaml)
+│   ├── tests/        # Test configs (k8s.yaml, slurm.yaml, bare_metal.yaml)
 │   └── providers/    # Provider configs (microk8s.yaml, aws/)
 ├── stubs/            # Inventory and lifecycle scripts
 │   ├── k8s/

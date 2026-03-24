@@ -33,7 +33,7 @@
 #   7. teardown               (teardown) - Clean up all resources
 #
 # Note: In the AWS reference implementation, the BM install/verify steps
-#   (install_image_bm, install_config_bm) are in ../aws/bm.yaml instead of
+#   (install_image_bm, install_config_bm) are in ../aws/bare_metal.yaml instead of
 #   here, as verify_image and verify_config steps within the BM lifecycle.
 #
 # Quick start (new provider):

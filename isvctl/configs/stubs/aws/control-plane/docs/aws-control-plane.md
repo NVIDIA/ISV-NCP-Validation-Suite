@@ -328,5 +328,5 @@ Access key operations may take 5-20 seconds to propagate. The scripts include re
 
 ## Related Documentation
 
-- [Configuration Guide](../../../../../docs/guides/configuration.md) - Step-based configuration reference
-- [Output Schemas](../../../../../isvctl/src/isvctl/config/output_schemas.py) - JSON schema definitions
+- [Configuration Guide](../../../../../../docs/guides/configuration.md) - Step-based configuration reference
+- [Output Schemas](../../../../../../isvctl/src/isvctl/config/output_schemas.py) - JSON schema definitions

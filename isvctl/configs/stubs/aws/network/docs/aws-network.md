@@ -436,7 +436,7 @@ aws ec2 delete-vpc --vpc-id $VPC_ID
 ```
 
 For automated cleanup, use the suite's teardown phase which handles the full
-dependency sequence via [`teardown_vpc.py`](../teardown_vpc.py):
+dependency sequence via [`teardown.py`](../teardown.py):
 
 ```bash
 uv run isvctl test run -f isvctl/configs/providers/aws/network.yaml --phase teardown
@@ -444,6 +444,6 @@ uv run isvctl test run -f isvctl/configs/providers/aws/network.yaml --phase tear
 
 ## Related Documentation
 
-- [Configuration Guide](../../../../../docs/guides/configuration.md)
-- [isvctl Documentation](../../../../../docs/packages/isvctl.md)
+- [Configuration Guide](../../../../../../docs/guides/configuration.md)
+- [isvctl Documentation](../../../../../../docs/packages/isvctl.md)
 - [AWS EKS Validation Guide](../../eks/docs/aws-eks.md)

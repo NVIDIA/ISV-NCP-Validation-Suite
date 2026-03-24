@@ -245,15 +245,15 @@ python ./scripts/provision.py --name test 2>/dev/null | jq .
 
 ## Templates
 
-For common validation scenarios, **pre-built templates** are available in [`isvctl/configs/tests/`](../../isvctl/configs/tests/README.md). These provide a copy-and-customize starting point with skeleton scripts and documented JSON contracts.
+For common validation scenarios, **pre-built test suites** are available in [`isvctl/configs/tests/`](../../isvctl/configs/tests/README.md). These provide a copy-and-customize starting point with skeleton scripts and documented JSON contracts.
 
 | Template | What it tests | Stubs |
 |----------|---------------|-------|
 | [`iam.yaml`](../../isvctl/configs/tests/iam.yaml) | User create → verify credentials → delete | 3 scripts |
 | [`network.yaml`](../../isvctl/configs/tests/network.yaml) | VPC CRUD, subnets, isolation, security, connectivity, traffic | 8 scripts |
 | [`vm.yaml`](../../isvctl/configs/tests/vm.yaml) | Launch GPU VM → list → reboot → NIM deploy → teardown | 4 scripts + 2 shared |
-| [`bm.yaml`](../../isvctl/configs/tests/bm.yaml) | Launch bare-metal → describe → reboot → NIM → teardown → verify | 5 scripts + 2 shared |
-| [`kaas.yaml`](../../isvctl/configs/tests/kaas.yaml) | Provision K8s GPU cluster → validate nodes/GPU/workloads → teardown | 2 scripts |
+| [`bare_metal.yaml`](../../isvctl/configs/tests/bare_metal.yaml) | Launch bare-metal → describe → reboot → NIM → teardown → verify | 5 scripts + 2 shared |
+| [`k8s.yaml`](../../isvctl/configs/tests/k8s.yaml) | Provision K8s GPU cluster → validate nodes/GPU/workloads → teardown | 2 scripts |
 | [`control-plane.yaml`](../../isvctl/configs/tests/control-plane.yaml) | API health, access key lifecycle, tenant lifecycle | 10 scripts |
 | [`image-registry.yaml`](../../isvctl/configs/tests/image-registry.yaml) | Image upload → VM launch → install config CRUD → BMaaS install → teardown | 6 scripts |
 
@@ -271,7 +271,7 @@ Each template has a matching **AWS reference implementation** you can study as a
 ## Related Documentation
 
 - [Configuration Guide](configuration.md) - Full config reference (steps, schemas, validations, templates)
-- [Validation Templates](../../isvctl/configs/tests/README.md) - Provider-agnostic templates with full guide
+- [Validation Test Suites](../../isvctl/configs/tests/README.md) - Provider-agnostic test suites with step-by-step details
 - [AWS Reference Implementation](../references/aws.md) - Working AWS examples for all templates
 - [isvctl Package](../packages/isvctl.md) - CLI documentation
 - [Local Development](local-development.md) - Development setup

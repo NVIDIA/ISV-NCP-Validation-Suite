@@ -102,38 +102,43 @@ jobs:
           fail-on-findings: "true" # Enforce quality gate
           fail-on-severity: "error" # Only fail on critical/high severity issues
 
-  security-trivy-scan:
-    name: Vulnerability Scan (Trivy)
-    runs-on: linux-amd64-cpu4
-    timeout-minutes: 30
-    permissions:
-      actions: read
-      contents: read
-      pull-requests: write
-    env:
-      TRIVY_IGNOREFILE: .trivyignore.yaml
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
+  # DISABLED (2026-03-24): Trivy is subject to an active supply chain compromise
+  # (TeamPCP / GHSA-69fq-xp46-6x23). Aqua Security has lost control of Docker Hub
+  # publishing credentials multiple times; malicious images were pushed as recently
+  # as 2026-03-22. All Trivy usage is suspended per NVIDIA Security guidance until
+  # the upstream project is verified safe. Track re-enablement in GHSA-69fq-xp46-6x23.
+  # security-trivy-scan:
+  #   name: Vulnerability Scan (Trivy)
+  #   runs-on: linux-amd64-cpu4
+  #   timeout-minutes: 30
+  #   permissions:
+  #     actions: read
+  #     contents: read
+  #     pull-requests: write
+  #   env:
+  #     TRIVY_IGNOREFILE: .trivyignore.yaml
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v6
 
-      - name: Run Trivy Scan
-        uses: NVIDIA/dsx-github-actions/.github/actions/trivy-scan@495fc76167e3d265f817c1fdc00b7b9275436418
-        with:
-          scan-type: fs
-          scan-ref: .
-          vuln-type: os,library
-          scanners: vuln,secret,misconfig,license
-          severity: HIGH,CRITICAL
-          skip-dirs: .git,dist,htmlcov,.pytest_cache,.ruff_cache,.venv,node_modules,vendor,.terraform
-          ignore-unfixed: "true"
-          upload-sarif: "false" # Needs GitHub Advanced Security; enable when allowed + add security-events: write
-          post-pr-comment: "true"
-          compare-base-ref: main
-          fail-on-findings: "true"
+  #     - name: Run Trivy Scan
+  #       uses: NVIDIA/dsx-github-actions/.github/actions/trivy-scan@495fc76167e3d265f817c1fdc00b7b9275436418
+  #       with:
+  #         scan-type: fs
+  #         scan-ref: .
+  #         vuln-type: os,library
+  #         scanners: vuln,secret,misconfig,license
+  #         severity: HIGH,CRITICAL
+  #         skip-dirs: .git,dist,htmlcov,.pytest_cache,.ruff_cache,.venv,node_modules,vendor,.terraform
+  #         ignore-unfixed: "true"
+  #         upload-sarif: "false" # Needs GitHub Advanced Security; enable when allowed + add security-events: write
+  #         post-pr-comment: "true"
+  #         compare-base-ref: main
+  #         fail-on-findings: "true"
 
-      - name: Trivy finding details (job summary)
-        if: always()
-        run: make security-trivy-detail
+  #     - name: Trivy finding details (job summary)
+  #       if: always()
+  #       run: make security-trivy-detail
 
   # ============================================================================
   # PIPELINE STATUS
@@ -150,7 +155,7 @@ jobs:
       - test
       - security-secret-scan
       - security-codeql-scan
-      - security-trivy-scan
+      # - security-trivy-scan  # Disabled — see comment above (Trivy supply chain compromise)
     steps:
       - name: Check Pipeline Status
         run: |

@@ -4,7 +4,7 @@ This guide provides a complete walkthrough for validating AWS VPC networking cap
 
 ## Overview
 
-The network validation suite includes 6 comprehensive test suites:
+The network validation suite includes 13 comprehensive test suites:
 
 | Test Suite | Duration | Description |
 |------------|----------|-------------|
@@ -14,8 +14,15 @@ The network validation suite includes 6 comprehensive test suites:
 | **Security Blocking** | ~30s | SG/NACL blocking rules (negative tests) |
 | **Connectivity** | ~3 min | Instance network assignment via SSM |
 | **Traffic Validation** | ~5-7 min | Real ping tests - allowed/blocked traffic |
+| **VPC IP Config** | ~10s | DHCP options, subnet CIDRs, auto-assign IP (DDI) |
+| **DHCP IP Management** | ~3 min | DHCP lease, IP match, DNS options via SSH (DDI) |
+| **BYOIP** | ~30s | Bring-Your-Own-IP with custom CIDRs |
+| **Stable Private IP** | ~5 min | IP persistence across stop/start |
+| **Floating IP** | ~5 min | Atomic IP switch between instances (<10s) |
+| **Localized DNS** | ~60s | Custom internal domain resolution |
+| **VPC Peering** | ~30s | Cross-VPC connectivity with full bandwidth |
 
-**Total runtime**: ~10-12 minutes for all tests
+**Total runtime**: ~25-30 minutes for all tests
 
 **Key Features:**
 
@@ -34,15 +41,22 @@ The network validation suite includes 6 comprehensive test suites:
 │                    AWS Network Validation Suite                 │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  Scripts (boto3)              Validations (JSON check)          │
-│  ┌──────────────────┐         ┌─────────────────────────┐       │
-│  │ vpc_crud_test.py │ ──────▶ │ VpcCrudCheck            │       │
-│  │ subnet_test.py   │ ──────▶ │ SubnetConfigCheck       │       │
-│  │ isolation_test.py│ ──────▶ │ VpcIsolationCheck       │       │
-│  │ security_test.py │ ──────▶ │ SecurityBlockingCheck   │       │
-│  │ test_connectivity│ ──────▶ │ NetworkConnectivityCheck│       │
-│  │ traffic_test.py  │ ──────▶ │ TrafficFlowCheck        │       │
-│  └──────────────────┘         └─────────────────────────┘       │
+│  Scripts (boto3)                Validations (JSON check)        │
+│  ┌────────────────────────┐    ┌──────────────────────────┐     │
+│  │ vpc_crud_test.py       │───▶│ VpcCrudCheck             │     │
+│  │ subnet_test.py         │───▶│ SubnetConfigCheck        │     │
+│  │ isolation_test.py      │───▶│ VpcIsolationCheck        │     │
+│  │ security_test.py       │───▶│ SecurityBlockingCheck    │     │
+│  │ test_connectivity.py   │───▶│ NetworkConnectivityCheck │     │
+│  │ traffic_test.py        │───▶│ TrafficFlowCheck         │     │
+│  │ vpc_ip_config_test.py  │───▶│ VpcIpConfigCheck         │     │
+│  │ dhcp_ip_test.py        │───▶│ DhcpIpManagementCheck    │     │
+│  │ byoip_test.py          │───▶│ ByoipCheck               │     │
+│  │ stable_ip_test.py      │───▶│ StablePrivateIpCheck     │     │
+│  │ floating_ip_test.py    │───▶│ FloatingIpCheck          │     │
+│  │ dns_test.py            │───▶│ LocalizedDnsCheck        │     │
+│  │ peering_test.py        │───▶│ VpcPeeringCheck          │     │
+│  └────────────────────────┘    └──────────────────────────┘     │
 │                                                                 │
 │  Platform-specific            Platform-agnostic                 │
 │  (AWS boto3 SDK)              (checks JSON output)              │
@@ -83,13 +97,20 @@ All scripts are located in `isvctl/configs/stubs/aws/network/`:
 
 | Script | Purpose | Output Schema |
 |--------|---------|---------------|
+| `create_vpc.py` | Create shared VPC for tests | `network` |
 | `vpc_crud_test.py` | VPC create/read/update/delete | `vpc_crud` |
 | `subnet_test.py` | Multi-AZ subnet configuration | `subnet_config` |
 | `isolation_test.py` | VPC isolation verification | `vpc_isolation` |
 | `security_test.py` | SG/NACL blocking rules | `security_blocking` |
 | `test_connectivity.py` | Instance connectivity via SSM | `connectivity_result` |
 | `traffic_test.py` | Real ping traffic tests | `traffic_flow` |
-| `create_vpc.py` | Create shared VPC for tests | `network` |
+| `vpc_ip_config_test.py` | DHCP options, subnet CIDRs, auto-assign IP | `vpc_ip_config` |
+| `dhcp_ip_test.py` | DHCP lease, IP match, DNS options via SSH | `dhcp_ip` |
+| `byoip_test.py` | Bring-Your-Own-IP with custom CIDRs | `byoip` |
+| `stable_ip_test.py` | IP persistence across stop/start | `stable_ip` |
+| `floating_ip_test.py` | Atomic IP switch between instances | `floating_ip` |
+| `dns_test.py` | Custom internal domain resolution | `localized_dns` |
+| `peering_test.py` | Cross-VPC connectivity | `vpc_peering` |
 | `teardown.py` | Clean up VPC resources | `teardown` |
 
 ## Quick Start
@@ -215,6 +236,93 @@ The most comprehensive test - sends real network traffic:
 - Tests internet ICMP (ping 8.8.8.8)
 - Tests internet HTTPS (curl checkip.amazonaws.com)
 
+### 7. VPC IP Configuration Check (DDI)
+
+**Script**: `vpc_ip_config_test.py`
+**Validation**: `VpcIpConfigCheck`
+
+Tests IP address management configuration on the shared VPC:
+
+- Verify VPC CIDR block
+- Check subnet CIDRs and available IP counts
+- Verify auto-assign public IP settings
+- Check DHCP options set (domain name servers, domain name)
+
+### 8. DHCP IP Management Check (DDI)
+
+**Script**: `dhcp_ip_test.py`
+**Validation**: `DhcpIpManagementCheck`
+
+Tests DHCP-assigned IP management via SSH on a live instance:
+
+- Launch instance in the shared VPC
+- Verify DHCP lease is active
+- Check assigned IP matches AWS metadata
+- Verify DNS options are configured correctly
+
+### 9. BYOIP Check
+
+**Script**: `byoip_test.py`
+**Validation**: `ByoipCheck`
+
+Tests Bring-Your-Own-IP with non-standard CIDR ranges:
+
+- Create VPC with custom CIDR (e.g., `100.64.0.0/16`)
+- Create VPC with standard CIDR (e.g., `10.90.0.0/16`)
+- Verify both VPCs are functional
+- Verify subnets can be created in custom CIDR ranges
+- Clean up both VPCs
+
+### 10. Stable Private IP Check
+
+**Script**: `stable_ip_test.py`
+**Validation**: `StablePrivateIpCheck`
+
+Tests that private IPs persist across instance stop/start cycles:
+
+- Create VPC and launch instance
+- Record private IP address
+- Stop instance, then start it
+- Verify private IP is unchanged after restart
+
+### 11. Floating IP Check
+
+**Script**: `floating_ip_test.py`
+**Validation**: `FloatingIpCheck`
+
+Tests atomic IP reassignment between instances:
+
+- Create VPC and launch two instances
+- Allocate Elastic IP and associate with instance A
+- Reassociate Elastic IP to instance B
+- Verify switch completes within the `max_switch_seconds` threshold (default 10s)
+- Clean up all resources
+
+### 12. Localized DNS Check
+
+**Script**: `dns_test.py`
+**Validation**: `LocalizedDnsCheck`
+
+Tests custom internal domain resolution via Route 53 private hosted zones:
+
+- Create VPC and private hosted zone (e.g., `internal.isv.test`)
+- Create DNS records pointing to instance IPs
+- Verify forward resolution works from within the VPC
+- Clean up hosted zone and VPC
+
+### 13. VPC Peering Check
+
+**Script**: `peering_test.py`
+**Validation**: `VpcPeeringCheck`
+
+Tests cross-VPC connectivity via VPC peering:
+
+- Create two VPCs with non-overlapping CIDRs
+- Create and accept VPC peering connection
+- Update route tables in both VPCs
+- Verify connectivity between peered VPCs
+- Clean up peering connection and VPCs
+
 ## Prerequisites
 
 ### AWS Credentials
@@ -288,47 +396,50 @@ export AWS_REGION=us-west-2
 
 ### network.yaml Structure
 
+The AWS provider config imports the canonical network test suite and overrides commands with boto3 scripts:
+
 ```yaml
+import:
+  - ../../tests/network.yaml
+
 version: "1.0"
 
 commands:
   network:
+    phases: ["setup", "test", "teardown"]
     steps:
-      # Test 1: VPC CRUD
-      - name: vpc_crud
-        phase: test
-        command: "python3 ./stubs/aws/network/vpc_crud_test.py"
-        args:
-          - "--region"
-          - "{{region}}"
-          - "--cidr"
-          - "10.99.0.0/16"
-        timeout: 120
-        output_schema: vpc_crud
-        validations:
-          - VpcCrudCheck: {}
-
-      # ... more test steps ...
-
-      # Setup: Create shared VPC
-      - name: create_network
+      - name: create_network      # Setup: shared VPC
         phase: setup
-        command: "python3 ./stubs/aws/network/create_vpc.py"
-        validations:
-          - NetworkProvisionedCheck: {}
+        command: "python3 ../../stubs/aws/network/create_vpc.py"
+        args: ["--name", "isv-shared-vpc", "--region", "{{region}}", "--cidr", "10.0.0.0/16"]
+        timeout: 300
 
-      # Teardown
-      - name: teardown
+      - name: vpc_crud             # Test 1: VPC CRUD (~30s)
+      - name: subnet_config        # Test 2: Subnet Config (~30s)
+      - name: vpc_isolation         # Test 3: VPC Isolation (~30s)
+      - name: security_blocking     # Test 4: Security Blocking (~30s)
+      - name: connectivity_test     # Test 5: Connectivity (~3 min)
+      - name: traffic_validation    # Test 6: Traffic Validation (~5-7 min)
+      - name: vpc_ip_config         # Test 7: VPC IP Config - DDI (~10s)
+      - name: dhcp_ip_test          # Test 8: DHCP IP Management - DDI (~3 min)
+      - name: byoip_test            # Test 9: BYOIP (~30s)
+      - name: stable_ip_test        # Test 10: Stable Private IP (~5 min)
+      - name: floating_ip_test      # Test 11: Floating IP (~5 min)
+      - name: dns_test              # Test 12: Localized DNS (~60s)
+      - name: peering_test          # Test 13: VPC Peering (~30s)
+
+      - name: teardown             # Teardown: shared VPC cleanup
         phase: teardown
-        command: "python3 ./stubs/aws/network/teardown.py"
-        validations:
-          - StepSuccessCheck: {}
+        command: "python3 ../../stubs/aws/network/teardown.py"
+        # ...
 
 tests:
-  platform: network
+  cluster_name: "aws-network-validation"
   settings:
     region: "us-west-2"
 ```
+
+See [`providers/aws/network.yaml`](../../../../providers/aws/network.yaml) for the full config with all arguments and timeouts.
 
 ### Environment Variables
 
@@ -348,13 +459,23 @@ ORCHESTRATION RESULTS
 ============================================================
 [PASS] SETUP   : create_network: passed
   [create_network] NetworkProvisionedCheck: PASSED - Network vpc-xxx provisioned: CIDR=10.0.0.0/16, subnets=2
-[PASS] TEST    : vpc_crud: passed; subnet_config: passed; vpc_isolation: passed; security_blocking: passed; connectivity_test: passed; traffic_validation: passed
+[PASS] TEST    : vpc_crud: passed; subnet_config: passed; vpc_isolation: passed; security_blocking: passed;
+                 connectivity_test: passed; traffic_validation: passed; vpc_ip_config: passed;
+                 dhcp_ip_test: passed; byoip_test: passed; stable_ip_test: passed;
+                 floating_ip_test: passed; dns_test: passed; peering_test: passed
   [vpc_crud] VpcCrudCheck: PASSED - All 5 CRUD tests passed
   [subnet_config] SubnetConfigCheck: PASSED - 4 subnets across 2 AZs
   [vpc_isolation] VpcIsolationCheck: PASSED - VPCs vpc-a and vpc-b are properly isolated
   [security_blocking] SecurityBlockingCheck: PASSED - All 5 security blocking tests passed
   [connectivity_test] NetworkConnectivityCheck: PASSED - 2 instances with network connectivity
   [traffic_validation] TrafficFlowCheck: PASSED - All 4 traffic tests passed (latency: 0.5ms)
+  [vpc_ip_config] VpcIpConfigCheck: PASSED - CIDR, subnets, DHCP options verified
+  [dhcp_ip_test] DhcpIpManagementCheck: PASSED - DHCP lease active, IP matches metadata
+  [byoip_test] ByoipCheck: PASSED - Custom CIDR 100.64.0.0/16 and standard CIDR functional
+  [stable_ip_test] StablePrivateIpCheck: PASSED - Private IP unchanged after stop/start
+  [floating_ip_test] FloatingIpCheck: PASSED - IP switched in 1.2s (threshold: 10s)
+  [dns_test] LocalizedDnsCheck: PASSED - internal.isv.test resolves correctly
+  [peering_test] VpcPeeringCheck: PASSED - Cross-VPC connectivity verified
 [PASS] TEARDOWN: teardown: passed
   [teardown] StepSuccessCheck: PASSED - Teardown successful
 ------------------------------------------------------------

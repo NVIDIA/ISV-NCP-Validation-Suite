@@ -7,8 +7,10 @@ This guide provides a complete walkthrough for validating AWS VM Import capabili
 The AWS ISO/VMDK import validation tests verify:
 
 1. **upload_image** - Download VMDK, upload to S3, import as AMI
-2. **launch_instance** - Launch GPU instance from imported AMI
-3. **teardown** - Clean up all resources (instance, AMI, S3, IAM roles)
+2. **crud_image** - Get, list, copy, delete AMI lifecycle
+3. **launch_instance** - Launch GPU instance from imported AMI
+4. **crud_install_config** - EC2 Launch Template CRUD lifecycle
+5. **teardown** - Clean up all resources (instance, AMI, S3, IAM roles)
 
 **Key Features:**
 
@@ -20,79 +22,92 @@ The AWS ISO/VMDK import validation tests verify:
 
 ## Architecture
 
-### New Step-Based Architecture
+### Step-Based Architecture
 
 ```text
-┌────────────────────────────────────────────────────────────────────┐
-│  Scripts (Platform-Specific - boto3)                               │
-│  ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐    │
-│  │  upload_image.py │ │ launch_instance  │ │   teardown.py    │    │
-│  │                  │ │       .py        │ │                  │    │
-│  │ - Download VMDK  │ │ - Create keypair │ │ - Terminate EC2  │    │
-│  │ - Upload to S3   │ │ - Create SG      │ │ - Delete AMI     │    │
-│  │ - Import as AMI  │ │ - Launch EC2     │ │ - Delete bucket  │    │
-│  │ - Output JSON    │ │ - Output JSON    │ │ - Cleanup IAM    │    │
-│  └──────────────────┘ └──────────────────┘ └──────────────────┘    │
-└────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│  Scripts (Platform-Specific - boto3)                                     │
+│  ┌──────────────────┐ ┌──────────────────┐ ┌─────────────────────────┐   │
+│  │  upload_image.py │ │  crud_image.py   │ │  crud_install_config.py │   │
+│  │ - Download VMDK  │ │ - Get AMI        │ │ - Create template       │   │
+│  │ - Upload to S3   │ │ - List AMIs      │ │ - Read template         │   │
+│  │ - Import as AMI  │ │ - Copy AMI       │ │ - Update template       │   │
+│  │                  │ │ - Delete copy    │ │ - Delete template       │   │
+│  └──────────────────┘ └──────────────────┘ └─────────────────────────┘   │
+│  ┌──────────────────┐ ┌──────────────────┐                               │
+│  │launch_instance.py│ │   teardown.py    │                               │
+│  │ - Create keypair │ │ - Terminate EC2  │                               │
+│  │ - Create SG      │ │ - Delete AMI     │                               │
+│  │ - Launch EC2     │ │ - Delete bucket  │                               │
+│  │                  │ │ - Cleanup IAM    │                               │
+│  └──────────────────┘ └──────────────────┘                               │
+└──────────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
-┌────────────────────────────────────────────────────────────────────┐
-│  Validations (Platform-Agnostic)                                   │
-│  ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐    │
-│  │ StepSuccessCheck │ │  SshGpuCheck     │ │ InstanceState    │    │
-│  │ FieldExistsCheck │ │  SshOsCheck      │ │     Check        │    │
-│  │ FieldValueCheck  │ │  SshConnectivity │ │                  │    │
-│  └──────────────────┘ └──────────────────┘ └──────────────────┘    │
-└────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│  Validations (Platform-Agnostic)                                         │
+│  ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────────────┐  │
+│  │ StepSuccessCheck │ │ CrudOperations   │ │ SshConnectivityCheck     │  │
+│  │ FieldExistsCheck │ │     Check        │ │ SshOsCheck, SshGpuCheck  │  │
+│  │ InstanceState    │ │                  │ │                          │  │
+│  │     Check        │ │                  │ │                          │  │
+│  └──────────────────┘ └──────────────────┘ └──────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Test Flow
 
 ```text
-┌─────────────────────────────────────────────────────────────────────┐
-│  uv run isvctl test run -f isvctl/configs/providers/aws/image-registry.yaml   │
-└─────────────────────────────────────────────────────────────────────┘
+uv run isvctl test run -f isvctl/configs/providers/aws/image-registry.yaml
                                    │
                                    ▼
 ┌────────────────────────────────────────────────────────────────────┐
 │  1. upload_image (SETUP phase)                                     │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │ Download VMDK ─▶ Create S3 Bucket ─▶ Upload ─▶ Import AMI   │   │
-│  │ (or use local)   (isv-iso-xxx)       to S3    via VM Import │   │
-│  │                                                             │   │
-│  │ Output: {image_id, storage_bucket, disk_ids, ...}           │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-│                                                                    │
-│  Validations: StepSuccessCheck, FieldExistsCheck                   │
+│     Download VMDK ─▶ Create S3 Bucket ─▶ Upload ─▶ Import AMI      │
+│     Output: {image_id, storage_bucket, disk_ids}                   │
+│     Validations: StepSuccessCheck, FieldExistsCheck                │
 └────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
 ┌────────────────────────────────────────────────────────────────────┐
-│  2. launch_instance (SETUP phase)                                  │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │ Create Key Pair ─▶ Create SG ─▶ Launch g4dn.xlarge          │   │
-│  │                                  from imported AMI          │   │
-│  │                                                             │   │
-│  │ Output: {instance_id, public_ip, key_path, ...}             │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-│                                                                    │
-│  Validations: InstanceStateCheck, SshConnectivityCheck,            │
-│               SshGpuCheck, SshOsCheck                              │
+│  2. crud_image (TEST phase)                                        │
+│     Get AMI ─▶ List AMIs ─▶ Copy AMI ─▶ Delete copy                │
+│     Output: {image_id, operations: {get, list, create, delete}}    │
+│     Validations: StepSuccessCheck, CrudOperationsCheck             │
 └────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
 ┌────────────────────────────────────────────────────────────────────┐
-│  3. teardown (TEARDOWN phase)                                      │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │ Terminate Instance ─▶ Delete AMI ─▶ Delete Snapshots        │   │
-│  │ Delete Bucket ─▶ Delete Key Pair ─▶ Delete SG ─▶ Delete IAM │   │
-│  │                                                             │   │
-│  │ Output: {deleted: {instance, ami, bucket, ...}}             │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-│                                                                    │
-│  Validations: StepSuccessCheck                                     │
+│  3. launch_instance (TEST phase)                                   │
+│     Create Key Pair ─▶ Create SG ─▶ Launch from imported AMI       │
+│     Output: {instance_id, public_ip, key_path}                     │
+│     Validations: InstanceStateCheck, SshConnectivityCheck,         │
+│                  SshOsCheck, SshGpuCheck                           │
+└────────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌────────────────────────────────────────────────────────────────────┐
+│  4. crud_install_config (TEST phase)                               │
+│     Create template ─▶ Read ─▶ Update ─▶ Delete                    │
+│     Output: {config_id, config_name, operations: {create, read,    │
+│              update, delete}}                                      │
+│     Validations: StepSuccessCheck, FieldExistsCheck                │
+└────────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌────────────────────────────────────────────────────────────────────┐
+│  5. teardown (TEARDOWN phase)                                      │
+│     Terminate Instance ─▶ Delete AMI ─▶ Delete Snapshots           │
+│     Delete Bucket ─▶ Delete Key Pair ─▶ Delete SG ─▶ Delete IAM    │
+│     Validations: StepSuccessCheck                                  │
 └────────────────────────────────────────────────────────────────────┘
 ```
+
+> **Note**: The canonical image-registry config also defines `install_image_bm` and
+> `install_config_bm` steps for bare-metal provisioning. On AWS, these are implemented
+> in the [bare_metal.yaml](../../../../providers/aws/bare_metal.yaml) config instead
+> (as `verify_image` and `verify_config` steps). They are auto-skipped here since
+> this config doesn't define those steps.
 
 ## Prerequisites
 
@@ -204,10 +219,12 @@ uv run isvctl test run -f isvctl/configs/providers/aws/image-registry.yaml
 | Download VMDK | 2-5 min | ~700MB from Ubuntu cloud |
 | Upload to S3 | 2-5 min | Depends on network speed |
 | VM Import | 15-30 min | AWS import_image processing |
+| CRUD Image | 2-5 min | AMI get/list/copy/delete lifecycle |
 | Launch Instance | 5-8 min | Instance + status checks |
 | GPU Validation | 1-2 min | SSH + nvidia-smi |
+| CRUD Install Config | ~30s | Launch Template CRUD |
 | Cleanup | 1-2 min | Delete all resources |
-| **Total** | **25-50 min** | Full test cycle |
+| **Total** | **28-55 min** | Full test cycle |
 
 ---
 
@@ -215,98 +232,58 @@ uv run isvctl test run -f isvctl/configs/providers/aws/image-registry.yaml
 
 ### image-registry.yaml Structure
 
+The AWS provider config imports the canonical image-registry test suite and overrides commands with boto3 scripts:
+
 ```yaml
+import:
+  - ../../tests/image-registry.yaml
+
 version: "1.0"
 
 commands:
   image_registry:
     phases: ["setup", "test", "teardown"]
     steps:
-      # Step 1: Upload VMDK and import as AMI
-      - name: upload_image
+      - name: upload_image          # Setup: Download VMDK, upload to S3, import as AMI
         phase: setup
-        command: "python3 ./stubs/aws/image-registry/upload_image.py"
-        args:
-          - "--image-url"
-          - "{{image_url}}"
-          - "--image-format"
-          - "{{image_format}}"
-          - "--region"
-          - "{{region}}"
+        command: "python3 ../../stubs/aws/image-registry/upload_image.py"
+        args: ["--image-url", "{{image_url}}", "--image-format", "{{image_format}}", "--region", "{{region}}"]
         timeout: 3600
 
-      # Step 2: Launch GPU instance from imported AMI
-      - name: launch_instance
+      - name: crud_image            # Test: AMI get/list/copy/delete lifecycle
         phase: test
-        command: "python3 ./stubs/aws/image-registry/launch_instance.py"
-        args:
-          - "--ami-id"
-          - "{{steps.upload_image.image_id}}"  # Use generic field name
-          - "--instance-type"
-          - "{{instance_type}}"
-          - "--region"
-          - "{{region}}"
+        command: "python3 ../../stubs/aws/image-registry/crud_image.py"
+        args: ["--image-id", "{{steps.upload_image.image_id}}", "--region", "{{region}}"]
         timeout: 600
 
-      # Step 3: Cleanup all resources
-      - name: teardown
+      - name: launch_instance       # Test: Launch GPU instance from imported AMI
+        phase: test
+        command: "python3 ../../stubs/aws/image-registry/launch_instance.py"
+        args: ["--ami-id", "{{steps.upload_image.image_id}}", "--instance-type", "{{instance_type}}", "--region", "{{region}}"]
+        timeout: 600
+
+      - name: crud_install_config   # Test: EC2 Launch Template CRUD
+        phase: test
+        command: "python3 ../../stubs/aws/image-registry/crud_install_config.py"
+        args: ["--region", "{{region}}"]
+        timeout: 120
+
+      - name: teardown              # Teardown: Clean up all resources
         phase: teardown
-        command: "python3 ./stubs/aws/image-registry/teardown.py"
-        args:
-          - "--instance-id"
-          - "{{steps.launch_instance.instance_id}}"
-          - "--ami-id"
-          - "{{steps.upload_image.image_id}}"  # Use generic field name
-          - "--snapshot-ids"
-          - "{{steps.upload_image.disk_ids | join(',')}}"  # Use generic field name
-          - "--bucket-name"
-          - "{{steps.upload_image.storage_bucket}}"  # Use generic field name
-          # ... other cleanup args
-        timeout: 300
+        command: "python3 ../../stubs/aws/image-registry/teardown.py"
+        # ... instance, AMI, snapshots, bucket, key, SG, IAM cleanup
+        timeout: 1800
 
 tests:
-  platform: image_registry
   cluster_name: "aws-image-registry-validation"
-
   settings:
     region: "us-west-2"
     image_url: "https://cloud-images.ubuntu.com/releases/noble/release/ubuntu-24.04-server-cloudimg-amd64.vmdk"
     image_format: "vmdk"
     instance_type: "g4dn.xlarge"
-
-  validations:
-    iso_import:
-      step: upload_image
-      checks:
-        - StepSuccessCheck: {}
-        - FieldExistsCheck:
-            fields: ["image_id", "storage_bucket", "disk_ids"]
-
-    instance_launch:
-      step: launch_instance
-      checks:
-        - StepSuccessCheck: {}
-        - InstanceStateCheck:
-            expected_state: "running"
-
-    ssh:
-      step: launch_instance
-      checks:
-        - SshConnectivityCheck: {}
-        - SshOsCheck:
-            expected_os: "ubuntu"
-
-    gpu:
-      step: launch_instance
-      checks:
-        - SshGpuCheck:
-            expected_gpus: 1
-
-    teardown_checks:
-      step: teardown
-      checks:
-        - StepSuccessCheck: {}
 ```
+
+See [`providers/aws/image-registry.yaml`](../../../../providers/aws/image-registry.yaml) for the full config with all arguments and timeouts.
 
 ### Settings Reference
 
@@ -367,23 +344,21 @@ uv run isvctl test run -f isvctl/configs/providers/aws/image-registry.yaml -v
 
 ## Validations
 
-### Generic Validations Used
+### Validations by Step
 
-| Validation | Purpose | From Step |
-|------------|---------|-----------|
-| `StepSuccessCheck` | Verify step completed successfully | All steps |
-| `FieldExistsCheck` | Verify required output fields exist | upload_image, launch_instance |
-| `FieldValueCheck` | Verify specific field values | upload_image |
-| `InstanceStateCheck` | Verify EC2 instance state | launch_instance |
-| `SshConnectivityCheck` | Verify SSH access works | launch_instance |
-| `SshOsCheck` | Verify OS type | launch_instance |
-| `SshGpuCheck` | Verify GPU via nvidia-smi | launch_instance |
-| `SshGpuStressCheck` | Run GPU stress test (optional) | launch_instance |
+| Validation Group | Checks | Step |
+|------------------|--------|------|
+| `image_upload` | `StepSuccessCheck`, `FieldExistsCheck` (image_id, storage_bucket, disk_ids) | upload_image |
+| `image_crud` | `StepSuccessCheck`, `FieldExistsCheck`, `CrudOperationsCheck` (get, list, create, delete) | crud_image |
+| `vm_from_image` | `StepSuccessCheck`, `FieldExistsCheck`, `InstanceStateCheck` (running) | launch_instance |
+| `vm_ssh` | `SshConnectivityCheck`, `SshOsCheck` (ubuntu) | launch_instance |
+| `install_config_crud` | `StepSuccessCheck`, `FieldExistsCheck` (config_id, config_name, operations) | crud_install_config |
+| `teardown_checks` | `StepSuccessCheck` | teardown |
 
-### Validation Timing
-
-- **Default (no `phase`)**: Runs after setup steps complete
-- **`phase: teardown`**: Runs after teardown steps complete
+The canonical config also defines `bm_from_image` and `bm_from_config` validation groups
+for bare-metal provisioning steps. These are auto-skipped in this config since the
+`install_image_bm` and `install_config_bm` steps are not defined here (they live in
+[`bare_metal.yaml`](../../../../providers/aws/bare_metal.yaml) instead).
 
 ---
 

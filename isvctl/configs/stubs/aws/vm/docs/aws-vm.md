@@ -6,20 +6,22 @@ Validates AWS EC2 VM-as-a-Service capabilities using the ISV validation framewor
 
 The AWS VM validation tests verify:
 
-1. **Instance Lifecycle** - Provisioning, state verification, instance listing
-2. **SSH Access** - Remote connectivity via SSH
+1. **Instance Lifecycle** - Provisioning, state verification, instance listing, tagging
+2. **SSH Access** - Remote connectivity via SSH, cloud-init completion
 3. **Host OS Validation** - OS image, kernel, libvirt/QEMU, SBIOS, NVIDIA drivers
 4. **GPU Tests** - GPU visibility, stress workloads
 5. **vCPU Pinning** - vCPU count, NUMA topology, CPU-GPU locality
 6. **PCI Bus Config** - PCIe link speed/width, IOMMU groups, BAR memory
-7. **Reboot Resilience** - Instance reboot, recovery, full host OS persistence
-8. **NIM Inference** - NIM container deployment, health, model listing, inference (optional)
+7. **Stop/Start Resilience** - Instance stop, start, SSH/GPU re-validation
+8. **Reboot Resilience** - Instance reboot, recovery, full host OS persistence
+9. **Serial Console** - Console output accessibility
+10. **NIM Inference** - NIM container deployment, health, model listing, inference (optional)
 
 ## Architecture
 
 Scripts perform cloud/SSH operations and output JSON. Validations assert on the JSON.
 
-```
+```text
 Config (YAML) -> Script (boto3/paramiko) -> JSON output -> Validations (assertions)
 ```
 
@@ -29,10 +31,14 @@ Config (YAML) -> Script (boto3/paramiko) -> JSON output -> Validations (assertio
 |---|------|-------|--------|-------------|
 | 1 | `launch_instance` | setup | `stubs/aws/vm/launch_instance.py` | Provision EC2 GPU instance |
 | 2 | `list_instances` | test | `stubs/aws/vm/list_instances.py` | List instances in VPC |
-| 3 | `reboot_instance` | test | `stubs/aws/vm/reboot_instance.py` | Reboot and validate recovery |
-| 4 | `deploy_nim` | test | `stubs/common/deploy_nim.py` | Deploy NIM container via SSH (skipped if no NGC key) |
-| 5 | `teardown_nim` | teardown | `stubs/common/teardown_nim.py` | Stop NIM container |
-| 6 | `teardown` | teardown | `stubs/aws/vm/teardown.py` | Terminate instance, delete key pair + SG |
+| 3 | `verify_tags` | test | `stubs/aws/vm/describe_tags.py` | Verify user-defined tags on instance |
+| 4 | `stop_instance` | test | `stubs/aws/vm/stop_instance.py` | Stop VM, verify stopped state |
+| 5 | `start_instance` | test | `stubs/aws/vm/start_instance.py` | Start stopped VM, verify recovery + SSH |
+| 6 | `reboot_instance` | test | `stubs/aws/vm/reboot_instance.py` | Reboot and validate recovery |
+| 7 | `serial_console` | test | `stubs/aws/vm/serial_console.py` | Retrieve serial console output |
+| 8 | `deploy_nim` | test | `stubs/common/deploy_nim.py` | Deploy NIM container via SSH (skipped if no NGC key) |
+| 9 | `teardown_nim` | teardown | `stubs/common/teardown_nim.py` | Stop NIM container |
+| 10 | `teardown` | teardown | `stubs/aws/vm/teardown.py` | Terminate instance, delete key pair + SG |
 
 Only `launch_instance` is in the **setup** phase. If any test step fails, teardown still runs
 to prevent resource leaks. NIM steps are shared and reusable across VMaaS and BMaaS.
@@ -43,13 +49,17 @@ to prevent resource leaks. NIM steps are shared and reusable across VMaaS and BM
 |------------|------|-------------|
 | `InstanceStateCheck` | launch_instance, reboot_instance | Verify instance is running |
 | `InstanceListCheck` | list_instances | Verify instances in VPC, target found |
-| `SshConnectivityCheck` | launch_instance, reboot_instance | SSH connectivity and command execution |
-| `SshOsCheck` | launch_instance, reboot_instance | Verify OS type |
-| `SshGpuCheck` | launch_instance, reboot_instance | GPU visibility via nvidia-smi |
+| `InstanceTagCheck` | verify_tags | Verify required tags (Name, CreatedBy) |
+| `SshConnectivityCheck` | launch_instance, start_instance, reboot_instance | SSH connectivity and command execution |
+| `SshOsCheck` | launch_instance, start_instance, reboot_instance | Verify OS type |
+| `SshCloudInitCheck` | launch_instance | Cloud-init completed successfully |
+| `SshGpuCheck` | launch_instance, start_instance, reboot_instance | GPU visibility via nvidia-smi |
 | `SshVcpuPinningCheck` | launch_instance, reboot_instance | vCPU count, NUMA topology, CPU-GPU locality |
 | `SshPciBusCheck` | launch_instance, reboot_instance | PCI GPU enumeration, PCIe link, IOMMU, BAR memory |
 | `SshHostSoftwareCheck` | launch_instance, reboot_instance | Kernel, libvirt/QEMU, SBIOS, NVIDIA drivers |
-| `SshGpuStressCheck` | launch_instance | GPU stress test (excluded by default) |
+| `InstanceStopCheck` | stop_instance | Stop API call, state transitions to stopped |
+| `InstanceStartCheck` | start_instance | Start API call, state recovery to running |
+| `SerialConsoleCheck` | serial_console | Serial console output available and accessible |
 | `InstanceRebootCheck` | reboot_instance | Reboot API call, state recovery, SSH, uptime reset |
 | `SshNimHealthCheck` | deploy_nim | NIM `/v1/health/ready` (skipped if no NGC key) |
 | `SshNimModelCheck` | deploy_nim | NIM `/v1/models` returns expected model |
@@ -118,12 +128,15 @@ Full config: [`isvctl/configs/providers/aws/vm.yaml`](../../../../providers/aws/
 | Phase | Duration | Description |
 |-------|----------|-------------|
 | Launch Instance | 3-5 min | Create key, SG, launch EC2, wait for running |
-| SSH + GPU + Host OS | ~2 min | All SSH-based validations |
+| SSH + GPU + Host OS | ~2 min | All SSH-based validations (including cloud-init) |
+| Verify Tags | ~5s | Check instance tags |
+| Stop + Start | 3-5 min | Stop VM, verify stopped, start VM, re-validate SSH/GPU |
 | Reboot + Revalidation | 3-7 min | Reboot via API, re-run SSH/GPU/host OS checks |
+| Serial Console | ~5s | Retrieve console output |
 | NIM Deploy | 5-20 min | Pull image, start container, wait for health (first run) |
 | NIM Validation | ~30s | Health, models, inference checks |
 | Teardown | ~1 min | Terminate instance, delete resources |
-| **Total** | **15-35 min** | Full test cycle (with NIM) |
+| **Total** | **20-40 min** | Full test cycle (with NIM) |
 
 ---
 
@@ -231,6 +244,58 @@ Validates that an EC2 instance rebooted successfully and fully recovered.
   "count": 1,
   "found_target": true,
   "target_instance": "i-0abc123"
+}
+```
+
+### describe_tags.py
+
+```json
+{
+  "success": true,
+  "platform": "vm",
+  "instance_id": "i-0abc123def456",
+  "tags": {"Name": "isv-test-gpu", "CreatedBy": "isvtest"},
+  "tag_count": 2
+}
+```
+
+### stop_instance.py
+
+```json
+{
+  "success": true,
+  "platform": "vm",
+  "instance_id": "i-0abc123def456",
+  "state": "stopped",
+  "stop_initiated": true
+}
+```
+
+### start_instance.py
+
+```json
+{
+  "success": true,
+  "platform": "vm",
+  "instance_id": "i-0abc123def456",
+  "state": "running",
+  "public_ip": "54.1.2.3",
+  "key_file": "/tmp/isv-test-key.pem",
+  "start_initiated": true,
+  "ssh_ready": true
+}
+```
+
+### serial_console.py
+
+```json
+{
+  "success": true,
+  "platform": "vm",
+  "instance_id": "i-0abc123def456",
+  "console_available": true,
+  "serial_access_enabled": true,
+  "output_length": 4096
 }
 ```
 

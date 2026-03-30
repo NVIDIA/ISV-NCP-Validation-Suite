@@ -8,13 +8,53 @@ Validation and management tools for NVIDIA ISV Lab environments.
 > **Experimental Preview Release**
 > This is an experimental/preview release of ISV-NCP-Validation-Suite. Use at your own risk in production environments. The software is provided "as is" without warranties of any kind. Features, APIs, and configurations may change without notice in future releases. For production deployments, thoroughly test in non-critical environments first.
 
-## Packages
+## What Is This?
 
-- **isvctl** - Unified controller for cluster lifecycle orchestration
-- **isvtest** - Validation framework for Kubernetes, Slurm, and bare metal
-- **isvreporter** - Test results reporter for ISV Lab Service
+The ISV NCP Validation Suite is a test framework for validating that developers and compute providers get the most from their NVIDIA hardware across a range of common compute offerings.
 
-## Adding Your Platform
+It consists of a very flexible set of tests, which ensure that a system is able to support AI training, inferencing, and running AI-enabled applications, along with more traditional cloud services.
+
+This validation suite is meant to be run against an existing cloud system, specifically one that is running NVIDIA hardware. This suite is not itself a cloud software platform, nor does it target a single specific cloud platform. Instead, it maps high-level requirements to a set of *stub* functions, which allow you to run high-level operations (like "Create a Virtual Machine") which you can then use for direct validation, or as steps in validating more complex specifications.
+
+## Quick Start
+
+The fastest way to try running parts of the validation suite is against an existing cloud service, such as AWS. This can be run by setting up your environment with your AWS keys and running a simple test, as follows:
+
+### Prerequisites
+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python package manager)
+
+Install:
+
+```bash
+git clone https://github.com/NVIDIA/ISV-NCP-Validation-Suite.git
+cd ISV-NCP-Validation-Suite
+uv sync
+```
+
+Configure credentials:
+
+```bash
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+export AWS_REGION=...
+export AWS_SESSION_TOKEN=...  # only required for temporary/SSO credentials
+```
+
+Execution:
+
+```bash
+$ uv run isvctl test run -f isvctl/configs/providers/aws/control-plane.yaml
+Loaded configuration (1 import).
+Validating configuration...
+
+Running phases: ['setup', 'test', 'teardown']
+... [~80 lines abridged]
+------------------------------------------------------------
+[PASS] All phases completed successfully
+```
+
+## Running against your own platform
 
 Start from the **provider-agnostic templates** — copy, implement the stub scripts for your cloud/platform, and run:
 
@@ -27,24 +67,6 @@ uv run isvctl test run -f isvctl/configs/my-isv/vm.yaml
 Templates are available for: [IAM](isvctl/configs/tests/iam.yaml) | [Network](isvctl/configs/tests/network.yaml) | [VM](isvctl/configs/tests/vm.yaml) | [Bare Metal](isvctl/configs/tests/bare_metal.yaml) | [Kubernetes](isvctl/configs/tests/k8s.yaml) | [Control Plane](isvctl/configs/tests/control-plane.yaml) | [Image Registry](isvctl/configs/tests/image-registry.yaml)
 
 See the [Templates README](isvctl/configs/tests/README.md) for the full guide, and the [AWS Reference Implementation](docs/references/aws.md) as a working example.
-
-## Prerequisites
-
-- [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python package manager)
-
-## Quick Start
-
-```bash
-# Clone and install
-git clone https://github.com/NVIDIA/ISV-NCP-Validation-Suite.git
-cd ISV-NCP-Validation-Suite
-uv sync
-
-# Run validation tests
-uv run isvctl test run -f isvctl/configs/tests/k8s.yaml       # Kubernetes
-uv run isvctl test run -f isvctl/configs/providers/microk8s.yaml  # MicroK8s
-uv run isvctl test run -f isvctl/configs/tests/slurm.yaml     # Slurm
-```
 
 ## Documentation
 
@@ -98,4 +120,5 @@ Report vulnerabilities via the [NVIDIA Security Vulnerability Submission Form](h
 ## License
 
 This project is licensed under the [Apache License 2.0](LICENSE).
+
 This project will download and install additional third-party open source software projects. Review the license terms of these open source projects before use.

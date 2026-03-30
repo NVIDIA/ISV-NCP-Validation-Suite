@@ -270,6 +270,11 @@ tests:
         InstanceStateCheck:
           expected_state: "running"
 
+    instance_created:
+      step: launch_instance
+      checks:
+        InstanceCreatedCheck: {}
+
     list_instances:
       step: list_instances
       checks:
@@ -385,6 +390,21 @@ tests:
         SshNimInferenceCheck:
           prompt: "What is CUDA?"
           max_tokens: 50
+
+    driver_info:
+      step: launch_instance
+      checks:
+        SshDriverCheck: {}
+
+    cpu_info:
+      step: launch_instance
+      checks:
+        SshCpuInfoCheck: {}
+
+    container_runtime:
+      step: launch_instance
+      checks:
+        SshContainerRuntimeCheck: {}
 
     nim_teardown:
       step: teardown_nim

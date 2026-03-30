@@ -52,6 +52,8 @@ tests:
       checks:
         K8sNodeCountCheck:
           count: "{{ steps.setup.kubernetes.node_count | default(4, true) }}"
+        K8sExpectedNodesCheck:
+          names: []
         K8sNodeReadyCheck:
           require_all_ready: true
         K8sNvidiaSmiCheck:

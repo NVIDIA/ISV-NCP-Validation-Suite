@@ -421,6 +421,21 @@ tests:
         SshEthernetCheck:
           ping_target: "8.8.8.8"
 
+    driver_info:
+      step: describe_instance
+      checks:
+        SshDriverCheck: {}
+
+    cpu_info:
+      step: describe_instance
+      checks:
+        SshCpuInfoCheck: {}
+
+    container_runtime:
+      step: describe_instance
+      checks:
+        SshContainerRuntimeCheck: {}
+
     stop_checks:
       step: stop_instance
       checks:

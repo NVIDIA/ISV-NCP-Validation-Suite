@@ -14,8 +14,12 @@ Builds a structured catalog of all available validation tests by calling
 discover_all_tests() and serializing each BaseValidation subclass's metadata.
 The catalog is version-keyed by the installed isvtest package version.
 
-Platform tagging is derived from config files in isvctl/configs/ -- each config
-declares a platform and lists which validation checks to run for that platform.
+Platform tagging uses two sources (union of both):
+  1. Config files -- which checks appear in each isvctl/configs/tests/*.yaml
+  2. Class markers -- e.g. markers=["bare_metal"] implies BARE_METAL platform
+
+This ensures checks get a platform badge in the UI even when they aren't listed
+in a YAML config (e.g. Bm* checks that only run on-host, not via SSH).
 """
 
 import logging
@@ -40,6 +44,19 @@ PLATFORM_CONFIGS: dict[str, list[str]] = {
     "NETWORK": ["tests/network.yaml"],
     "VM": ["tests/vm.yaml"],
     "IMAGE_REGISTRY": ["tests/image-registry.yaml"],
+}
+
+# Maps class-level markers to platform strings so checks that aren't listed
+# in a YAML config still get the correct platform in the catalog.
+# Only platform-identifying markers are included; trait markers like "gpu",
+# "ssh", "workload", "slow", and "security" are intentionally omitted.
+MARKER_TO_PLATFORM: dict[str, str] = {
+    "bare_metal": "BARE_METAL",
+    "kubernetes": "KUBERNETES",
+    "slurm": "SLURM",
+    "vm": "VM",
+    "network": "NETWORK",
+    "iam": "IAM",
 }
 
 
@@ -135,11 +152,17 @@ def build_catalog() -> list[dict[str, Any]]:
     # Build class metadata lookup
     class_meta: dict[str, dict[str, Any]] = {}
     for cls in discover_all_tests():
+        markers = list(getattr(cls, "markers", []))
         class_meta[cls.__name__] = {
             "description": getattr(cls, "description", "") or "",
-            "markers": list(getattr(cls, "markers", [])),
+            "markers": markers,
             "module": cls.__module__,
         }
+        # Infer platforms from markers for classes not already covered by configs
+        for marker in markers:
+            platform = MARKER_TO_PLATFORM.get(marker)
+            if platform:
+                platform_map.setdefault(cls.__name__, set()).add(platform)
 
     catalog: list[dict[str, Any]] = []
     seen: set[str] = set()

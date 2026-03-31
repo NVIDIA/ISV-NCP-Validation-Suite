@@ -30,7 +30,7 @@ class NodeCountCheck(BaseValidation):
     """
 
     description: ClassVar[str] = "Check cluster node count matches expected"
-    markers: ClassVar[list[str]] = []
+    markers: ClassVar[list[str]] = ["kubernetes"]
 
     def run(self) -> None:
         step_output = self.config.get("step_output", {})
@@ -64,7 +64,7 @@ class ClusterHealthCheck(BaseValidation):
     """
 
     description: ClassVar[str] = "Check cluster is healthy"
-    markers: ClassVar[list[str]] = []
+    markers: ClassVar[list[str]] = ["kubernetes"]
 
     def run(self) -> None:
         step_output = self.config.get("step_output", {})
@@ -96,7 +96,7 @@ class GpuOperatorInstalledCheck(BaseValidation):
     """
 
     description: ClassVar[str] = "Check GPU operator installation"
-    markers: ClassVar[list[str]] = ["gpu"]
+    markers: ClassVar[list[str]] = ["kubernetes", "gpu"]
 
     def run(self) -> None:
         step_output = self.config.get("step_output", {})

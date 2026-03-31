@@ -118,24 +118,48 @@ def main() -> int:
         print(json.dumps(result, indent=2))
         return 1
 
-    # Always attempt SG and key pair cleanup, even if waiter timed out
+    # Always attempt SG and key pair cleanup, even if waiter timed out.
+    # Bare-metal instances can hold SG dependencies for 30-60s after
+    # reaching "terminated" state, so retry with backoff.
     if args.delete_security_group and sg_ids:
-        time.sleep(5)
         for sg_id in sg_ids:
             try:
                 sg_info = ec2.describe_security_groups(GroupIds=[sg_id])
                 if sg_info["SecurityGroups"] and sg_info["SecurityGroups"][0].get("GroupName") == "default":
                     continue
-                ec2.delete_security_group(GroupId=sg_id)
-                result["deleted"]["security_groups"].append(sg_id)
             except ClientError as e:
-                error_code = e.response["Error"]["Code"]
-                if error_code == "DependencyViolation":
-                    result.setdefault("warnings", []).append(
-                        f"SG {sg_id} still in use (instance shutting down); will be cleaned up by AWS"
+                if e.response["Error"]["Code"] == "InvalidGroup.NotFound":
+                    continue
+                result.setdefault("warnings", []).append(f"Could not describe SG {sg_id}: {e}")
+                continue
+
+            deleted = False
+            for attempt in range(6):
+                delay = 10 * (2**attempt)  # 10, 20, 40, 80, 160, 320s
+                if attempt > 0:
+                    print(
+                        f"  SG {sg_id}: DependencyViolation, retrying in {delay}s (attempt {attempt + 1}/6)...",
+                        file=sys.stderr,
                     )
-                elif error_code not in ("InvalidGroup.NotFound", "CannotDelete"):
-                    result.setdefault("warnings", []).append(f"Could not delete SG {sg_id}: {e}")
+                    time.sleep(delay)
+                try:
+                    ec2.delete_security_group(GroupId=sg_id)
+                    result["deleted"]["security_groups"].append(sg_id)
+                    deleted = True
+                    break
+                except ClientError as e:
+                    error_code = e.response["Error"]["Code"]
+                    if error_code == "InvalidGroup.NotFound":
+                        deleted = True
+                        break
+                    if error_code != "DependencyViolation":
+                        result.setdefault("warnings", []).append(f"Could not delete SG {sg_id}: {e}")
+                        break
+
+            if not deleted:
+                result.setdefault("warnings", []).append(
+                    f"SG {sg_id} still in use after retries; may need manual cleanup"
+                )
 
     if args.delete_key_pair and key_name:
         try:

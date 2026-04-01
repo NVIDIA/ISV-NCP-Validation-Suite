@@ -1502,15 +1502,14 @@ class NvlinkCheck(BaseValidation):
 
         expected_gpus = self.config.get("expected_gpus", ssh_cfg.get("gpu_count"))
 
+        ssh = None
         try:
             ssh = get_ssh_client(host, user, key_path, timeout=60)
 
             # Check NVLink status per GPU
             exit_code, stdout, _ = run_ssh_command(ssh, "nvidia-smi nvlink -s 2>/dev/null")
             if exit_code != 0 or not stdout.strip():
-                ssh.close()
                 pytest.skip(f"NVLink not available on {host}")
-                return
 
             # Parse per-GPU NVLink status
             # Format: "GPU 0: ..." followed by link lines
@@ -1549,8 +1548,6 @@ class NvlinkCheck(BaseValidation):
                 self.report_subtest("topology", True, "Topology matrix available")
                 self.log.info(f"GPU topology:\n{stdout.strip()}")
 
-            ssh.close()
-
             failed = get_failed_subtests(self._subtest_results)
             if failed:
                 self.set_failed(f"NVLink subtests failed: {', '.join(failed)}")
@@ -1561,6 +1558,12 @@ class NvlinkCheck(BaseValidation):
 
         except Exception as e:
             self.set_failed(f"NVLink check failed: {e}")
+        finally:
+            if ssh is not None:
+                try:
+                    ssh.close()
+                except Exception:
+                    pass
 
 
 class InfiniBandCheck(BaseValidation):
@@ -1595,15 +1598,14 @@ class InfiniBandCheck(BaseValidation):
 
         expected_ports = self.config.get("expected_ports")
 
+        ssh = None
         try:
             ssh = get_ssh_client(host, user, key_path, timeout=60)
 
             # Check if ibstat is available
             exit_code, stdout, _ = run_ssh_command(ssh, "ibstat 2>/dev/null")
             if exit_code != 0 or not stdout.strip():
-                ssh.close()
                 pytest.skip(f"InfiniBand not available on {host}")
-                return
 
             # Parse ibstat output for CA (Channel Adapter) and port status
             # Format: "CA 'mlx5_0'" ... "Port 1:" ... "State: Active"
@@ -1635,7 +1637,6 @@ class InfiniBandCheck(BaseValidation):
             if total_ports == 0:
                 self.report_subtest("ib_ports", False, "No IB ports found")
                 self.set_failed(f"No InfiniBand ports found on {host}")
-                ssh.close()
                 return
 
             if expected_ports and active_ports < expected_ports:
@@ -1645,8 +1646,6 @@ class InfiniBandCheck(BaseValidation):
                     f"{active_ports} active ports, expected {expected_ports}",
                 )
 
-            ssh.close()
-
             failed = get_failed_subtests(self._subtest_results)
             if failed:
                 self.set_failed(f"InfiniBand subtests failed: {', '.join(failed)}")
@@ -1655,6 +1654,12 @@ class InfiniBandCheck(BaseValidation):
 
         except Exception as e:
             self.set_failed(f"InfiniBand check failed: {e}")
+        finally:
+            if ssh is not None:
+                try:
+                    ssh.close()
+                except Exception:
+                    pass
 
 
 class EthernetCheck(BaseValidation):

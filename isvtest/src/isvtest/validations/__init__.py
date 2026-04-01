@@ -32,7 +32,12 @@ from isvtest.validations.generic import (
     SchemaValidation,
     StepSuccessCheck,
 )
-from isvtest.validations.host import CloudInitCheck
+from isvtest.validations.host import (
+    CloudInitCheck,
+    ContainerRuntimeCheck,
+    CpuInfoCheck,
+    DriverCheck,
+)
 from isvtest.validations.iam import (
     AccessKeyAuthenticatedCheck,
     AccessKeyCreatedCheck,
@@ -81,7 +86,10 @@ __all__ = [
     "ByoipCheck",
     "CloudInitCheck",
     "ClusterHealthCheck",
+    "ContainerRuntimeCheck",
+    "CpuInfoCheck",
     "DhcpIpManagementCheck",
+    "DriverCheck",
     "FieldExistsCheck",
     "FieldValueCheck",
     "FloatingIpCheck",

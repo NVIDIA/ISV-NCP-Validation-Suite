@@ -134,10 +134,10 @@ def main() -> int:
                 continue
 
             deleted = False
-            for attempt in range(10):
-                delay = 30  # fixed 30s intervals, up to 5 min total
+            for attempt in range(6):
+                delay = min(5 * 2**attempt, 60)  # 5, 10, 20, 40, 60, 60s
                 print(
-                    f"  SG {sg_id}: {'retrying' if attempt > 0 else 'waiting'} {delay}s before delete (attempt {attempt + 1}/10)...",
+                    f"  SG {sg_id}: {'retrying' if attempt > 0 else 'waiting'} {delay}s before delete (attempt {attempt + 1}/6)...",
                     file=sys.stderr,
                 )
                 time.sleep(delay)

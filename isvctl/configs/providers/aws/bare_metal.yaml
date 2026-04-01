@@ -243,7 +243,7 @@ commands:
           - "--delete-key-pair"
           - "--delete-security-group"
           - "{{teardown_flag}}"
-        timeout: 1800
+        timeout: 2400
 
       # Post-teardown sanitization: verify instance terminated and resources deleted
       - name: verify_teardown

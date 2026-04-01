@@ -96,7 +96,7 @@ def main() -> int:
             waiter = ec2.get_waiter("instance_terminated")
             waiter.wait(
                 InstanceIds=[args.instance_id],
-                WaiterConfig={"Delay": 30, "MaxAttempts": 50},
+                WaiterConfig={"Delay": 30, "MaxAttempts": 60},
             )
             print("  Instance terminated", file=sys.stderr)
         except WaiterError:
@@ -134,17 +134,17 @@ def main() -> int:
                 continue
 
             deleted = False
-            for attempt in range(6):
-                delay = 10 * (2**attempt)  # 10, 20, 40, 80, 160, 320s
-                if attempt > 0:
-                    print(
-                        f"  SG {sg_id}: DependencyViolation, retrying in {delay}s (attempt {attempt + 1}/6)...",
-                        file=sys.stderr,
-                    )
-                    time.sleep(delay)
+            for attempt in range(10):
+                delay = 30  # fixed 30s intervals, up to 5 min total
+                print(
+                    f"  SG {sg_id}: {'retrying' if attempt > 0 else 'waiting'} {delay}s before delete (attempt {attempt + 1}/10)...",
+                    file=sys.stderr,
+                )
+                time.sleep(delay)
                 try:
                     ec2.delete_security_group(GroupId=sg_id)
                     result["deleted"]["security_groups"].append(sg_id)
+                    print(f"  SG {sg_id}: deleted", file=sys.stderr)
                     deleted = True
                     break
                 except ClientError as e:
@@ -153,8 +153,10 @@ def main() -> int:
                         deleted = True
                         break
                     if error_code != "DependencyViolation":
+                        print(f"  SG {sg_id}: {error_code} - {e}", file=sys.stderr)
                         result.setdefault("warnings", []).append(f"Could not delete SG {sg_id}: {e}")
                         break
+                    print(f"  SG {sg_id}: DependencyViolation", file=sys.stderr)
 
             if not deleted:
                 result.setdefault("warnings", []).append(
@@ -165,10 +167,12 @@ def main() -> int:
         try:
             ec2.delete_key_pair(KeyName=key_name)
             result["deleted"]["key_pairs"].append(key_name)
+            print(f"  Key pair {key_name}: deleted", file=sys.stderr)
             key_file = f"/tmp/{key_name}.pem"
             if os.path.exists(key_file):
                 os.remove(key_file)
         except ClientError as e:
+            print(f"  Key pair {key_name}: {e}", file=sys.stderr)
             result.setdefault("warnings", []).append(f"Could not delete key pair: {e}")
 
     result["success"] = True

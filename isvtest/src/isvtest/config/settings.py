@@ -24,7 +24,7 @@ class Settings:
         REFRAME_PATH: Path to ReFrame validation scripts (default: workloads)
         SLURM_PATH: Path to Slurm validation scripts (default: validations)
         K8S_PATH: Path to Kubernetes validation scripts (default: validations)
-        K8S_PROVIDER: Kubernetes provider ("kubectl" or "microk8s", default: kubectl)
+        K8S_PROVIDER: Kubernetes provider ("kubectl", "microk8s", or "minikube", default: kubectl)
         K8S_GPU_OPERATOR_NAMESPACE: GPU operator namespace (default: auto-detect based on provider)
         K8S_NAMESPACE: Kubernetes namespace for test pods (default: default)
         SKIP_K8S_TESTS: Set to "true" to skip Kubernetes tests (default: false)

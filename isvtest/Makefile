@@ -1,6 +1,6 @@
 # Quick reference for common test commands
 
-.PHONY: help test-all test-common test-k8s test-slurm test-local-k8s test-local-k8s-common test-local-k8s-gpu-stress
+.PHONY: help test-all test-common test-k8s test-slurm test-local-k8s test-local-k8s-common test-local-k8s-gpu-stress test-minikube test-minikube-common
 
 help:
 	@echo "ISV Test Commands:"
@@ -11,6 +11,8 @@ help:
 	@echo "  make test-local-k8s            - Run k8s tests with microk8s"
 	@echo "  make test-local-k8s-common     - Run common + k8s with microk8s"
 	@echo "  make test-local-k8s-gpu-stress - Run GPU stress test on K8s (5+ min per node)"
+	@echo "  make test-minikube             - Run k8s tests with minikube"
+	@echo "  make test-minikube-common      - Run common + k8s with minikube"
 
 test-all:
 	uv run isvtest all
@@ -34,3 +36,11 @@ test-local-k8s-common:
 
 test-local-k8s-gpu-stress:
 	K8S_PROVIDER=microk8s GPU_MEMORY_GB=4 GPU_STRESS_RUNTIME=30 uv run isvtest k8s -k test_gpu_stress_single_node -v
+
+# Local Kubernetes tests using minikube
+
+test-minikube:
+	K8S_PROVIDER=minikube uv run isvtest k8s
+
+test-minikube-common:
+	K8S_PROVIDER=minikube uv run pytest src/isvtest/tests -v

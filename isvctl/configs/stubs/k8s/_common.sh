@@ -9,44 +9,47 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-# MicroK8s Inventory Stub - Queries local MicroK8s cluster
+# Shared K8s Inventory Logic
 #
-# Requirements:
-#   - MicroK8s installed and running
-#   - microk8s kubectl or kubectl configured
+# Sourced by provider-specific setup.sh scripts. Expects the caller to set:
+#   KUBECTL           - kubectl command (e.g. "kubectl", "microk8s kubectl", "k3s kubectl")
+#   CLUSTER_NAME      - cluster identifier
+#   DEFAULT_GPU_NS    - fallback GPU operator namespace (default: nvidia-gpu-operator)
+#   USE_NVIDIA_SMI_FALLBACK - "true" to fall back to nvidia-smi for GPU/driver info (default: false)
+#   REQUIRE_JQ        - "true" to require jq and populate nodes array (default: false)
 #
-# Output: JSON inventory conforming to isvctl schema
+# Output: prints JSON inventory to stdout
 
-set -eo pipefail
+DEFAULT_GPU_NS="${DEFAULT_GPU_NS:-nvidia-gpu-operator}"
+USE_NVIDIA_SMI_FALLBACK="${USE_NVIDIA_SMI_FALLBACK:-false}"
+REQUIRE_JQ="${REQUIRE_JQ:-false}"
 
-# Determine kubectl command (microk8s or regular)
-if command -v microk8s &> /dev/null; then
-    KUBECTL="microk8s kubectl"
-elif command -v kubectl &> /dev/null; then
-    KUBECTL="kubectl"
-else
-    echo "Error: Neither microk8s nor kubectl found" >&2
+# --- jq check (only when required) ---
+if [ "$REQUIRE_JQ" = "true" ] && ! command -v jq &> /dev/null; then
+    echo "Error: jq not found - required for JSON processing" >&2
     exit 1
 fi
 
-# Check cluster is accessible
-if ! $KUBECTL cluster-info &> /dev/null 2>&1; then
-    echo "Error: Cannot connect to MicroK8s cluster" >&2
+# --- Cluster connectivity ---
+if ! $KUBECTL cluster-info &> /dev/null; then
+    echo "Error: Cannot connect to Kubernetes cluster (using: $KUBECTL)" >&2
     exit 1
 fi
 
-# Get cluster name
-CLUSTER_NAME="microk8s-$(hostname)"
-
-# Get node count (usually 1 for local microk8s)
+# --- Node info ---
 NODE_COUNT=$($KUBECTL get nodes --no-headers 2>/dev/null | wc -l)
 
-# Get GPU info (use -o name to avoid counting "No resources found" message)
+if [ "$REQUIRE_JQ" = "true" ]; then
+    NODES=$($KUBECTL get nodes -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n' | jq -R . | jq -s .)
+else
+    NODES="[]"
+fi
+
+# --- GPU info ---
 GPU_NODE_COUNT=$($KUBECTL get nodes -l nvidia.com/gpu.present=true -o name 2>/dev/null | wc -l || echo "0")
 GPU_PER_NODE=$($KUBECTL get nodes -l nvidia.com/gpu.present=true -o jsonpath='{.items[0].status.capacity.nvidia\.com/gpu}' 2>/dev/null || echo "0")
 if [ -z "$GPU_PER_NODE" ] || [ "$GPU_PER_NODE" = "null" ]; then
-    # Fallback: count GPUs from nvidia-smi (one line per GPU)
-    if command -v nvidia-smi &> /dev/null; then
+    if [ "$USE_NVIDIA_SMI_FALLBACK" = "true" ] && command -v nvidia-smi &> /dev/null; then
         GPU_PER_NODE=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | wc -l || echo "0")
     else
         GPU_PER_NODE=0
@@ -55,7 +58,7 @@ fi
 
 TOTAL_GPUS=$((GPU_NODE_COUNT * GPU_PER_NODE))
 
-# Get driver version from node labels (combine major.minor.rev)
+# --- Driver version from node labels ---
 DRIVER_MAJOR=$($KUBECTL get nodes -l nvidia.com/gpu.present=true -o jsonpath='{.items[0].metadata.labels.nvidia\.com/cuda\.driver\.major}' 2>/dev/null || echo "")
 DRIVER_MINOR=$($KUBECTL get nodes -l nvidia.com/gpu.present=true -o jsonpath='{.items[0].metadata.labels.nvidia\.com/cuda\.driver\.minor}' 2>/dev/null || echo "")
 DRIVER_REV=$($KUBECTL get nodes -l nvidia.com/gpu.present=true -o jsonpath='{.items[0].metadata.labels.nvidia\.com/cuda\.driver\.rev}' 2>/dev/null || echo "")
@@ -66,24 +69,29 @@ elif [ -n "$DRIVER_MAJOR" ] && [ -n "$DRIVER_MINOR" ]; then
     DRIVER_VERSION="${DRIVER_MAJOR}.${DRIVER_MINOR}"
 elif [ -n "$DRIVER_MAJOR" ]; then
     DRIVER_VERSION="${DRIVER_MAJOR}"
-elif command -v nvidia-smi &> /dev/null; then
-    # Fallback to nvidia-smi if labels not available
+elif [ "$USE_NVIDIA_SMI_FALLBACK" = "true" ] && command -v nvidia-smi &> /dev/null; then
     DRIVER_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 || echo "unknown")
 else
     DRIVER_VERSION="unknown"
 fi
 
-# GPU operator namespace
+# --- GPU operator namespace ---
 GPU_OPERATOR_NS=""
 for ns in gpu-operator gpu-operator-resources nvidia-gpu-operator; do
-    if $KUBECTL get namespace "$ns" &> /dev/null 2>&1; then
+    if $KUBECTL get namespace "$ns" &> /dev/null; then
         GPU_OPERATOR_NS="$ns"
         break
     fi
 done
-GPU_OPERATOR_NS="${GPU_OPERATOR_NS:-gpu-operator-resources}"
+GPU_OPERATOR_NS="${GPU_OPERATOR_NS:-$DEFAULT_GPU_NS}"
 
-# Output JSON
+# --- Runtime class ---
+RUNTIME_CLASS=""
+if $KUBECTL get runtimeclass nvidia &> /dev/null; then
+    RUNTIME_CLASS="nvidia"
+fi
+
+# --- Output JSON ---
 cat << EOF
 {
   "success": true,
@@ -92,12 +100,12 @@ cat << EOF
   "kubernetes": {
     "driver_version": "${DRIVER_VERSION}",
     "node_count": ${NODE_COUNT},
-    "nodes": [],
+    "nodes": ${NODES},
     "gpu_node_count": ${GPU_NODE_COUNT},
     "gpu_per_node": ${GPU_PER_NODE},
     "total_gpus": ${TOTAL_GPUS},
     "gpu_operator_namespace": "${GPU_OPERATOR_NS}",
-    "runtime_class": "nvidia",
+    "runtime_class": "${RUNTIME_CLASS}",
     "gpu_resource_name": "nvidia.com/gpu"
   }
 }

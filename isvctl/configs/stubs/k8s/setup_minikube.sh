@@ -9,28 +9,30 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-# K8s Inventory Stub - Queries real cluster and outputs inventory JSON
+# Minikube Inventory Stub - Queries local Minikube cluster
 #
 # Requirements:
-#   - kubectl OR microk8s configured and accessible
-#   - jq for JSON processing
-#   - nvidia GPU operator installed (for GPU detection)
+#   - Minikube installed and running
+#   - kubectl configured (minikube automatically configures kubeconfig)
 
 set -eo pipefail
 
-# Detect kubectl command
-if command -v kubectl &> /dev/null; then
-    KUBECTL="kubectl"
-elif command -v microk8s &> /dev/null; then
-    KUBECTL="microk8s kubectl"
-else
-    echo "Error: Neither kubectl nor microk8s found" >&2
+if ! command -v kubectl &> /dev/null; then
+    echo "Error: kubectl not found (minikube should configure it automatically)" >&2
     exit 1
 fi
 
-CLUSTER_NAME=$($KUBECTL config current-context 2>/dev/null || echo "unknown")
-DEFAULT_GPU_NS="unknown"
-REQUIRE_JQ="true"
+KUBECTL="kubectl"
+
+# Get cluster name from minikube profile or kubectl context
+if command -v minikube &> /dev/null; then
+    CLUSTER_NAME=$(minikube profile 2>/dev/null || echo "minikube")
+else
+    CLUSTER_NAME=$($KUBECTL config current-context 2>/dev/null || echo "minikube")
+fi
+
+DEFAULT_GPU_NS="${DEFAULT_GPU_NS:-gpu-operator}"
+USE_NVIDIA_SMI_FALLBACK="${USE_NVIDIA_SMI_FALLBACK:-true}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/_common.sh"

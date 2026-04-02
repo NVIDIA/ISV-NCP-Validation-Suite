@@ -8,13 +8,13 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-# MicroK8s Cluster Validation Configuration
+# Minikube Cluster Validation Configuration
 # Imports the canonical K8s test suite and adds bare-metal host checks
 # for local development and single-node testing.
 #
 # Usage:
-#   isvctl test run -f isvctl/configs/providers/microk8s.yaml
-#   isvctl test run -f isvctl/configs/providers/microk8s.yaml -- -v -s
+#   isvctl test run -f isvctl/configs/providers/minikube.yaml
+#   isvctl test run -f isvctl/configs/providers/minikube.yaml -- -v -s
 
 import: ../tests/k8s.yaml
 
@@ -26,15 +26,15 @@ commands:
     steps:
       - name: setup
         phase: setup
-        command: "../stubs/k8s/setup_microk8s.sh"
+        command: "../stubs/k8s/setup_minikube.sh"
         timeout: 60
       - name: teardown
         phase: teardown
-        command: "../stubs/k8s/teardown_microk8s.sh"
+        command: "../stubs/k8s/teardown_minikube.sh"
         timeout: 30
 
 tests:
-  description: "MicroK8s local validation"
+  description: "Minikube local validation"
 
   settings:
     show_skipped_tests: true
@@ -66,9 +66,9 @@ tests:
         K8sDriverVersionCheck:
           driver_version: "{{ steps.setup.kubernetes.driver_version }}"
         K8sGpuOperatorNamespaceCheck:
-          namespace: "{{ steps.setup.kubernetes.gpu_operator_namespace | default('gpu-operator-resources') }}"
+          namespace: "{{ steps.setup.kubernetes.gpu_operator_namespace | default('nvidia-gpu-operator') }}"
         K8sGpuOperatorPodsCheck:
-          namespace: "{{ steps.setup.kubernetes.gpu_operator_namespace | default('gpu-operator-resources') }}"
+          namespace: "{{ steps.setup.kubernetes.gpu_operator_namespace | default('nvidia-gpu-operator') }}"
         K8sMigConfigCheck:
           require_mig: false
           expected_labels:

@@ -30,6 +30,12 @@ isvctl test run -f isvctl/configs/tests/k8s.yaml
 # Validate a local MicroK8s
 isvctl test run -f isvctl/configs/providers/microk8s.yaml
 
+# Validate a local Minikube
+isvctl test run -f isvctl/configs/providers/minikube.yaml
+
+# Validate a local k3s
+isvctl test run -f isvctl/configs/providers/k3s.yaml
+
 # Validate a Slurm cluster
 isvctl test run -f isvctl/configs/tests/slurm.yaml
 
@@ -43,13 +49,14 @@ isvctl test run -f isvctl/configs/tests/k8s.yaml -- -v -s -k "NodeCount"
 isvctl/
 ├── configs/           # Unified configuration files
 │   ├── tests/        # Test configs (k8s.yaml, slurm.yaml, bare_metal.yaml)
-│   └── providers/    # Provider configs (microk8s.yaml, aws/)
+│   └── providers/    # Provider configs (microk8s.yaml, minikube.yaml, k3s.yaml, aws/)
 ├── stubs/            # Inventory and lifecycle scripts
 │   ├── k8s/
-│   │   ├── setup.sh       # Queries cluster via kubectl
-│   │   └── teardown.sh    # No-op for existing clusters
-│   ├── microk8s/
-│   │   └── ...
+│   │   ├── _common.sh         # Shared K8s inventory logic
+│   │   ├── setup.sh           # Generic kubectl setup
+│   │   ├── setup_microk8s.sh  # MicroK8s setup
+│   │   ├── setup_minikube.sh  # Minikube setup
+│   │   └── setup_k3s.sh       # k3s setup
 │   └── slurm/
 │       └── ...
 ├── schemas/          # JSON Schema for validation

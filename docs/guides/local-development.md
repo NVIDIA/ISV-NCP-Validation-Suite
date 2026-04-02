@@ -49,9 +49,12 @@ uv run isvctl test run -f isvctl/configs/providers/aws/vm.yaml
 uv run isvctl test run -f isvctl/configs/providers/aws/iam.yaml
 ```
 
-### Kubernetes Tests (MicroK8s)
+### Kubernetes Tests
 
-For local Kubernetes testing:
+Three local Kubernetes providers are supported: MicroK8s, Minikube, and k3s.
+Only one can hold the GPU at a time — stop the others before switching.
+
+#### MicroK8s
 
 ```bash
 # Install MicroK8s
@@ -64,12 +67,47 @@ microk8s enable dns storage gpu
 
 # Verify
 microk8s kubectl get nodes
+
+# Run tests
+uv run isvctl test run -f isvctl/configs/providers/microk8s.yaml
 ```
 
-Run tests:
+#### Minikube
 
 ```bash
-uv run isvctl test run -f isvctl/configs/providers/microk8s.yaml
+# Install Minikube (https://minikube.sigs.k8s.io/docs/start/)
+# Start with GPU passthrough (requires nvidia-container-toolkit)
+minikube start --driver docker --container-runtime docker --gpus all
+
+# Install GPU Operator (driver/toolkit/device-plugin provided by minikube)
+helm install gpu-operator nvidia/gpu-operator \
+  --namespace nvidia-gpu-operator --create-namespace \
+  --set driver.enabled=false \
+  --set toolkit.enabled=false \
+  --set devicePlugin.enabled=false
+
+# Run tests
+uv run isvctl test run -f isvctl/configs/providers/minikube.yaml
+```
+
+#### k3s
+
+```bash
+# Install k3s
+curl -sfL https://get.k3s.io | sh -
+
+# Make kubeconfig readable
+sudo chmod 644 /etc/rancher/k3s/k3s.yaml
+
+# Install GPU Operator (driver/toolkit/device-plugin provided by host)
+KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm install gpu-operator nvidia/gpu-operator \
+  --namespace nvidia-gpu-operator --create-namespace \
+  --set driver.enabled=false \
+  --set toolkit.enabled=false \
+  --set devicePlugin.enabled=false
+
+# Run tests
+KUBECONFIG=/etc/rancher/k3s/k3s.yaml uv run isvctl test run -f isvctl/configs/providers/k3s.yaml
 ```
 
 ## Useful Options

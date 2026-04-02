@@ -29,7 +29,9 @@ def get_k8s_provider() -> str:
     1. Use K8S_PROVIDER environment variable if set
     2. Check if 'kubectl' command exists -> use kubectl
     3. Check if 'microk8s kubectl' command exists -> use microk8s
-    4. Default to kubectl
+    4. Check if 'k3s kubectl' command exists -> use k3s
+    5. Check if 'minikube kubectl' command exists -> use minikube
+    6. Default to kubectl
 
     This function caches the result to avoid repeated detection.
     """
@@ -68,6 +70,34 @@ def get_k8s_provider() -> str:
     except (FileNotFoundError, PermissionError, subprocess.TimeoutExpired):
         pass
 
+    # Check if k3s exists and is executable
+    try:
+        result = subprocess.run(
+            ["k3s", "kubectl", "version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            logger.info("Auto-detected K8S_PROVIDER: k3s")
+            return "k3s"
+    except (FileNotFoundError, PermissionError, subprocess.TimeoutExpired):
+        pass
+
+    # Check if minikube exists and is executable
+    try:
+        result = subprocess.run(
+            ["minikube", "kubectl", "version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            logger.info("Auto-detected K8S_PROVIDER: minikube")
+            return "minikube"
+    except (FileNotFoundError, PermissionError, subprocess.TimeoutExpired):
+        pass
+
     # Default to kubectl
     logger.info("Using K8S_PROVIDER: kubectl (default)")
     return "kubectl"
@@ -89,6 +119,9 @@ def get_kubectl_command() -> list[str]:
 
     if k8s_provider == "microk8s":
         return ["microk8s", "kubectl"]
+    if k8s_provider == "k3s":
+        return ["k3s", "kubectl"]
+    # minikube, kubectl, and other providers use standard kubectl
     return ["kubectl"]
 
 

@@ -257,8 +257,9 @@ tests:
   description: "VM (virtual machine) GPU validation tests"
 
   settings:
-    region: "us-west-2"
-    instance_type: "g5.xlarge"
+    # Provider-specific -- override in your provider config
+    region: ""
+    instance_type: ""
     teardown_flag: "{{(env.VM_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"
 
   # ─── Validations ─────────────────────────────────────────────────

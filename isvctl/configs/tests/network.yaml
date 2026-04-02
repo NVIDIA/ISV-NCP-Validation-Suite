@@ -305,7 +305,8 @@ tests:
   platform: network
 
   settings:
-    region: "us-west-2"
+    # Provider-specific -- override in your provider config
+    region: ""
 
   # ─── Validations ─────────────────────────────────────────────────
   # These are PROVIDER-AGNOSTIC. They only check JSON field names/values.

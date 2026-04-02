@@ -184,8 +184,9 @@ tests:
   description: "Control plane: API health, access key lifecycle, tenant lifecycle"
 
   settings:
-    region: "us-west-2"
-    services: "compute,storage,identity"
+    # Provider-specific -- override in your provider config
+    region: ""
+    services: ""
 
   # ─── Validations ─────────────────────────────────────────────────
   # These are PROVIDER-AGNOSTIC. They only check JSON field names/values.

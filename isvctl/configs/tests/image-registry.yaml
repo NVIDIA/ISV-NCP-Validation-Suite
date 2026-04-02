@@ -214,10 +214,11 @@ tests:
   platform: image_registry
 
   settings:
-    region: "us-west-2"
+    # Provider-specific -- override in your provider config
+    region: ""
     image_url: "https://cloud-images.ubuntu.com/releases/noble/release/ubuntu-24.04-server-cloudimg-amd64.vmdk"
     image_format: "vmdk"
-    instance_type: "g4dn.xlarge"
+    instance_type: ""
     teardown_flag: "{{(env.IR_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"
 
   # ─── Validations ─────────────────────────────────────────────────

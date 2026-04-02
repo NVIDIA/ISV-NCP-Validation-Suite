@@ -111,8 +111,8 @@ tests:
   platform: iam
 
   settings:
-    # Override these for your environment
-    region: "us-west-2"
+    # Provider-specific -- override in your provider config
+    region: ""
     teardown_flag: "{{(env.IAM_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"
 
   # ─── Validations ─────────────────────────────────────────────────

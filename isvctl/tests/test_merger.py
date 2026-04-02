@@ -432,3 +432,13 @@ class TestImportEndToEnd:
         assert "kubernetes" in validations
         assert "bare_metal" in validations  # minikube adds host checks
         assert "reframe" in validations  # minikube adds reframe checks
+
+    def test_k3s_inherits_k8s_validations(self) -> None:
+        """providers/k3s.yaml imports tests/k8s.yaml and adds overrides."""
+        result = merge_yaml_files([self.CONFIGS_DIR / "providers" / "k3s.yaml"])
+
+        assert "tests" in result
+        validations = result["tests"]["validations"]
+        assert "kubernetes" in validations
+        assert "bare_metal" in validations  # k3s adds host checks
+        assert "reframe" in validations  # k3s adds reframe checks

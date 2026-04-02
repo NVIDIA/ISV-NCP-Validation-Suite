@@ -89,6 +89,8 @@ def get_kubectl_command() -> list[str]:
 
     if k8s_provider == "microk8s":
         return ["microk8s", "kubectl"]
+    if k8s_provider == "k3s":
+        return ["k3s", "kubectl"]
     # minikube, kubectl, and other providers use standard kubectl
     return ["kubectl"]
 

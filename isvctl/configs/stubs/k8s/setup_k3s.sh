@@ -34,6 +34,7 @@ if [ -z "$KUBECONFIG" ] && [ -f /etc/rancher/k3s/k3s.yaml ]; then
 fi
 
 CLUSTER_NAME="k3s-$(hostname)"
+DEFAULT_GPU_NS="gpu-operator"
 USE_NVIDIA_SMI_FALLBACK="true"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

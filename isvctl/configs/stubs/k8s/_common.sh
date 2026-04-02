@@ -31,7 +31,7 @@ if [ "$REQUIRE_JQ" = "true" ] && ! command -v jq &> /dev/null; then
 fi
 
 # --- Cluster connectivity ---
-if ! $KUBECTL cluster-info &> /dev/null 2>&1; then
+if ! $KUBECTL cluster-info &> /dev/null; then
     echo "Error: Cannot connect to Kubernetes cluster (using: $KUBECTL)" >&2
     exit 1
 fi
@@ -78,7 +78,7 @@ fi
 # --- GPU operator namespace ---
 GPU_OPERATOR_NS=""
 for ns in gpu-operator gpu-operator-resources nvidia-gpu-operator; do
-    if $KUBECTL get namespace "$ns" &> /dev/null 2>&1; then
+    if $KUBECTL get namespace "$ns" &> /dev/null; then
         GPU_OPERATOR_NS="$ns"
         break
     fi
@@ -87,7 +87,7 @@ GPU_OPERATOR_NS="${GPU_OPERATOR_NS:-$DEFAULT_GPU_NS}"
 
 # --- Runtime class ---
 RUNTIME_CLASS=""
-if $KUBECTL get runtimeclass nvidia &> /dev/null 2>&1; then
+if $KUBECTL get runtimeclass nvidia &> /dev/null; then
     RUNTIME_CLASS="nvidia"
 fi
 

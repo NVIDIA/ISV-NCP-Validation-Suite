@@ -31,5 +31,8 @@ else
     CLUSTER_NAME=$($KUBECTL config current-context 2>/dev/null || echo "minikube")
 fi
 
+DEFAULT_GPU_NS="${DEFAULT_GPU_NS:-gpu-operator}"
+USE_NVIDIA_SMI_FALLBACK="${USE_NVIDIA_SMI_FALLBACK:-true}"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/_common.sh"

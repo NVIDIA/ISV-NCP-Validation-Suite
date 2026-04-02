@@ -148,9 +148,11 @@ Integration tests require access to a real cluster:
 ```bash
 uv run isvctl test run -f isvctl/configs/tests/k8s.yaml
 uv run isvctl test run -f isvctl/configs/providers/microk8s.yaml
+uv run isvctl test run -f isvctl/configs/providers/minikube.yaml
+uv run isvctl test run -f isvctl/configs/providers/k3s.yaml
 ```
 
-See the [Local Development Guide](docs/guides/local-development.md) for MicroK8s setup.
+See the [Local Development Guide](docs/guides/local-development.md) for MicroK8s, Minikube, and k3s setup.
 
 ## Pull Request Process
 
@@ -292,7 +294,7 @@ ISV-NCP-Validation-Suite/
 
 - [Getting Started](docs/getting-started.md) — Installation and usage
 - [Configuration](docs/guides/configuration.md) — Config file format and options
-- [Local Development](docs/guides/local-development.md) — MicroK8s setup for local testing
+- [Local Development](docs/guides/local-development.md) — MicroK8s, Minikube, and k3s setup for local testing
 
 ## License
 

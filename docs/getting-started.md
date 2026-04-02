@@ -43,6 +43,12 @@ uv run isvctl test run -f isvctl/configs/tests/k8s.yaml
 # Local MicroK8s
 uv run isvctl test run -f isvctl/configs/providers/microk8s.yaml
 
+# Local Minikube
+uv run isvctl test run -f isvctl/configs/providers/minikube.yaml
+
+# Local k3s
+uv run isvctl test run -f isvctl/configs/providers/k3s.yaml
+
 # Slurm cluster
 uv run isvctl test run -f isvctl/configs/tests/slurm.yaml
 ```

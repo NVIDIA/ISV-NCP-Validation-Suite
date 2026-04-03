@@ -221,7 +221,7 @@ commands:
           - "{{steps.launch_instance.public_ip}}"
         timeout: 1800
 
-      # ─── Step 9: Power-Cycle Instance ────────────────────────────────
+      # ─── Step 8: Power-Cycle Instance ────────────────────────────────
       # Hard power off + power on (cold start). Unlike reboot (OS-level),
       # this exercises firmware init, BIOS POST, and a cold OS boot.
       # YOUR SCRIPT must output JSON with at minimum:

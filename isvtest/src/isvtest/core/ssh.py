@@ -24,10 +24,13 @@ Requires paramiko: pip install paramiko
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import paramiko
+
+log = logging.getLogger(__name__)
 
 
 def get_ssh_client(
@@ -63,17 +66,22 @@ def get_ssh_client(
     return ssh_client
 
 
-def run_ssh_command(ssh: paramiko.SSHClient, command: str) -> tuple[int, str, str]:
+def run_ssh_command(
+    ssh: paramiko.SSHClient,
+    command: str,
+    timeout: int = 120,
+) -> tuple[int, str, str]:
     """Run command via SSH and return exit_code, stdout, stderr.
 
     Args:
         ssh: Connected SSH client
         command: Command to execute
+        timeout: Per-command timeout in seconds (default: 120)
 
     Returns:
         Tuple of (exit_code, stdout, stderr)
     """
-    _, stdout, stderr = ssh.exec_command(command)
+    _, stdout, stderr = ssh.exec_command(command, timeout=timeout)
     exit_code = stdout.channel.recv_exit_status()
     return exit_code, stdout.read().decode(), stderr.read().decode()
 
@@ -133,6 +141,15 @@ def get_ssh_config(config: dict[str, Any], inventory: dict[str, Any]) -> dict[st
         or step_output.get("ssh_key_path")
         or ssh_inv.get("key_path")
         or vmaas_inv.get("ssh_key_path")
+    )
+
+    log.debug(
+        "SSH config resolved: host=%s, user=%s, key=%s (sources: step_output.public_ip=%s, config.host=%s)",
+        host,
+        user,
+        key_path,
+        step_output.get("public_ip"),
+        config.get("host"),
     )
 
     return {

@@ -29,14 +29,15 @@
 #   4. serial_console       (test)     - Retrieve serial console output (read-only)
 #   5. stop_instance        (test)     - Power off node, verify stopped state
 #   6. start_instance       (test)     - Power on node, verify recovery
-#   7. describe_instance    (test)     - Describe post-start state + SSH info
-#                                        (runs after start so IP is current)
-#   8. reboot_instance      (test)     - Reboot instance, validate recovery
-#   9. reinstall_instance   (test)     - Reinstall OS from stock image [skip: true by default]
-#  10. deploy_nim           (test)     - Deploy NIM container via SSH
-#  11. teardown_nim         (teardown) - Stop NIM container
-#  12. teardown             (teardown) - Terminate instance
-#  13. verify_teardown      (teardown) - Confirm resources deleted
+#   7. reboot_instance      (test)     - Reboot instance, validate recovery
+#   8. power_cycle_instance (test)     - Hard power off + on, validate cold-start recovery
+#   9. describe_instance    (test)     - Describe current state + SSH info
+#                                        (runs after power_cycle so IP is current)
+#  10. reinstall_instance   (test)     - Reinstall OS from stock image [skip: true by default]
+#  11. deploy_nim           (test)     - Deploy NIM container via SSH
+#  12. teardown_nim         (teardown) - Stop NIM container
+#  13. teardown             (teardown) - Terminate instance
+#  14. verify_teardown      (teardown) - Confirm resources deleted
 #
 # Dev workflow (reuse existing instance):
 #   # Run 1: launch + test, keep instance alive
@@ -193,30 +194,7 @@ commands:
           - "{{steps.launch_instance.public_ip}}"
         timeout: 2700
 
-      # ─── Step 7: Describe Instance ────────────────────────────────
-      # Runs AFTER start_instance so the IP is current (stop/start may reassign it).
-      # YOUR SCRIPT must output JSON with at minimum:
-      #   {
-      #     "success": true,
-      #     "platform": "bm",
-      #     "instance_id": "...",
-      #     "instance_state": "running",
-      #     "public_ip": "...",
-      #     "key_file": "..."
-      #   }
-      - name: describe_instance
-        phase: test
-        command: "python3 ../stubs/bare_metal/describe_instance.py"
-        args:
-          - "--instance-id"
-          - "{{steps.launch_instance.instance_id}}"
-          - "--region"
-          - "{{region}}"
-          - "--key-file"
-          - "{{steps.launch_instance.key_file}}"
-        timeout: 120
-
-      # ─── Step 8: Reboot Instance ──────────────────────────────────
+      # ─── Step 7: Reboot Instance ──────────────────────────────────
       # BM-specific: longer waits for hardware POST/BIOS/OS boot.
       # YOUR SCRIPT must output JSON with at minimum:
       #   {
@@ -243,7 +221,62 @@ commands:
           - "{{steps.launch_instance.public_ip}}"
         timeout: 1800
 
-      # ─── Step 9: Reinstall Instance ─────────────────────────────────
+      # ─── Step 9: Power-Cycle Instance ────────────────────────────────
+      # Hard power off + power on (cold start). Unlike reboot (OS-level),
+      # this exercises firmware init, BIOS POST, and a cold OS boot.
+      # YOUR SCRIPT must output JSON with at minimum:
+      #   {
+      #     "success": true,
+      #     "platform": "bm",
+      #     "instance_id": "...",
+      #     "instance_state": "running",
+      #     "public_ip": "54.x.x.x",
+      #     "key_file": "/tmp/key.pem",
+      #     "power_cycle_initiated": true,
+      #     "power_was_off": true,
+      #     "ssh_ready": true,
+      #     "recovery_seconds": 180
+      #   }
+      - name: power_cycle_instance
+        phase: test
+        command: "python3 ../stubs/bare_metal/power_cycle_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+          - "--public-ip"
+          - "{{steps.reboot_instance.public_ip}}"
+        timeout: 2700
+
+      # ─── Describe Instance ─────────────────────────────────────────
+      # Runs AFTER power_cycle so the IP is current (stop/start may reassign).
+      # This step is the SSH/GPU validation anchor: most host-level checks
+      # bind to describe_instance for connection details.
+      # YOUR SCRIPT must output JSON with at minimum:
+      #   {
+      #     "success": true,
+      #     "platform": "bm",
+      #     "instance_id": "...",
+      #     "state": "running",
+      #     "public_ip": "...",
+      #     "key_file": "..."
+      #   }
+      - name: describe_instance
+        phase: test
+        command: "python3 ../stubs/bare_metal/describe_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+        timeout: 120
+
+      # ─── Step 10: Reinstall Instance ────────────────────────────────
       # Reinstall the node from its configured stock OS.
       # Skipped by default: can be very slow depending on platform.
       # Set skip: false and implement stubs/bare_metal/reinstall_instance.py to enable.
@@ -263,31 +296,31 @@ commands:
           - "{{steps.launch_instance.public_ip}}"
         timeout: 3600
 
-      # ─── Step 10: Deploy NIM Container ────────────────────────────
-      # Uses post-reboot IP/key since reboot may reassign the public IP
+      # ─── Step 11: Deploy NIM Container ───────────────────────────
+      # Uses post-power-cycle IP/key since power-cycle may reassign the public IP
       - name: deploy_nim
         phase: test
         command: "python3 ../stubs/common/deploy_nim.py"
         args:
           - "--host"
-          - "{{steps.reboot_instance.public_ip}}"
+          - "{{steps.power_cycle_instance.public_ip}}"
           - "--key-file"
-          - "{{steps.reboot_instance.key_file}}"
+          - "{{steps.power_cycle_instance.key_file}}"
         timeout: 1800
 
-      # ─── Step 11: Teardown NIM ────────────────────────────────────
-      # Uses post-reboot IP/key to match what deploy_nim used
+      # ─── Step 12: Teardown NIM ───────────────────────────────────
+      # Uses post-power-cycle IP/key to match what deploy_nim used
       - name: teardown_nim
         phase: teardown
         command: "python3 ../stubs/common/teardown_nim.py"
         args:
           - "--host"
-          - "{{steps.reboot_instance.public_ip}}"
+          - "{{steps.power_cycle_instance.public_ip}}"
           - "--key-file"
-          - "{{steps.reboot_instance.key_file}}"
+          - "{{steps.power_cycle_instance.key_file}}"
         timeout: 120
 
-      # ─── Step 12: Teardown Instance ───────────────────────────────
+      # ─── Step 13: Teardown Instance ──────────────────────────────
       - name: teardown
         phase: teardown
         command: "python3 ../stubs/bare_metal/teardown.py"
@@ -301,7 +334,7 @@ commands:
           - "{{teardown_flag}}"
         timeout: 1800
 
-      # ─── Step 13: Verify Teardown ─────────────────────────────────
+      # ─── Step 14: Verify Teardown ────────────────────────────────
       # Post-teardown sanitization: verify instance terminated and
       # resources deleted.
       - name: verify_teardown
@@ -488,6 +521,31 @@ tests:
       step: reboot_instance
       checks:
         HostSoftwareCheck: {}
+
+    power_cycle_checks:
+      step: power_cycle_instance
+      checks:
+        InstancePowerCycleCheck:
+          max_recovery_time: 900
+
+    power_cycle_state:
+      step: power_cycle_instance
+      checks:
+        InstanceStateCheck:
+          expected_state: "running"
+
+    power_cycle_ssh:
+      step: power_cycle_instance
+      checks:
+        ConnectivityCheck: {}
+        OsCheck:
+          expected_os: "ubuntu"
+
+    power_cycle_gpu:
+      step: power_cycle_instance
+      checks:
+        GpuCheck:
+          expected_gpus: 8
 
     # Reinstall validations (skipped when reinstall_instance step is skipped)
     reinstall_state:

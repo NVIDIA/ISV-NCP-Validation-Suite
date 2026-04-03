@@ -192,8 +192,9 @@ def update_test_run(
         except Exception as e:
             logger.warning(f"Failed to read log file: {e}")
 
-    # Redact sensitive values before uploading to external service
+    # Sanitize and redact before uploading to external service
     if log_output:
+        log_output = log_output.replace("\x00", "")
         log_output = redact_text(log_output)
 
     # Auto-detect ISV test version from package

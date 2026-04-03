@@ -26,6 +26,7 @@ from isvtest.tests.test_validations import (
 )
 from isvtest.validations.instance import (
     InstanceListCheck,
+    InstancePowerCycleCheck,
     InstanceStartCheck,
     InstanceStopCheck,
     InstanceTagCheck,
@@ -541,6 +542,133 @@ class TestInstanceTagCheck:
         result = v.execute()
         assert result["passed"] is False
         assert "tags" in result["error"]
+
+
+class TestInstancePowerCycleCheck:
+    """Tests for InstancePowerCycleCheck validation."""
+
+    def test_power_cycle_success(self) -> None:
+        v = InstancePowerCycleCheck(
+            config={
+                "step_output": {
+                    "instance_id": "i-abc123",
+                    "power_cycle_initiated": True,
+                    "power_was_off": True,
+                    "state": "running",
+                    "ssh_ready": True,
+                    "recovery_seconds": 180,
+                },
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is True
+        assert "i-abc123" in result["output"]
+        assert "recovery=180s" in result["output"]
+
+    def test_missing_instance_id(self) -> None:
+        v = InstancePowerCycleCheck(config={"step_output": {"power_cycle_initiated": True, "state": "running"}})
+        result = v.execute()
+        assert result["passed"] is False
+        assert "instance_id" in result["error"]
+
+    def test_power_cycle_not_initiated(self) -> None:
+        v = InstancePowerCycleCheck(
+            config={
+                "step_output": {
+                    "instance_id": "i-abc123",
+                    "power_cycle_initiated": False,
+                    "power_was_off": True,
+                    "state": "running",
+                    "ssh_ready": True,
+                },
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is False
+        assert "not initiated" in result["error"]
+
+    def test_power_was_not_off(self) -> None:
+        v = InstancePowerCycleCheck(
+            config={
+                "step_output": {
+                    "instance_id": "i-abc123",
+                    "power_cycle_initiated": True,
+                    "power_was_off": False,
+                    "state": "running",
+                    "ssh_ready": True,
+                },
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is False
+        assert "powered-off" in result["error"]
+
+    def test_not_running_after_cycle(self) -> None:
+        v = InstancePowerCycleCheck(
+            config={
+                "step_output": {
+                    "instance_id": "i-abc123",
+                    "power_cycle_initiated": True,
+                    "power_was_off": True,
+                    "state": "stopped",
+                    "ssh_ready": False,
+                },
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is False
+        assert "stopped" in result["error"]
+
+    def test_ssh_not_ready(self) -> None:
+        v = InstancePowerCycleCheck(
+            config={
+                "step_output": {
+                    "instance_id": "i-abc123",
+                    "power_cycle_initiated": True,
+                    "power_was_off": True,
+                    "state": "running",
+                    "ssh_ready": False,
+                },
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is False
+        assert "SSH" in result["error"]
+
+    def test_recovery_too_slow(self) -> None:
+        v = InstancePowerCycleCheck(
+            config={
+                "step_output": {
+                    "instance_id": "i-abc123",
+                    "power_cycle_initiated": True,
+                    "power_was_off": True,
+                    "state": "running",
+                    "ssh_ready": True,
+                    "recovery_seconds": 1200,
+                },
+                "max_recovery_time": 900,
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is False
+        assert "1200s" in result["error"]
+        assert "900s" in result["error"]
+
+    def test_success_without_recovery_time(self) -> None:
+        v = InstancePowerCycleCheck(
+            config={
+                "step_output": {
+                    "instance_id": "i-abc123",
+                    "power_cycle_initiated": True,
+                    "power_was_off": True,
+                    "state": "running",
+                    "ssh_ready": True,
+                },
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is True
+        assert "i-abc123" in result["output"]
 
 
 def _mock_ssh_run(responses: dict[str, tuple[int, str, str]]):

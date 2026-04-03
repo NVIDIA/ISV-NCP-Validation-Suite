@@ -19,7 +19,7 @@ It is a post-teardown sanitization check that confirms:
 
 Required JSON output fields:
   {
-    "success": true,              # boolean - did all checks pass?
+    "success": true,             # boolean - did all checks pass?
     "platform": "bm",            # string  - always "bm"
     "checks": {                  # object  - individual check results
       "instance_terminated": {
@@ -37,7 +37,7 @@ Required JSON output fields:
 On failure, set "success": false and include an "error" field.
 
 Usage:
-    python verify_terminated.py --instance-id <id> --region us-west-2 \
+    python verify_terminated.py --instance-id <id> --region <region> \
         --security-group-id <sg-id> --key-name <key-name>
 
 Reference implementation: ../aws/bm/verify_terminated.py
@@ -52,7 +52,7 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify instance terminated (template)")
     parser.add_argument("--instance-id", required=True, help="Instance identifier")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     parser.add_argument("--security-group-id", nargs="?", default=None, help="Security group to verify deleted")
     parser.add_argument("--key-name", nargs="?", default=None, help="Key pair name to verify deleted")
     args = parser.parse_args()

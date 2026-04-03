@@ -34,7 +34,7 @@ On failure, set "success": false and include an "error" field.
 
 Usage:
     python test_connectivity.py --vpc-id vpc-abc123 \\
-        --subnet-ids subnet-abc,subnet-def --sg-id sg-abc123 --region us-west-2
+        --subnet-ids subnet-abc,subnet-def --sg-id sg-abc123 --region <region>
 
 Reference implementation: ../aws/network/test_connectivity.py
 """
@@ -49,7 +49,7 @@ def main() -> int:
     parser.add_argument("--vpc-id", required=True, help="VPC / network ID to test in")
     parser.add_argument("--subnet-ids", required=True, help="Comma-separated subnet IDs")
     parser.add_argument("--sg-id", required=True, help="Security group ID")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     args = parser.parse_args()
 
     _subnet_ids = [s.strip() for s in args.subnet_ids.split(",") if s.strip()]

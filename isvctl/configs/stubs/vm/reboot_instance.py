@@ -32,7 +32,7 @@ Required JSON output fields:
   error             (str, optional) - human-readable error message provided when success is false
 
 Usage:
-    python reboot_instance.py --instance-id i-xxx --region us-west-2 \\
+    python reboot_instance.py --instance-id i-xxx --region <region> \\
         --key-file /tmp/key.pem --public-ip 54.x.x.x
 
 Reference implementation (AWS):
@@ -47,7 +47,7 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(description="Reboot VM instance and verify recovery")
     parser.add_argument("--instance-id", required=True, help="Instance ID to reboot")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     parser.add_argument("--key-file", required=True, help="Path to SSH private key")
     parser.add_argument("--public-ip", required=True, help="Instance public IP address")
     args = parser.parse_args()

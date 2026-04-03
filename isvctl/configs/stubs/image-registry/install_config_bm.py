@@ -26,7 +26,7 @@ Required JSON output:
 }
 
 Usage:
-    python install_config_bm.py --config-id cfg-xxx --region us-west-2
+    python install_config_bm.py --config-id cfg-xxx --region <region>
 
 AWS reference implementation:
     ../aws/image-registry/install_config_bm.py

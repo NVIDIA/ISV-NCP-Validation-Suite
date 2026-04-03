@@ -27,7 +27,7 @@ Required JSON output:
 Usage:
     python teardown.py --instance-id i-xxx --image-id img-xxx --disk-ids disk-a,disk-b \\
         --bucket-name my-bucket --key-name my-key --security-group-id sg-xxx \\
-        --instance-profile my-profile --region us-west-2
+        --instance-profile my-profile --region <region>
 
     Pass --skip-destroy to skip actual deletion (dry-run).
 

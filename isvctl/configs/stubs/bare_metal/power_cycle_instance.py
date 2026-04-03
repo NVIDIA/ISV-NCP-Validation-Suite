@@ -30,11 +30,11 @@ Power-cycle vs reboot:
 Required JSON output fields:
   {
     "success": true,                # boolean - did the full cycle succeed?
-    "platform": "bm",              # string  - always "bm"
+    "platform": "bm",               # string  - always "bm"
     "instance_id": "...",           # string  - instance identifier
     "state": "running",             # string  - must be "running" after recovery
-    "public_ip": "54.x.x.x",      # string  - public IP (may change after cycle)
-    "key_file": "/tmp/key.pem",    # string  - path to SSH private key
+    "public_ip": "54.x.x.x",        # string  - public IP (may change after cycle)
+    "key_file": "/tmp/key.pem",     # string  - path to SSH private key
     "power_cycle_initiated": true,  # boolean - was the power-off API call made?
     "power_was_off": true,          # boolean - did the node actually power off?
     "ssh_ready": true,              # boolean - can we SSH after recovery?
@@ -56,7 +56,7 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(description="Power-cycle bare-metal node (template)")
     parser.add_argument("--instance-id", required=True, help="Instance identifier")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     parser.add_argument("--key-file", required=True, help="Path to SSH private key")
     parser.add_argument("--public-ip", required=True, help="Instance public IP")
     args = parser.parse_args()

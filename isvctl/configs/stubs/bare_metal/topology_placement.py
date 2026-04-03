@@ -21,7 +21,7 @@ Required JSON output:
     "platform": "bm",
     "instance_id": "<id>",
     "placement_supported": true,
-    "availability_zone": "us-west-2a",
+    "availability_zone": "...",
     "placement_group": "<group-name>",
     "placement_strategy": "cluster",
     "operations": {
@@ -33,7 +33,7 @@ Required JSON output:
 }
 
 Usage:
-    python topology_placement.py --instance-id <id> --region us-west-2
+    python topology_placement.py --instance-id <id> --region <region>
 
 Reference implementation: ../aws/bare_metal/topology_placement.py
 """
@@ -46,7 +46,7 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(description="Topology-based placement test (template)")
     parser.add_argument("--instance-id", required=True, help="Instance ID")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     args = parser.parse_args()
 
     result: dict = {

@@ -34,7 +34,7 @@ Required JSON output fields:
   }
 
 Usage:
-    python stable_ip_test.py --region us-west-2 --cidr 10.91.0.0/16
+    python stable_ip_test.py --region <region> --cidr 10.91.0.0/16
 
 Reference implementation: ../aws/network/stable_ip_test.py
 """
@@ -46,7 +46,7 @@ import sys
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Stable private IP test (template)")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     parser.add_argument("--cidr", default="10.91.0.0/16", help="CIDR for test VPC")
     args = parser.parse_args()  # noqa: F841
 

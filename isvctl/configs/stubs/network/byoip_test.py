@@ -33,7 +33,7 @@ Required JSON output fields:
   }
 
 Usage:
-    python byoip_test.py --region us-west-2 --custom-cidr 100.64.0.0/16
+    python byoip_test.py --region <region> --custom-cidr 100.64.0.0/16
 
 Reference implementation: ../aws/network/byoip_test.py
 """
@@ -45,7 +45,7 @@ import sys
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="BYOIP test (template)")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     parser.add_argument("--custom-cidr", default="100.64.0.0/16", help="Custom CIDR to test")
     parser.add_argument("--standard-cidr", default="10.90.0.0/16", help="Standard CIDR for conflict check")
     args = parser.parse_args()  # noqa: F841

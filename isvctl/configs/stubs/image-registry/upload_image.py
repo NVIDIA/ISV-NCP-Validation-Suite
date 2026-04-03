@@ -26,7 +26,7 @@ Required JSON output:
 }
 
 Usage:
-    python upload_image.py --image-url <url> --image-format vmdk --region us-west-2
+    python upload_image.py --image-url <url> --image-format vmdk --region <region>
 
 AWS reference implementation:
     ../aws/image-registry/upload_image.py

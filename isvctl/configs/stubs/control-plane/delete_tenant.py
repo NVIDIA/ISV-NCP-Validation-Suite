@@ -24,7 +24,7 @@ Required JSON output:
 }
 
 Usage:
-    python delete_tenant.py --group-name my-tenant --region us-west-2
+    python delete_tenant.py --group-name my-tenant --region <region>
 
 AWS reference implementation:
     ../aws/control-plane/delete_tenant.py

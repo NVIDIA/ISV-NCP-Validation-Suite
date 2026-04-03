@@ -42,7 +42,7 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(description="Power off bare-metal node without destroying it")
     parser.add_argument("--instance-id", required=True, help="Node ID to power off")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     args = parser.parse_args()
 
     result = {

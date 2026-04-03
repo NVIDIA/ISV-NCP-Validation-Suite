@@ -18,12 +18,12 @@ This script is called during the "setup" phase. It must:
 
 Required JSON output fields:
   {
-    "success": true,          # boolean - did the operation succeed?
-    "platform": "iam",        # string  - always "iam"
+    "success": true,           # boolean - did the operation succeed?
+    "platform": "iam",         # string  - always "iam"
     "username": "...",         # string  - the created username
     "user_id":  "...",         # string  - unique user identifier
-    "access_key_id": "...",   # string  - credential identifier (optional)
-    "secret_access_key": "..."# string  - credential secret (optional)
+    "access_key_id": "...",    # string  - credential identifier (optional)
+    "secret_access_key": "..." # string  - credential secret (optional)
   }
 
 On failure, set "success": false and include an "error" field:

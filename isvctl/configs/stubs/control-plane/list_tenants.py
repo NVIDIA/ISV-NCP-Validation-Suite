@@ -24,7 +24,7 @@ Required JSON output:
 }
 
 Usage:
-    python list_tenants.py --region us-west-2 --target-group my-tenant
+    python list_tenants.py --region <region> --target-group my-tenant
 
 AWS reference implementation:
     ../aws/control-plane/list_tenants.py

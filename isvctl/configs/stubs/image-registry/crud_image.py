@@ -33,7 +33,7 @@ Required JSON output:
 }
 
 Usage:
-    python crud_image.py --image-id <id> --region us-west-2
+    python crud_image.py --image-id <id> --region <region>
 
 Reference implementation: ../aws/image-registry/crud_image.py
 """
@@ -46,7 +46,7 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(description="CRUD custom OS images (template)")
     parser.add_argument("--image-id", required=True, help="Source image ID from upload_image step")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     args = parser.parse_args()
 
     result: dict = {

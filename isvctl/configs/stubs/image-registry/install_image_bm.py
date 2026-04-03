@@ -25,7 +25,7 @@ Required JSON output:
 }
 
 Usage:
-    python install_image_bm.py --image-id img-xxx --region us-west-2
+    python install_image_bm.py --image-id img-xxx --region <region>
 
 AWS reference implementation:
     ../aws/image-registry/install_image_bm.py

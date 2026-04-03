@@ -35,7 +35,7 @@ Required JSON output fields:
   }
 
 Usage:
-    python peering_test.py --region us-west-2 --cidr-a 10.88.0.0/16 --cidr-b 10.87.0.0/16
+    python peering_test.py --region <region> --cidr-a 10.88.0.0/16 --cidr-b 10.87.0.0/16
 
 Reference implementation: ../aws/network/peering_test.py
 """
@@ -47,7 +47,7 @@ import sys
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="VPC peering test (template)")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     parser.add_argument("--cidr-a", default="10.88.0.0/16", help="CIDR for VPC A")
     parser.add_argument("--cidr-b", default="10.87.0.0/16", help="CIDR for VPC B")
     args = parser.parse_args()  # noqa: F841

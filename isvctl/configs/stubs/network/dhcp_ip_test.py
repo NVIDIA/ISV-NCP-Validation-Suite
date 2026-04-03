@@ -27,10 +27,10 @@ Required JSON output fields:
     "success": true,                           # boolean - did the instance launch?
     "platform": "network",                     # string  - always "network"
     "test_name": "dhcp_ip",                    # string  - always "dhcp_ip"
-    "public_ip": "3.1.2.3",                   # string  - SSH target address
-    "private_ip": "10.0.1.5",                 # string  - expected private IP
-    "key_file": "/tmp/isv-dhcp-test-key.pem", # string  - SSH private key path
-    "key_name": "isv-dhcp-test-key",          # string  - key pair name
+    "public_ip": "3.1.2.3",                    # string  - SSH target address
+    "private_ip": "10.0.1.5",                  # string  - expected private IP
+    "key_file": "/tmp/isv-dhcp-test-key.pem",  # string  - SSH private key path
+    "key_name": "isv-dhcp-test-key",           # string  - key pair name
     "ssh_user": "ubuntu",                      # string  - SSH username
     "instance_id": "i-abc123"                  # string  - instance identifier
   }
@@ -39,7 +39,7 @@ On failure, set "success": false and include an "error" field.
 
 Usage:
     python dhcp_ip_test.py --vpc-id vpc-abc123 --subnet-id subnet-abc \\
-        --sg-id sg-abc123 --region us-west-2
+        --sg-id sg-abc123 --region <region>
 
 Reference implementation: ../aws/network/dhcp_ip_test.py
 """
@@ -55,7 +55,7 @@ def main() -> int:
     parser.add_argument("--subnet-id", required=True, help="Subnet to launch instance in")
     parser.add_argument("--sg-id", required=True, help="Security group ID")
     parser.add_argument("--ssh-user", default="ubuntu", help="SSH username")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     args = parser.parse_args()
 
     result: dict = {

@@ -20,24 +20,24 @@ This script is called during the "test" phase. It is SELF-CONTAINED:
 
 Required JSON output fields:
   {
-    "success": true,                              # boolean - did all checks pass?
-    "platform": "network",                        # string  - always "network"
-    "test_name": "subnet_config",                 # string  - always "subnet_config"
-    "network_id": "vpc-abc123",                   # string  - VPC used for the test
-    "subnets": [                                  # list    - created subnets
+    "success": true,                        # boolean - did all checks pass?
+    "platform": "network",                  # string  - always "network"
+    "test_name": "subnet_config",           # string  - always "subnet_config"
+    "network_id": "vpc-abc123",             # string  - VPC used for the test
+    "subnets": [                            # list    - created subnets
       {
-        "subnet_id": "subnet-abc123",             # string  - subnet identifier
-        "cidr": "10.98.0.0/24",                   # string  - subnet CIDR
-        "availability_zone": "us-west-2a"         # string  - AZ placement
+        "subnet_id": "subnet-abc123",       # string  - subnet identifier
+        "cidr": "10.98.0.0/24",             # string  - subnet CIDR
+        "availability_zone": "<az>"         # string  - AZ placement
       }
     ],
-    "route_tables_verified": true                 # boolean - route tables OK?
+    "route_tables_verified": true           # boolean - route tables OK?
   }
 
 On failure, set "success": false and include an "error" field.
 
 Usage:
-    python subnet_test.py --region us-west-2 --cidr 10.98.0.0/16 --subnet-count 4
+    python subnet_test.py --region <region> --cidr 10.98.0.0/16 --subnet-count 4
 
 Reference implementation: ../aws/network/subnet_test.py
 """
@@ -49,7 +49,7 @@ import sys
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Subnet configuration test (template)")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     parser.add_argument("--cidr", default="10.98.0.0/16", help="CIDR block for test VPC")
     parser.add_argument("--subnet-count", type=int, default=4, help="Number of subnets to create")
     args = parser.parse_args()  # noqa: F841 — used in TODO block below

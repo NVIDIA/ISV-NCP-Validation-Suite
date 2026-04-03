@@ -28,7 +28,7 @@ Required JSON output:
 }
 
 Usage:
-    python check_api.py --region us-west-2 --services compute,storage,identity
+    python check_api.py --region <region> --services compute,storage,identity
 
 AWS reference implementation:
     ../aws/control-plane/check_api.py

@@ -33,7 +33,7 @@ Required JSON output:
 }
 
 Usage:
-    python crud_install_config.py --region us-west-2
+    python crud_install_config.py --region <region>
 
 AWS reference implementation:
     ../aws/image-registry/upload_image.py (similar pattern)

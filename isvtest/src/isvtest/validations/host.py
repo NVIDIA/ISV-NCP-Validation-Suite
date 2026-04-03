@@ -732,11 +732,11 @@ class HostSoftwareCheck(BaseValidation):
             # ==============================================================
             # 3. SBIOS (System BIOS / UEFI firmware)
             # ==============================================================
-            # BIOS vendor
+            # BIOS vendor (sysfs first — no root needed; dmidecode as fallback)
             exit_code, stdout, _ = run_ssh_command(
                 ssh,
-                "sudo dmidecode -s bios-vendor 2>/dev/null "
-                "|| cat /sys/class/dmi/id/bios_vendor 2>/dev/null "
+                "cat /sys/class/dmi/id/bios_vendor 2>/dev/null "
+                "|| dmidecode -s bios-vendor 2>/dev/null "
                 "|| echo 'unknown'",
             )
             bios_vendor = stdout.strip() if exit_code == 0 else "unknown"
@@ -755,8 +755,8 @@ class HostSoftwareCheck(BaseValidation):
             # BIOS version
             exit_code, stdout, _ = run_ssh_command(
                 ssh,
-                "sudo dmidecode -s bios-version 2>/dev/null "
-                "|| cat /sys/class/dmi/id/bios_version 2>/dev/null "
+                "cat /sys/class/dmi/id/bios_version 2>/dev/null "
+                "|| dmidecode -s bios-version 2>/dev/null "
                 "|| echo 'unknown'",
             )
             bios_version = stdout.strip() if exit_code == 0 else "unknown"
@@ -765,8 +765,8 @@ class HostSoftwareCheck(BaseValidation):
             # BIOS release date
             exit_code, stdout, _ = run_ssh_command(
                 ssh,
-                "sudo dmidecode -s bios-release-date 2>/dev/null "
-                "|| cat /sys/class/dmi/id/bios_date 2>/dev/null "
+                "cat /sys/class/dmi/id/bios_date 2>/dev/null "
+                "|| dmidecode -s bios-release-date 2>/dev/null "
                 "|| echo 'unknown'",
             )
             bios_date = stdout.strip() if exit_code == 0 else "unknown"
@@ -775,8 +775,8 @@ class HostSoftwareCheck(BaseValidation):
             # System product / platform
             exit_code, stdout, _ = run_ssh_command(
                 ssh,
-                "sudo dmidecode -s system-product-name 2>/dev/null "
-                "|| cat /sys/class/dmi/id/product_name 2>/dev/null "
+                "cat /sys/class/dmi/id/product_name 2>/dev/null "
+                "|| dmidecode -s system-product-name 2>/dev/null "
                 "|| echo 'unknown'",
             )
             product = stdout.strip() if exit_code == 0 else "unknown"

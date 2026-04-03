@@ -50,6 +50,7 @@ from isvtest.validations.iam import (
 from isvtest.validations.instance import (
     InstanceCreatedCheck,
     InstanceListCheck,
+    InstancePowerCycleCheck,
     InstanceRebootCheck,
     InstanceStartCheck,
     InstanceStateCheck,
@@ -96,6 +97,7 @@ __all__ = [
     "GpuOperatorInstalledCheck",
     "InstanceCreatedCheck",
     "InstanceListCheck",
+    "InstancePowerCycleCheck",
     "InstanceRebootCheck",
     "InstanceStartCheck",
     "InstanceStateCheck",

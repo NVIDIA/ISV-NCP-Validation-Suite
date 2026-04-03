@@ -125,6 +125,74 @@ class InstanceRebootCheck(BaseValidation):
         self.set_passed(f"Instance {instance_id} rebooted successfully (state={state}{uptime_str})")
 
 
+class InstancePowerCycleCheck(BaseValidation):
+    """Validate that an instance was power-cycled successfully.
+
+    A power-cycle is a hard power off followed by power on (cold start),
+    unlike a reboot which is an OS-level restart. This validates that the
+    node recovers from complete power loss.
+
+    Checks the power-cycle step output for:
+    - power_cycle_initiated: True (power-off API call succeeded)
+    - power_was_off: True (node actually reached powered-off state)
+    - state: "running" (node recovered)
+    - ssh_ready: True (SSH connectivity restored)
+    - recovery_seconds: Within max_recovery_time
+
+    Config:
+        step_output: The power-cycle step output to check
+        max_recovery_time: Maximum seconds from power-on to SSH ready (default: 900)
+
+    Step output (from power_cycle_instance.py):
+        instance_id: Instance identifier
+        power_cycle_initiated: Whether power-off API call succeeded
+        power_was_off: Whether node reached powered-off state
+        state: Instance state after recovery
+        ssh_ready: Whether SSH is accessible after recovery
+        recovery_seconds: Seconds from power-on to SSH ready
+    """
+
+    description: ClassVar[str] = "Check instance recovered from power-cycle"
+    markers: ClassVar[list[str]] = ["bare_metal"]
+
+    def run(self) -> None:
+        step_output = self.config.get("step_output", {})
+        max_recovery_time = self.config.get("max_recovery_time", 900)
+
+        instance_id = step_output.get("instance_id")
+        if not instance_id:
+            self.set_failed("No 'instance_id' in step output")
+            return
+
+        power_cycle_initiated = step_output.get("power_cycle_initiated", False)
+        if not power_cycle_initiated:
+            self.set_failed(f"Power-cycle was not initiated for {instance_id}")
+            return
+
+        power_was_off = step_output.get("power_was_off", False)
+        if not power_was_off:
+            self.set_failed(f"Instance {instance_id} did not reach powered-off state")
+            return
+
+        state = step_output.get("state")
+        if state != "running":
+            self.set_failed(f"Instance {instance_id} not running after power-cycle: {state}")
+            return
+
+        ssh_ready = step_output.get("ssh_ready", False)
+        if not ssh_ready:
+            self.set_failed(f"SSH not ready after power-cycle for {instance_id}")
+            return
+
+        recovery = step_output.get("recovery_seconds")
+        if recovery is not None and recovery > max_recovery_time:
+            self.set_failed(f"Instance {instance_id} recovery took {recovery:.0f}s > {max_recovery_time}s")
+            return
+
+        recovery_str = f", recovery={recovery:.0f}s" if recovery is not None else ""
+        self.set_passed(f"Instance {instance_id} recovered from power-cycle (state={state}{recovery_str})")
+
+
 class InstanceCreatedCheck(BaseValidation):
     """Validate instance was created successfully.
 

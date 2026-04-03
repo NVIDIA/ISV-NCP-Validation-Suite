@@ -23,14 +23,15 @@
 #   6. verify_config - boto3: Verifies install config can provision BM (test)
 #   7. stop_instance - boto3: Powers off BM node, verifies stopped state (test)
 #   8. start_instance - boto3: Powers on BM node, verifies recovery (test)
-#   9. describe_instance - boto3: Describes post-start state, passes SSH info (test)
-#                          (runs after start so IP is current)
-#  10. reboot_instance - boto3: Reboots instance, validates recovery (test)
-#  11. reinstall_instance - boto3: Reinstalls OS from stock AMI (test) [skip: true]
-#  12. deploy_nim - paramiko: Deploys NIM container via SSH (test)
-#  13. teardown_nim - paramiko: Stops NIM container via SSH (teardown)
-#  14. teardown - boto3: Terminates bare-metal EC2 (teardown)
-#  15. verify_teardown - boto3: Confirms instance terminated (teardown)
+#   9. reboot_instance - boto3: Reboots instance, validates recovery (test)
+#  10. power_cycle_instance - boto3: Hard power off + on, validates cold-start (test)
+#  11. describe_instance - boto3: Describes current state, passes SSH info (test)
+#                          (runs after power_cycle so IP is current)
+#  12. reinstall_instance - boto3: Reinstalls OS from stock AMI (test) [skip: true]
+#  13. deploy_nim - paramiko: Deploys NIM container via SSH (test)
+#  14. teardown_nim - paramiko: Stops NIM container via SSH (teardown)
+#  15. teardown - boto3: Terminates bare-metal EC2 (teardown)
+#  16. verify_teardown - boto3: Confirms instance terminated (teardown)
 #
 # Dev workflow (reuse existing instance):
 #   # Run 1: launch + test, keep instance alive
@@ -156,20 +157,6 @@ commands:
           - "{{steps.launch_instance.public_ip}}"
         timeout: 2700
 
-      # Describe post-start instance state - SSH/GPU validation anchor
-      # Runs after start_instance so the IP is current (stop/start may reassign it)
-      - name: describe_instance
-        phase: test
-        command: "python3 ../../stubs/aws/bare_metal/describe_instance.py"
-        args:
-          - "--instance-id"
-          - "{{steps.launch_instance.instance_id}}"
-          - "--region"
-          - "{{region}}"
-          - "--key-file"
-          - "{{steps.launch_instance.key_file}}"
-        timeout: 120
-
       # Reboot instance and validate recovery
       # BM-specific: longer waits for hardware POST/BIOS/OS boot
       - name: reboot_instance
@@ -183,8 +170,38 @@ commands:
           - "--key-file"
           - "{{steps.launch_instance.key_file}}"
           - "--public-ip"
-          - "{{steps.launch_instance.public_ip}}"
+          - "{{steps.start_instance.public_ip}}"
         timeout: 1800
+
+      # Power-cycle: hard power off + power on (cold start)
+      # Force=True bypasses OS shutdown — equivalent to pulling the power
+      - name: power_cycle_instance
+        phase: test
+        command: "python3 ../../stubs/aws/bare_metal/power_cycle_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+          - "--public-ip"
+          - "{{steps.reboot_instance.public_ip}}"
+        timeout: 3600
+
+      # Describe instance state - SSH/GPU validation anchor
+      # Runs after power_cycle so the IP is current (stop/start may reassign it)
+      - name: describe_instance
+        phase: test
+        command: "python3 ../../stubs/aws/bare_metal/describe_instance.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+          - "--key-file"
+          - "{{steps.launch_instance.key_file}}"
+        timeout: 120
 
       # Reinstall instance from stock OS (stop + swap root volume + start)
       # Skipped by default: ~30-45 min on AWS metal, and CreateReplaceRootVolumeTask
@@ -202,32 +219,32 @@ commands:
           - "--key-file"
           - "{{steps.launch_instance.key_file}}"
           - "--public-ip"
-          - "{{steps.launch_instance.public_ip}}"
+          - "{{steps.power_cycle_instance.public_ip}}"
         timeout: 3600
 
       # Deploy NIM container via SSH (shared script)
       # Requires NGC_API_KEY env var
-      # Uses post-reboot IP/key since reboot may reassign the public IP
+      # Uses post-power-cycle IP/key since power-cycle may reassign the public IP
       - name: deploy_nim
         phase: test
         command: "python3 ../../stubs/common/deploy_nim.py"
         args:
           - "--host"
-          - "{{steps.reboot_instance.public_ip}}"
+          - "{{steps.power_cycle_instance.public_ip}}"
           - "--key-file"
-          - "{{steps.reboot_instance.key_file}}"
+          - "{{steps.power_cycle_instance.key_file}}"
         timeout: 1800
 
       # Teardown NIM container via SSH (shared script)
-      # Uses post-reboot IP/key to match what deploy_nim used
+      # Uses post-power-cycle IP/key to match what deploy_nim used
       - name: teardown_nim
         phase: teardown
         command: "python3 ../../stubs/common/teardown_nim.py"
         args:
           - "--host"
-          - "{{steps.reboot_instance.public_ip}}"
+          - "{{steps.power_cycle_instance.public_ip}}"
           - "--key-file"
-          - "{{steps.reboot_instance.key_file}}"
+          - "{{steps.power_cycle_instance.key_file}}"
         timeout: 120
 
       # Teardown bare-metal instance (boto3)
@@ -298,6 +315,13 @@ tests:
     # Start GPU - AWS metal has 8 GPUs
     start_gpu:
       step: start_instance
+      checks:
+        GpuCheck:
+          expected_gpus: 8
+
+    # Power-cycle GPU - AWS metal has 8 GPUs
+    power_cycle_gpu:
+      step: power_cycle_instance
       checks:
         GpuCheck:
           expected_gpus: 8

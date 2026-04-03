@@ -24,10 +24,13 @@ Requires paramiko: pip install paramiko
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import paramiko
+
+log = logging.getLogger(__name__)
 
 
 def get_ssh_client(
@@ -63,19 +66,63 @@ def get_ssh_client(
     return ssh_client
 
 
-def run_ssh_command(ssh: paramiko.SSHClient, command: str) -> tuple[int, str, str]:
+def run_ssh_command(
+    ssh: paramiko.SSHClient,
+    command: str,
+    timeout: int = 120,
+) -> tuple[int, str, str]:
     """Run command via SSH and return exit_code, stdout, stderr.
+
+    Uses a threading event to enforce a wall-clock timeout, since
+    paramiko's channel timeout only applies to socket operations and
+    does not bound recv_exit_status(). Drains stdout/stderr before
+    waiting for exit status to avoid deadlocks when output exceeds
+    the channel window size.
 
     Args:
         ssh: Connected SSH client
         command: Command to execute
+        timeout: Wall-clock timeout in seconds (default: 120)
 
     Returns:
         Tuple of (exit_code, stdout, stderr)
+
+    Raises:
+        socket.timeout: If the command does not complete within timeout
     """
-    _, stdout, stderr = ssh.exec_command(command)
-    exit_code = stdout.channel.recv_exit_status()
-    return exit_code, stdout.read().decode(), stderr.read().decode()
+    import threading
+
+    _, stdout, _stderr = ssh.exec_command(command)
+    channel = stdout.channel
+
+    stdout_data: list[bytes] = []
+    stderr_data: list[bytes] = []
+
+    def _drain() -> None:
+        while not channel.exit_status_ready():
+            if channel.recv_ready():
+                stdout_data.append(channel.recv(65536))
+            if channel.recv_stderr_ready():
+                stderr_data.append(channel.recv_stderr(65536))
+        while channel.recv_ready():
+            stdout_data.append(channel.recv(65536))
+        while channel.recv_stderr_ready():
+            stderr_data.append(channel.recv_stderr(65536))
+
+    thread = threading.Thread(target=_drain, daemon=True)
+    thread.start()
+    thread.join(timeout=timeout)
+
+    if thread.is_alive():
+        channel.close()
+        raise TimeoutError("timed out")
+
+    exit_code = channel.recv_exit_status()
+    return (
+        exit_code,
+        b"".join(stdout_data).decode(),
+        b"".join(stderr_data).decode(),
+    )
 
 
 def get_ssh_config(config: dict[str, Any], inventory: dict[str, Any]) -> dict[str, Any]:
@@ -133,6 +180,15 @@ def get_ssh_config(config: dict[str, Any], inventory: dict[str, Any]) -> dict[st
         or step_output.get("ssh_key_path")
         or ssh_inv.get("key_path")
         or vmaas_inv.get("ssh_key_path")
+    )
+
+    log.debug(
+        "SSH config resolved: host=%s, user=%s, key=%s (sources: step_output.public_ip=%s, config.host=%s)",
+        host,
+        user,
+        key_path,
+        step_output.get("public_ip"),
+        config.get("host"),
     )
 
     return {

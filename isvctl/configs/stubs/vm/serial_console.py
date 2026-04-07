@@ -37,9 +37,16 @@ import sys
 
 
 def main() -> int:
+    """Retrieve serial console output from a running instance and emit JSON."""
     parser = argparse.ArgumentParser(description="Serial console access test (template)")
     parser.add_argument("--instance-id", required=True, help="Instance ID")
     parser.add_argument("--region", required=True, help="Cloud region")
+
+    def _arg_error(message: str) -> None:
+        print(json.dumps({"success": False, "platform": "vm", "error": message}, indent=2))
+        raise SystemExit(2)
+
+    parser.error = _arg_error  # type: ignore[assignment]
     args = parser.parse_args()
 
     result: dict = {

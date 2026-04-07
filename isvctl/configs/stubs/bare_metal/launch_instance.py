@@ -44,7 +44,8 @@ Usage:
     python launch_instance.py --name isv-bm-test-gpu --instance-type <type> --region <region>
 
     # Reuse existing instance:
-    BM_INSTANCE_ID=i-xxx BM_KEY_FILE=/tmp/key.pem python launch_instance.py
+    BM_INSTANCE_ID=i-xxx BM_KEY_FILE=/tmp/key.pem python launch_instance.py \
+        --name isv-bm-test-gpu --instance-type <type> --region <region>
 
 Reference implementation: ../aws/bm/launch_instance.py
 """

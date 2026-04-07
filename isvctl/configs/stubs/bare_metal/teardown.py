@@ -34,7 +34,7 @@ Usage:
     python teardown.py --instance-id <id> --region <region> --skip-destroy
 
     # Also supports env var:
-    BM_SKIP_TEARDOWN=true python teardown.py --instance-id <id>
+    BM_SKIP_TEARDOWN=true python teardown.py --instance-id <id> --region <region>
 
 Reference implementation: ../aws/bm/teardown.py
 """
@@ -46,6 +46,7 @@ import sys
 
 
 def main() -> int:
+    """Teardown bare-metal instance and associated resources, emitting JSON result."""
     parser = argparse.ArgumentParser(description="Teardown bare-metal instance (template)")
     parser.add_argument("--instance-id", required=True, help="Instance identifier")
     parser.add_argument("--region", required=True, help="Cloud region")

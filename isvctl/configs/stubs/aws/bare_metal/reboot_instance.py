@@ -40,62 +40,12 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import boto3
-
-
-def wait_for_ssh(
-    host: str,
-    user: str,
-    key_file: str,
-    max_attempts: int = 60,
-    interval: int = 15,
-) -> bool:
-    """Wait for SSH to become available on the host.
-
-    Bare-metal instances can take 10-15 min to fully reboot, so defaults
-    are more generous than the VM version (60 attempts x 15s = 15 min).
-
-    Args:
-        host: Public IP or hostname
-        user: SSH username
-        key_file: Path to SSH private key
-        max_attempts: Maximum number of connection attempts
-        interval: Seconds between attempts
-
-    Returns:
-        True if SSH is ready, False if timed out
-    """
-    for attempt in range(1, max_attempts + 1):
-        try:
-            result = subprocess.run(
-                [
-                    "ssh",
-                    "-o",
-                    "StrictHostKeyChecking=no",
-                    "-o",
-                    "ConnectTimeout=5",
-                    "-o",
-                    "BatchMode=yes",
-                    "-i",
-                    key_file,
-                    f"{user}@{host}",
-                    "exit 0",
-                ],
-                capture_output=True,
-                timeout=15,
-            )
-            if result.returncode == 0:
-                print(f"  SSH ready after attempt {attempt}", file=sys.stderr)
-                return True
-        except (subprocess.TimeoutExpired, OSError):
-            pass
-
-        print(f"  Waiting for SSH... (attempt {attempt}/{max_attempts})", file=sys.stderr)
-        time.sleep(interval)
-
-    return False
+from common.ssh_utils import wait_for_ssh
 
 
 def get_uptime_via_ssh(host: str, user: str, key_file: str) -> float | None:

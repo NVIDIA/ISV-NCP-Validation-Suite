@@ -46,7 +46,7 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(description="Start stopped VM instance and verify recovery")
     parser.add_argument("--instance-id", required=True, help="Instance ID to start")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     parser.add_argument("--key-file", required=True, help="Path to SSH private key")
     parser.add_argument("--public-ip", required=True, help="Instance public IP address")
     args = parser.parse_args()

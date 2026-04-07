@@ -27,10 +27,10 @@ Instance reuse (dev workflow):
 
 Required JSON output fields:
   {
-    "success": true,                # boolean - did the operation succeed?
+    "success": true,               # boolean - did the operation succeed?
     "platform": "bm",              # string  - always "bm"
-    "instance_id": "...",           # string  - unique instance identifier
-    "public_ip": "54.x.x.x",      # string  - public IP for SSH access
+    "instance_id": "...",          # string  - unique instance identifier
+    "public_ip": "54.x.x.x",       # string  - public IP for SSH access
     "key_file": "/tmp/key.pem",    # string  - path to SSH private key
     "vpc_id": "vpc-xxx",           # string  - network/VPC identifier
     "instance_state": "running",   # string  - must be "running"
@@ -41,10 +41,11 @@ Required JSON output fields:
 On failure, set "success": false and include an "error" field.
 
 Usage:
-    python launch_instance.py --name isv-bm-test-gpu --instance-type g4dn.metal --region us-west-2
+    python launch_instance.py --name isv-bm-test-gpu --instance-type <type> --region <region>
 
     # Reuse existing instance:
-    BM_INSTANCE_ID=i-xxx BM_KEY_FILE=/tmp/key.pem python launch_instance.py
+    BM_INSTANCE_ID=i-xxx BM_KEY_FILE=/tmp/key.pem python launch_instance.py \
+        --name isv-bm-test-gpu --instance-type <type> --region <region>
 
 Reference implementation: ../aws/bm/launch_instance.py
 """
@@ -56,10 +57,17 @@ import sys
 
 
 def main() -> int:
+    """Launch a bare-metal GPU instance and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Launch bare-metal GPU instance (template)")
     parser.add_argument("--name", default="isv-bm-test-gpu", help="Instance name tag")
-    parser.add_argument("--instance-type", default="g4dn.metal", help="Bare-metal instance type")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--instance-type", required=True, help="Bare-metal instance type")
+    parser.add_argument("--region", required=True, help="Cloud region")
+
+    def _arg_error(message: str) -> None:
+        print(json.dumps({"success": False, "platform": "bm", "error": message}, indent=2))
+        raise SystemExit(2)
+
+    parser.error = _arg_error  # type: ignore[assignment]
     args = parser.parse_args()  # noqa: F841 — used in TODO block below
 
     result: dict = {

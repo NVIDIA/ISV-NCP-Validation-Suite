@@ -29,7 +29,7 @@ Required JSON output:
 }
 
 Usage:
-    python launch_instance.py --image-id <image-id> --instance-type g4dn.xlarge --region us-west-2
+    python launch_instance.py --image-id <image-id> --instance-type <type> --region <region>
 
 AWS reference implementation:
     ../aws/image-registry/launch_instance.py
@@ -43,7 +43,7 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(description="Launch GPU instance from imported image")
     parser.add_argument("--image-id", required=True, help="Imported machine image ID")
-    parser.add_argument("--instance-type", required=True, help="Instance type / flavor (e.g. g4dn.xlarge)")
+    parser.add_argument("--instance-type", required=True, help="Instance type / flavor")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")
     args = parser.parse_args()  # noqa: F841 — used in TODO block below
 

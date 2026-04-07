@@ -41,7 +41,7 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(description="Describe VM instance tags")
     parser.add_argument("--instance-id", required=True, help="Instance ID")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     args = parser.parse_args()
 
     result = {

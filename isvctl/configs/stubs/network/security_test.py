@@ -40,7 +40,7 @@ Required JSON output fields:
 On failure, set "success": false and include an "error" field.
 
 Usage:
-    python security_test.py --region us-west-2 --cidr 10.94.0.0/16
+    python security_test.py --region <region> --cidr 10.94.0.0/16
 
 Reference implementation: ../aws/network/security_test.py
 """
@@ -52,7 +52,7 @@ import sys
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Security blocking test (template)")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     parser.add_argument("--cidr", default="10.94.0.0/16", help="CIDR block for test VPC")
     args = parser.parse_args()  # noqa: F841 — used in TODO block below
 

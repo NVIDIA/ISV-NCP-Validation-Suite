@@ -40,8 +40,8 @@ On failure, set "success": false and include an "error" field.
 If the VPC doesn't exist, return success (idempotent teardown).
 
 Usage:
-    python teardown.py --vpc-id vpc-abc123 --region us-west-2
-    python teardown.py --vpc-id vpc-abc123 --region us-west-2 --skip-destroy
+    python teardown.py --vpc-id vpc-abc123 --region <region>
+    python teardown.py --vpc-id vpc-abc123 --region <region> --skip-destroy
 
 Reference implementation: ../aws/network/teardown.py
 """
@@ -54,7 +54,7 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(description="Teardown VPC / virtual network (template)")
     parser.add_argument("--vpc-id", required=True, help="VPC / network ID to delete")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     parser.add_argument("--skip-destroy", action="store_true", help="Skip actual deletion")
     args = parser.parse_args()
 

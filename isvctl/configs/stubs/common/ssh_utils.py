@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+"""Shared SSH utilities for stub scripts.
+
+Provides wait_for_ssh() used by bare-metal and VM stubs that need to
+poll for SSH readiness after instance state changes (start, reboot,
+power-cycle, reinstall).
+"""
+
+import subprocess
+import sys
+import time
+
+
+def wait_for_ssh(
+    host: str,
+    user: str,
+    key_file: str,
+    max_attempts: int = 60,
+    interval: int = 15,
+) -> bool:
+    """Wait for SSH to become available on the host.
+
+    Args:
+        host: Public IP or hostname
+        user: SSH username
+        key_file: Path to SSH private key
+        max_attempts: Maximum number of connection attempts
+        interval: Seconds between attempts
+
+    Returns:
+        True if SSH is ready, False if timed out
+    """
+    for attempt in range(1, max_attempts + 1):
+        try:
+            result = subprocess.run(
+                [
+                    "ssh",
+                    "-o",
+                    "StrictHostKeyChecking=no",
+                    "-o",
+                    "ConnectTimeout=5",
+                    "-o",
+                    "BatchMode=yes",
+                    "-i",
+                    key_file,
+                    f"{user}@{host}",
+                    "exit 0",
+                ],
+                capture_output=True,
+                timeout=15,
+            )
+            if result.returncode == 0:
+                print(f"  SSH ready after attempt {attempt}", file=sys.stderr)
+                return True
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+
+        print(f"  Waiting for SSH... (attempt {attempt}/{max_attempts})", file=sys.stderr)
+        time.sleep(interval)
+
+    return False

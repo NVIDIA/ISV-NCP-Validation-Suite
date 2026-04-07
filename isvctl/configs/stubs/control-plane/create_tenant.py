@@ -25,7 +25,7 @@ Required JSON output:
 }
 
 Usage:
-    python create_tenant.py --region us-west-2
+    python create_tenant.py --region <region>
 
 AWS reference implementation:
     ../aws/control-plane/create_tenant.py

@@ -24,20 +24,20 @@ Required JSON output fields:
     "platform": "network",                     # string  - always "network"
     "test_name": "vpc_ip_config",              # string  - always "vpc_ip_config"
     "network_id": "vpc-abc123",                # string  - VPC identifier
-    "cidr": "10.0.0.0/16",                    # string  - VPC CIDR block
+    "cidr": "10.0.0.0/16",                     # string  - VPC CIDR block
     "subnets": [                               # list    - subnet details
       {
         "subnet_id": "subnet-abc",             # string  - subnet identifier
-        "cidr": "10.0.1.0/24",                # string  - subnet CIDR
-        "az": "us-west-2a",                   # string  - availability zone
+        "cidr": "10.0.1.0/24",                 # string  - subnet CIDR
+        "az": "<az>",                          # string  - availability zone
         "auto_assign_public_ip": true,         # boolean - auto-assign public IP?
         "available_ips": 251                   # int     - available IP addresses
       }
     ],
     "dhcp_options": {                          # object  - DHCP options set
       "dhcp_options_id": "dopt-abc",           # string  - DHCP options set ID
-      "domain_name": "ec2.internal",           # string  - domain name
-      "domain_name_servers": ["AmazonProvidedDNS"],  # list - DNS servers
+      "domain_name": "internal.example",       # string  - domain name
+      "domain_name_servers": ["..."],          # list - DNS servers
       "ntp_servers": []                        # list    - NTP servers (may be empty)
     }
   }
@@ -45,7 +45,7 @@ Required JSON output fields:
 On failure, set "success": false and include an "error" field.
 
 Usage:
-    python vpc_ip_config_test.py --vpc-id vpc-abc123 --region us-west-2
+    python vpc_ip_config_test.py --vpc-id vpc-abc123 --region <region>
 
 Reference implementation: ../aws/network/vpc_ip_config_test.py
 """
@@ -58,7 +58,7 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(description="VPC IP configuration test (template)")
     parser.add_argument("--vpc-id", required=True, help="VPC / network ID to inspect")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     args = parser.parse_args()
 
     result: dict = {

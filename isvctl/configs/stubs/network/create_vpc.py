@@ -22,15 +22,15 @@ Required JSON output fields:
     "success": true,                       # boolean - did the operation succeed?
     "platform": "network",                 # string  - always "network"
     "network_id": "vpc-abc123",            # string  - VPC / network identifier
-    "cidr": "10.0.0.0/16",                # string  - the CIDR block assigned
+    "cidr": "10.0.0.0/16",                 # string  - the CIDR block assigned
     "subnets": [                           # list    - created subnets
-      {"subnet_id": "subnet-abc123", "cidr": "10.0.1.0/24", "az": "us-west-2a",
+      {"subnet_id": "subnet-abc123", "cidr": "10.0.1.0/24", "az": "<az>",
        "auto_assign_public_ip": true, "available_ips": 251}
     ],
     "security_group_id": "sg-abc123",      # string  - default security group ID
     "dhcp_options": {                      # object  - DHCP options configuration
       "dhcp_options_id": "dopt-abc",       # string  - DHCP options set ID
-      "domain_name": "ec2.internal",       # string  - domain name
+      "domain_name": "internal.example",   # string  - domain name
       "domain_name_servers": ["..."],      # list    - DNS servers
       "ntp_servers": []                    # list    - NTP servers (may be empty)
     }
@@ -44,7 +44,7 @@ On failure, set "success": false and include an "error" field:
   }
 
 Usage:
-    python create_vpc.py --name isv-shared-vpc --region us-west-2 --cidr 10.0.0.0/16
+    python create_vpc.py --name isv-shared-vpc --region <region> --cidr 10.0.0.0/16
 
 Reference implementation: ../aws/network/create_vpc.py
 """
@@ -57,7 +57,7 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(description="Create VPC / virtual network (template)")
     parser.add_argument("--name", default="isv-shared-vpc", help="Name tag for the VPC")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     parser.add_argument("--cidr", default="10.0.0.0/16", help="CIDR block for the VPC")
     args = parser.parse_args()
 

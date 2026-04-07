@@ -27,8 +27,8 @@ Required JSON output fields:
   error        (str, optional) - error message provided when success is false
 
 Usage:
-    python list_instances.py --vpc-id vpc-xxx --region us-west-2
-    python list_instances.py --vpc-id vpc-xxx --instance-id i-xxx --region us-west-2
+    python list_instances.py --vpc-id vpc-xxx --region <region>
+    python list_instances.py --vpc-id vpc-xxx --instance-id i-xxx --region <region>
 
 Reference implementation (AWS):
     ../aws/vm/list_instances.py
@@ -43,7 +43,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="List VM instances in a VPC/network")
     parser.add_argument("--vpc-id", required=True, help="VPC or network identifier")
     parser.add_argument("--instance-id", help="Filter to a specific instance ID")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     args = parser.parse_args()  # noqa: F841 — used in TODO block below
 
     result = {

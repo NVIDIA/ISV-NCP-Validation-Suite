@@ -24,7 +24,7 @@ Required JSON output:
 }
 
 Usage:
-    python test_access_key.py --access-key-id AKID --secret-access-key SECRET --region us-west-2
+    python test_access_key.py --access-key-id AKID --secret-access-key SECRET --region <region>
 
 AWS reference implementation:
     ../aws/control-plane/test_access_key.py

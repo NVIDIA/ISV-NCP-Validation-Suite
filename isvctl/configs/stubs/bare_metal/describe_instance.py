@@ -22,18 +22,18 @@ phase (so teardown always runs, even if tests fail).
 
 Required JSON output fields:
   {
-    "success": true,              # boolean - did the query succeed?
+    "success": true,             # boolean - did the query succeed?
     "platform": "bm",            # string  - always "bm"
-    "instance_id": "...",         # string  - instance identifier
-    "instance_state": "running",  # string  - current state
-    "public_ip": "54.x.x.x",    # string  - public IP for SSH access
+    "instance_id": "...",        # string  - instance identifier
+    "instance_state": "running", # string  - current state
+    "public_ip": "54.x.x.x",     # string  - public IP for SSH access
     "key_file": "/tmp/key.pem"   # string  - path to SSH private key
   }
 
 On failure, set "success": false and include an "error" field.
 
 Usage:
-    python describe_instance.py --instance-id <id> --region us-west-2 --key-file /tmp/key.pem
+    python describe_instance.py --instance-id <id> --region <region> --key-file /tmp/key.pem
 
 Reference implementation: ../aws/bm/describe_instance.py
 """
@@ -46,7 +46,7 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(description="Describe bare-metal instance (template)")
     parser.add_argument("--instance-id", required=True, help="Instance identifier")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     parser.add_argument("--key-file", required=True, help="Path to SSH private key")
     args = parser.parse_args()
 

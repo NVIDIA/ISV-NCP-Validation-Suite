@@ -34,7 +34,7 @@ Required JSON output fields:
   error             (str, optional) - error message provided when success is false
 
 Usage:
-    python launch_instance.py --name isv-test-gpu --instance-type g5.xlarge --region us-west-2
+    python launch_instance.py --name isv-test-gpu --instance-type <type> --region <region>
 
 Reference implementation (AWS):
     ../aws/vm/launch_instance.py
@@ -48,8 +48,8 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(description="Launch GPU VM instance")
     parser.add_argument("--name", default="isv-test-gpu", help="Instance name tag")
-    parser.add_argument("--instance-type", default="g5.xlarge", help="GPU instance type")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--instance-type", required=True, help="GPU instance type")
+    parser.add_argument("--region", required=True, help="Cloud region")
     args = parser.parse_args()  # noqa: F841 — used in TODO block below
 
     result = {

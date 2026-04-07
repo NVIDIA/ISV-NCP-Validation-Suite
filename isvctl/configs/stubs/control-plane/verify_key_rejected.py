@@ -25,7 +25,7 @@ Required JSON output:
 }
 
 Usage:
-    python verify_key_rejected.py --access-key-id AKID --secret-access-key SECRET --region us-west-2
+    python verify_key_rejected.py --access-key-id AKID --secret-access-key SECRET --region <region>
 
 AWS reference implementation:
     ../aws/control-plane/verify_key_rejected.py

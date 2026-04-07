@@ -42,57 +42,11 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
-
-def wait_for_ssh(
-    host: str,
-    user: str,
-    key_file: str,
-    max_attempts: int = 30,
-    interval: int = 10,
-) -> bool:
-    """Wait for SSH to become available on the host.
-
-    Args:
-        host: Public IP or hostname
-        user: SSH username
-        key_file: Path to SSH private key
-        max_attempts: Maximum number of connection attempts
-        interval: Seconds between attempts
-
-    Returns:
-        True if SSH is ready, False if timed out
-    """
-    for attempt in range(1, max_attempts + 1):
-        try:
-            result = subprocess.run(
-                [
-                    "ssh",
-                    "-o",
-                    "StrictHostKeyChecking=no",
-                    "-o",
-                    "ConnectTimeout=5",
-                    "-o",
-                    "BatchMode=yes",
-                    "-i",
-                    key_file,
-                    f"{user}@{host}",
-                    "exit 0",
-                ],
-                capture_output=True,
-                timeout=15,
-            )
-            if result.returncode == 0:
-                print(f"  SSH ready after attempt {attempt}", file=sys.stderr)
-                return True
-        except (subprocess.TimeoutExpired, OSError):
-            pass
-
-        print(f"  Waiting for SSH... (attempt {attempt}/{max_attempts})", file=sys.stderr)
-        time.sleep(interval)
-
-    return False
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from common.ssh_utils import wait_for_ssh
 
 
 def get_uptime_via_ssh(
@@ -240,7 +194,7 @@ def main() -> int:
         # Step 6: Wait for SSH to be ready
         # ============================================================
         print("Waiting for SSH to be ready after reboot...", file=sys.stderr)
-        ssh_ready = wait_for_ssh(public_ip, args.ssh_user, args.key_file)
+        ssh_ready = wait_for_ssh(public_ip, args.ssh_user, args.key_file, max_attempts=30, interval=10)
         result["ssh_ready"] = ssh_ready
 
         if not ssh_ready:

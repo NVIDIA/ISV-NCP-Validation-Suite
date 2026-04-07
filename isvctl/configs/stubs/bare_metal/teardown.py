@@ -21,20 +21,20 @@ This script is called during the "teardown" phase. It must:
 Required JSON output fields:
   {
     "success": true,                              # boolean - did teardown succeed?
-    "platform": "bm",                            # string  - always "bm"
+    "platform": "bm",                             # string  - always "bm"
     "resources_deleted": ["instance:i-xxx", ...], # list    - what was cleaned up
-    "message": "Teardown completed"              # string  - human-readable status
+    "message": "Teardown completed"               # string  - human-readable status
   }
 
 On failure, set "success": false and include an "error" field.
 If resources don't exist, return success (idempotent teardown).
 
 Usage:
-    python teardown.py --instance-id <id> --region us-west-2 --delete-key-pair --delete-security-group
-    python teardown.py --instance-id <id> --region us-west-2 --skip-destroy
+    python teardown.py --instance-id <id> --region <region> --delete-key-pair --delete-security-group
+    python teardown.py --instance-id <id> --region <region> --skip-destroy
 
     # Also supports env var:
-    BM_SKIP_TEARDOWN=true python teardown.py --instance-id <id>
+    BM_SKIP_TEARDOWN=true python teardown.py --instance-id <id> --region <region>
 
 Reference implementation: ../aws/bm/teardown.py
 """
@@ -46,9 +46,10 @@ import sys
 
 
 def main() -> int:
+    """Teardown bare-metal instance and associated resources, emitting JSON result."""
     parser = argparse.ArgumentParser(description="Teardown bare-metal instance (template)")
     parser.add_argument("--instance-id", required=True, help="Instance identifier")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     parser.add_argument("--delete-key-pair", action="store_true", help="Also delete key pair")
     parser.add_argument("--delete-security-group", action="store_true", help="Also delete security group")
     parser.add_argument("--skip-destroy", action="store_true", help="Skip actual destruction")

@@ -186,10 +186,10 @@ class InstancePowerCycleCheck(BaseValidation):
 
         recovery = step_output.get("recovery_seconds")
         if recovery is not None and recovery > max_recovery_time:
-            self.set_failed(f"Instance {instance_id} recovery took {recovery:.0f}s > {max_recovery_time}s")
+            self.set_failed(f"Instance {instance_id} recovery took {recovery}s > {max_recovery_time}s")
             return
 
-        recovery_str = f", recovery={recovery:.0f}s" if recovery is not None else ""
+        recovery_str = f", recovery={recovery}s" if recovery is not None else ""
         self.set_passed(f"Instance {instance_id} recovered from power-cycle (state={state}{recovery_str})")
 
 

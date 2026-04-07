@@ -47,7 +47,7 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(description="Power on stopped bare-metal node and verify recovery")
     parser.add_argument("--instance-id", required=True, help="Node ID to power on")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     parser.add_argument("--key-file", required=True, help="Path to SSH private key")
     parser.add_argument("--public-ip", required=True, help="Node public IP address")
     args = parser.parse_args()

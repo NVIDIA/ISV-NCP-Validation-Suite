@@ -25,7 +25,7 @@ Required JSON output:
 }
 
 Usage:
-    python get_tenant.py --group-name my-tenant --region us-west-2
+    python get_tenant.py --group-name my-tenant --region <region>
 
 AWS reference implementation:
     ../aws/control-plane/get_tenant.py

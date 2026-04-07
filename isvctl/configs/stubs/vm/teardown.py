@@ -28,7 +28,7 @@ Required JSON output fields:
   error              (str, optional) - error message provided when success is false
 
 Usage:
-    python teardown.py --instance-id i-xxx --region us-west-2 \\
+    python teardown.py --instance-id i-xxx --region <region> \\
         --delete-key-pair --delete-security-group
 
 Reference implementation (AWS):
@@ -43,7 +43,7 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(description="Tear down VM instance and resources")
     parser.add_argument("--instance-id", required=True, help="Instance ID to terminate")
-    parser.add_argument("--region", default="us-west-2", help="Cloud region")
+    parser.add_argument("--region", required=True, help="Cloud region")
     parser.add_argument(
         "--delete-key-pair",
         action="store_true",

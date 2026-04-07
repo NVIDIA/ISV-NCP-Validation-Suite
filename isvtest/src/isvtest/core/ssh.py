@@ -25,6 +25,8 @@ Requires paramiko: pip install paramiko
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -88,10 +90,8 @@ def run_ssh_command(
         Tuple of (exit_code, stdout, stderr)
 
     Raises:
-        socket.timeout: If the command does not complete within timeout
+        TimeoutError: If the command does not complete within timeout
     """
-    import threading
-
     _, stdout, _stderr = ssh.exec_command(command)
     channel = stdout.channel
 
@@ -102,8 +102,10 @@ def run_ssh_command(
         while not channel.exit_status_ready():
             if channel.recv_ready():
                 stdout_data.append(channel.recv(65536))
-            if channel.recv_stderr_ready():
+            elif channel.recv_stderr_ready():
                 stderr_data.append(channel.recv_stderr(65536))
+            else:
+                time.sleep(0.1)
         while channel.recv_ready():
             stdout_data.append(channel.recv(65536))
         while channel.recv_stderr_ready():

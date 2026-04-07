@@ -151,8 +151,10 @@ def build_catalog() -> list[dict[str, Any]]:
 
     # Build class metadata lookup, skipping classes marked for exclusion
     class_meta: dict[str, dict[str, Any]] = {}
+    excluded_names: set[str] = set()
     for cls in discover_all_tests():
         if getattr(cls, "catalog_exclude", False):
+            excluded_names.add(cls.__name__)
             continue
         markers = list(getattr(cls, "markers", []))
         class_meta[cls.__name__] = {
@@ -186,9 +188,10 @@ def build_catalog() -> list[dict[str, Any]]:
     for name, platforms in platform_map.items():
         if name in seen:
             continue
-        seen.add(name)
-        # Inherit metadata from base class
         base = name.split("-")[0] if "-" in name else name
+        if name in excluded_names or base in excluded_names:
+            continue
+        seen.add(name)
         meta = class_meta.get(base, {})
         variant_suffix = name[len(base) :] if base != name else ""
         desc = meta.get("description", "")

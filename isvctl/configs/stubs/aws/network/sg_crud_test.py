@@ -52,6 +52,12 @@ from common.vpc import create_test_vpc
 logger = logging.getLogger(__name__)
 
 
+def _skip_remaining(tests: dict[str, Any], reason: str, *keys: str) -> None:
+    """Populate missing test slots with a skipped/failed entry."""
+    for key in keys:
+        tests[key] = {"passed": False, "error": f"skipped: {reason}"}
+
+
 def test_create_sg(ec2: Any, vpc_id: str, sg_name: str) -> dict[str, Any]:
     """Test creating a security group."""
     result: dict[str, Any] = {"passed": False}
@@ -292,6 +298,17 @@ def main() -> int:
         vpc_id = vpc_result.get("vpc_id")  # Capture early for finally-block cleanup
 
         if not vpc_result["passed"]:
+            _skip_remaining(
+                result["tests"],
+                "create_vpc did not pass",
+                "create_sg",
+                "read_sg",
+                "update_sg_add_rule",
+                "update_sg_modify_rule",
+                "update_sg_remove_rule",
+                "delete_sg",
+                "verify_deleted",
+            )
             print(json.dumps(result, indent=2))
             return 1
 
@@ -303,6 +320,16 @@ def main() -> int:
         sg_id = create_result.get("sg_id")  # Capture early for finally-block cleanup
 
         if not create_result["passed"]:
+            _skip_remaining(
+                result["tests"],
+                "create_sg did not pass",
+                "read_sg",
+                "update_sg_add_rule",
+                "update_sg_modify_rule",
+                "update_sg_remove_rule",
+                "delete_sg",
+                "verify_deleted",
+            )
             print(json.dumps(result, indent=2))
             return 1
 
@@ -342,8 +369,10 @@ def main() -> int:
 
         if delete_result["passed"]:
             # Test 7: Verify deleted
-            result["tests"]["verify_deleted"] = test_verify_deleted(ec2, sg_id)
-            sg_id = None  # Mark as deleted so finally skips cleanup
+            verify_result = test_verify_deleted(ec2, sg_id)
+            result["tests"]["verify_deleted"] = verify_result
+            if verify_result["passed"]:
+                sg_id = None  # Mark as deleted so finally skips cleanup
         else:
             result["tests"]["verify_deleted"] = {
                 "passed": False,
@@ -358,17 +387,24 @@ def main() -> int:
     except Exception as e:
         result["error"] = str(e)
     finally:
-        # Cleanup: delete SG if still exists, then VPC
+        # Cleanup: delete SG if still exists, then VPC.
+        # Teardown failures are recorded in result so the orchestrator sees leaked resources.
         if sg_id:
             try:
                 ec2.delete_security_group(GroupId=sg_id)
             except ClientError:
                 logger.exception("Failed to delete security group %s during cleanup", sg_id)
+                result["success"] = False
+                result["status"] = "teardown_failed"
+                result.setdefault("errors", []).append(f"Cleanup failed: could not delete SG {sg_id}")
         if vpc_id:
             try:
                 ec2.delete_vpc(VpcId=vpc_id)
             except ClientError:
                 logger.exception("Failed to delete VPC %s during cleanup", vpc_id)
+                result["success"] = False
+                result["status"] = "teardown_failed"
+                result.setdefault("errors", []).append(f"Cleanup failed: could not delete VPC {vpc_id}")
 
     print(json.dumps(result, indent=2))
     return 0 if result["success"] else 1

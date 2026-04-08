@@ -120,7 +120,21 @@ commands:
         timeout: 120
         output_schema: vpc_isolation
 
-      # ─── Test 4: Security Blocking ─────────────────────────────────
+      # ─── Test 4a: Security Group CRUD ───────────────────────────────
+      # Self-contained test. Creates SG, reads, updates rules, deletes.
+      # YOUR SCRIPT must output JSON matching the sg_crud schema.
+      - name: sg_crud
+        phase: test
+        command: "python3 ../stubs/network/sg_crud_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--cidr"
+          - "10.95.0.0/16"
+        timeout: 120
+        output_schema: sg_crud
+
+      # ─── Test 4b: Security Blocking ────────────────────────────────
       # Self-contained test. Tests firewall/ACL blocking rules.
       # YOUR SCRIPT must output JSON matching the security_blocking schema.
       - name: security_blocking
@@ -328,6 +342,8 @@ tests:
           require_multi_az: true
         VpcIsolationCheck:
           step: vpc_isolation
+        SgCrudCheck:
+          step: sg_crud
         SecurityBlockingCheck:
           step: security_blocking
         NetworkConnectivityCheck:

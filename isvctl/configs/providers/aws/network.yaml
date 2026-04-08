@@ -13,11 +13,12 @@
 # Imports validations from the provider-agnostic network canonical config.
 # This file only provides AWS-specific commands (boto3 stubs) and settings.
 #
-# Comprehensive network testing with 13 test suites:
+# Comprehensive network testing with 14 test suites:
 #   1. VPC CRUD - Create, Read, Update, Delete VPC lifecycle
 #   2. Subnet Configuration - Multi-AZ subnet distribution
 #   3. VPC Isolation - Security boundaries between VPCs
-#   4. Security Blocking - SG/NACL blocking rules (negative tests)
+#  4a. Security Group CRUD - Create, Read, Update, Delete SG lifecycle
+#  4b. Security Blocking - SG/NACL blocking rules (negative tests)
 #   5. Connectivity - Instance network assignment
 #   6. Traffic Validation - Real ping tests via SSM
 #   7. VPC IP Config - DHCP options, subnet CIDRs, auto-assign IP (DDI)
@@ -101,7 +102,19 @@ commands:
         timeout: 120
         output_schema: vpc_isolation
 
-      # Test 4: Security Blocking (~30s)
+      # Test 4a: Security Group CRUD (~30s)
+      - name: sg_crud
+        phase: test
+        command: "python3 ../../stubs/aws/network/sg_crud_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--cidr"
+          - "10.95.0.0/16"
+        timeout: 120
+        output_schema: sg_crud
+
+      # Test 4b: Security Blocking (~30s)
       - name: security_blocking
         phase: test
         command: "python3 ../../stubs/aws/network/security_test.py"

@@ -123,6 +123,8 @@ STEP_SCHEMA_MAPPING: dict[str, str | None] = {
     "dns_validation": "localized_dns",
     "peering_test": "vpc_peering",
     "peering_validation": "vpc_peering",
+    "sg_crud_test": "sg_crud",
+    "sg_crud": "sg_crud",
 }
 
 # Common fields present in all outputs
@@ -775,6 +777,29 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
                 "type": "object",
                 "properties": {"id": {"type": "string"}, "cidr": {"type": "string"}},
             },
+        },
+        "additionalProperties": True,
+    },
+    "sg_crud": {
+        "type": "object",
+        "required": ["success", "platform"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "tests": {
+                "type": "object",
+                "properties": {
+                    "create_vpc": {"type": "object"},
+                    "create_sg": {"type": "object"},
+                    "read_sg": {"type": "object"},
+                    "update_sg_add_rule": {"type": "object"},
+                    "update_sg_modify_rule": {"type": "object"},
+                    "update_sg_remove_rule": {"type": "object"},
+                    "delete_sg": {"type": "object"},
+                    "verify_deleted": {"type": "object"},
+                },
+                "description": "Security group CRUD test results",
+            },
+            "network_id": {"type": "string", "description": "VPC ID"},
         },
         "additionalProperties": True,
     },

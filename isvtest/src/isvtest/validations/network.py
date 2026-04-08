@@ -200,6 +200,56 @@ class VpcIsolationCheck(BaseValidation):
             self.set_passed(f"VPCs {vpc_a} and {vpc_b} are properly isolated")
 
 
+class SgCrudCheck(BaseValidation):
+    """Validate Security Group CRUD lifecycle operations.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        tests: dict with create_sg, read_sg, update_sg_add_rule,
+               update_sg_modify_rule, update_sg_remove_rule,
+               delete_sg, verify_deleted
+    """
+
+    description: ClassVar[str] = "Check security group CRUD operations"
+    markers: ClassVar[list[str]] = ["network", "security"]
+
+    def run(self) -> None:
+        step_output = self.config.get("step_output", {})
+        tests = step_output.get("tests", {})
+
+        if not tests:
+            self.set_failed("No 'tests' in step output")
+            return
+
+        required_tests = [
+            "create_vpc",
+            "create_sg",
+            "read_sg",
+            "update_sg_add_rule",
+            "update_sg_modify_rule",
+            "update_sg_remove_rule",
+            "delete_sg",
+            "verify_deleted",
+        ]
+        passed_tests = []
+        failed_tests = []
+
+        for test_name in required_tests:
+            test_result = tests.get(test_name, {})
+            if test_result.get("passed"):
+                passed_tests.append(test_name)
+            else:
+                error = test_result.get("error", "unknown error")
+                failed_tests.append(f"{test_name}: {error}")
+
+        if not failed_tests:
+            self.set_passed(f"All {len(passed_tests)} SG CRUD tests passed")
+        else:
+            self.set_failed(f"Failed tests: {', '.join(failed_tests)}")
+
+
 class SecurityBlockingCheck(BaseValidation):
     """Validate security group and NACL blocking rules work correctly.
 

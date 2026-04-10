@@ -47,23 +47,24 @@ isvctl test run -f isvctl/configs/tests/k8s.yaml -- -v -s -k "NodeCount"
 
 ```text
 isvctl/
-├── configs/           # Unified configuration files
-│   ├── tests/        # Test configs (k8s.yaml, slurm.yaml, bare_metal.yaml)
-│   └── providers/    # Provider configs (microk8s.yaml, minikube.yaml, k3s.yaml, aws/)
-├── stubs/            # Inventory and lifecycle scripts
-│   ├── k8s/
-│   │   ├── _common.sh         # Shared K8s inventory logic
-│   │   ├── setup.sh           # Generic kubectl setup
-│   │   ├── setup_microk8s.sh  # MicroK8s setup
-│   │   ├── setup_minikube.sh  # Minikube setup
-│   │   └── setup_k3s.sh       # k3s setup
-│   └── slurm/
-│       └── ...
-├── schemas/          # JSON Schema for validation
-│   ├── config.schema.json
-│   └── command_output.schema.json
-└── scripts/          # Helper scripts
-    └── yaml2json.py
+├── configs/
+│   ├── tests/         # Canonical test suites (vm.yaml, bare_metal.yaml, network.yaml, ...)
+│   ├── providers/     # Provider configs (aws/, microk8s.yaml, minikube.yaml, k3s.yaml)
+│   └── stubs/         # Lifecycle scripts (provider-agnostic templates + aws/ reference)
+│       ├── vm/                # VM lifecycle stubs
+│       ├── bare_metal/        # Bare metal lifecycle stubs
+│       ├── network/           # Network validation stubs
+│       ├── control-plane/     # API/IAM/tenant stubs
+│       ├── iam/               # User lifecycle stubs
+│       ├── image-registry/    # Image CRUD stubs
+│       ├── common/            # Shared stubs (NIM deploy/teardown)
+│       ├── k8s/               # Kubernetes setup/teardown
+│       ├── slurm/             # Slurm setup/teardown
+│       └── aws/               # AWS reference implementations
+├── schemas/           # JSON Schema for validation
+├── scripts/           # Helper scripts
+├── src/               # isvctl Python source
+└── tests/             # Unit tests
 ```
 
 ## Usage
@@ -112,27 +113,30 @@ See [Configuration Guide](../guides/configuration.md) for full details.
 ```yaml
 version: "1.0"
 
-# Lifecycle commands - grouped by platform
 commands:
   kubernetes:
-    setup:
-      command: "./isvctl/stubs/k8s/setup.sh"
-      timeout: 120
-    teardown:
-      command: "./isvctl/stubs/k8s/teardown.sh"
-      timeout: 30
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: setup
+        phase: setup
+        command: "../stubs/k8s/setup.sh"
+        timeout: 120
+      - name: teardown
+        phase: teardown
+        command: "../stubs/k8s/teardown.sh"
+        timeout: 30
 
-# Test configuration
 tests:
   platform: kubernetes
-  cluster_name: "{{inventory.cluster_name}}"
+  cluster_name: "{{steps.setup.cluster_name}}"
 
   validations:
     kubernetes:
-      - K8sNodeCountCheck:
-          count: "{{inventory.kubernetes.node_count}}"
-      - K8sGpuCapacityCheck:
-          expected_total: "{{inventory.kubernetes.total_gpus}}"
+      checks:
+        K8sNodeCountCheck:
+          count: "{{steps.setup.kubernetes.node_count}}"
+        K8sGpuCapacityCheck:
+          expected_total: "{{steps.setup.kubernetes.total_gpus}}"
 ```
 
 ### Inventory Output Schema

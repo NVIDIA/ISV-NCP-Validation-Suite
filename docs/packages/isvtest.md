@@ -7,7 +7,7 @@
 > isvctl test run -f isvctl/configs/tests/k8s.yaml
 > ```
 
-A validation framework for NVIDIA ISV Lab environments supporting Kubernetes clusters, Slurm HPC systems, and bare metal servers.
+A validation framework for NVIDIA ISV Lab environments supporting bare metal servers, virtual machines, Kubernetes clusters, and Slurm HPC systems.
 
 ## Quick Start
 
@@ -17,148 +17,235 @@ uv sync
 
 # Use via isvctl (recommended)
 isvctl test run -f isvctl/configs/tests/k8s.yaml
+isvctl test run -f isvctl/configs/providers/my-isv/vm.yaml
+isvctl test run -f isvctl/configs/providers/my-isv/bare_metal.yaml
 ```
 
 ## Architecture
 
 ```text
 isvtest/src/isvtest/
-├── config/
-│   ├── inventory.py     # Cluster inventory schema
-│   ├── loader.py        # Config loader
-│   └── settings.py      # Global settings
+├── config/              # Configuration loading
 ├── core/                # Framework core
 │   ├── validation.py    # BaseValidation class
 │   ├── workload.py      # BaseWorkloadCheck class
 │   ├── runners.py       # Command runners
-│   └── discovery.py     # Test discovery
-├── validations/         # Quick validation tests
-│   ├── bm_*.py          # Bare metal validations
-│   ├── k8s_*.py         # Kubernetes validations
-│   ├── slurm_*.py       # Slurm validations
-│   └── reframe_*.py     # ReFrame validations
+│   ├── discovery.py     # Test discovery
+│   ├── ssh.py           # SSH client utilities
+│   ├── k8s.py           # Kubernetes helpers
+│   ├── slurm.py         # Slurm helpers
+│   └── nvidia.py        # NVIDIA driver/GPU helpers
+├── validations/         # Platform-agnostic validation checks
+│   ├── generic.py       # Field checks, schema validation, step success
+│   ├── instance.py      # Instance lifecycle (stop/start/reboot/power-cycle)
+│   ├── network.py       # VPC, subnet, security group, DNS, peering
+│   ├── host.py          # SSH-based host checks (GPU, driver, OS, NCCL, NVLink)
+│   ├── nim.py           # NIM container health/inference/models
+│   ├── cluster.py       # Kubernetes cluster validations
+│   ├── iam.py           # Access key and tenant validations
+│   ├── bm_*.py          # Legacy bare metal validations
+│   ├── k8s_*.py         # Legacy Kubernetes validations
+│   └── slurm_*.py       # Legacy Slurm validations
 ├── workloads/           # Workload-based tests (longer running)
 │   ├── k8s_*.py         # K8s workloads (NCCL, stress, NIM)
 │   ├── slurm_*.py       # Slurm workloads (NCCL, stress, sbatch)
 │   └── reframe_*.py     # ReFrame tests
+├── catalog.py           # Test catalog generation
 └── main.py              # CLI entry point
 ```
 
 ## Available Validations
 
-### Bare Metal (`validations/bm_*.py`)
+Validations are platform-agnostic checks that inspect JSON step output. They are organized by category and referenced by class name in YAML test configs. Each validation has a `description` and `markers` that indicate which platforms it applies to.
 
-| Validation | Description |
-| ---------- | ----------- |
-| `BmDriverInstalled` | Verify NVIDIA driver is installed |
-| `BmDriverVersion` | Check driver version meets minimum |
-| `BmGpuDetection` | Detect GPUs and verify count |
-| `BmGpuHealth` | Check GPU temperature and health |
-| `BmGpuComputeCapability` | Verify compute capability |
-| `BmCudaVersion` | Check CUDA version |
+### Generic (`validations/generic.py`)
 
-### Kubernetes (`validations/k8s_*.py`)
+Utility checks that work with any step output.
 
-| Validation | Description |
-| ---------- | ----------- |
-| `K8sNodeCountCheck` | Verify node count |
-| `K8sNodeReadyCheck` | Verify all nodes are Ready |
-| `K8sNvidiaSmiCheck` | Run nvidia-smi on all GPU nodes |
-| `K8sDriverVersionCheck` | Verify driver version across nodes |
-| `K8sGpuPodAccessCheck` | Verify GPU access from pods (nvidia-smi) |
-| `K8sGpuOperatorNamespaceCheck` | Verify GPU Operator namespace |
-| `K8sGpuOperatorPodsCheck` | Verify GPU Operator pods running |
-| `K8sPodHealthCheck` | Check pod health status |
-| `K8sGpuLabelsCheck` | Verify GPU node labels |
-| `K8sGpuCapacityCheck` | Verify node GPU capacity |
-| `K8sMigConfigCheck` | Check MIG configuration |
+| Validation | Platforms | Description |
+| ---------- | --------- | ----------- |
+| `StepSuccessCheck` | all | Check step completed successfully |
+| `FieldExistsCheck` | all | Check required fields exist in output |
+| `FieldValueCheck` | all | Check field has expected value |
+| `CrudOperationsCheck` | all | Check all CRUD operations passed |
+| `SchemaValidation` | all | Validate output matches JSON schema |
 
-### Slurm (`validations/slurm_*.py`)
+### Instance (`validations/instance.py`)
 
-| Validation | Description |
-| ---------- | ----------- |
-| `SlurmInfoAvailable` | Verify sinfo command works |
-| `SlurmPartition` | Verify a Slurm partition exists and has expected nodes |
-| `SlurmJobSubmission` | Test job submission |
-| `SlurmGpuAllocation` | Test GPU allocation |
+Instance lifecycle validations for VMs and bare metal.
 
-### Workloads (`workloads/`)
+| Validation | Platforms | Description |
+| ---------- | --------- | ----------- |
+| `InstanceCreatedCheck` | vm | Check instance was created |
+| `InstanceStateCheck` | vm, bare_metal | Check instance is in expected state |
+| `InstanceListCheck` | vm, bare_metal | Check instance list from VPC |
+| `InstanceTagCheck` | vm, bare_metal | Check instance tags are present |
+| `InstanceStopCheck` | vm, bare_metal | Check instance stopped successfully |
+| `InstanceStartCheck` | vm, bare_metal | Check stopped instance started successfully |
+| `InstanceRebootCheck` | vm, bare_metal | Check instance rebooted successfully |
+| `InstancePowerCycleCheck` | bare_metal | Check instance recovered from power-cycle |
+| `StableIdentifierCheck` | vm, bare_metal | Check instance ID is stable across lifecycle events |
+| `SerialConsoleCheck` | vm, bare_metal | Check serial console access |
+| `TopologyPlacementCheck` | bare_metal | Check topology-based placement support |
 
-| Workload | Description |
-| -------- | ----------- |
-| `K8sNcclWorkload` | Single-node NCCL AllReduce validation |
-| `K8sNcclMultiNodeWorkload` | Multi-node NCCL AllReduce via MPIJob |
-| `K8sGpuStressWorkload` | GPU stress test |
-| `K8sNimHelmWorkload` | NIM Helm deployment + GenAI-Perf KPIs |
-| `K8sNimInferenceWorkload` | NIM inference validation |
-| `SlurmNcclMultiNodeWorkload` | Multi-node NCCL AllReduce via Slurm |
-| `SlurmGpuStressWorkload` | GPU stress test across Slurm partition |
-| `SlurmSbatchWorkload` | Run arbitrary sbatch script |
+### Network (`validations/network.py`)
 
-Each workload class has detailed docstrings covering config options, environment variables, and troubleshooting.
+VPC, subnet, security group, DNS, and connectivity checks.
 
-#### Workload Prerequisites
+| Validation | Platforms | Description |
+| ---------- | --------- | ----------- |
+| `NetworkProvisionedCheck` | network | Check network was provisioned |
+| `VpcCrudCheck` | network | Check VPC CRUD operations |
+| `SubnetConfigCheck` | network | Check subnet configuration |
+| `VpcIsolationCheck` | network, security | Check VPC isolation |
+| `VpcIpConfigCheck` | network | Check VPC IP configuration |
+| `VpcPeeringCheck` | network | Check VPC peering |
+| `SgCrudCheck` | network, security | Check security group CRUD operations |
+| `SecurityBlockingCheck` | network, security | Check security blocking rules |
+| `FloatingIpCheck` | network | Check floating IP switch |
+| `LocalizedDnsCheck` | network | Check localized DNS |
+| `ByoipCheck` | network | Check BYOIP support |
+| `StablePrivateIpCheck` | network | Check private IP stability |
+| `NetworkConnectivityCheck` | network | Check network connectivity |
+| `TrafficFlowCheck` | network | Check traffic flow |
+| `DhcpIpManagementCheck` | network, ssh | Check DHCP/IP management via SSH |
 
-Some workloads require additional cluster components beyond the base GPU Operator:
+### Host (`validations/host.py`)
+
+SSH-based host validations for GPU, driver, OS, networking, and workloads.
+
+| Validation | Platforms | Description |
+| ---------- | --------- | ----------- |
+| `ConnectivityCheck` | vm, bare_metal | Validates SSH connectivity |
+| `OsCheck` | vm, bare_metal | Validates OS via SSH |
+| `CpuInfoCheck` | vm, bare_metal | Validates CPU, NUMA topology, and PCI configuration |
+| `VcpuPinningCheck` | vm | Validates vCPU pinning and NUMA affinity |
+| `PciBusCheck` | vm | Validates PCI bus configuration for GPU devices |
+| `HostSoftwareCheck` | vm, bare_metal | Validates kernel, libvirt, SBIOS, and NVIDIA drivers |
+| `GpuCheck` | vm, bare_metal | Validates GPU via SSH |
+| `DriverCheck` | vm, bare_metal | Validates kernel and NVIDIA drivers |
+| `ContainerRuntimeCheck` | vm, bare_metal | Tests container runtime and NVIDIA Docker support |
+| `CloudInitCheck` | vm, bare_metal | Validates cloud-init completed and metadata service is reachable |
+| `GpuStressCheck` | bare_metal | GPU stress test via SSH |
+| `NcclCheck` | bare_metal | NCCL AllReduce test via SSH |
+| `TrainingCheck` | bare_metal | DDP training workload via SSH |
+| `NvlinkCheck` | bare_metal | NVLink topology and status via SSH |
+| `InfiniBandCheck` | bare_metal | InfiniBand interface status via SSH |
+| `EthernetCheck` | bare_metal | Ethernet interfaces and connectivity via SSH |
+
+### NIM (`validations/nim.py`)
+
+NIM container validations via SSH.
+
+| Validation | Platforms | Description |
+| ---------- | --------- | ----------- |
+| `NimHealthCheck` | vm, bare_metal | Validates NIM health endpoint |
+| `NimModelCheck` | vm, bare_metal | Validates NIM model listing |
+| `NimInferenceCheck` | vm, bare_metal | Validates NIM inference via chat completions |
+
+### Cluster (`validations/cluster.py`)
+
+Kubernetes cluster validations.
+
+| Validation | Platforms | Description |
+| ---------- | --------- | ----------- |
+| `ClusterHealthCheck` | kubernetes | Check cluster is healthy |
+| `NodeCountCheck` | kubernetes | Check cluster node count matches expected |
+| `GpuOperatorInstalledCheck` | kubernetes | Check GPU operator installation |
+| `PerformanceCheck` | workload | Check workload performance meets requirements |
+
+### IAM (`validations/iam.py`)
+
+Access key and tenant validations.
+
+| Validation | Platforms | Description |
+| ---------- | --------- | ----------- |
+| `AccessKeyCreatedCheck` | iam | Check access key was created |
+| `AccessKeyAuthenticatedCheck` | iam | Check access key can authenticate |
+| `AccessKeyDisabledCheck` | iam | Check access key was disabled |
+| `AccessKeyRejectedCheck` | iam | Check disabled key is rejected |
+| `TenantCreatedCheck` | iam | Check tenant was created |
+| `TenantListedCheck` | iam | Check tenant appears in list |
+| `TenantInfoCheck` | iam | Check tenant info retrieved |
+
+## Workloads
+
+Workloads are longer-running tests that deploy containers or run multi-node jobs.
+
+| Workload | Platform | Description |
+| -------- | -------- | ----------- |
+| `K8sNcclWorkload` | kubernetes | Single-node NCCL AllReduce validation |
+| `K8sNcclMultiNodeWorkload` | kubernetes | Multi-node NCCL AllReduce via MPIJob |
+| `K8sGpuStressWorkload` | kubernetes | GPU stress test |
+| `K8sNimHelmWorkload` | kubernetes | NIM Helm deployment + GenAI-Perf KPIs |
+| `K8sNimInferenceWorkload` | kubernetes | NIM inference validation |
+| `SlurmNcclMultiNodeWorkload` | slurm | Multi-node NCCL AllReduce via Slurm |
+| `SlurmGpuStressWorkload` | slurm | GPU stress test across Slurm partition |
+| `SlurmSbatchWorkload` | slurm | Run arbitrary sbatch script |
+
+### Workload Prerequisites
 
 | Workload | Requirement | Notes |
 | -------- | ----------- | ----- |
-| `K8sNcclMultiNodeWorkload` | [Kubeflow MPI Operator](https://github.com/kubeflow/mpi-operator) | Provides the `MPIJob` CRD (`kubeflow.org/v2beta1`) used to orchestrate multi-node runs |
-| `K8sNcclMultiNodeWorkload` | NVIDIA DRA driver (optional) | When the `ComputeDomain` CRD is present, MNNVL/IMEX channels are enabled automatically for full NVLink bandwidth across nodes. Controlled by `use_compute_domain: auto\|true\|false` |
+| `K8sNcclMultiNodeWorkload` | [Kubeflow MPI Operator](https://github.com/kubeflow/mpi-operator) | Provides the `MPIJob` CRD (`kubeflow.org/v2beta1`) |
+| `K8sNcclMultiNodeWorkload` | NVIDIA DRA driver (optional) | MNNVL/IMEX channels for full NVLink bandwidth. `use_compute_domain: auto\|true\|false` |
 | `K8sNimHelmWorkload` | `NGC_API_KEY` env var | Required to pull NIM models from NGC |
 
 ## Configuration Format
 
 See [Configuration Guide](../guides/configuration.md) for full details.
 
-The `tests:` section in isvctl configs uses this format (also used by legacy isvtest YAML):
+Validations are referenced in YAML test configs by class name under `tests.validations`. Each validation group is bound to a step and lists one or more checks:
 
 ```yaml
-cluster_name: "MY_CLUSTER"
-platform: kubernetes  # or slurm, bare_metal
+version: "1.0"
 
-validations:
-  bare_metal:
-    - BmDriverInstalled: {}
-    - BmDriverVersion:
-        min_version: "580.0"
-    - BmGpuDetection:
-        expected_count: 8
+commands:
+  vm:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: launch_instance
+        phase: setup
+        command: "python3 ../stubs/vm/launch_instance.py"
+        timeout: 600
 
-  kubernetes:
-    - K8sNodeCountCheck:
-        count: 3
-    - K8sNodeReadyCheck: {}
-    - K8sGpuOperatorPodsCheck:
-        namespace: "gpu-operator"
-    - K8sGpuPodAccessCheck:
-        gpu_count: 1
-    - K8sGpuCapacityCheck:
-        expected_per_node: 8
-        expected_total: 24
+      - name: stop_instance
+        phase: test
+        command: "python3 ../stubs/vm/stop_instance.py"
+        timeout: 600
 
-  slurm:
-    - SlurmInfoAvailable: {}
-    - SlurmPartition:
-        partition_name: "gpu"
+tests:
+  platform: vm
+  validations:
+    setup_checks:
+      step: launch_instance
+      checks:
+        InstanceStateCheck:
+          expected_state: "running"
 
-exclude:
-  markers: [slow, workload]
+    stop_checks:
+      step: stop_instance
+      checks:
+        InstanceStopCheck: {}
 
-settings:
-  timeout: 60
-  show_skipped_tests: true
+    start_checks:
+      step: start_instance
+      checks:
+        InstanceStartCheck: {}
+        StableIdentifierCheck:
+          reference_id: "{{steps.launch_instance.instance_id}}"
 ```
+
+Canonical test configs live in `isvctl/configs/tests/` (vm.yaml, bare_metal.yaml, network.yaml, etc.). Provider-specific configs in `isvctl/configs/providers/<provider>/` import the canonical config and override commands with platform stubs.
 
 ## Test Markers
 
 Filter tests using pytest markers:
 
-- `bare_metal`, `kubernetes`, `slurm` - Platform-specific
-- `gpu`, `network`, `hardware`, `software` - Component-specific
+- `bare_metal`, `vm`, `kubernetes`, `slurm` - Platform-specific
+- `gpu`, `network`, `ssh`, `security`, `iam` - Component-specific
 - `workload` - Workload-based tests (longer running)
 - `slow` - Tests that take longer than 5 minutes
-- `validation` - All validation tests (auto-applied)
 
 **Note:** By default, `workload` and `slow` markers are excluded. Use `-k` to explicitly run them.
 
@@ -174,7 +261,8 @@ uvx pre-commit run -a
 
 ## Related Documentation
 
-- [Local Development with MicroK8s](../guides/local-development.md) - Running K8s tests locally
+- [Configuration Guide](../guides/configuration.md)
+- [Local Development with MicroK8s](../guides/local-development.md)
 
 ## License
 

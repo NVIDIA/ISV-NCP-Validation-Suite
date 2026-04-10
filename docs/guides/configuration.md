@@ -238,21 +238,21 @@ A validation check can be run multiple times with different parameters by append
 validations:
   k8s_workloads:
     checks:
-      - K8sNimHelmWorkload-1b:
-          model: "meta/llama-3.2-1b-instruct"
-          gpu_count: 1
-          timeout: 900
-      - K8sNimHelmWorkload-3b:
-          model: "meta/llama-3.2-3b-instruct"
-          gpu_count: 4
-          timeout: 1800
+      K8sNimHelmWorkload-1b:
+        model: "meta/llama-3.2-1b-instruct"
+        gpu_count: 1
+        timeout: 900
+      K8sNimHelmWorkload-3b:
+        model: "meta/llama-3.2-3b-instruct"
+        gpu_count: 4
+        timeout: 1800
 
   slurm:
     checks:
-      - SlurmPartition-cpu:
-          partition_name: "cpu"
-      - SlurmPartition-gpu:
-          partition_name: "gpu"
+      SlurmPartition-cpu:
+        partition_name: "cpu"
+      SlurmPartition-gpu:
+        partition_name: "gpu"
 ```
 
 The part before the dash must match an existing validation class name (e.g., `K8sNimHelmWorkload`, `SlurmPartition`). The suffix after the dash is a label -- it can be any descriptive string. Each variant runs as a separate test case with its own parameters and appears independently in test results and coverage.
@@ -265,7 +265,7 @@ The part before the dash must match an existing validation class name (e.g., `K8
 
 ## Import and Override
 
-Provider configs can import a canonical test suite and override only the commands (scripts), while inheriting all validations:
+Provider configs can import a canonical test suite and override command definitions while inheriting validations (unless explicitly overridden):
 
 ```yaml
 # isvctl/configs/providers/my-isv/vm.yaml
@@ -278,7 +278,7 @@ commands:
         command: "python3 ../../stubs/my-isv/vm/launch_instance.py"
       - name: stop_instance
         command: "python3 ../../stubs/my-isv/vm/stop_instance.py"
-      # ... override only the commands, validations stay the same
+      # ... list the full set of steps you need
 
 tests:
   settings:
@@ -286,7 +286,7 @@ tests:
     instance_type: "gpu.large"
 ```
 
-The import path is relative to the importing file. The imported config provides the full step list, phases, and validations. The provider config overrides specific steps and settings. See the [AWS reference implementation](../references/aws.md) for working examples.
+The import path is relative to the importing file. The imported config provides the base step list, phases, and validations. Nested dictionaries (like `tests.settings`) are deep-merged, but list fields (like `commands.<platform>.steps`) are **replaced as a whole** — if you set `steps:` in the provider config, include the full desired list. See the [AWS reference implementation](../references/aws.md) for working examples.
 
 ## Template Variables
 

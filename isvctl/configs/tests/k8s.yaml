@@ -117,7 +117,7 @@ tests:
         K8sNimHelmWorkload-3b:
           model: "meta/llama-3.2-3b-instruct"
           model_tag: "latest"
-          gpu_count: "{{ steps.setup.kubernetes.total_gpus | default(4, true) }}"
+          gpu_count: "{{ steps.setup.kubernetes.gpu_per_node | default(4, true) }}"
           timeout: 1800
           genai_perf_requests: 200
           genai_perf_concurrency: 8

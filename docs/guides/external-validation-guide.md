@@ -168,14 +168,14 @@ Validations are grouped by meaningful category names. Set `step` at the group le
 validations:
   # Group-level step applies to all checks in the group
   setup_checks:
-    step: provision_cluster
+    step: setup
     checks:
       - StepSuccessCheck: {}
       - ClusterHealthCheck: {}
 
   # Per-check step overrides
   mixed:
-    step: provision_cluster       # default
+    step: setup                   # default
     checks:
       - ClusterHealthCheck: {}    # uses default step
       - StepSuccessCheck:

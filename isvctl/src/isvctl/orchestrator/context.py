@@ -147,11 +147,11 @@ class Context:
             output: JSON output from the step command
 
         Example:
-            After provision_cluster step:
-            >>> context.set_step_output("provision_cluster", {"cluster_name": "my-cluster"})
+            After setup step:
+            >>> context.set_step_output("setup", {"cluster_name": "my-cluster"})
 
             Subsequent step can reference:
-            >>> args: ["--cluster", "{{ steps.provision_cluster.cluster_name }}"]
+            >>> args: ["--cluster", "{{ steps.setup.cluster_name }}"]
         """
         self.data.setdefault("steps", {})[step_name] = output
 

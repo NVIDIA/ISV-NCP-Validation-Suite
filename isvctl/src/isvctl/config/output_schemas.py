@@ -22,7 +22,7 @@ Example usage:
     from isvctl.config.output_schemas import get_schema_for_step, validate_output
 
     # Auto-detect schema from step name
-    schema_name = get_schema_for_step("provision_cluster")  # Returns "cluster"
+    schema_name = get_schema_for_step("setup")  # Returns "cluster"
 
     # Validate output against schema
     is_valid, errors = validate_output(output_json, schema_name)
@@ -36,6 +36,7 @@ import jsonschema
 # The step name determines which schema is used for validation
 STEP_SCHEMA_MAPPING: dict[str, str | None] = {
     # Cluster operations -> "cluster" schema
+    "setup": "cluster",
     "provision_cluster": "cluster",
     "create_cluster": "cluster",
     "setup_cluster": "cluster",
@@ -828,7 +829,7 @@ def get_schema_for_step(step_name: str) -> str | None:
         Schema name for validation
 
     Examples:
-        >>> get_schema_for_step("provision_cluster")
+        >>> get_schema_for_step("setup")
         "cluster"
         >>> get_schema_for_step("my_custom_cluster_setup")
         "cluster"  # Partial match - contains "cluster"

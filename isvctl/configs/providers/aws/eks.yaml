@@ -36,7 +36,7 @@ version: "1.0"
 commands:
   kubernetes:
     steps:
-      - name: provision_cluster
+      - name: setup
         phase: setup
         command: "../../stubs/aws/eks/setup.sh"
         timeout: 1800 # 30 min for Terraform provisioning
@@ -48,7 +48,7 @@ commands:
           # Override with your IP for security
           TF_VAR_cluster_endpoint_public_access_cidrs: '["0.0.0.0/0"]'
 
-      - name: teardown_cluster
+      - name: teardown
         phase: teardown
         command: "../../stubs/aws/eks/teardown.sh"
         timeout: 1800 # 30 min for Terraform destroy

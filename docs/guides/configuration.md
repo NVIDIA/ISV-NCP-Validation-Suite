@@ -325,7 +325,7 @@ The schema is automatically detected from the step name using a mapping system:
 
 | Step Name Pattern | Schema | Required Fields |
 | ----------------- | ------ | --------------- |
-| `create_cluster`, `provision_cluster` | `cluster` | `success`, `platform`, `cluster_name`, `node_count` |
+| `setup`, `create_cluster`, `provision_cluster` | `cluster` | `success`, `platform`, `cluster_name`, `node_count` |
 | `create_network`, `create_vpc` | `network` | `success`, `platform` |
 | `launch_instance`, `create_vm` | `instance` | `success`, `platform`, `instance_id` |
 | `run_workload`, `run_test` | `workload_result` | `success`, `platform`, `status` |
@@ -378,7 +378,7 @@ steps:
 }
 ```
 
-**Cluster schema (`provision_cluster`):**
+**Cluster schema (`setup`):**
 
 ```json
 {

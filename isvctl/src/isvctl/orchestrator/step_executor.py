@@ -26,9 +26,9 @@ Example config:
     commands:
       kubernetes:
         steps:
-          - name: provision_cluster
+          - name: setup
             phase: setup
-            command: "./provision.sh"
+            command: "./setup.sh"
           - name: teardown
             phase: teardown
             command: "./teardown.sh"
@@ -37,7 +37,7 @@ Example config:
       validations:
         cluster:
           - NodeCountCheck:
-              step: provision_cluster
+              step: setup
               expected: 4
 """
 

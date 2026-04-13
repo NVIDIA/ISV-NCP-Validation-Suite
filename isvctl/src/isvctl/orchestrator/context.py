@@ -266,6 +266,9 @@ class Context:
 
         Emits a one-time warning per unique path so operators know defaults
         are in effect and can verify they're correct.
+
+        Args:
+            template_str: Jinja2 template string to scan for step references
         """
         steps_data = self.data.get("steps", {})
         for match in self._STEP_PATH_RE.finditer(template_str):

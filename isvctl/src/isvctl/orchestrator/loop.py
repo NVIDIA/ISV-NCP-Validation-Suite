@@ -67,6 +67,7 @@ class OrchestratorResult:
         success: Whether all phases succeeded
         phases: Results for each phase that was executed
         inventory: Final inventory data (step outputs)
+        context_warnings: Template/context warnings collected during orchestration
     """
 
     success: bool

@@ -21,6 +21,8 @@ from isvtest.core.validation import BaseValidation
 class NodeCountCheck(BaseValidation):
     """Validate that the cluster has the expected number of nodes.
 
+    Superseded by K8sNodeCountCheck which queries the cluster directly.
+
     Config:
         step_output: The step output to check
         expected: Expected node count (required)
@@ -31,6 +33,7 @@ class NodeCountCheck(BaseValidation):
 
     description: ClassVar[str] = "Check cluster node count matches expected"
     markers: ClassVar[list[str]] = ["kubernetes"]
+    catalog_exclude: ClassVar[bool] = True
 
     def run(self) -> None:
         step_output = self.config.get("step_output", {})
@@ -54,6 +57,9 @@ class NodeCountCheck(BaseValidation):
 class ClusterHealthCheck(BaseValidation):
     """Validate that the cluster is healthy and accessible.
 
+    Superseded by K8sNodeReadyCheck and K8sPodHealthCheck which query
+    the cluster directly.
+
     Config:
         step_output: The step output to check
 
@@ -65,6 +71,7 @@ class ClusterHealthCheck(BaseValidation):
 
     description: ClassVar[str] = "Check cluster is healthy"
     markers: ClassVar[list[str]] = ["kubernetes"]
+    catalog_exclude: ClassVar[bool] = True
 
     def run(self) -> None:
         step_output = self.config.get("step_output", {})
@@ -86,6 +93,9 @@ class ClusterHealthCheck(BaseValidation):
 class GpuOperatorInstalledCheck(BaseValidation):
     """Validate that GPU operator is installed.
 
+    Superseded by K8sGpuOperatorNamespaceCheck and K8sGpuOperatorPodsCheck
+    which query the cluster directly.
+
     Config:
         step_output: The step output to check
 
@@ -97,6 +107,7 @@ class GpuOperatorInstalledCheck(BaseValidation):
 
     description: ClassVar[str] = "Check GPU operator installation"
     markers: ClassVar[list[str]] = ["kubernetes", "gpu"]
+    catalog_exclude: ClassVar[bool] = True
 
     def run(self) -> None:
         step_output = self.config.get("step_output", {})

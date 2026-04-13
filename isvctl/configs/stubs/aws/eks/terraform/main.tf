@@ -587,7 +587,7 @@ resource "helm_release" "efs_csi_driver" {
 }
 
 # EFS StorageClass
-resource "kubernetes_storage_class" "efs" {
+resource "kubernetes_storage_class_v1" "efs" {
   count = var.enable_efs ? 1 : 0
 
   metadata {
@@ -610,7 +610,7 @@ resource "kubernetes_storage_class" "efs" {
 # Default gp3 StorageClass
 # -----------------------------------------------------------------------------
 
-resource "kubernetes_storage_class" "gp3" {
+resource "kubernetes_storage_class_v1" "gp3" {
   metadata {
     name = "gp3"
     annotations = {

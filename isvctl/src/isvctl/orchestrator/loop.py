@@ -19,7 +19,7 @@ import logging
 import shutil
 import tempfile
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -72,6 +72,7 @@ class OrchestratorResult:
     success: bool
     phases: list[PhaseResult]
     inventory: dict[str, Any] | None = None
+    context_warnings: list[str] = field(default_factory=list)
 
 
 def _merge_junit_xmls(phase_files: list[Path], output_path: Path) -> None:
@@ -393,6 +394,7 @@ class Orchestrator:
             success=overall_success,
             phases=phase_results,
             inventory=self.context.get_accumulated_context().get("steps", {}),
+            context_warnings=self.context.get_warnings(),
         )
 
     def _create_phase_result(

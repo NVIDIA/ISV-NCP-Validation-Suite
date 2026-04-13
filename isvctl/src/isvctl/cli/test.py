@@ -430,6 +430,11 @@ def run(
                         vr_status = typer.style("FAILED", fg=typer.colors.RED)
                     typer.echo(f"  {category_prefix}{vr_name}: {vr_status} - {vr_message}")
 
+    if result.context_warnings:
+        typer.echo(typer.style("WARNINGS", fg=typer.colors.YELLOW))
+        for w in result.context_warnings:
+            typer.echo(typer.style(f"  - {w}", fg=typer.colors.YELLOW))
+
     typer.echo("-" * 60)
     if result.success:
         status = typer.style("[PASS]", fg=typer.colors.GREEN)

@@ -101,6 +101,7 @@ class Context:
 
         # Track which missing steps have already been warned about
         self._warned_missing_steps: set[str] = set()
+        self._context_warnings: list[str] = []
 
         # Layer 6: Environment variables (for {{env.VAR}} access)
         # Must be loaded before settings so settings can reference env vars.
@@ -229,6 +230,10 @@ class Context:
         """
         return self.data
 
+    def get_warnings(self) -> list[str]:
+        """Return any warnings about missing step data or fields."""
+        return list(self._context_warnings)
+
     def render_string(self, template_str: str) -> str:
         """Render a Jinja2 template string with context.
 
@@ -247,32 +252,53 @@ class Context:
         template = env.from_string(template_str)
         return template.render(**self.data)
 
-    _STEP_REF_RE = re.compile(r"steps\.(\w+)")
+    _STEP_PATH_RE = re.compile(r"steps\.([\w.]+)")
 
     def _warn_missing_step_defaults(self, template_str: str) -> None:
-        """Warn when a template references a step that hasn't produced output.
+        """Warn when a template references missing step data.
 
-        When running with ``--phase test``, setup steps don't execute so their
-        outputs are empty.  Templates with ``| default(...)`` will silently
-        fall back, which can mask configuration errors (e.g., using
-        ``total_gpus`` instead of ``gpu_per_node``).  This emits a one-time
-        warning per missing step so the operator knows defaults are in effect.
+        Detects two cases that ``ChainableUndefined`` would silently absorb:
+
+        1. **Step not run** — ``steps.setup`` is empty because ``--phase test``
+           skipped setup.
+        2. **Field not found** — ``steps.setup`` has output but the referenced
+           field doesn't exist (typo, rename, wrong variable).
+
+        Emits a one-time warning per unique path so operators know defaults
+        are in effect and can verify they're correct.
         """
         steps_data = self.data.get("steps", {})
-        for match in self._STEP_REF_RE.finditer(template_str):
-            step_name = match.group(1)
-            if step_name in self._warned_missing_steps:
+        for match in self._STEP_PATH_RE.finditer(template_str):
+            full_path = match.group(1)
+            parts = full_path.split(".")
+            step_name = parts[0]
+            warn_key = f"steps.{full_path}"
+
+            if warn_key in self._warned_missing_steps:
                 continue
+
             if step_name not in steps_data or not steps_data[step_name]:
-                self._warned_missing_steps.add(step_name)
-                logger.warning(
-                    "Template references 'steps.%s' but step '%s' has no output "
-                    "(step may not have run). Default values will be used. "
-                    "Template: %s",
-                    step_name,
-                    step_name,
-                    template_str.strip(),
-                )
+                self._warned_missing_steps.add(warn_key)
+                msg = f"step '{step_name}' has no output (not run?), using defaults for: steps.{full_path}"
+                logger.warning(msg)
+                self._context_warnings.append(msg)
+                continue
+
+            # Step has output — walk the path to check for missing fields
+            node = steps_data
+            for i, part in enumerate(parts):
+                if isinstance(node, dict) and part in node:
+                    node = node[part]
+                elif isinstance(node, dict):
+                    missing = parts[i]
+                    available = ", ".join(sorted(node.keys())) if node else "(empty)"
+                    self._warned_missing_steps.add(warn_key)
+                    msg = f"'{missing}' not found in steps.{'.'.join(parts[:i])} (available: {available})"
+                    logger.warning(msg)
+                    self._context_warnings.append(msg)
+                    break
+                else:
+                    break
 
     def render_dict(self, data: dict[str, Any]) -> dict[str, Any]:
         """Recursively render all string values in a dictionary.

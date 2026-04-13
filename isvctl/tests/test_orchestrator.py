@@ -345,8 +345,8 @@ class TestContext:
 
         assert result == "4"
         assert len(caplog.records) == 1
-        assert "steps.setup" in caplog.records[0].message
-        assert "has no output" in caplog.records[0].message
+        assert "step 'setup' has no output" in caplog.records[0].message
+        assert len(context.get_warnings()) == 1
 
     def test_no_warning_when_step_output_present(self, caplog: logging.LogRecord) -> None:
         """Template referencing a step with output should not warn."""
@@ -361,12 +361,40 @@ class TestContext:
         assert len(caplog.records) == 0
 
     def test_missing_step_warning_deduplicates(self, caplog: logging.LogRecord) -> None:
-        """Multiple templates referencing the same missing step should warn only once."""
+        """Same path referenced twice should warn only once."""
         config = RunConfig()
         context = Context(config)
 
         with caplog.at_level(logging.WARNING, logger="isvctl.orchestrator.context"):
             context.render_string("{{ steps.setup.kubernetes.total_gpus | default(16, true) }}")
-            context.render_string("{{ steps.setup.kubernetes.gpu_per_node | default(4, true) }}")
+            context.render_string("{{ steps.setup.kubernetes.total_gpus | default(4, true) }}")
 
         assert len(caplog.records) == 1
+
+    def test_warns_when_field_missing_in_step_output(self, caplog: logging.LogRecord) -> None:
+        """Typo or wrong field name in a populated step should warn."""
+        config = RunConfig()
+        context = Context(config)
+        context.set_step_output("setup", {"kubernetes": {"total_gpus": 1, "gpu_per_node": 1}})
+
+        with caplog.at_level(logging.WARNING, logger="isvctl.orchestrator.context"):
+            result = context.render_string("{{ steps.setup.kubernetes._total_gpus | default(1, true) }}")
+
+        assert result == "1"
+        assert len(caplog.records) == 1
+        assert "'_total_gpus' not found" in caplog.records[0].message
+        assert "total_gpus" in caplog.records[0].message  # listed in available keys
+        assert len(context.get_warnings()) == 1
+
+    def test_warns_with_available_keys(self, caplog: logging.LogRecord) -> None:
+        """Warning for missing field should list available keys at that level."""
+        config = RunConfig()
+        context = Context(config)
+        context.set_step_output("setup", {"kubernetes": {"gpu_per_node": 4, "total_gpus": 16}})
+
+        with caplog.at_level(logging.WARNING, logger="isvctl.orchestrator.context"):
+            context.render_string("{{ steps.setup.kubernetes.typo_field | default(1, true) }}")
+
+        assert len(caplog.records) == 1
+        assert "'typo_field' not found" in caplog.records[0].message
+        assert "gpu_per_node" in caplog.records[0].message

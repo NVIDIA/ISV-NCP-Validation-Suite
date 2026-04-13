@@ -10,6 +10,7 @@
 
 """Tests for orchestration components."""
 
+import logging
 import tempfile
 from pathlib import Path
 
@@ -333,3 +334,39 @@ class TestContext:
         assert result["items"][3] == 123
         assert result["items"][4] is True
         assert result["items"][5] is None
+
+    def test_warns_when_step_output_missing(self, caplog: logging.LogRecord) -> None:
+        """Template referencing a step that hasn't run should warn."""
+        config = RunConfig()
+        context = Context(config)
+
+        with caplog.at_level(logging.WARNING, logger="isvctl.orchestrator.context"):
+            result = context.render_string("{{ steps.setup.kubernetes.total_gpus | default(4, true) }}")
+
+        assert result == "4"
+        assert len(caplog.records) == 1
+        assert "steps.setup" in caplog.records[0].message
+        assert "has no output" in caplog.records[0].message
+
+    def test_no_warning_when_step_output_present(self, caplog: logging.LogRecord) -> None:
+        """Template referencing a step with output should not warn."""
+        config = RunConfig()
+        context = Context(config)
+        context.set_step_output("setup", {"kubernetes": {"total_gpus": 16}})
+
+        with caplog.at_level(logging.WARNING, logger="isvctl.orchestrator.context"):
+            result = context.render_string("{{ steps.setup.kubernetes.total_gpus | default(4, true) }}")
+
+        assert result == "16"
+        assert len(caplog.records) == 0
+
+    def test_missing_step_warning_deduplicates(self, caplog: logging.LogRecord) -> None:
+        """Multiple templates referencing the same missing step should warn only once."""
+        config = RunConfig()
+        context = Context(config)
+
+        with caplog.at_level(logging.WARNING, logger="isvctl.orchestrator.context"):
+            context.render_string("{{ steps.setup.kubernetes.total_gpus | default(16, true) }}")
+            context.render_string("{{ steps.setup.kubernetes.gpu_per_node | default(4, true) }}")
+
+        assert len(caplog.records) == 1

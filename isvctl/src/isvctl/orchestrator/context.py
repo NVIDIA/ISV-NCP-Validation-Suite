@@ -17,7 +17,9 @@ enriched with inventory data from command outputs.
 
 import copy
 import json
+import logging
 import os
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -26,6 +28,8 @@ from jinja2 import ChainableUndefined, Environment
 
 from isvctl.config.schema import CommandOutput, RunConfig
 from isvctl.redaction import filter_env
+
+logger = logging.getLogger(__name__)
 
 
 def _create_jinja_env() -> Environment:
@@ -94,6 +98,9 @@ class Context:
 
         # Step phases (for inferring validation phase from step)
         self._step_phases: dict[str, str] = {}
+
+        # Track which missing steps have already been warned about
+        self._warned_missing_steps: set[str] = set()
 
         # Layer 6: Environment variables (for {{env.VAR}} access)
         # Must be loaded before settings so settings can reference env vars.
@@ -234,9 +241,38 @@ class Context:
         if "{{" not in template_str or "}}" not in template_str:
             return template_str
 
+        self._warn_missing_step_defaults(template_str)
+
         env = _create_jinja_env()
         template = env.from_string(template_str)
         return template.render(**self.data)
+
+    _STEP_REF_RE = re.compile(r"steps\.(\w+)")
+
+    def _warn_missing_step_defaults(self, template_str: str) -> None:
+        """Warn when a template references a step that hasn't produced output.
+
+        When running with ``--phase test``, setup steps don't execute so their
+        outputs are empty.  Templates with ``| default(...)`` will silently
+        fall back, which can mask configuration errors (e.g., using
+        ``total_gpus`` instead of ``gpu_per_node``).  This emits a one-time
+        warning per missing step so the operator knows defaults are in effect.
+        """
+        steps_data = self.data.get("steps", {})
+        for match in self._STEP_REF_RE.finditer(template_str):
+            step_name = match.group(1)
+            if step_name in self._warned_missing_steps:
+                continue
+            if step_name not in steps_data or not steps_data[step_name]:
+                self._warned_missing_steps.add(step_name)
+                logger.warning(
+                    "Template references 'steps.%s' but step '%s' has no output "
+                    "(step may not have run). Default values will be used. "
+                    "Template: %s",
+                    step_name,
+                    step_name,
+                    template_str.strip(),
+                )
 
     def render_dict(self, data: dict[str, Any]) -> dict[str, Any]:
         """Recursively render all string values in a dictionary.

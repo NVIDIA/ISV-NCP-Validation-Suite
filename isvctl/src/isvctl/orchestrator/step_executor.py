@@ -137,12 +137,17 @@ class StepExecutor:
         self,
         steps: list[StepConfig],
         context: Context,
+        best_effort: bool = False,
     ) -> StepResults:
         """Execute all steps sequentially.
 
         Args:
             steps: List of step configurations
             context: Context for templating and storing outputs
+            best_effort: When True, continue executing remaining steps even if
+                one fails (unless the step has ``continue_on_failure`` explicitly
+                set to False).  Used for teardown phases where all cleanup steps
+                should be attempted regardless of individual failures.
 
         Returns:
             StepResults with all step outcomes
@@ -172,11 +177,14 @@ class StepExecutor:
             if step_result.output:
                 context.set_step_output(step.name, step_result.output)
 
-            # Check if we should continue
             if not step_result.success and not step.continue_on_failure:
-                logger.error(f"Step {step.name} failed, stopping execution")
-                results.success = False
-                break
+                if best_effort:
+                    logger.warning(f"Step {step.name} failed (best-effort mode, continuing)")
+                    results.success = False
+                else:
+                    logger.error(f"Step {step.name} failed, stopping execution")
+                    results.success = False
+                    break
 
         return results
 

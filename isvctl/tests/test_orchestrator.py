@@ -14,6 +14,8 @@ import logging
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from isvctl.config.schema import CommandConfig, CommandOutput, RunConfig
 from isvctl.orchestrator.commands import CommandExecutor
 from isvctl.orchestrator.context import Context
@@ -335,7 +337,7 @@ class TestContext:
         assert result["items"][4] is True
         assert result["items"][5] is None
 
-    def test_warns_when_step_output_missing(self, caplog: logging.LogRecord) -> None:
+    def test_warns_when_step_output_missing(self, caplog: pytest.LogCaptureFixture) -> None:
         """Template referencing a step that hasn't run should warn."""
         config = RunConfig()
         context = Context(config)
@@ -348,7 +350,7 @@ class TestContext:
         assert "step 'setup' has no output" in caplog.records[0].message
         assert len(context.get_warnings()) == 1
 
-    def test_no_warning_when_step_output_present(self, caplog: logging.LogRecord) -> None:
+    def test_no_warning_when_step_output_present(self, caplog: pytest.LogCaptureFixture) -> None:
         """Template referencing a step with output should not warn."""
         config = RunConfig()
         context = Context(config)
@@ -360,7 +362,7 @@ class TestContext:
         assert result == "16"
         assert len(caplog.records) == 0
 
-    def test_missing_step_warning_deduplicates(self, caplog: logging.LogRecord) -> None:
+    def test_missing_step_warning_deduplicates(self, caplog: pytest.LogCaptureFixture) -> None:
         """Same path referenced twice should warn only once."""
         config = RunConfig()
         context = Context(config)
@@ -371,7 +373,7 @@ class TestContext:
 
         assert len(caplog.records) == 1
 
-    def test_warns_when_field_missing_in_step_output(self, caplog: logging.LogRecord) -> None:
+    def test_warns_when_field_missing_in_step_output(self, caplog: pytest.LogCaptureFixture) -> None:
         """Typo or wrong field name in a populated step should warn."""
         config = RunConfig()
         context = Context(config)
@@ -386,7 +388,7 @@ class TestContext:
         assert "total_gpus" in caplog.records[0].message  # listed in available keys
         assert len(context.get_warnings()) == 1
 
-    def test_warns_with_available_keys(self, caplog: logging.LogRecord) -> None:
+    def test_warns_with_available_keys(self, caplog: pytest.LogCaptureFixture) -> None:
         """Warning for missing field should list available keys at that level."""
         config = RunConfig()
         context = Context(config)

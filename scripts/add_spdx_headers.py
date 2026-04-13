@@ -34,13 +34,19 @@ SKIP_PATHS = {
 
 def _git_ls_files() -> list[str]:
     """List all tracked + untracked-but-not-ignored files via git."""
-    result = subprocess.run(
-        ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except FileNotFoundError as exc:
+        raise SystemExit("git is required to enumerate repository files") from exc
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(f"git ls-files failed: {exc.stderr.strip() or exc}") from exc
+
     return [line for line in result.stdout.splitlines() if line]
 
 

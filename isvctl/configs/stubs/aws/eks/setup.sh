@@ -176,8 +176,9 @@ if [ "$SKIP_PREFLIGHT" != "true" ]; then
     echo "" >&2
     echo "Running preflight checks..." >&2
 
-    # Wait for GPU nodes to be ready (GPU operator takes time)
+    # Wait for GPU nodes to be labeled by GPU Operator
     echo "  Waiting for GPU nodes..." >&2
+    GPU_NODES=0
     for i in {1..30}; do
         GPU_NODES=$(kubectl get nodes -l nvidia.com/gpu.present=true -o name 2>/dev/null | wc -l || echo "0")
         if [ "$GPU_NODES" -gt 0 ]; then
@@ -188,7 +189,6 @@ if [ "$SKIP_PREFLIGHT" != "true" ]; then
         sleep 10
     done
 
-    # Fail if no GPU nodes were detected after waiting
     if [ "$GPU_NODES" -eq 0 ]; then
         echo "" >&2
         echo "Error: No GPU nodes detected after waiting 5 minutes." >&2
@@ -197,6 +197,22 @@ if [ "$SKIP_PREFLIGHT" != "true" ]; then
         echo "Check GPU Operator: kubectl get pods -n gpu-operator" >&2
         exit 1
     fi
+
+    # Wait for GPU capacity and driver labels to be populated
+    # These are set by the GPU Operator after driver installation completes
+    echo "  Waiting for GPU driver and capacity labels..." >&2
+    for i in {1..30}; do
+        GPU_CAP=$(kubectl get nodes -l nvidia.com/gpu.present=true \
+            -o jsonpath='{.items[0].status.capacity.nvidia\.com/gpu}' 2>/dev/null || echo "")
+        DRIVER_LABEL=$(kubectl get nodes -l nvidia.com/gpu.present=true \
+            -o jsonpath='{.items[0].metadata.labels.nvidia\.com/cuda\.driver\.major}' 2>/dev/null || echo "")
+        if [ -n "$GPU_CAP" ] && [ "$GPU_CAP" != "0" ] && [ -n "$DRIVER_LABEL" ]; then
+            echo "    GPU capacity: $GPU_CAP, driver label: $DRIVER_LABEL" >&2
+            break
+        fi
+        echo "    Waiting for GPU operator to finish driver setup... ($i/30)" >&2
+        sleep 10
+    done
 
     # Check GPU Operator
     GPU_OP_NS=""

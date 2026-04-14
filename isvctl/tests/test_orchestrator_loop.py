@@ -135,7 +135,12 @@ EOF
         pass
 
     def test_run_teardown_phase(self) -> None:
-        """Test teardown phase execution."""
+        """Test teardown phase execution when only teardown is requested.
+
+        Covers the use case where setup ran in a previous invocation (e.g., with
+        AWS_SKIP_TEARDOWN) and now the user explicitly runs ``--phase teardown``
+        to clean up resources.
+        """
         config = RunConfig(
             commands={
                 "kubernetes": PlatformCommands(
@@ -154,6 +159,9 @@ EOF
         assert len(result.phases) == 1
         assert result.phases[0].phase == Phase.TEARDOWN
         assert result.phases[0].success
+        assert "SKIPPED" not in result.phases[0].message, "teardown must actually run, not be skipped"
+        step_names = [s["name"] for s in result.phases[0].details["steps"]]
+        assert "cleanup" in step_names, "teardown step must have executed"
 
     def test_run_all_phases_with_failure(self) -> None:
         """Test that teardown runs even after setup failure."""
@@ -305,6 +313,118 @@ EOF
         finally:
             Path(setup_script).unlink(missing_ok=True)
             Path(teardown_ok_script).unlink(missing_ok=True)
+
+
+class TestTeardownOnlyPhase:
+    """Tests for running teardown as the only requested phase.
+
+    Covers the workflow where setup ran in a prior invocation (e.g., with
+    AWS_SKIP_TEARDOWN set) and the user later runs ``--phase teardown`` to
+    clean up resources from that earlier run.
+    """
+
+    def test_teardown_only_runs_without_setup(self) -> None:
+        """Teardown must execute when it is the only requested phase.
+
+        When a user explicitly requests ``--phase teardown``, it should run
+        regardless of whether setup ran in this invocation.
+        """
+        config = RunConfig(
+            commands={
+                "kubernetes": PlatformCommands(
+                    steps=[
+                        StepConfig(name="setup_cluster", command="echo", args=["hi"], phase="setup"),
+                        StepConfig(name="cleanup", command="echo", args=["bye"], phase="teardown"),
+                    ]
+                )
+            },
+            tests=ValidationConfig(platform="kubernetes"),
+        )
+        orchestrator = Orchestrator(config)
+        result = orchestrator.run(phases=[Phase.TEARDOWN])
+
+        assert result.success
+        teardown_phases = [p for p in result.phases if p.phase == Phase.TEARDOWN]
+        assert len(teardown_phases) == 1
+        assert teardown_phases[0].success
+        assert "SKIPPED" not in teardown_phases[0].message
+        step_names = [s["name"] for s in teardown_phases[0].details["steps"]]
+        assert "cleanup" in step_names
+
+    def test_teardown_only_does_not_run_setup_steps(self) -> None:
+        """When only teardown is requested, setup steps must not execute."""
+        config = RunConfig(
+            commands={
+                "kubernetes": PlatformCommands(
+                    steps=[
+                        StepConfig(name="setup_cluster", command="echo", args=["created"], phase="setup"),
+                        StepConfig(name="cleanup", command="echo", args=["deleted"], phase="teardown"),
+                    ]
+                )
+            },
+            tests=ValidationConfig(platform="kubernetes"),
+        )
+        orchestrator = Orchestrator(config)
+        result = orchestrator.run(phases=[Phase.TEARDOWN])
+
+        setup_phases = [p for p in result.phases if p.phase == Phase.SETUP]
+        assert len(setup_phases) == 0, "setup phase must not appear when only teardown is requested"
+
+    def test_teardown_only_best_effort_continues_past_failures(self) -> None:
+        """Teardown-only run must use best-effort so all cleanup steps execute."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".sh", delete=False) as f:
+            f.write("#!/bin/bash\necho '{\"success\": true}'\n")
+            ok_script = f.name
+
+        try:
+            Path(ok_script).chmod(0o755)
+
+            config = RunConfig(
+                commands={
+                    "kubernetes": PlatformCommands(
+                        steps=[
+                            StepConfig(name="teardown_nim", command="false", phase="teardown"),
+                            StepConfig(name="teardown_vm", command=ok_script, phase="teardown"),
+                        ]
+                    )
+                },
+                tests=ValidationConfig(platform="kubernetes"),
+            )
+            orchestrator = Orchestrator(config)
+            result = orchestrator.run(phases=[Phase.TEARDOWN])
+
+            teardown_phases = [p for p in result.phases if p.phase == Phase.TEARDOWN]
+            assert len(teardown_phases) == 1
+            step_names = [s["name"] for s in teardown_phases[0].details["steps"]]
+            assert "teardown_nim" in step_names, "failing teardown step must be recorded"
+            assert "teardown_vm" in step_names, "second teardown step must run despite first failure"
+        finally:
+            Path(ok_script).unlink(missing_ok=True)
+
+    def test_teardown_still_skipped_when_setup_requested_but_did_not_run(self) -> None:
+        """When both setup and teardown are requested, teardown is still gated on setup execution.
+
+        This ensures the existing safety guard stays in place for full lifecycle runs.
+        """
+        config = RunConfig(
+            commands={
+                "kubernetes": PlatformCommands(
+                    phases=["setup", "teardown"],
+                    steps=[
+                        StepConfig(name="setup_cluster", command="echo", args=["hi"], phase="setup", skip=True),
+                        StepConfig(name="cleanup", command="echo", args=["bye"], phase="teardown"),
+                    ],
+                )
+            },
+            tests=ValidationConfig(platform="kubernetes"),
+        )
+        orchestrator = Orchestrator(config)
+        result = orchestrator.run(phases=[Phase.SETUP, Phase.TEARDOWN], teardown_on_failure=True)
+
+        teardown_phases = [p for p in result.phases if p.phase == Phase.TEARDOWN]
+        assert len(teardown_phases) == 1
+        assert "SKIPPED" in teardown_phases[0].message
+        assert "setup steps did not run" in teardown_phases[0].message
 
 
 class TestStepExecutorBestEffort:

@@ -145,8 +145,7 @@ class StepExecutor:
             steps: List of step configurations
             context: Context for templating and storing outputs
             best_effort: When True, continue executing remaining steps even if
-                one fails (unless the step has ``continue_on_failure`` explicitly
-                set to False).  Used for teardown phases where all cleanup steps
+                one fails.  Used for teardown phases where all cleanup steps
                 should be attempted regardless of individual failures.
 
         Returns:

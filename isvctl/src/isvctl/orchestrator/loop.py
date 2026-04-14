@@ -311,11 +311,15 @@ class Orchestrator:
                 if not overall_success and not is_teardown:
                     skip_reason = "previous phase failed"
 
-                # Skip teardown only if setup steps never ran (nothing to clean up).
-                # Validation failures alone should NOT prevent teardown — resources
-                # may have been created by the setup steps even if validations failed.
+                # Teardown gating depends on whether setup was part of this run:
+                # - If setup was requested alongside teardown (full lifecycle), skip
+                #   teardown only when setup steps never actually executed.
+                # - If teardown was requested alone (e.g., `--phase teardown`), run
+                #   it unconditionally — the user is explicitly cleaning up resources
+                #   from a previous run.
                 if is_teardown:
-                    if not setup_steps_ran:
+                    setup_was_requested = "setup" in requested_phase_names or Phase.ALL in requested_phases
+                    if setup_was_requested and not setup_steps_ran:
                         skip_reason = "setup steps did not run"
                     elif not overall_success and not teardown_on_failure:
                         skip_reason = "teardown_on_failure is disabled"

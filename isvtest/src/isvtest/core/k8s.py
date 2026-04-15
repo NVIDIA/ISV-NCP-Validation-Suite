@@ -12,6 +12,8 @@
 
 import functools
 import os
+import shlex
+import shutil
 import subprocess
 import time
 from typing import Any
@@ -106,15 +108,53 @@ def get_k8s_provider() -> str:
 def get_kubectl_command() -> list[str]:
     """Get the kubectl command based on environment configuration.
 
+    This function is intentionally not cached (unlike ``get_k8s_provider()``)
+    so that the ``KUBECTL`` override is re-read on each call, which is
+    consistent with its current behaviour and allows mid-process override in
+    tests.
+
     Returns:
         List of command parts for kubectl execution.
         For microk8s: ["microk8s", "kubectl"]
         For standard k8s: ["kubectl"]
+        When ``KUBECTL`` is set: tokens from ``shlex.split`` (e.g.
+        ``["oc"]``, ``["/path/to/oc"]``, ``["microk8s", "kubectl"]``).
 
     Environment Variables:
+        KUBECTL: Optional kubectl-compatible CLI prefix (parsed with POSIX
+            shlex; takes precedence over ``K8S_PROVIDER``).
         K8S_PROVIDER: Set to "microk8s" for local microk8s development,
                      leave unset or set to "kubectl" for standard kubectl.
+
+    Raises:
+        FileNotFoundError: If ``KUBECTL`` is set but the binary is not on PATH.
+        ValueError: If ``KUBECTL`` contains malformed shell syntax
+            (e.g. unterminated quotes).
     """
+    raw = os.environ.get("KUBECTL")
+    if raw is not None:
+        trimmed = raw.strip()
+        if trimmed:
+            try:
+                parts = shlex.split(trimmed, posix=True)
+            except ValueError as exc:
+                msg = f"KUBECTL has invalid shell syntax: {trimmed!r}"
+                raise ValueError(msg) from exc
+            if parts and all(token for token in parts):
+                if shutil.which(parts[0]) is None:
+                    msg = f"KUBECTL is set to '{parts[0]}' but it was not found on PATH"
+                    logger.error(msg)
+                    raise FileNotFoundError(msg)
+                logger.info("Using kubectl-compatible CLI from KUBECTL: %s", parts)
+                return parts
+            logger.warning(
+                "KUBECTL did not yield usable command tokens; falling through to K8S_PROVIDER detection"
+            )
+        else:
+            logger.warning(
+                "KUBECTL is set but empty after stripping; falling through to K8S_PROVIDER detection"
+            )
+
     k8s_provider = get_k8s_provider()
 
     if k8s_provider == "microk8s":

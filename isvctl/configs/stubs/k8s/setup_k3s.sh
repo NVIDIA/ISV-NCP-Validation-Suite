@@ -19,12 +19,14 @@
 set -eo pipefail
 
 # Prefer k3s kubectl (reads its own kubeconfig automatically)
-if command -v k3s &> /dev/null; then
+if [[ "${KUBECTL:-}" =~ [^[:space:]] ]]; then
+    :  # already set from environment; skip detection
+elif command -v k3s &> /dev/null; then
     KUBECTL="k3s kubectl"
 elif command -v kubectl &> /dev/null; then
     KUBECTL="kubectl"
 else
-    echo "Error: Neither k3s nor kubectl found" >&2
+    echo "Error: Neither k3s nor kubectl found. Set KUBECTL to override." >&2
     exit 1
 fi
 

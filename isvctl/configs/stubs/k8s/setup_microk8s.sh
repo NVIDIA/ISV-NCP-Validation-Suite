@@ -18,12 +18,14 @@
 set -eo pipefail
 
 # Detect kubectl command (microk8s or regular)
-if command -v microk8s &> /dev/null; then
+if [[ "${KUBECTL:-}" =~ [^[:space:]] ]]; then
+    :  # already set from environment; skip detection
+elif command -v microk8s &> /dev/null; then
     KUBECTL="microk8s kubectl"
 elif command -v kubectl &> /dev/null; then
     KUBECTL="kubectl"
 else
-    echo "Error: Neither microk8s nor kubectl found" >&2
+    echo "Error: Neither microk8s nor kubectl found. Set KUBECTL to override." >&2
     exit 1
 fi
 

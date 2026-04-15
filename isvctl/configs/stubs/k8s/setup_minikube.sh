@@ -17,12 +17,15 @@
 
 set -eo pipefail
 
-if ! command -v kubectl &> /dev/null; then
-    echo "Error: kubectl not found (minikube should configure it automatically)" >&2
+# Detect kubectl command
+if [[ "${KUBECTL:-}" =~ [^[:space:]] ]]; then
+    :  # already set from environment; skip detection
+elif command -v kubectl &> /dev/null; then
+    KUBECTL="kubectl"
+else
+    echo "Error: kubectl not found. Set KUBECTL to override." >&2
     exit 1
 fi
-
-KUBECTL="kubectl"
 
 # Get cluster name from minikube profile or kubectl context
 if command -v minikube &> /dev/null; then

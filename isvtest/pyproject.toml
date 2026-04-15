@@ -56,5 +56,5 @@ markers = [
     "hardware: hardware ingestion and lifecycle checks",
     "ingestion: hardware ingestion verification",
     "dpu: DPU health and network checks",
-    "carbide: Carbide/NICo platform validations",
+    "nico: NICo platform validations",
 ]

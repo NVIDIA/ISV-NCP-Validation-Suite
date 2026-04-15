@@ -10,7 +10,7 @@
 
 """Hardware ingestion and DPU health validations.
 
-Validations for Carbide/NICo bare metal hardware lifecycle:
+Validations for NICo bare metal hardware lifecycle:
 - Hardware ingestion verification (expected vs actual machines)
 - DPU health checks (agent heartbeat, probes, capabilities)
 - DPU network readiness (interfaces, BGP, extension services)
@@ -36,7 +36,7 @@ class HardwareIngestionCheck(BaseValidation):
 
     Step output (from verify_ingestion.py stub):
         success: bool
-        platform: "carbide"
+        platform: "nico"
         site_id: str
         expected_count: int
         ingested_count: int
@@ -56,7 +56,7 @@ class HardwareIngestionCheck(BaseValidation):
 
     description: ClassVar[str] = "Check all expected hardware is ingested and matches manifest"
     timeout: ClassVar[int] = 120
-    markers: ClassVar[list[str]] = ["hardware", "ingestion", "carbide"]
+    markers: ClassVar[list[str]] = ["hardware", "ingestion", "nico"]
 
     def run(self) -> None:
         step_output = self.config.get("step_output", {})
@@ -148,7 +148,7 @@ class HardwareIngestionCheck(BaseValidation):
 class DpuHealthCheck(BaseValidation):
     """Validate DPU health status for ingested machines.
 
-    Checks that DPUs are recognized by Carbide, the DPU agent heartbeat
+    Checks that DPUs are recognized by NICo, the DPU agent heartbeat
     is active, and health probes are passing. Does NOT require an active
     instance or EVPN overlay -- uses machine-level health data only.
 
@@ -159,7 +159,7 @@ class DpuHealthCheck(BaseValidation):
 
     Step output (from check_dpu_health.py stub):
         success: bool
-        platform: "carbide"
+        platform: "nico"
         site_id: str
         machines_checked: int
         machines: list[dict]:
@@ -179,7 +179,7 @@ class DpuHealthCheck(BaseValidation):
 
     description: ClassVar[str] = "Check DPU health and agent heartbeat status"
     timeout: ClassVar[int] = 120
-    markers: ClassVar[list[str]] = ["hardware", "dpu", "carbide"]
+    markers: ClassVar[list[str]] = ["hardware", "dpu", "nico"]
 
     def run(self) -> None:
         step_output = self.config.get("step_output", {})
@@ -303,7 +303,7 @@ class DpuNetworkCheck(BaseValidation):
 
     Step output:
         success: bool
-        platform: "carbide"
+        platform: "nico"
         instance_id: str
         machine_id: str
         interfaces: list[dict]:
@@ -319,7 +319,7 @@ class DpuNetworkCheck(BaseValidation):
 
     description: ClassVar[str] = "Check DPU network interfaces and overlay connectivity"
     timeout: ClassVar[int] = 120
-    markers: ClassVar[list[str]] = ["hardware", "dpu", "network", "carbide"]
+    markers: ClassVar[list[str]] = ["hardware", "dpu", "network", "nico"]
 
     # Valid running states for DPU extension deployments
     _DEPLOYMENT_OK_STATUSES: ClassVar[set[str]] = {"Running", "Pending"}

@@ -10,11 +10,11 @@
 
 # DPU Health Validation - Canonical Configuration
 #
-# Verifies DPU health status for all machines at a Carbide/Forge site.
+# Verifies DPU health status for all machines at a NICo site.
 # Checks DPU agent heartbeat, health probes, and capability inventory.
 #
 # Architecture:
-#   - check_dpu_health.py queries the Forge API for machine health data
+#   - check_dpu_health.py queries the NICo API for machine health data
 #   - DpuHealthCheck validates DPU presence, heartbeat, and alerts
 #
 # Note: DpuNetworkCheck (interface status, BGP, extension services) requires
@@ -26,7 +26,7 @@
 #
 # Usage:
 #   NGC_API_KEY=<key> uv run isvctl test run \
-#     -f isvctl/configs/providers/carbide/dpu_health.yaml
+#     -f isvctl/configs/providers/nico/dpu_health.yaml
 
 version: "1.0"
 
@@ -35,11 +35,11 @@ commands:
     phases: ["test"]
     steps:
       # ─── Step 1: Check DPU Health ──────────────────────────────────
-      # Queries Forge API for machine health data including DPU-specific
+      # Queries NICo API for machine health data including DPU-specific
       # probes, agent heartbeat status, and capability inventory.
       - name: check_dpu_health
         phase: test
-        command: "python3 ../stubs/carbide/dpu/check_dpu_health.py"
+        command: "python3 ../stubs/nico/dpu/check_dpu_health.py"
         args:
           - "--org"
           - "{{org}}"
@@ -48,7 +48,7 @@ commands:
         timeout: 120
 
 tests:
-  platform: carbide
+  platform: nico
   cluster_name: "dpu-health-validation"
   description: "Verify DPU health and agent heartbeat status"
 

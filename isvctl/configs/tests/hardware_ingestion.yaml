@@ -10,21 +10,21 @@
 
 # Hardware Ingestion Validation - Canonical Configuration
 #
-# Verifies that all expected hardware at a Carbide/Forge site has been
+# Verifies that all expected hardware at a NICo site has been
 # properly ingested and matches the provided manifest.
 #
 # Architecture:
-#   - verify_ingestion.py queries the Forge API for expected-machine and
+#   - verify_ingestion.py queries the NICo API for expected-machine and
 #     machine records, compares by chassis serial number
 #   - HardwareIngestionCheck validates the comparison results
 #
 # Prerequisites:
 #   - NGC_API_KEY environment variable set with org access
-#   - Expected machines pre-registered via Forge API or carbide-admin-cli
+#   - Expected machines pre-registered via NICo API or nico-admin-cli
 #
 # Usage:
 #   NGC_API_KEY=<key> uv run isvctl test run \
-#     -f isvctl/configs/providers/carbide/hardware_ingestion.yaml
+#     -f isvctl/configs/providers/nico/hardware_ingestion.yaml
 
 version: "1.0"
 
@@ -37,7 +37,7 @@ commands:
       # Output includes per-machine status, health, GPU/DPU counts.
       - name: verify_ingestion
         phase: test
-        command: "python3 ../stubs/carbide/hardware_ingestion/verify_ingestion.py"
+        command: "python3 ../stubs/nico/hardware_ingestion/verify_ingestion.py"
         args:
           - "--org"
           - "{{org}}"
@@ -46,7 +46,7 @@ commands:
         timeout: 120
 
 tests:
-  platform: carbide
+  platform: nico
   cluster_name: "hardware-ingestion-validation"
   description: "Verify all expected hardware is ingested and healthy"
 

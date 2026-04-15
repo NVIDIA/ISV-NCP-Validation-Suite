@@ -9,9 +9,10 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-"""Shared Forge Cloud API client for Carbide stubs.
+"""Shared NICo API client for NICo validation stubs.
 
 Handles authenticated GET requests with pagination and proper URL encoding.
+The NICo REST API uses /forge/ in its URL path (legacy name).
 """
 
 import json

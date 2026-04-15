@@ -9,12 +9,12 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-"""Verify hardware ingestion against Carbide/Forge expected-machine manifest.
+"""Verify hardware ingestion against NICo expected-machine manifest.
 
-Calls the Forge Cloud API to compare expected-machine records against
+Calls the NICo REST API to compare expected-machine records against
 actually discovered machines. Matches by chassis serial number.
 
-Forge API endpoints used:
+NICo API endpoints used:
   GET /v2/org/{org}/forge/expected-machine?siteId={site_id}
   GET /v2/org/{org}/forge/machine?siteId={site_id}&includeMetadata=true
 
@@ -23,7 +23,7 @@ Auth: NGC Bearer token via NGC_API_KEY env var.
 Required JSON output fields:
   {
     "success": true,
-    "platform": "carbide",
+    "platform": "nico",
     "site_id": "...",
     "expected_count": 4,
     "ingested_count": 4,
@@ -59,7 +59,7 @@ import sys
 # Allow importing from sibling common/ directory
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from common.forge_client import (
+from common.nico_client import (
     DEFAULT_API_BASE,
     classify_health,
     forge_get_all,
@@ -68,7 +68,7 @@ from common.forge_client import (
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Verify Carbide hardware ingestion")
+    parser = argparse.ArgumentParser(description="Verify NICo hardware ingestion")
     parser.add_argument("--org", required=True, help="NGC org name")
     parser.add_argument("--site-id", required=True, help="Forge site UUID")
     parser.add_argument(
@@ -85,7 +85,7 @@ def main() -> int:
 
     result: dict = {
         "success": False,
-        "platform": "carbide",
+        "platform": "nico",
         "site_id": args.site_id,
         "expected_count": 0,
         "ingested_count": 0,

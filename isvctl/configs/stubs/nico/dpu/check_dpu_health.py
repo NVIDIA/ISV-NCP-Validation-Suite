@@ -9,12 +9,12 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-"""Check DPU health for all machines at a Carbide/Forge site.
+"""Check DPU health for all machines at a NICo site.
 
-Queries the Forge Cloud API for machine health data including DPU-specific
+Queries the NICo REST API for machine health data including DPU-specific
 probes, agent heartbeat status, and capability inventory.
 
-Forge API endpoints used:
+NICo API endpoints used:
   GET /v2/org/{org}/forge/machine?siteId={site_id}&includeMetadata=true
 
 Auth: NGC Bearer token via NGC_API_KEY env var.
@@ -22,7 +22,7 @@ Auth: NGC Bearer token via NGC_API_KEY env var.
 Required JSON output fields:
   {
     "success": true,
-    "platform": "carbide",
+    "platform": "nico",
     "site_id": "...",
     "machines_checked": 2,
     "machines": [
@@ -55,9 +55,9 @@ import sys
 # Allow importing from sibling common/ directory
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from common.forge_client import DEFAULT_API_BASE, forge_get_all, sum_capabilities
+from common.nico_client import DEFAULT_API_BASE, forge_get_all, sum_capabilities
 
-# Known DPU-related alert targets and probe IDs from the Forge API.
+# Known DPU-related alert targets and probe IDs from the NICo API.
 # The stub uses these for pre-filtering; the validation class should
 # also check health_summary for a complete picture.
 DPU_ALERT_TARGETS = {"forge-dpu-agent", "dpu"}
@@ -87,7 +87,7 @@ def _extract_health_successes(health: dict) -> list[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Check DPU health on Carbide machines")
+    parser = argparse.ArgumentParser(description="Check DPU health on NICo machines")
     parser.add_argument("--org", required=True, help="NGC org name")
     parser.add_argument("--site-id", required=True, help="Forge site UUID")
     parser.add_argument(
@@ -104,7 +104,7 @@ def main() -> int:
 
     result: dict = {
         "success": False,
-        "platform": "carbide",
+        "platform": "nico",
         "site_id": args.site_id,
         "machines_checked": 0,
         "machines": [],

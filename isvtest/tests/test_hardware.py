@@ -62,7 +62,7 @@ def _ingestion_output(
         ]
     return {
         "success": success,
-        "platform": "carbide",
+        "platform": "nico",
         "site_id": "test-site-001",
         "expected_count": expected_count,
         "ingested_count": ingested_count,
@@ -101,7 +101,7 @@ def _dpu_health_output(
         ]
     return {
         "success": success,
-        "platform": "carbide",
+        "platform": "nico",
         "site_id": "test-site-001",
         "machines_checked": len(machines),
         "machines": machines,
@@ -130,7 +130,7 @@ def _dpu_network_output(
         ]
     result: dict[str, Any] = {
         "success": success,
-        "platform": "carbide",
+        "platform": "nico",
         "instance_id": "inst-001",
         "machine_id": "m-001",
         "interfaces": interfaces,

@@ -30,6 +30,7 @@ from isvtest.core.slurm import (
     JobResult,
     get_job_output,
     get_job_state,
+    get_partition_names,
     parse_sbatch_job_id,
 )
 from isvtest.core.workload import BaseWorkloadCheck
@@ -86,6 +87,15 @@ class SlurmSbatchWorkload(BaseWorkloadCheck):
         job_timeout = self.config.get("timeout", DEFAULT_JOB_TIMEOUT)
         poll_interval = self.config.get("poll_interval", DEFAULT_POLL_INTERVAL)
         cleanup = self.config.get("cleanup", True)
+
+        # Skip early if the script targets a partition that doesn't exist
+        partition = variables.get("PARTITION")
+        if partition:
+            result = self.run_command("sinfo -o '%P %a %l %D %N'")
+            if result.exit_code == 0:
+                available = get_partition_names(result.stdout)
+                if partition not in available:
+                    pytest.skip(f"Partition '{partition}' not present on this cluster (available: {available})")
 
         # Load script content
         content = self._load_script(script_name, script_content)

@@ -347,14 +347,20 @@ class SlurmNcclMultiNodeWorkload(BaseWorkloadCheck):
 
             time.sleep(poll_interval)
 
-        # Timeout - cancel the job
+        # Timeout - cancel and collect partial output for debugging
         self.log.warning(f"Job {job_id} timed out after {timeout}s, cancelling...")
         self.run_command(f"scancel {job_id}", timeout=30)
+
+        stdout, stderr = get_job_output(self, job_id, nodelist, cleanup=True)
+        partial_output = f"{stdout}\n{stderr}".strip()
+        if partial_output:
+            self.log.info(f"Partial output from timed-out job {job_id}:\n{partial_output[-2000:]}")
 
         return SlurmNcclResult(
             success=False,
             job_id=job_id,
             error=f"Job timed out after {timeout}s",
+            output=partial_output,
         )
 
     def _parse_nccl_output(self, job_id: str, output: str) -> SlurmNcclResult:

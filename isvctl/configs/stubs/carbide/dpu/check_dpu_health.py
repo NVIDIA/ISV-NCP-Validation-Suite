@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+"""Check DPU health for all machines at a Carbide/Forge site.
+
+Queries the Forge Cloud API for machine health data including DPU-specific
+probes, agent heartbeat status, and capability inventory.
+
+Forge API endpoints used:
+  GET /v2/org/{org}/forge/machine?siteId={site_id}&includeMetadata=true
+
+Auth: NGC Bearer token via NGC_API_KEY env var.
+
+Required JSON output fields:
+  {
+    "success": true,
+    "platform": "carbide",
+    "site_id": "...",
+    "machines_checked": 2,
+    "machines": [
+      {
+        "machine_id": "...",
+        "chassis_serial": "...",
+        "status": "Ready",
+        "dpu_count": 2,
+        "dpu_capability": {"type": "DPU", "name": "BlueField-3", "count": 2},
+        "health_summary": "healthy",
+        "health_successes": ["DpuDiskUtilizationCheck", "BgpDaemonEnabled"],
+        "health_alerts": [],
+        "dpu_agent_heartbeat": true
+      }
+    ]
+  }
+
+Usage:
+    NGC_API_KEY=<key> python check_dpu_health.py --org <org> --site-id <uuid>
+
+Reference:
+    OpenAPI spec: ncp-isv-carbide-proxy-service/src/main/resources/docs/openapi/forge_api.yaml
+"""
+
+import argparse
+import json
+import os
+import sys
+
+# Allow importing from sibling common/ directory
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from common.forge_client import DEFAULT_API_BASE, forge_get_all, sum_capabilities
+
+# Known DPU-related alert targets and probe IDs from the Forge API.
+# The stub uses these for pre-filtering; the validation class should
+# also check health_summary for a complete picture.
+DPU_ALERT_TARGETS = {"forge-dpu-agent", "dpu"}
+DPU_ALERT_IDS = {"heartbeattimeout", "dpudiskutilizationcheck"}
+
+
+def _is_dpu_alert(alert: dict) -> bool:
+    """Check if a health alert is DPU-related."""
+    target = alert.get("target", "").lower()
+    alert_id = alert.get("id", "").lower()
+    return any(t in target for t in DPU_ALERT_TARGETS) or any(i in alert_id for i in DPU_ALERT_IDS)
+
+
+def _has_dpu_heartbeat(health: dict) -> bool:
+    """Check if DPU agent heartbeat is active (no HeartbeatTimeout alerts on DPU targets)."""
+    for alert in health.get("alerts", []):
+        target = alert.get("target", "").lower()
+        alert_id = alert.get("id", "").lower()
+        if "dpu" in target and "heartbeat" in alert_id:
+            return False
+    return True
+
+
+def _extract_health_successes(health: dict) -> list[str]:
+    """Extract health probe success IDs."""
+    return [s.get("id", "") for s in health.get("successes", []) if s.get("id")]
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Check DPU health on Carbide machines")
+    parser.add_argument("--org", required=True, help="NGC org name")
+    parser.add_argument("--site-id", required=True, help="Forge site UUID")
+    parser.add_argument(
+        "--api-base",
+        default=DEFAULT_API_BASE,
+        help="Forge API base URL (default: NGC production)",
+    )
+    args = parser.parse_args()
+
+    token = os.environ.get("NGC_API_KEY", "")
+    if not token:
+        print(json.dumps({"success": False, "error": "NGC_API_KEY not set"}))
+        return 1
+
+    result: dict = {
+        "success": False,
+        "platform": "carbide",
+        "site_id": args.site_id,
+        "machines_checked": 0,
+        "machines": [],
+    }
+
+    try:
+        # Fetch all machines with metadata (paginated)
+        machines = forge_get_all(
+            args.org,
+            "machine",
+            token,
+            base_url=args.api_base,
+            params={"siteId": args.site_id, "includeMetadata": "true"},
+            result_key="machines",
+        )
+
+        for machine in machines:
+            machine_id = machine.get("id", "")
+            metadata = machine.get("metadata", {})
+            dmi = metadata.get("dmiData", {})
+            chassis_serial = dmi.get("chassisSerial", machine_id)
+            health = machine.get("health", {})
+            capabilities = machine.get("machineCapabilities", [])
+
+            # Count DPU capabilities (sum count field, not entries)
+            dpu_count = sum_capabilities(capabilities, "DPU")
+
+            # Build DPU capability summary
+            dpu_caps = [c for c in capabilities if c.get("type") == "DPU"]
+            dpu_capability = None
+            if dpu_caps:
+                first_dpu = dpu_caps[0]
+                dpu_capability = {
+                    "type": "DPU",
+                    "name": first_dpu.get("name", "Unknown"),
+                    "count": dpu_count,
+                }
+
+            # Extract health data
+            health_successes = _extract_health_successes(health)
+            all_alerts = health.get("alerts", [])
+            dpu_alerts = [
+                {"id": a.get("id", ""), "target": a.get("target", ""), "message": a.get("message", "")}
+                for a in all_alerts
+                if _is_dpu_alert(a)
+            ]
+            heartbeat = _has_dpu_heartbeat(health)
+
+            # health_summary: unhealthy if ANY alerts (not just DPU-filtered ones)
+            health_summary = "unhealthy" if all_alerts else "healthy"
+
+            result["machines"].append(
+                {
+                    "machine_id": machine_id,
+                    "chassis_serial": chassis_serial,
+                    "status": machine.get("status", "Unknown"),
+                    "dpu_count": dpu_count,
+                    "dpu_capability": dpu_capability,
+                    "health_summary": health_summary,
+                    "health_successes": health_successes,
+                    "health_alerts": dpu_alerts,
+                    "dpu_agent_heartbeat": heartbeat,
+                }
+            )
+
+        result["machines_checked"] = len(result["machines"])
+        result["success"] = True
+
+    except Exception as e:
+        result["error"] = f"{type(e).__name__}: {e}"
+
+    print(json.dumps(result, indent=2))
+    return 0 if result["success"] else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

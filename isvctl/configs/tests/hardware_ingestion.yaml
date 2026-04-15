@@ -1,0 +1,67 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# Hardware Ingestion Validation - Canonical Configuration
+#
+# Verifies that all expected hardware at a Carbide/Forge site has been
+# properly ingested and matches the provided manifest.
+#
+# Architecture:
+#   - verify_ingestion.py queries the Forge API for expected-machine and
+#     machine records, compares by chassis serial number
+#   - HardwareIngestionCheck validates the comparison results
+#
+# Prerequisites:
+#   - NGC_API_KEY environment variable set with org access
+#   - Expected machines pre-registered via Forge API or carbide-admin-cli
+#
+# Usage:
+#   NGC_API_KEY=<key> uv run isvctl test run \
+#     -f isvctl/configs/providers/carbide/hardware_ingestion.yaml
+
+version: "1.0"
+
+commands:
+  hardware_ingestion:
+    phases: ["test"]
+    steps:
+      # ─── Step 1: Verify Hardware Ingestion ─────────────────────────
+      # Compares expected-machine manifest against discovered machines.
+      # Output includes per-machine status, health, GPU/DPU counts.
+      - name: verify_ingestion
+        phase: test
+        command: "python3 ../stubs/carbide/hardware_ingestion/verify_ingestion.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+        timeout: 120
+
+tests:
+  platform: carbide
+  cluster_name: "hardware-ingestion-validation"
+  description: "Verify all expected hardware is ingested and healthy"
+
+  settings:
+    org: "{{org}}"
+    site_id: "{{site_id}}"
+
+  validations:
+    ingestion_check:
+      step: verify_ingestion
+      checks:
+        HardwareIngestionCheck:
+          min_machines: 1
+          expected_status: ["Ready", "InUse"]
+          require_healthy: true
+
+  exclude:
+    markers: []

@@ -246,7 +246,7 @@ def run(
     setup_logging(verbose)
 
     # Collect extra pytest args from context (after --)
-    pytest_extra_args = " ".join(ctx.args) if ctx.args else ""
+    pytest_extra_args = shlex.join(ctx.args) if ctx.args else ""
 
     # Set working directory to workspace root
     working_dir = Path.cwd()

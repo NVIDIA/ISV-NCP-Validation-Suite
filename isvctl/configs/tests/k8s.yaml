@@ -10,7 +10,9 @@
 
 # Kubernetes Cluster Validation Configuration
 # This unified config contains all settings for validating a K8s cluster
-# K8S_PROVIDER is auto-detected (microk8s vs kubectl)
+# K8S_PROVIDER is auto-detected (microk8s vs kubectl).
+# To use OpenShift `oc` or another kubectl-compatible CLI, set KUBECTL
+# in the environment or under `env` for commands.
 #
 # Usage:
 #   isvctl test run -f isvctl/configs/tests/k8s.yaml

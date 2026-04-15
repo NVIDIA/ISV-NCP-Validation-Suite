@@ -147,13 +147,9 @@ def get_kubectl_command() -> list[str]:
                     raise FileNotFoundError(msg)
                 logger.info("Using kubectl-compatible CLI from KUBECTL: %s", parts)
                 return parts
-            logger.warning(
-                "KUBECTL did not yield usable command tokens; falling through to K8S_PROVIDER detection"
-            )
+            logger.warning("KUBECTL did not yield usable command tokens; falling through to K8S_PROVIDER detection")
         else:
-            logger.warning(
-                "KUBECTL is set but empty after stripping; falling through to K8S_PROVIDER detection"
-            )
+            logger.warning("KUBECTL is set but empty after stripping; falling through to K8S_PROVIDER detection")
 
     k8s_provider = get_k8s_provider()
 

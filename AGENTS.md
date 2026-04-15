@@ -339,6 +339,7 @@ tests:
 | `AWS_ACCESS_KEY_ID` | AWS access key | AWS scripts |
 | `AWS_SECRET_ACCESS_KEY` | AWS secret key | AWS scripts |
 | `AWS_REGION` | AWS region | AWS scripts |
+| `KUBECTL` | Optional kubectl-compatible CLI prefix (parsed with POSIX shlex in Python, word-split in shell stubs; overrides `K8S_PROVIDER` detection) | isvtest (`get_kubectl_command`), isvctl k8s stubs |
 
 ## Directory Structure Notes
 

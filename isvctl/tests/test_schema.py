@@ -8,11 +8,19 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-"""Tests for Pydantic schema models."""
+"""Tests for Pydantic schema models and output schema registry."""
+
+from typing import ClassVar
 
 import pytest
 from pydantic import ValidationError
 
+from isvctl.config.output_schemas import (
+    OUTPUT_SCHEMAS,
+    STEP_SCHEMA_MAPPING,
+    get_schema_for_step,
+    validate_output,
+)
 from isvctl.config.schema import CommandConfig, CommandOutput, PlatformCommands, RunConfig, StepConfig
 
 
@@ -249,3 +257,144 @@ class TestRunConfigModel:
         assert steps[0].command == "./k8s-setup.sh"
         assert steps[1].name == "teardown_cluster"
         assert steps[1].command == "./k8s-teardown.sh"
+
+
+class TestOutputSchemaMapping:
+    """Tests for step name -> schema auto-detection.
+
+    Prevents regressions where overly-broad mapping keys (like "setup")
+    silently break platforms that share generic step names.
+    """
+
+    def test_setup_does_not_map_to_cluster(self) -> None:
+        """'setup' must NOT auto-map to the cluster schema.
+
+        The name 'setup' is used by slurm, k8s, bare_metal, etc. — each with
+        different output shapes. Mapping it to 'cluster' broke every non-EKS
+        platform (#191). Configs that need cluster validation should set
+        output_schema: cluster explicitly.
+        """
+        schema = get_schema_for_step("setup")
+        assert schema != "cluster", (
+            "'setup' must not map to 'cluster' — it is used across platforms "
+            "with different output shapes. Use output_schema in step config instead."
+        )
+
+    def test_all_mapped_schemas_exist(self) -> None:
+        """Every schema referenced in STEP_SCHEMA_MAPPING must be registered."""
+        for step_name, schema_name in STEP_SCHEMA_MAPPING.items():
+            if schema_name is not None:
+                assert schema_name in OUTPUT_SCHEMAS, (
+                    f"Step '{step_name}' maps to schema '{schema_name}' which is not registered in OUTPUT_SCHEMAS"
+                )
+
+    def test_explicit_output_schema_overrides_autodetect(self) -> None:
+        """StepConfig.output_schema should take priority over name-based detection."""
+        step = StepConfig(name="setup", command="./setup.sh", output_schema="cluster")
+        assert step.output_schema == "cluster"
+        assert get_schema_for_step(step.name) != "cluster"
+
+    @pytest.mark.parametrize(
+        ("step_name", "expected_schema"),
+        [
+            ("provision_cluster", "cluster"),
+            ("create_cluster", "cluster"),
+            ("create_network", "network"),
+            ("launch_instance", "instance"),
+            ("teardown", "teardown"),
+            ("create_access_key", "access_key"),
+        ],
+    )
+    def test_specific_step_names_resolve_correctly(self, step_name: str, expected_schema: str) -> None:
+        """Verify well-known step names map to the correct schemas."""
+        assert get_schema_for_step(step_name) == expected_schema
+
+
+class TestOutputSchemaValidation:
+    """Tests that representative stub outputs conform to their resolved schemas.
+
+    Each sample mirrors the actual JSON structure produced by the corresponding
+    setup stub (e.g., slurm/setup.sh, k8s/_common.sh, aws/eks/setup.sh).
+    If a stub's output shape changes, these tests must be updated to match.
+    """
+
+    SLURM_SETUP_OUTPUT: ClassVar[dict] = {
+        "success": True,
+        "platform": "slurm",
+        "cluster_name": "demo-slurm",
+        "slurm": {
+            "partitions": {"gpu": {"nodes": ["n1", "n2"]}, "all": {"nodes": ["n1", "n2"]}},
+            "cuda_arch": "90",
+            "storage_path": "/home",
+            "default_partition": "gpu",
+            "driver_version": "560.35.03",
+            "gpu_per_node": 4,
+            "total_gpus": 8,
+        },
+    }
+
+    K8S_SETUP_OUTPUT: ClassVar[dict] = {
+        "success": True,
+        "platform": "kubernetes",
+        "cluster_name": "test-cluster",
+        "kubernetes": {
+            "driver_version": "560.35.03",
+            "node_count": 3,
+            "nodes": ["node1", "node2", "node3"],
+            "gpu_node_count": 2,
+            "gpu_per_node": 4,
+            "total_gpus": 8,
+            "gpu_operator_namespace": "nvidia-gpu-operator",
+            "runtime_class": "nvidia",
+            "gpu_resource_name": "nvidia.com/gpu",
+        },
+    }
+
+    EKS_SETUP_OUTPUT: ClassVar[dict] = {
+        "success": True,
+        "platform": "kubernetes",
+        "cluster_name": "eks-cluster",
+        "node_count": 3,
+        "endpoint": "https://eks.amazonaws.com",
+        "gpu_count": 8,
+        "gpu_per_node": 4,
+        "driver_version": "560.35.03",
+        "kubeconfig_path": "/tmp/kubeconfig",
+        "kubernetes": {
+            "driver_version": "560.35.03",
+            "node_count": 3,
+            "nodes": ["node1", "node2", "node3"],
+            "gpu_node_count": 2,
+            "gpu_per_node": 4,
+            "total_gpus": 8,
+            "gpu_operator_namespace": "nvidia-gpu-operator",
+            "runtime_class": "nvidia",
+            "gpu_resource_name": "nvidia.com/gpu",
+        },
+    }
+
+    def test_slurm_output_passes_autodetected_schema(self) -> None:
+        """Slurm setup.sh output must pass its auto-detected schema (generic)."""
+        schema = get_schema_for_step("setup")
+        is_valid, errors = validate_output(self.SLURM_SETUP_OUTPUT, schema)
+        assert is_valid, f"Slurm output failed '{schema}' schema: {errors}"
+
+    def test_k8s_output_passes_autodetected_schema(self) -> None:
+        """k8s _common.sh output must pass its auto-detected schema (generic).
+
+        Note: _common.sh does NOT put node_count at the top level, so it
+        cannot pass the 'cluster' schema without modification.
+        """
+        schema = get_schema_for_step("setup")
+        is_valid, errors = validate_output(self.K8S_SETUP_OUTPUT, schema)
+        assert is_valid, f"K8s output failed '{schema}' schema: {errors}"
+
+    def test_k8s_output_fails_cluster_schema(self) -> None:
+        """k8s _common.sh output lacks top-level node_count, so cluster schema must reject it."""
+        is_valid, _errors = validate_output(self.K8S_SETUP_OUTPUT, "cluster")
+        assert not is_valid, "K8s _common.sh output should NOT pass cluster schema (no top-level node_count)"
+
+    def test_eks_output_passes_cluster_schema(self) -> None:
+        """EKS setup.sh output has top-level node_count and must pass cluster schema."""
+        is_valid, errors = validate_output(self.EKS_SETUP_OUTPUT, "cluster")
+        assert is_valid, f"EKS output failed 'cluster' schema: {errors}"

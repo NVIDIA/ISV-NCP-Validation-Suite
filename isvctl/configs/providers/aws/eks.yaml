@@ -39,6 +39,7 @@ commands:
       - name: setup
         phase: setup
         command: "../../stubs/aws/eks/setup.sh"
+        output_schema: cluster
         timeout: 1800 # 30 min for Terraform provisioning
         env:
           TF_AUTO_APPROVE: "true"

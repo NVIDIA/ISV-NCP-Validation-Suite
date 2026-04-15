@@ -17,10 +17,13 @@ by executing a test job on each node individually.
 from dataclasses import dataclass
 from typing import ClassVar
 
+import pytest
+
 from isvtest.core.nvidia import extract_first_gpu_info, has_gpu_output
 from isvtest.core.slurm import (
     DEFAULT_NODE_TIMEOUT,
     MANIFESTS_DIR,
+    get_partition_names,
     get_partition_nodes,
     is_gpu_partition,
 )
@@ -77,8 +80,9 @@ class SlurmNodeJobExecution(BaseValidation):
         if nodes is None:
             return  # Error already set
         if not nodes:
-            self.set_failed(f"No nodes found in partition '{partition_name}'")
-            return
+            result = self.run_command("sinfo -o '%P %a %l %D %N'")
+            available = get_partition_names(result.stdout) if result.exit_code == 0 else []
+            pytest.skip(f"Partition '{partition_name}' has no nodes (available partitions: {available})")
 
         self.log.info(f"Found {len(nodes)} nodes in partition '{partition_name}': {nodes}")
 

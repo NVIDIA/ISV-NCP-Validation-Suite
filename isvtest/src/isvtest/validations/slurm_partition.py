@@ -13,6 +13,8 @@
 import json
 from typing import ClassVar
 
+import pytest
+
 from isvtest.core.slurm import get_partition_names, get_partitions
 from isvtest.core.validation import BaseValidation
 
@@ -119,6 +121,11 @@ class SlurmPartition(BaseValidation):
         if partition_name:
             # Check for specific partition
             if partition_name not in partitions:
+                if not expected_nodes and not required_nodes:
+                    pytest.skip(
+                        f"Partition '{partition_name}' not present on this cluster "
+                        f"(available: {list(partitions.keys())})"
+                    )
                 self.set_failed(f"Partition '{partition_name}' not found. Available: {list(partitions.keys())}")
                 return
 

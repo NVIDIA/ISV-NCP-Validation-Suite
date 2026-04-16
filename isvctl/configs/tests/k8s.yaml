@@ -124,5 +124,9 @@ tests:
           genai_perf_requests: 200
           genai_perf_concurrency: 8
 
+    k8s_observability:
+      checks:
+        K8sApiServerMetricsCheck: {}
+
   exclude:
     markers: []

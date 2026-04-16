@@ -92,6 +92,10 @@ tests:
             "nvidia.com/mig.capable": "true"
             "nvidia.com/mig.strategy": "single"
 
+    k8s_identity:
+      checks:
+        K8sOidcIssuerCheck: {}
+
     k8s_workloads:
       checks:
         K8sNcclWorkload:

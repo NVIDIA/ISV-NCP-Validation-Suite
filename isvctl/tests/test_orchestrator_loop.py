@@ -485,20 +485,24 @@ class TestMissingStepRefDetection:
     """Tests for detecting undefined {{steps.X.Y}} references in step args."""
 
     def test_find_missing_step_path_returns_none_when_resolved(self) -> None:
+        """Fully-resolved {{steps.X.Y}} refs return None (no missing path)."""
         steps_data = {"create_network": {"network_id": "vpc-abc123"}}
         arg = "{{steps.create_network.network_id}}"
         assert _find_missing_step_path(arg, steps_data) is None
 
     def test_find_missing_step_path_detects_missing_step(self) -> None:
+        """Return the full path when the top-level step name is absent."""
         arg = "{{steps.create_network.network_id}}"
         assert _find_missing_step_path(arg, {}) == "create_network.network_id"
 
     def test_find_missing_step_path_detects_missing_field(self) -> None:
+        """Return the full path when a leaf field is missing from step output."""
         steps_data = {"create_network": {"other_field": "x"}}
         arg = "{{steps.create_network.network_id}}"
         assert _find_missing_step_path(arg, steps_data) == "create_network.network_id"
 
     def test_find_missing_step_path_detects_empty_leaf(self) -> None:
+        """Treat an empty-string leaf as missing (would render to '')."""
         steps_data = {"create_network": {"network_id": ""}}
         arg = "{{steps.create_network.network_id}}"
         assert _find_missing_step_path(arg, steps_data) == "create_network.network_id"

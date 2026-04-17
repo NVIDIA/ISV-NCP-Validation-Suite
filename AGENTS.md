@@ -29,6 +29,8 @@ make build          # Build all packages (wheels output to dist/)
 
 ```bash
 make test           # Run tests for all packages
+make smoke-test     # Run all 6 my-isv provider configs end-to-end in demo mode
+                    # (sets ISVCTL_DEMO_MODE=1; no cloud needed; ~10s)
 uv run pytest       # Run tests in current package directory
 
 # isvtest has separate markers:
@@ -128,9 +130,10 @@ Config (YAML) -> Script (any language) -> JSON output -> Validations (assertions
 **Stubs (ISV Scripts)**: Located in `isvctl/configs/stubs/`
 
 - Platform setup/teardown shell scripts: `stubs/k8s/setup.sh`, `stubs/slurm/setup.sh`, etc.
-- Tag verification scripts: `stubs/vm/describe_tags.py`, `stubs/bare_metal/describe_tags.py`
-- AWS Python scripts organized by domain: `stubs/aws/network/`, `stubs/aws/vm/`, `stubs/aws/iam/`, etc.
+- Provider-agnostic template stubs: `stubs/my-isv/<domain>/*.py` (iam, control-plane, vm, bare_metal, network, image-registry). Each stub has a TODO block and a `DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"` gate: default run returns `"Not implemented - ..."` errors, `ISVCTL_DEMO_MODE=1` (what `make smoke-test` sets) returns dummy-success output. ISVs copy this tree as a starting point.
+- AWS Python scripts organized by domain: `stubs/aws/network/`, `stubs/aws/vm/`, `stubs/aws/iam/`, etc. — fully implemented reference using boto3.
 - Shared AWS utilities: `stubs/aws/common/` (error handling, EC2 helpers, VPC helpers)
+- Shared stubs used by multiple domains: `stubs/common/` (SSH helpers, NIM deploy/teardown)
 - Each script is self-contained and can be run manually for debugging
 
 ### isvtest - Validation Framework

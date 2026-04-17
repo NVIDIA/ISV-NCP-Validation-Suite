@@ -263,13 +263,20 @@ For common validation scenarios, **pre-built test suites** are available in [`is
 | [`image-registry.yaml`](../../isvctl/configs/tests/image-registry.yaml) | Image upload → VM launch → install config CRUD → BMaaS install → teardown | 6 scripts |
 
 ```bash
-# Copy the templates and implement for your platform
-cp -r isvctl/configs/tests/ isvctl/configs/my-isv/
-# Edit the stub scripts (each has a TODO block showing what to implement)
-uv run isvctl test run -f isvctl/configs/my-isv/vm.yaml
+# Preview the full pipeline under `my-isv` in demo mode (~10s, no cloud)
+make smoke-test
+
+# Copy the my-isv scaffolding (stubs + provider configs) for your platform
+cp -r isvctl/configs/stubs/my-isv/ isvctl/configs/stubs/acme/
+cp -r isvctl/configs/providers/my-isv/ isvctl/configs/providers/acme/
+# Repoint providers/acme/*.yaml at stubs/acme/ and implement each TODO block.
+# Stubs fail with "Not implemented" by default; ISVCTL_DEMO_MODE=1 activates
+# the demo-success fallback for smoke-testing before you wire real APIs.
+uv run isvctl test run -f isvctl/configs/providers/acme/vm.yaml
 ```
 
-Each template has a matching **AWS reference implementation** you can study as a working example. See the [AWS Reference Guide](../references/aws.md) for details.
+Each template has a matching **AWS reference implementation** (`stubs/aws/...`)
+you can study as a working example. See the [AWS Reference Guide](../references/aws.md) for details.
 
 ---
 

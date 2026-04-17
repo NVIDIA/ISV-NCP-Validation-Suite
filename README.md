@@ -56,12 +56,19 @@ Running phases: ['setup', 'test', 'teardown']
 
 ## Running against your own platform
 
-Start from the **provider-agnostic templates** — copy, implement the stub scripts for your cloud/platform, and run:
+Start from the **my-isv living example** — a set of provider-agnostic
+template stubs that pass all validations under `ISVCTL_DEMO_MODE=1` and
+error out with "Not implemented" otherwise:
 
 ```bash
-cp -r isvctl/configs/tests/ isvctl/configs/my-isv/
-# Edit the stub scripts for your platform
-uv run isvctl test run -f isvctl/configs/my-isv/vm.yaml
+# See the full pipeline run end-to-end in demo mode (~10s, no cloud)
+make smoke-test
+
+# Copy the scaffolding for your platform and implement each stub
+cp -r isvctl/configs/stubs/my-isv/ isvctl/configs/stubs/acme/
+cp -r isvctl/configs/providers/my-isv/ isvctl/configs/providers/acme/
+# Repoint providers/acme/*.yaml at stubs/acme/ and fill in the TODO blocks
+uv run isvctl test run -f isvctl/configs/providers/acme/vm.yaml
 ```
 
 Templates are available for: [IAM](isvctl/configs/tests/iam.yaml) | [Network](isvctl/configs/tests/network.yaml) | [VM](isvctl/configs/tests/vm.yaml) | [Bare Metal](isvctl/configs/tests/bare_metal.yaml) | [Kubernetes](isvctl/configs/tests/k8s.yaml) | [Control Plane](isvctl/configs/tests/control-plane.yaml) | [Image Registry](isvctl/configs/tests/image-registry.yaml)

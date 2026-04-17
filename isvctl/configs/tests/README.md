@@ -6,29 +6,43 @@ For background on the step-based architecture, writing scripts, and running vali
 
 ## Quick Start
 
+### Try the living example first (~10s, no cloud needed)
+
 ```bash
-# 1. Copy the test suites and stubs
-cp -r isvctl/configs/tests/ isvctl/configs/my-isv/
-cp -r isvctl/configs/stubs/ isvctl/configs/my-isv/stubs/
-
-# 2. Implement the stub scripts for your platform
-#    Each stub has a TODO block showing what to implement
-
-# 3. Run
-uv run isvctl test run -f isvctl/configs/my-isv/vm.yaml
+make smoke-test
 ```
 
-Or use the **import directive** (recommended for providers):
+This runs all 6 my-isv provider configs with `ISVCTL_DEMO_MODE=1` set, which
+flips the template stubs under `isvctl/configs/stubs/my-isv/` into demo-success
+mode so the validation contract can be exercised without real infrastructure.
+
+### Write your own provider
+
+```bash
+# 1. Copy the my-isv scaffolding (stubs + provider configs) as a starting point
+cp -r isvctl/configs/stubs/my-isv/ isvctl/configs/stubs/acme/
+cp -r isvctl/configs/providers/my-isv/ isvctl/configs/providers/acme/
+
+# 2. Repoint providers/acme/*.yaml at stubs/acme/ (sed or by hand)
+
+# 3. Implement each stub. Fill in the TODO block in each script; the default
+#    branch exits with "Not implemented" until you do.
+
+# 4. Run
+uv run isvctl test run -f isvctl/configs/providers/acme/vm.yaml
+```
+
+Or use the **import directive** (recommended — only override what changes):
 
 ```yaml
-# isvctl/configs/providers/my-isv/vm.yaml
+# isvctl/configs/providers/acme/vm.yaml
 import: ../../tests/vm.yaml
 
 commands:
   vm:
     steps:
       - name: launch_instance
-        command: "python3 ../../stubs/my-isv/vm/launch_instance.py"
+        command: "python3 ../../stubs/acme/vm/launch_instance.py"
       # ... override only the commands, validations stay the same
 ```
 
@@ -36,14 +50,14 @@ commands:
 
 | Test Suite | Domain | Stubs | AWS Reference |
 |------------|--------|-------|---------------|
-| [`iam.yaml`](iam.yaml) | User lifecycle (create → verify → delete) | [`stubs/iam/`](../stubs/iam/) (3 scripts) | [`providers/aws/iam.yaml`](../providers/aws/iam.yaml) |
-| [`network.yaml`](network.yaml) | VPC CRUD, subnets, isolation, SG CRUD, security, connectivity, traffic, DDI, SDN | [`stubs/network/`](../stubs/network/) (16 scripts) | [`providers/aws/network.yaml`](../providers/aws/network.yaml) |
-| [`vm.yaml`](vm.yaml) | GPU VM lifecycle: launch → tags → stop/start → reboot → NIM → teardown | [`stubs/vm/`](../stubs/vm/) (8 scripts) | [`providers/aws/vm.yaml`](../providers/aws/vm.yaml) |
-| [`bare_metal.yaml`](bare_metal.yaml) | BMaaS lifecycle: launch → tags → topology → serial → stop/start → reboot → power-cycle → NIM → teardown | [`stubs/bare_metal/`](../stubs/bare_metal/) (13 scripts) | [`providers/aws/bare_metal.yaml`](../providers/aws/bare_metal.yaml) |
+| [`iam.yaml`](iam.yaml) | User lifecycle (create → verify → delete) | [`stubs/my-isv/iam/`](../stubs/my-isv/iam/) (3 scripts) | [`providers/aws/iam.yaml`](../providers/aws/iam.yaml) |
+| [`network.yaml`](network.yaml) | VPC CRUD, subnets, isolation, SG CRUD, security, connectivity, traffic, DDI, SDN | [`stubs/my-isv/network/`](../stubs/my-isv/network/) (16 scripts) | [`providers/aws/network.yaml`](../providers/aws/network.yaml) |
+| [`vm.yaml`](vm.yaml) | GPU VM lifecycle: launch → tags → stop/start → reboot → NIM → teardown | [`stubs/my-isv/vm/`](../stubs/my-isv/vm/) (8 scripts) | [`providers/aws/vm.yaml`](../providers/aws/vm.yaml) |
+| [`bare_metal.yaml`](bare_metal.yaml) | BMaaS lifecycle: launch → tags → topology → serial → stop/start → reboot → power-cycle → NIM → teardown | [`stubs/my-isv/bare_metal/`](../stubs/my-isv/bare_metal/) (13 scripts) | [`providers/aws/bare_metal.yaml`](../providers/aws/bare_metal.yaml) |
 | [`k8s.yaml`](k8s.yaml) | Kubernetes GPU cluster: nodes, GPU operator, scheduling, workloads | [`stubs/k8s/`](../stubs/k8s/) (2 scripts) | [`providers/aws/eks.yaml`](../providers/aws/eks.yaml) |
 | [`slurm.yaml`](slurm.yaml) | Slurm HPC cluster: partitions, jobs, GPU allocation | [`stubs/slurm/`](../stubs/slurm/) (2 scripts) | — |
-| [`control-plane.yaml`](control-plane.yaml) | API health, access key lifecycle, tenant lifecycle | [`stubs/control-plane/`](../stubs/control-plane/) (10 scripts) | [`providers/aws/control-plane.yaml`](../providers/aws/control-plane.yaml) |
-| [`image-registry.yaml`](image-registry.yaml) | Image upload, CRUD, VM launch, install config, BMaaS provisioning | [`stubs/image-registry/`](../stubs/image-registry/) (7 scripts) | [`providers/aws/image-registry.yaml`](../providers/aws/image-registry.yaml) |
+| [`control-plane.yaml`](control-plane.yaml) | API health, access key lifecycle, tenant lifecycle | [`stubs/my-isv/control-plane/`](../stubs/my-isv/control-plane/) (10 scripts) | [`providers/aws/control-plane.yaml`](../providers/aws/control-plane.yaml) |
+| [`image-registry.yaml`](image-registry.yaml) | Image upload, CRUD, VM launch, install config, BMaaS provisioning | [`stubs/my-isv/image-registry/`](../stubs/my-isv/image-registry/) (7 scripts) | [`providers/aws/image-registry.yaml`](../providers/aws/image-registry.yaml) |
 
 ## Test Suite Details
 
@@ -51,65 +65,65 @@ commands:
 
 | Step | Phase | Script | Key JSON Fields |
 |------|-------|--------|-----------------|
-| `create_user` | setup | `stubs/iam/create_user.py` | `username`, `user_id`, `access_key_id`, `secret_access_key` |
-| `test_credentials` | test | `stubs/iam/test_credentials.py` | `account_id`, `tests.identity.passed`, `tests.access.passed` |
-| `teardown` | teardown | `stubs/iam/delete_user.py` | `resources_deleted`, `message` |
+| `create_user` | setup | `stubs/my-isv/iam/create_user.py` | `username`, `user_id`, `access_key_id`, `secret_access_key` |
+| `test_credentials` | test | `stubs/my-isv/iam/test_credentials.py` | `account_id`, `tests.identity.passed`, `tests.access.passed` |
+| `teardown` | teardown | `stubs/my-isv/iam/delete_user.py` | `resources_deleted`, `message` |
 
 ### Network (`network.yaml`)
 
 | Step | Phase | Script | What It Tests |
 |------|-------|--------|---------------|
-| `create_network` | setup | `stubs/network/create_vpc.py` | Shared VPC creation |
-| `vpc_crud` | test | `stubs/network/vpc_crud_test.py` | Create/Read/Update/Delete lifecycle |
-| `subnet_config` | test | `stubs/network/subnet_test.py` | Multi-AZ subnet distribution |
-| `vpc_isolation` | test | `stubs/network/isolation_test.py` | Security boundaries between VPCs |
-| `sg_crud` | test | `stubs/network/sg_crud_test.py` | Security group create/read/update/delete lifecycle |
-| `security_blocking` | test | `stubs/network/security_test.py` | Firewall/ACL blocking rules |
-| `connectivity_test` | test | `stubs/network/test_connectivity.py` | Instance network assignment |
-| `traffic_validation` | test | `stubs/network/traffic_test.py` | Ping allowed/blocked, internet |
-| `vpc_ip_config` | test | `stubs/network/vpc_ip_config_test.py` | DHCP options, subnet CIDRs, auto-assign IP |
-| `dhcp_ip_test` | test | `stubs/network/dhcp_ip_test.py` | DHCP lease, IP match, DNS options via SSH |
-| `byoip_test` | test | `stubs/network/byoip_test.py` | Bring-Your-Own-IP with custom CIDRs |
-| `stable_ip_test` | test | `stubs/network/stable_ip_test.py` | IP persistence across stop/start |
-| `floating_ip_test` | test | `stubs/network/floating_ip_test.py` | Atomic IP switch between instances |
-| `dns_test` | test | `stubs/network/dns_test.py` | Custom internal domain resolution |
-| `peering_test` | test | `stubs/network/peering_test.py` | Cross-VPC connectivity |
-| `teardown` | teardown | `stubs/network/teardown.py` | VPC cleanup |
+| `create_network` | setup | `stubs/my-isv/network/create_vpc.py` | Shared VPC creation |
+| `vpc_crud` | test | `stubs/my-isv/network/vpc_crud_test.py` | Create/Read/Update/Delete lifecycle |
+| `subnet_config` | test | `stubs/my-isv/network/subnet_test.py` | Multi-AZ subnet distribution |
+| `vpc_isolation` | test | `stubs/my-isv/network/isolation_test.py` | Security boundaries between VPCs |
+| `sg_crud` | test | `stubs/my-isv/network/sg_crud_test.py` | Security group create/read/update/delete lifecycle |
+| `security_blocking` | test | `stubs/my-isv/network/security_test.py` | Firewall/ACL blocking rules |
+| `connectivity_test` | test | `stubs/my-isv/network/test_connectivity.py` | Instance network assignment |
+| `traffic_validation` | test | `stubs/my-isv/network/traffic_test.py` | Ping allowed/blocked, internet |
+| `vpc_ip_config` | test | `stubs/my-isv/network/vpc_ip_config_test.py` | DHCP options, subnet CIDRs, auto-assign IP |
+| `dhcp_ip_test` | test | `stubs/my-isv/network/dhcp_ip_test.py` | DHCP lease, IP match, DNS options via SSH |
+| `byoip_test` | test | `stubs/my-isv/network/byoip_test.py` | Bring-Your-Own-IP with custom CIDRs |
+| `stable_ip_test` | test | `stubs/my-isv/network/stable_ip_test.py` | IP persistence across stop/start |
+| `floating_ip_test` | test | `stubs/my-isv/network/floating_ip_test.py` | Atomic IP switch between instances |
+| `dns_test` | test | `stubs/my-isv/network/dns_test.py` | Custom internal domain resolution |
+| `peering_test` | test | `stubs/my-isv/network/peering_test.py` | Cross-VPC connectivity |
+| `teardown` | teardown | `stubs/my-isv/network/teardown.py` | VPC cleanup |
 
 ### VM (`vm.yaml`)
 
 | Step | Phase | Script | Key JSON Fields |
 |------|-------|--------|-----------------|
-| `launch_instance` | setup | `stubs/vm/launch_instance.py` | `instance_id`, `public_ip`, `key_file`, `vpc_id` |
-| `list_instances` | test | `stubs/vm/list_instances.py` | `instances`, `total_count` |
-| `verify_tags` | test | `stubs/vm/describe_tags.py` | `instance_id`, `tags`, `tag_count` |
-| `stop_instance` | test | `stubs/vm/stop_instance.py` | `instance_id`, `state`, `stop_initiated` |
-| `start_instance` | test | `stubs/vm/start_instance.py` | `instance_id`, `state`, `public_ip`, `ssh_ready` |
-| `reboot_instance` | test | `stubs/vm/reboot_instance.py` | `uptime_seconds`, `ssh_connectivity` |
-| `serial_console` | test | `stubs/vm/serial_console.py` | `console_available`, `serial_access_enabled` |
+| `launch_instance` | setup | `stubs/my-isv/vm/launch_instance.py` | `instance_id`, `public_ip`, `key_file`, `vpc_id` |
+| `list_instances` | test | `stubs/my-isv/vm/list_instances.py` | `instances`, `total_count` |
+| `verify_tags` | test | `stubs/my-isv/vm/describe_tags.py` | `instance_id`, `tags`, `tag_count` |
+| `stop_instance` | test | `stubs/my-isv/vm/stop_instance.py` | `instance_id`, `state`, `stop_initiated` |
+| `start_instance` | test | `stubs/my-isv/vm/start_instance.py` | `instance_id`, `state`, `public_ip`, `ssh_ready` |
+| `reboot_instance` | test | `stubs/my-isv/vm/reboot_instance.py` | `uptime_seconds`, `ssh_connectivity` |
+| `serial_console` | test | `stubs/my-isv/vm/serial_console.py` | `console_available`, `serial_access_enabled` |
 | `deploy_nim` | test | `stubs/common/deploy_nim.py` | `container_id`, `health_endpoint` |
 | `teardown_nim` | teardown | `stubs/common/teardown_nim.py` | `message` |
-| `teardown` | teardown | `stubs/vm/teardown.py` | `resources_deleted`, `message` |
+| `teardown` | teardown | `stubs/my-isv/vm/teardown.py` | `resources_deleted`, `message` |
 
 ### Bare Metal (`bare_metal.yaml`)
 
 | Step | Phase | Script | Key JSON Fields |
 |------|-------|--------|-----------------|
-| `launch_instance` | setup | `stubs/bare_metal/launch_instance.py` | `instance_id`, `public_ip`, `key_file`, `vpc_id` |
-| `list_instances` | test | `stubs/vm/list_instances.py` | Reuses VM script |
-| `verify_tags` | test | `stubs/bare_metal/describe_tags.py` | `instance_id`, `tags`, `tag_count` |
-| `topology_placement` | test | `stubs/bare_metal/topology_placement.py` | `placement_supported`, `operations` |
-| `serial_console` | test | `stubs/bare_metal/serial_console.py` | `console_available`, `serial_access_enabled` |
-| `stop_instance` | test | `stubs/bare_metal/stop_instance.py` | `instance_id`, `state`, `stop_initiated` |
-| `start_instance` | test | `stubs/bare_metal/start_instance.py` | `instance_id`, `state`, `public_ip`, `ssh_ready` |
-| `reboot_instance` | test | `stubs/bare_metal/reboot_instance.py` | `uptime_seconds`, `ssh_connectivity` |
-| `power_cycle_instance` | test | `stubs/bare_metal/power_cycle_instance.py` | `instance_id`, `state`, `public_ip`, `ssh_ready` |
-| `describe_instance` | test | `stubs/bare_metal/describe_instance.py` | `instance_state`, `public_ip`, `key_file` |
-| `reinstall_instance` | test | `stubs/bare_metal/reinstall_instance.py` | `instance_state` (skipped by default) |
+| `launch_instance` | setup | `stubs/my-isv/bare_metal/launch_instance.py` | `instance_id`, `public_ip`, `key_file`, `vpc_id` |
+| `list_instances` | test | `stubs/my-isv/vm/list_instances.py` | Reuses VM script |
+| `verify_tags` | test | `stubs/my-isv/bare_metal/describe_tags.py` | `instance_id`, `tags`, `tag_count` |
+| `topology_placement` | test | `stubs/my-isv/bare_metal/topology_placement.py` | `placement_supported`, `operations` |
+| `serial_console` | test | `stubs/my-isv/bare_metal/serial_console.py` | `console_available`, `serial_access_enabled` |
+| `stop_instance` | test | `stubs/my-isv/bare_metal/stop_instance.py` | `instance_id`, `state`, `stop_initiated` |
+| `start_instance` | test | `stubs/my-isv/bare_metal/start_instance.py` | `instance_id`, `state`, `public_ip`, `ssh_ready` |
+| `reboot_instance` | test | `stubs/my-isv/bare_metal/reboot_instance.py` | `uptime_seconds`, `ssh_connectivity` |
+| `power_cycle_instance` | test | `stubs/my-isv/bare_metal/power_cycle_instance.py` | `instance_id`, `state`, `public_ip`, `ssh_ready` |
+| `describe_instance` | test | `stubs/my-isv/bare_metal/describe_instance.py` | `instance_state`, `public_ip`, `key_file` |
+| `reinstall_instance` | test | `stubs/my-isv/bare_metal/reinstall_instance.py` | `instance_state` (skipped by default) |
 | `deploy_nim` | test | `stubs/common/deploy_nim.py` | Shared NIM deployment |
 | `teardown_nim` | teardown | `stubs/common/teardown_nim.py` | Shared NIM cleanup |
-| `teardown` | teardown | `stubs/bare_metal/teardown.py` | `resources_deleted`, `message` |
-| `verify_teardown` | teardown | `stubs/bare_metal/verify_terminated.py` | `checks.instance_terminated`, `checks.sg_deleted` |
+| `teardown` | teardown | `stubs/my-isv/bare_metal/teardown.py` | `resources_deleted`, `message` |
+| `verify_teardown` | teardown | `stubs/my-isv/bare_metal/verify_terminated.py` | `checks.instance_terminated`, `checks.sg_deleted` |
 
 ### Kubernetes (`k8s.yaml`)
 
@@ -133,28 +147,28 @@ Validations use `sinfo`/`srun` directly: partitions, GPU allocation, job schedul
 
 | Step | Phase | Script | Key JSON Fields |
 |------|-------|--------|-----------------|
-| `check_api` | setup | `stubs/control-plane/check_api.py` | `account_id`, `tests` |
-| `create_access_key` | setup | `stubs/control-plane/create_access_key.py` | `username`, `access_key_id` |
-| `create_tenant` | setup | `stubs/control-plane/create_tenant.py` | `tenant_name`, `tenant_id` |
-| `test_access_key` | test | `stubs/control-plane/test_access_key.py` | `authenticated`, `account_id` |
-| `disable_access_key` | test | `stubs/control-plane/disable_access_key.py` | `status` |
-| `verify_key_rejected` | test | `stubs/control-plane/verify_key_rejected.py` | `rejected`, `error_type` |
-| `list_tenants` | test | `stubs/control-plane/list_tenants.py` | `tenants`, `found` |
-| `get_tenant` | test | `stubs/control-plane/get_tenant.py` | `tenant_name`, `description` |
-| `delete_access_key` | teardown | `stubs/control-plane/delete_access_key.py` | `resources_deleted` |
-| `delete_tenant` | teardown | `stubs/control-plane/delete_tenant.py` | `resources_deleted` |
+| `check_api` | setup | `stubs/my-isv/control-plane/check_api.py` | `account_id`, `tests` |
+| `create_access_key` | setup | `stubs/my-isv/control-plane/create_access_key.py` | `username`, `access_key_id` |
+| `create_tenant` | setup | `stubs/my-isv/control-plane/create_tenant.py` | `tenant_name`, `tenant_id` |
+| `test_access_key` | test | `stubs/my-isv/control-plane/test_access_key.py` | `authenticated`, `account_id` |
+| `disable_access_key` | test | `stubs/my-isv/control-plane/disable_access_key.py` | `status` |
+| `verify_key_rejected` | test | `stubs/my-isv/control-plane/verify_key_rejected.py` | `rejected`, `error_type` |
+| `list_tenants` | test | `stubs/my-isv/control-plane/list_tenants.py` | `tenants`, `found` |
+| `get_tenant` | test | `stubs/my-isv/control-plane/get_tenant.py` | `tenant_name`, `description` |
+| `delete_access_key` | teardown | `stubs/my-isv/control-plane/delete_access_key.py` | `resources_deleted` |
+| `delete_tenant` | teardown | `stubs/my-isv/control-plane/delete_tenant.py` | `resources_deleted` |
 
 ### Image Registry (`image-registry.yaml`)
 
 | Step | Phase | Script | Key JSON Fields |
 |------|-------|--------|-----------------|
-| `upload_image` | setup | `stubs/image-registry/upload_image.py` | `image_id`, `storage_bucket`, `disk_ids` |
-| `crud_image` | test | `stubs/image-registry/crud_image.py` | `image_id`, `operations` |
-| `launch_instance` | test | `stubs/image-registry/launch_instance.py` | `instance_id`, `public_ip`, `key_path` |
-| `crud_install_config` | test | `stubs/image-registry/crud_install_config.py` | `config_id`, `config_name`, `operations` |
-| `install_image_bm` | test | `stubs/image-registry/install_image_bm.py` | `instance_id`, `image_id`, `instance_state` |
-| `install_config_bm` | test | `stubs/image-registry/install_config_bm.py` | `instance_id`, `config_id`, `instance_state` |
-| `teardown` | teardown | `stubs/image-registry/teardown.py` | `resources_deleted`, `message` |
+| `upload_image` | setup | `stubs/my-isv/image-registry/upload_image.py` | `image_id`, `storage_bucket`, `disk_ids` |
+| `crud_image` | test | `stubs/my-isv/image-registry/crud_image.py` | `image_id`, `operations` |
+| `launch_instance` | test | `stubs/my-isv/image-registry/launch_instance.py` | `instance_id`, `public_ip`, `key_path` |
+| `crud_install_config` | test | `stubs/my-isv/image-registry/crud_install_config.py` | `config_id`, `config_name`, `operations` |
+| `install_image_bm` | test | `stubs/my-isv/image-registry/install_image_bm.py` | `instance_id`, `image_id`, `instance_state` |
+| `install_config_bm` | test | `stubs/my-isv/image-registry/install_config_bm.py` | `instance_id`, `config_id`, `instance_state` |
+| `teardown` | teardown | `stubs/my-isv/image-registry/teardown.py` | `resources_deleted`, `message` |
 
 ## Related Documentation
 

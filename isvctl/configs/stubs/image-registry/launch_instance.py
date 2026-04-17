@@ -78,7 +78,15 @@ def main() -> int:
     # ║  7. Set result["success"] = True                                 ║
     # ╚══════════════════════════════════════════════════════════════════╝
 
-    result["error"] = "Not implemented - replace with your platform's instance launch logic"
+    result["instance_id"] = "dummy-img-instance-0001"
+    result["public_ip"] = "203.0.113.40"
+    result["key_path"] = "/tmp/dummy-img-key.pem"
+    result["key_name"] = "dummy-img-key"
+    result["security_group_id"] = "dummy-sg-img"
+    result["instance_profile"] = "dummy-img-profile"
+    result["instance_state"] = "running"
+    result["state"] = "running"
+    result["success"] = True
 
     print(json.dumps(result, indent=2))
     return 0 if result["success"] else 1

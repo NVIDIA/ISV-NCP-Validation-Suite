@@ -67,7 +67,10 @@ def main() -> int:
     # ║  3. Set result["success"] = True                                 ║
     # ╚══════════════════════════════════════════════════════════════════╝
 
-    result["error"] = "Not implemented - replace with your platform's BM config install logic"
+    result["instance_id"] = "dummy-bm-config-0001"
+    result["instance_state"] = "running"
+    result["state"] = "running"
+    result["success"] = True
 
     print(json.dumps(result, indent=2))
     return 0 if result["success"] else 1

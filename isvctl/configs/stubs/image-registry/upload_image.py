@@ -70,7 +70,10 @@ def main() -> int:
     # ║  6. Set result["success"] = True                                 ║
     # ╚══════════════════════════════════════════════════════════════════╝
 
-    result["error"] = "Not implemented - replace with your platform's image import logic"
+    result["image_id"] = "dummy-image-0001"
+    result["storage_bucket"] = "dummy-image-bucket"
+    result["disk_ids"] = ["dummy-disk-0001"]
+    result["success"] = True
 
     print(json.dumps(result, indent=2))
     return 0 if result["success"] else 1

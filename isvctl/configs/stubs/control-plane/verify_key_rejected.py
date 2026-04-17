@@ -64,7 +64,9 @@ def main() -> int:
     # ║     → result["error"]      = "Key was not rejected"              ║
     # ╚══════════════════════════════════════════════════════════════════╝
 
-    result["error"] = "Not implemented - replace with your platform's key rejection verification logic"
+    result["rejected"] = True
+    result["error_code"] = "DummyTokenRejected"
+    result["success"] = True
 
     print(json.dumps(result, indent=2))
     return 0 if result["success"] else 1

@@ -39,7 +39,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Delete access key and test user")
     parser.add_argument("--username", required=True, help="User who owns the key")
     parser.add_argument("--access-key-id", required=True, help="Key to delete")
-    args = parser.parse_args()  # noqa: F841 — used in TODO block below
+    args = parser.parse_args()
 
     result: dict = {
         "success": False,
@@ -62,7 +62,10 @@ def main() -> int:
     # ║  3. Set result["message"] and result["success"] = True                  ║
     # ╚══════════════════════════════════════════════════════════════════════════╝
 
-    result["error"] = "Not implemented - replace with your platform's access key deletion logic"
+    result["resources_deleted"].append(f"access_key:{args.access_key_id}")
+    result["resources_deleted"].append(f"user:{args.username}")
+    result["message"] = "Access key and user deleted"
+    result["success"] = True
 
     print(json.dumps(result, indent=2))
     return 0 if result["success"] else 1

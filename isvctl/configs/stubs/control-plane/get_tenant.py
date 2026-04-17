@@ -40,7 +40,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Get tenant / resource group details")
     parser.add_argument("--group-name", required=True, help="Tenant / group name to look up")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")
-    args = parser.parse_args()  # noqa: F841 — used in TODO block below
+    args = parser.parse_args()
 
     result: dict = {
         "success": False,
@@ -60,7 +60,10 @@ def main() -> int:
     # ║  2. Set result["success"] = True                                 ║
     # ╚══════════════════════════════════════════════════════════════════╝
 
-    result["error"] = "Not implemented - replace with your platform's tenant detail retrieval logic"
+    result["tenant_name"] = args.group_name
+    result["tenant_id"] = "dummy-tenant-id"
+    result["description"] = "Dummy tenant for living example"
+    result["success"] = True
 
     print(json.dumps(result, indent=2))
     return 0 if result["success"] else 1

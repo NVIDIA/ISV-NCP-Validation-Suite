@@ -60,7 +60,10 @@ def main() -> int:
     # ║  3. Set result["success"] = True                                 ║
     # ╚══════════════════════════════════════════════════════════════════╝
 
-    result["error"] = "Not implemented - replace with your platform's access key creation logic"
+    result["username"] = "isv-test-user"
+    result["access_key_id"] = "dummy-key-id"
+    result["secret_access_key"] = "dummy-secret"
+    result["success"] = True
 
     print(json.dumps(result, indent=2))
     return 0 if result["success"] else 1

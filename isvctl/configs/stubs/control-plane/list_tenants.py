@@ -63,7 +63,10 @@ def main() -> int:
     # ║  3. Set result["success"] = True                                        ║
     # ╚══════════════════════════════════════════════════════════════════════════╝
 
-    result["error"] = "Not implemented - replace with your platform's tenant listing logic"
+    result["tenants"] = [{"tenant_name": args.target_group, "tenant_id": "dummy-tenant-id"}]
+    result["count"] = len(result["tenants"])
+    result["found_target"] = True
+    result["success"] = True
 
     print(json.dumps(result, indent=2))
     return 0 if result["success"] else 1

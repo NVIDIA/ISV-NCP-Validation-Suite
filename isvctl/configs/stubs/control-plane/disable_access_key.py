@@ -59,7 +59,8 @@ def main() -> int:
     # ║     → result["success"] = True                                   ║
     # ╚══════════════════════════════════════════════════════════════════╝
 
-    result["error"] = "Not implemented - replace with your platform's key disable logic"
+    result["status"] = "Inactive"
+    result["success"] = True
 
     print(json.dumps(result, indent=2))
     return 0 if result["success"] else 1

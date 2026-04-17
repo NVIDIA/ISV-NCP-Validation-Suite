@@ -57,7 +57,9 @@ def main() -> int:
     # ║  2. Set result["success"] = True                                 ║
     # ╚══════════════════════════════════════════════════════════════════╝
 
-    result["error"] = "Not implemented - replace with your platform's tenant creation logic"
+    result["tenant_name"] = "dummy-tenant"
+    result["tenant_id"] = "dummy-tenant-id"
+    result["success"] = True
 
     print(json.dumps(result, indent=2))
     return 0 if result["success"] else 1

@@ -31,6 +31,7 @@ from isvtest.validations.instance import (
     InstanceStopCheck,
     InstanceTagCheck,
 )
+from isvtest.validations.k8s_metrics import K8sApiServerMetricsCheck
 from isvtest.validations.network import (
     ByoipCheck,
     FloatingIpCheck,
@@ -1294,3 +1295,143 @@ class TestCloudInitCheckMetadataHeaders:
         assert len(curl_cmds) == 1
         assert "-H 'X-Custom: value1'" in curl_cmds[0]
         assert "-H 'X-Other: value2'" in curl_cmds[0]
+
+
+SAMPLE_APISERVER_METRICS = """\
+# HELP apiserver_request_total Counter of apiserver requests broken out for each verb, dry run value, group, version, resource, scope, component, and HTTP response code.
+# TYPE apiserver_request_total counter
+apiserver_request_total{code="200",component="apiserver",group="",resource="pods",verb="GET"} 1234
+apiserver_request_total{code="201",component="apiserver",group="",resource="pods",verb="POST"} 56
+# HELP apiserver_request_duration_seconds Response latency distribution in seconds for each verb, dry run value, group, version, resource, subresource, scope, and component.
+# TYPE apiserver_request_duration_seconds histogram
+apiserver_request_duration_seconds_bucket{component="apiserver",verb="GET",le="0.1"} 500
+apiserver_request_duration_seconds_count{component="apiserver",verb="GET"} 1000
+# HELP process_cpu_seconds_total Total user and system CPU time spent in seconds.
+# TYPE process_cpu_seconds_total counter
+process_cpu_seconds_total 42.5
+"""
+
+
+class TestK8sApiServerMetricsCheck:
+    """Tests for K8sApiServerMetricsCheck validation."""
+
+    def test_successful_metrics_response(self) -> None:
+        """Valid Prometheus payload with default expected metrics passes."""
+        mock_runner = MagicMock()
+        mock_runner.run.return_value = CommandResult(
+            exit_code=0, stdout=SAMPLE_APISERVER_METRICS, stderr="", duration=0.1
+        )
+        validation = K8sApiServerMetricsCheck(runner=mock_runner, config={})
+        result = validation.execute()
+        assert result["passed"] is True
+        assert "Prometheus format" in result["output"]
+
+    def test_missing_expected_metrics(self) -> None:
+        """Payload missing the default metrics fails with both names listed."""
+        payload = (
+            "# HELP process_cpu_seconds_total Total user and system CPU time.\n"
+            "# TYPE process_cpu_seconds_total counter\n"
+            "process_cpu_seconds_total 42.5\n"
+        )
+        mock_runner = MagicMock()
+        mock_runner.run.return_value = CommandResult(exit_code=0, stdout=payload, stderr="", duration=0.1)
+        validation = K8sApiServerMetricsCheck(runner=mock_runner, config={})
+        result = validation.execute()
+        assert result["passed"] is False
+        assert "apiserver_request_total" in result["error"]
+        assert "apiserver_request_duration_seconds" in result["error"]
+
+    def test_empty_response(self) -> None:
+        """An empty 200 response is reported explicitly."""
+        mock_runner = MagicMock()
+        mock_runner.run.return_value = CommandResult(exit_code=0, stdout="", stderr="", duration=0.1)
+        validation = K8sApiServerMetricsCheck(runner=mock_runner, config={})
+        result = validation.execute()
+        assert result["passed"] is False
+        assert "empty response" in result["error"]
+
+    def test_kubectl_command_failure_hints_rbac(self) -> None:
+        """Non-zero kubectl exit surfaces stderr and hints at RBAC."""
+        mock_runner = MagicMock()
+        mock_runner.run.return_value = CommandResult(
+            exit_code=1,
+            stdout="",
+            stderr="Error from server (Forbidden): ...",
+            duration=0.1,
+        )
+        validation = K8sApiServerMetricsCheck(runner=mock_runner, config={})
+        result = validation.execute()
+        assert result["passed"] is False
+        assert "Failed to query" in result["error"]
+        assert "RBAC" in result["error"]
+        assert "/metrics" in result["error"]
+
+    def test_custom_expected_metrics(self) -> None:
+        """Overriding expected_metrics with a present name passes."""
+        mock_runner = MagicMock()
+        mock_runner.run.return_value = CommandResult(
+            exit_code=0, stdout=SAMPLE_APISERVER_METRICS, stderr="", duration=0.1
+        )
+        validation = K8sApiServerMetricsCheck(
+            runner=mock_runner, config={"expected_metrics": ["process_cpu_seconds_total"]}
+        )
+        result = validation.execute()
+        assert result["passed"] is True
+
+    def test_custom_expected_metrics_missing(self) -> None:
+        """Overriding expected_metrics with an absent name fails and names it."""
+        mock_runner = MagicMock()
+        mock_runner.run.return_value = CommandResult(
+            exit_code=0, stdout=SAMPLE_APISERVER_METRICS, stderr="", duration=0.1
+        )
+        validation = K8sApiServerMetricsCheck(
+            runner=mock_runner, config={"expected_metrics": ["nonexistent_metric_foobar"]}
+        )
+        result = validation.execute()
+        assert result["passed"] is False
+        assert "nonexistent_metric_foobar" in result["error"]
+
+    def test_not_prometheus_format(self) -> None:
+        """Non-Prometheus payload (e.g. Status JSON) fails with clear message."""
+        mock_runner = MagicMock()
+        mock_runner.run.return_value = CommandResult(
+            exit_code=0,
+            stdout='{"kind": "Status", "apiVersion": "v1"}',
+            stderr="",
+            duration=0.1,
+        )
+        validation = K8sApiServerMetricsCheck(runner=mock_runner, config={})
+        result = validation.execute()
+        assert result["passed"] is False
+        assert "not in Prometheus" in result["error"]
+
+    def test_expected_metrics_must_be_a_list(self) -> None:
+        """Non-list expected_metrics config fails fast with a typed message."""
+        mock_runner = MagicMock()
+        validation = K8sApiServerMetricsCheck(
+            runner=mock_runner, config={"expected_metrics": "apiserver_request_total"}
+        )
+        result = validation.execute()
+        assert result["passed"] is False
+        assert "expected_metrics" in result["error"]
+        assert "list" in result["error"]
+        mock_runner.run.assert_not_called()
+
+    def test_expected_metrics_rejects_non_string_elements(self) -> None:
+        """List with non-string or empty elements fails fast without running kubectl."""
+        mock_runner = MagicMock()
+        validation = K8sApiServerMetricsCheck(
+            runner=mock_runner, config={"expected_metrics": ["apiserver_request_total", 123]}
+        )
+        result = validation.execute()
+        assert result["passed"] is False
+        assert "expected_metrics" in result["error"]
+        mock_runner.run.assert_not_called()
+
+        validation = K8sApiServerMetricsCheck(
+            runner=mock_runner, config={"expected_metrics": ["apiserver_request_total", ""]}
+        )
+        result = validation.execute()
+        assert result["passed"] is False
+        assert "expected_metrics" in result["error"]
+        mock_runner.run.assert_not_called()

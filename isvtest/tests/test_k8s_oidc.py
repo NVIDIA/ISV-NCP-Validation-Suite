@@ -96,6 +96,24 @@ class TestK8sOidcIssuerCheck:
         result = check.execute()
         assert result["passed"] is True
 
+    def test_required_fields_single_string_with_whitespace_is_trimmed(self) -> None:
+        response = {"issuer": "https://example.com"}
+        check = _make_check(
+            stdout=json.dumps(response),
+            config={"required_fields": " issuer "},
+        )
+        result = check.execute()
+        assert result["passed"] is True
+
+    def test_required_fields_whitespace_string_is_rejected(self) -> None:
+        check = _make_check(
+            stdout=json.dumps(VALID_OIDC_RESPONSE),
+            config={"required_fields": "   "},
+        )
+        result = check.execute()
+        assert result["passed"] is False
+        assert "Invalid 'required_fields' config" in result["error"]
+
     def test_required_fields_none_is_rejected(self) -> None:
         check = _make_check(
             stdout=json.dumps(VALID_OIDC_RESPONSE),
@@ -109,6 +127,15 @@ class TestK8sOidcIssuerCheck:
         check = _make_check(
             stdout=json.dumps(VALID_OIDC_RESPONSE),
             config={"required_fields": ["issuer", 1]},
+        )
+        result = check.execute()
+        assert result["passed"] is False
+        assert "Invalid 'required_fields' config" in result["error"]
+
+    def test_required_fields_whitespace_items_are_rejected(self) -> None:
+        check = _make_check(
+            stdout=json.dumps(VALID_OIDC_RESPONSE),
+            config={"required_fields": ["issuer", "   "]},
         )
         result = check.execute()
         assert result["passed"] is False

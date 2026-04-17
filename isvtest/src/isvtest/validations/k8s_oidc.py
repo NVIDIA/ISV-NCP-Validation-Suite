@@ -37,15 +37,27 @@ class K8sOidcIssuerCheck(BaseValidation):
     def run(self) -> None:
         """Fetch the OIDC discovery document and validate its shape and issuer URL."""
         required_fields_config = self.config.get("required_fields", DEFAULT_REQUIRED_FIELDS)
+        error_msg = "Invalid 'required_fields' config: expected a string or iterable of non-empty strings."
         if isinstance(required_fields_config, str):
-            required_fields = [required_fields_config]
-        elif isinstance(required_fields_config, Iterable):
-            required_fields = list(required_fields_config)
-            if any(not isinstance(field, str) or not field for field in required_fields):
-                self.set_failed("Invalid 'required_fields' config: expected a string or iterable of non-empty strings.")
+            field = required_fields_config.strip()
+            if not field:
+                self.set_failed(error_msg)
                 return
+            required_fields = [field]
+        elif isinstance(required_fields_config, Iterable):
+            required_fields = []
+            for field in required_fields_config:
+                if not isinstance(field, str):
+                    self.set_failed(error_msg)
+                    return
+
+                normalized_field = field.strip()
+                if not normalized_field:
+                    self.set_failed(error_msg)
+                    return
+                required_fields.append(normalized_field)
         else:
-            self.set_failed("Invalid 'required_fields' config: expected a string or iterable of non-empty strings.")
+            self.set_failed(error_msg)
             return
 
         kubectl_parts = get_kubectl_command()

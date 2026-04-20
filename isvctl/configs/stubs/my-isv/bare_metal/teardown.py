@@ -43,6 +43,7 @@ import argparse
 import json
 import os
 import sys
+from typing import Any
 
 # ISVCTL_DEMO_MODE=1 enables demo-success output (used by `make demo-test`).
 DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
@@ -71,7 +72,7 @@ def main() -> int:
     if args.delete_security_group and not args.security_group_id:
         parser.error("--security-group-id is required when --delete-security-group is set")
 
-    result: dict = {
+    result: dict[str, Any] = {
         "success": False,
         "platform": "bm",
         "resources_deleted": [],

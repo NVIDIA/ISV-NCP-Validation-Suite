@@ -49,6 +49,7 @@ import argparse
 import json
 import os
 import sys
+from typing import Any
 
 # ISVCTL_DEMO_MODE=1 enables demo-success output (used by `make demo-test`).
 DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
@@ -61,7 +62,7 @@ def main() -> int:
     parser.add_argument("--cidr-b", default="10.96.0.0/16", help="CIDR block for VPC B")
     args = parser.parse_args()
 
-    result: dict = {
+    result: dict[str, Any] = {
         "success": False,
         "platform": "network",
         "test_name": "vpc_isolation",

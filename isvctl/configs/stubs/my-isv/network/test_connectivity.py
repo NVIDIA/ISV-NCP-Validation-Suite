@@ -43,6 +43,7 @@ import argparse
 import json
 import os
 import sys
+from typing import Any
 
 # ISVCTL_DEMO_MODE=1 enables demo-success output (used by `make demo-test`).
 DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
@@ -58,7 +59,7 @@ def main() -> int:
 
     _subnet_ids = [s.strip() for s in args.subnet_ids.split(",") if s.strip()]
 
-    result: dict = {
+    result: dict[str, Any] = {
         "success": False,
         "platform": "network",
         "test_name": "connectivity",

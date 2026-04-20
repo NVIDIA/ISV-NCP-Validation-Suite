@@ -35,7 +35,7 @@ import argparse
 import json
 import os
 import sys
-from typing import NoReturn
+from typing import Any, NoReturn
 
 # ISVCTL_DEMO_MODE=1 enables demo-success output (used by `make demo-test`).
 DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
@@ -54,7 +54,7 @@ def main() -> int:
     parser.error = _arg_error  # type: ignore[assignment]
     args = parser.parse_args()
 
-    result: dict = {
+    result: dict[str, Any] = {
         "success": False,
         "platform": "vm",
         "instance_id": args.instance_id,

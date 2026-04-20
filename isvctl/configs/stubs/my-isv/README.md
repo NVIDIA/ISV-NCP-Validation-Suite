@@ -10,13 +10,13 @@ Each stub ships with a TODO block and two behaviors:
 ## The three pieces that make this work
 
 ```text
-tests/*.yaml               ← contract   (what to validate; platform-agnostic)
+tests/*.yaml               <- contract   (what to validate; platform-agnostic)
                   │
                   ▼ imported by
-providers/my-isv/*.yaml    ← wiring     (which stubs implement each step)
+providers/my-isv/*.yaml    <- wiring     (which stubs implement each step)
                   │
                   ▼ invokes
-stubs/my-isv/<domain>/*.py ← scaffold   (copy these; fill in TODO blocks)
+stubs/my-isv/<domain>/*.py <- scaffold   (copy these; fill in TODO blocks)
 ```
 
 The `tests/` layer is the validation contract -- you never modify it, you

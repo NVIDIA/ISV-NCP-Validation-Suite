@@ -17,7 +17,6 @@ This module provides shared functionality for:
 
 import json
 import os
-import shlex
 import subprocess
 import time
 import uuid
@@ -42,16 +41,6 @@ def get_ngc_api_key() -> str:
         The API key string, or empty string if neither variable is set.
     """
     return os.environ.get("NGC_API_KEY", "") or os.environ.get("NGC_NIM_API_KEY", "")
-
-
-def get_kubectl_base() -> str:
-    """Get the kubectl base command as a shell-safe string.
-
-    Returns:
-        Shell-escaped kubectl command string (e.g., "kubectl" or "microk8s kubectl").
-    """
-    kubectl_parts = get_kubectl_command()
-    return " ".join(shlex.quote(part) for part in kubectl_parts)
 
 
 def ensure_ngc_secrets(namespace: str, ngc_api_key: str | None = None) -> tuple[bool, str]:

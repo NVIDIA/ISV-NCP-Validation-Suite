@@ -8,7 +8,6 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-import shlex
 import subprocess
 import time
 import uuid
@@ -24,7 +23,7 @@ from isvtest.config.settings import (
     get_gpu_stress_timeout,
     get_k8s_namespace,
 )
-from isvtest.core.k8s import get_gpu_nodes, get_kubectl_command, get_node_gpu_count
+from isvtest.core.k8s import get_gpu_nodes, get_kubectl_base_shell, get_kubectl_command, get_node_gpu_count
 from isvtest.core.workload import BaseWorkloadCheck
 
 
@@ -114,8 +113,7 @@ class K8sGpuStressWorkload(BaseWorkloadCheck):
             pod_succeeded = False
             pod_logs = ""
 
-            # Build kubectl base command for this file's runner.run() calls
-            kubectl_base = " ".join(shlex.quote(part) for part in kubectl_parts)
+            kubectl_base = get_kubectl_base_shell()
 
             while time.time() < end_time:
                 time.sleep(5)

@@ -23,11 +23,12 @@ from isvtest.config.settings import get_k8s_namespace
 from isvtest.core.k8s import (
     get_gpu_nodes,
     get_job_pods,
+    get_kubectl_base_shell,
     get_kubectl_command,
     get_pod_logs,
     wait_for_job_completion,
 )
-from isvtest.core.ngc import ensure_ngc_secrets, get_kubectl_base
+from isvtest.core.ngc import ensure_ngc_secrets
 from isvtest.core.workload import BaseWorkloadCheck
 
 
@@ -82,7 +83,7 @@ class K8sNimInferenceWorkload(BaseWorkloadCheck):
         self.log.info("Steps: 1. Pull images, 2. Download model, 3. Load model (10-12m), 4. Run inference")
 
         kubectl_parts = get_kubectl_command()
-        kubectl_base = get_kubectl_base()
+        kubectl_base = get_kubectl_base_shell()
 
         try:
             result = subprocess.run(
@@ -144,7 +145,7 @@ class K8sNimInferenceWorkload(BaseWorkloadCheck):
             True if PVC exists or was created, False on error.
         """
         pvc_name = "nim-model-cache"
-        kubectl_base = get_kubectl_base()
+        kubectl_base = get_kubectl_base_shell()
 
         res = self.run_command(f"{kubectl_base} get pvc {pvc_name} -n {namespace}")
         if res.exit_code == 0:

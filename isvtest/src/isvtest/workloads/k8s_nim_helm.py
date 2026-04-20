@@ -29,8 +29,8 @@ from typing import Any, ClassVar
 import pytest
 
 from isvtest.config.settings import get_k8s_namespace
-from isvtest.core.k8s import get_gpu_nodes, get_kubectl_command
-from isvtest.core.ngc import get_kubectl_base, get_ngc_api_key, validate_nim_inference
+from isvtest.core.k8s import get_gpu_nodes, get_kubectl_base_shell, get_kubectl_command
+from isvtest.core.ngc import get_ngc_api_key, validate_nim_inference
 from isvtest.core.workload import BaseWorkloadCheck
 
 
@@ -140,7 +140,7 @@ class K8sNimHelmWorkload(BaseWorkloadCheck):
             release_name = None  # No cleanup needed
 
             # Just verify the service exists
-            kubectl_base = get_kubectl_base()
+            kubectl_base = get_kubectl_base_shell()
             result = self.run_command(f"{kubectl_base} get svc {service_name} -n {namespace}")
             if result.exit_code != 0:
                 self.set_failed(f"Service {service_name} not found in namespace {namespace}")
@@ -267,7 +267,7 @@ class K8sNimHelmWorkload(BaseWorkloadCheck):
             pytest.skip("NGC_API_KEY not set - NGC credentials required")
 
         kubectl_parts = get_kubectl_command()
-        kubectl_base = get_kubectl_base()
+        kubectl_base = get_kubectl_base_shell()
 
         # Create namespace if it doesn't exist
         self.run_command(
@@ -457,7 +457,7 @@ class K8sNimHelmWorkload(BaseWorkloadCheck):
         """Wait for NIM deployment to be ready and serving."""
         self.log.info(f"Waiting for NIM service {service_name} to be ready...")
 
-        kubectl_base = get_kubectl_base()
+        kubectl_base = get_kubectl_base_shell()
         release_name = service_name.replace("-nim-llm", "")
 
         start_time = time.time()
@@ -559,7 +559,7 @@ class K8sNimHelmWorkload(BaseWorkloadCheck):
 
         job_name = f"genai-perf-{uuid.uuid4().hex[:8]}"
         kubectl_parts = get_kubectl_command()
-        kubectl_base = get_kubectl_base()
+        kubectl_base = get_kubectl_base_shell()
 
         # Create GenAI-Perf job manifest
         job_yaml = self._create_genai_perf_job_yaml(
@@ -800,7 +800,7 @@ spec:
         """Dump Helm release status for debugging."""
         self.log.error("Dumping Helm release status for debugging...")
 
-        kubectl_base = get_kubectl_base()
+        kubectl_base = get_kubectl_base_shell()
 
         self.run_command(f"helm status {release_name} -n {namespace}")
         self.run_command(f"{kubectl_base} describe pods -n {namespace} -l app.kubernetes.io/instance={release_name}")

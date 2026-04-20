@@ -15,8 +15,7 @@ from unittest.mock import patch
 
 import pytest
 
-from isvtest.core.k8s import get_k8s_provider, get_kubectl_command
-from isvtest.core.ngc import get_kubectl_base
+from isvtest.core.k8s import get_k8s_provider, get_kubectl_base_shell, get_kubectl_command
 
 
 class TestGetKubectlCommandOverride:
@@ -101,13 +100,13 @@ class TestGetKubectlCommandOverride:
             result = get_kubectl_command()
         assert result == ["kubectl"]
 
-    def test_get_kubectl_base_round_trip(self) -> None:
-        """get_kubectl_base() returns shell-safe string from KUBECTL override."""
+    def test_get_kubectl_base_shell_round_trip(self) -> None:
+        """get_kubectl_base_shell() returns shell-safe string from KUBECTL override."""
         with (
             patch.dict(os.environ, {"KUBECTL": "microk8s kubectl"}, clear=True),
             patch("isvtest.core.k8s.shutil.which", return_value="/snap/bin/microk8s"),
         ):
-            result = get_kubectl_base()
+            result = get_kubectl_base_shell()
         assert result == "microk8s kubectl"
 
     def test_binary_not_on_path_raises(self) -> None:

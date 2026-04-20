@@ -8,12 +8,11 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-import shlex
 import subprocess
 import time
 from typing import Any, ClassVar
 
-from isvtest.core.k8s import get_kubectl_command
+from isvtest.core.k8s import get_kubectl_base_shell, get_kubectl_command
 from isvtest.core.runners import CommandResult, Runner
 from isvtest.core.validation import BaseValidation
 
@@ -45,7 +44,7 @@ class BaseWorkloadCheck(BaseValidation):
         4. Delete Job
         """
         kubectl_parts = get_kubectl_command()
-        kubectl_base = " ".join(shlex.quote(part) for part in kubectl_parts)
+        kubectl_base = get_kubectl_base_shell()
 
         # 1. Apply Job
         self.log.info(f"Deploying job {job_name} in namespace {namespace}...")

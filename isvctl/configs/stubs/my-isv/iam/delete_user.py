@@ -79,7 +79,7 @@ def main() -> int:
     # ╚══════════════════════════════════════════════════════════════════╝
 
     if DEMO_MODE:
-        # Demo-success output for the validation-contract smoke test.
+        # Demo-success output for the validation-contract demo test.
         # Safe to delete once the TODO above is filled in for real.
         result["resources_deleted"].append(f"user:{args.username}")
         result["success"] = True

@@ -28,6 +28,9 @@
 #    deploy_nim / teardown_nim / reinstall_instance steps are also
 #    skipped for the same reason.
 #
+# ACTION: Remove `exclude.markers: [ssh]` at the bottom once your
+#   stubs provision real instances with SSH access.
+#
 # Steps:
 #   SETUP
 #     1. launch_instance      - Provision a bare-metal GPU node

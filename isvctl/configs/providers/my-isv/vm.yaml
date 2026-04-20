@@ -26,6 +26,9 @@
 #    spin up a real host to SSH into. The deploy_nim / teardown_nim
 #    steps are also skipped for the same reason.
 #
+# ACTION: Remove `exclude.markers: [ssh]` at the bottom once your
+#   stubs provision real instances with SSH access.
+#
 # Steps:
 #   SETUP
 #     1. launch_instance  - Provision a GPU VM
@@ -183,5 +186,6 @@ tests:
   # Skip SSH-based host checks (ConnectivityCheck, GpuCheck, DriverCheck,
   # CpuInfoCheck, CloudInitCheck, NIM checks, etc.) - they'd try to connect
   # to the dummy public_ip. Pure JSON-contract checks still run.
+  # Real ISVs remove this exclusion as their stubs come online.
   exclude:
     markers: ["ssh"]

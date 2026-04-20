@@ -21,8 +21,10 @@
 #    InstanceStateCheck) on all 7 steps. The vm_ssh validation group
 #    (ConnectivityCheck + OsCheck on launch_instance) is excluded via
 #    `exclude.markers: [ssh]` because a dummy stub cannot stand up a
-#    real VM to SSH into. Real ISVs remove this exclusion as their
-#    stubs come online.
+#    real VM to SSH into.
+#
+# ACTION: Remove `exclude.markers: [ssh]` at the bottom once your
+#   stubs provision real instances with SSH access.
 #
 # Note on field names:
 #   The BMaaS install steps (install_image_bm, install_config_bm)
@@ -137,5 +139,6 @@ tests:
 
   # Skip SSH-based vm_ssh check (ConnectivityCheck + OsCheck on
   # launch_instance) - would try to SSH into the dummy public_ip.
+  # Real ISVs remove this exclusion as their stubs come online.
   exclude:
     markers: ["ssh"]

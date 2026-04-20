@@ -1,5 +1,5 @@
 .PHONY: help pre-commit build test coverage clean lint format install bump-patch bump-fix bump-minor bump-feat bump-major bump bump-check \
-	security-trivy security-trivy-detail security-trufflehog ci-security smoke-test
+	security-trivy security-trivy-detail security-trufflehog ci-security demo-test
 
 MY_ISV_DOMAINS := iam control-plane vm bare_metal network image-registry
 
@@ -73,12 +73,12 @@ test: ## Run tests for all packages
 	@echo ""
 	@echo "✅ All tests passed!"
 
-smoke-test: ## Run all my-isv living examples with ISVCTL_DEMO_MODE=1
+demo-test: ## Run all my-isv living examples with ISVCTL_DEMO_MODE=1
 	@echo "Running my-isv living examples in demo mode..."
 	@for domain in $(MY_ISV_DOMAINS); do \
 		echo ""; \
 		echo "=========================================="; \
-		echo "Smoke test: $$domain"; \
+		echo "Demo test: $$domain"; \
 		echo "=========================================="; \
 		ISVCTL_DEMO_MODE=1 uv run isvctl test run \
 			-f isvctl/configs/providers/my-isv/$$domain.yaml || exit 1; \

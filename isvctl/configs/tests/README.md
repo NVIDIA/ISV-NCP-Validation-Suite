@@ -9,7 +9,7 @@ For background on the step-based architecture, writing scripts, and running vali
 ### Try the living example first (~10s, no cloud needed)
 
 ```bash
-make smoke-test
+make demo-test
 ```
 
 This runs all 6 my-isv provider configs with `ISVCTL_DEMO_MODE=1` set, which

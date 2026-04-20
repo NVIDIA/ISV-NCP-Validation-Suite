@@ -37,7 +37,7 @@ import os
 import sys
 from typing import NoReturn
 
-# ISVCTL_DEMO_MODE=1 enables demo-success output (used by `make smoke-test`).
+# ISVCTL_DEMO_MODE=1 enables demo-success output (used by `make demo-test`).
 DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 

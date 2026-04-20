@@ -62,7 +62,7 @@ error out with "Not implemented" otherwise:
 
 ```bash
 # See the full pipeline run end-to-end in demo mode (~10s, no cloud)
-make smoke-test
+make demo-test
 
 # Copy the scaffolding for your platform and implement each stub
 cp -r isvctl/configs/stubs/my-isv/ isvctl/configs/stubs/acme/

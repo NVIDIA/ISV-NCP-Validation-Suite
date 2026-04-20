@@ -264,14 +264,14 @@ For common validation scenarios, **pre-built test suites** are available in [`is
 
 ```bash
 # Preview the full pipeline under `my-isv` in demo mode (~10s, no cloud)
-make smoke-test
+make demo-test
 
 # Copy the my-isv scaffolding (stubs + provider configs) for your platform
 cp -r isvctl/configs/stubs/my-isv/ isvctl/configs/stubs/acme/
 cp -r isvctl/configs/providers/my-isv/ isvctl/configs/providers/acme/
 # Repoint providers/acme/*.yaml at stubs/acme/ and implement each TODO block.
 # Stubs fail with "Not implemented" by default; ISVCTL_DEMO_MODE=1 activates
-# the demo-success fallback for smoke-testing before you wire real APIs.
+# the demo-success fallback for demo-testing before you wire real APIs.
 uv run isvctl test run -f isvctl/configs/providers/acme/vm.yaml
 ```
 

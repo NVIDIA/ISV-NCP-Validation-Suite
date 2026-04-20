@@ -50,4 +50,4 @@ When implementing a template for your platform:
 2. Open the AWS equivalent side-by-side (e.g., `stubs/aws/vm/launch_instance.py`)
 3. Replace the TODO block with your platform's API calls, keeping the same JSON output fields
 4. Read the AWS domain guide (linked above) for context on what each test validates and why
-5. Run `make smoke-test` at any point to smoke-test your progress without real credentials
+5. Run `make demo-test` at any point to demo-test your progress without real credentials

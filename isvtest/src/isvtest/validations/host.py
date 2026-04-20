@@ -1002,8 +1002,14 @@ class DriverCheck(BaseValidation):
             else:
                 self.report_subtest("nvidia_driver", False, "NVIDIA driver not found")
 
-            # Check CUDA toolkit
-            exit_code, stdout, _ = run_ssh_command(ssh, "nvcc --version 2>/dev/null | grep release || echo 'not_found'")
+            # Check CUDA toolkit — try PATH first (AWS DL AMI), then fall back to
+            # NVIDIA's canonical install location (/usr/local/cuda/bin/nvcc).
+            # Required for NCPs like GCP DL VM where CUDA is installed but not
+            # exported on the login PATH.
+            exit_code, stdout, _ = run_ssh_command(
+                ssh,
+                "(nvcc --version || /usr/local/cuda/bin/nvcc --version) 2>/dev/null | grep release || echo 'not_found'",
+            )
             cuda_found = "not_found" not in stdout and "release" in stdout
             self.report_subtest("cuda_toolkit", cuda_found, stdout.strip() if cuda_found else "CUDA toolkit not found")
 

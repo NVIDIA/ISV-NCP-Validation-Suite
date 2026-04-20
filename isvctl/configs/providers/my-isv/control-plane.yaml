@@ -126,6 +126,8 @@ commands:
           - "{{steps.create_access_key.username}}"
           - "--access-key-id"
           - "{{steps.create_access_key.access_key_id}}"
+          - "--region"
+          - "{{region}}"
         timeout: 60
         output_schema: teardown
 

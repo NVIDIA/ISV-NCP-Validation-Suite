@@ -103,13 +103,13 @@ def main() -> int:
         result["instances"] = [
             {
                 "instance_id": "dummy-conn-instance-a",
-                "subnet_id": args.subnet_ids.split(",")[0],
+                "subnet_id": _subnet_ids[0] if _subnet_ids else "",
                 "private_ip": "10.0.1.10",
                 "public_ip": "203.0.113.30",
             },
             {
                 "instance_id": "dummy-conn-instance-b",
-                "subnet_id": args.subnet_ids.split(",")[-1],
+                "subnet_id": _subnet_ids[-1] if _subnet_ids else "",
                 "private_ip": "10.0.2.10",
             },
         ]

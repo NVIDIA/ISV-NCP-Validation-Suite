@@ -24,7 +24,7 @@ Required JSON output:
 }
 
 Usage:
-    python delete_access_key.py --username testuser --access-key-id AKID
+    python delete_access_key.py --username testuser --access-key-id AKID --region <region>
 
 AWS reference implementation:
     ../aws/control-plane/delete_access_key.py
@@ -43,6 +43,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Delete access key and test user")
     parser.add_argument("--username", required=True, help="User who owns the key")
     parser.add_argument("--access-key-id", required=True, help="Key to delete")
+    parser.add_argument("--region", required=True, help="Cloud region")
     args = parser.parse_args()
 
     result: dict = {
@@ -68,13 +69,9 @@ def main() -> int:
 
     if DEMO_MODE:
         result["resources_deleted"].append(f"access_key:{args.access_key_id}")
-
         result["resources_deleted"].append(f"user:{args.username}")
-
         result["message"] = "Access key and user deleted"
-
         result["success"] = True
-
     else:
         result["error"] = "Not implemented - replace with your platform's access key deletion logic"
 

@@ -31,11 +31,13 @@ Required JSON output fields:
     "platform": "bm",              # string  - always "bm"
     "instance_id": "...",          # string  - unique instance identifier
     "public_ip": "54.x.x.x",       # string  - public IP for SSH access
+    "private_ip": "10.0.0.20",     # string  - private IP (read by DhcpIpManagementCheck)
     "key_file": "/tmp/key.pem",    # string  - path to SSH private key
     "vpc_id": "vpc-xxx",           # string  - network/VPC identifier
     "state": "running",            # string  - must be "running" (read by InstanceStateCheck)
     "security_group_id": "sg-xxx", # string  - security group / firewall ID
-    "key_name": "my-key"           # string  - key pair name
+    "key_name": "my-key",          # string  - key pair name
+    "instance_type": "..."         # string  - echoed from --instance-type
   }
 
 On failure, set "success": false and include an "error" field.

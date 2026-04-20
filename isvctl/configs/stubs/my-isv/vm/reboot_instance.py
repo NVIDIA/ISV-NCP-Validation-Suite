@@ -30,6 +30,9 @@ Required JSON output fields (read by InstanceRebootCheck + InstanceStateCheck):
   reboot_initiated  (bool)  - whether the reboot API call succeeded
   ssh_ready         (bool)  - whether SSH is reachable post-reboot
   uptime_seconds    (int)   - system uptime after reboot (proves reboot happened)
+  reboot_confirmed  (bool, optional) - explicit uptime-based confirmation;
+                                       InstanceRebootCheck fails if present
+                                       and False (treats absent as "trust uptime")
   error             (str, optional) - human-readable error message provided when success is false
 
 Usage:

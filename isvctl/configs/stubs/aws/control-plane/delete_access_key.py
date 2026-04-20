@@ -32,6 +32,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--username", required=True)
     parser.add_argument("--access-key-id", required=True)
+    parser.add_argument("--region", help="AWS region (IAM is global; used for endpoint routing)")
     parser.add_argument("--skip-destroy", action="store_true")
     args = parser.parse_args()
 
@@ -43,7 +44,7 @@ def main() -> int:
         print(json.dumps(result, indent=2))
         return 0
 
-    iam = boto3.client("iam")
+    iam = boto3.client("iam", region_name=args.region) if args.region else boto3.client("iam")
 
     try:
         # Delete access key

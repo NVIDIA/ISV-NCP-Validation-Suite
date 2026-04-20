@@ -72,13 +72,9 @@ def main() -> int:
 
     if DEMO_MODE:
         result["instance_id"] = "dummy-bm-img-0001"
-
         result["instance_state"] = "running"
-
         result["state"] = "running"
-
         result["success"] = True
-
     else:
         result["error"] = "Not implemented - replace with your platform's BM image install logic"
 

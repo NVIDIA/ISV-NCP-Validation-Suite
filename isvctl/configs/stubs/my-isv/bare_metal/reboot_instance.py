@@ -30,7 +30,9 @@ Required JSON output fields (read by InstanceRebootCheck + InstanceStateCheck):
     "key_file": "/tmp/key.pem", # string  - path to SSH private key
     "reboot_initiated": true,   # boolean - was the reboot API call made?
     "ssh_ready": true,          # boolean - can we SSH after reboot?
-    "uptime_seconds": 45        # int     - system uptime after reboot (should be low)
+    "uptime_seconds": 45,       # int     - system uptime after reboot (should be low)
+    "reboot_confirmed": true    # boolean - optional; InstanceRebootCheck fails if
+                                #           present and False (absent == "trust uptime")
   }
 
 On failure, set "success": false and include an "error" field.

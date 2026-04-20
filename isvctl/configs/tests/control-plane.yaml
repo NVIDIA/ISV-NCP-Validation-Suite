@@ -43,9 +43,7 @@ commands:
   control_plane:
     phases: ["setup", "test", "teardown"]
     steps:
-      # ═══════════════════════════════════════════════════════════════
-      # SETUP: API Health Check
-      # ═══════════════════════════════════════════════════════════════
+      # ─── SETUP: API Health Check ─────────────────────────────────
       # YOUR SCRIPT must output JSON with at minimum:
       #   {
       #     "success": true,
@@ -59,9 +57,7 @@ commands:
         args: ["--region", "{{region}}", "--services", "{{services}}"]
         timeout: 120
 
-      # ═══════════════════════════════════════════════════════════════
-      # SETUP: Create Resources
-      # ═══════════════════════════════════════════════════════════════
+      # ─── SETUP: Create Resources ────────────────────────────────
       # Access key output:
       #   {
       #     "success": true,
@@ -89,9 +85,7 @@ commands:
         args: ["--region", "{{region}}"]
         timeout: 60
 
-      # ═══════════════════════════════════════════════════════════════
-      # TEST: Access Key Lifecycle
-      # ═══════════════════════════════════════════════════════════════
+      # ─── TEST: Access Key Lifecycle ──────────────────────────────
       - name: test_access_key
         phase: test
         command: "python3 ../stubs/my-isv/control-plane/test_access_key.py"
@@ -130,9 +124,7 @@ commands:
         sensitive_args: ["--secret-access-key"]
         timeout: 120
 
-      # ═══════════════════════════════════════════════════════════════
-      # TEST: Tenant Lifecycle
-      # ═══════════════════════════════════════════════════════════════
+      # ─── TEST: Tenant Lifecycle ────────────────────────────────────
       - name: list_tenants
         phase: test
         command: "python3 ../stubs/my-isv/control-plane/list_tenants.py"
@@ -153,9 +145,7 @@ commands:
           - "{{region}}"
         timeout: 60
 
-      # ═══════════════════════════════════════════════════════════════
-      # TEARDOWN: Cleanup Resources
-      # ═══════════════════════════════════════════════════════════════
+      # ─── TEARDOWN: Cleanup Resources ─────────────────────────────
       - name: delete_access_key
         phase: teardown
         command: "python3 ../stubs/my-isv/control-plane/delete_access_key.py"

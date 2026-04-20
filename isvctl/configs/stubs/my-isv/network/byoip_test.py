@@ -70,11 +70,11 @@ def main() -> int:
 
     if DEMO_MODE:
         result["tests"] = {
-            "custom_cidr_create": {"passed": True, "cidr": args.custom_cidr},
+            "custom_cidr_create": {"passed": True, "vpc_id": "dummy-byoip-vpc", "cidr": args.custom_cidr},
             "custom_cidr_verify": {"passed": True},
             "standard_cidr_create": {"passed": True, "cidr": args.standard_cidr},
             "no_conflict": {"passed": True},
-            "custom_cidr_subnet": {"passed": True},
+            "custom_cidr_subnet": {"passed": True, "subnet_id": "dummy-byoip-subnet"},
         }
         result["success"] = True
     else:

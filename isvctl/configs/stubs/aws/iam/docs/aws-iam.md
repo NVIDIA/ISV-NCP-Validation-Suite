@@ -122,7 +122,7 @@ cp -r isvctl/configs/providers/my-isv/ isvctl/configs/providers/acme/
 #   isvctl/configs/stubs/acme/iam/create_user.py
 #   isvctl/configs/stubs/acme/iam/test_credentials.py
 #   isvctl/configs/stubs/acme/iam/delete_user.py
-# providers/acme/iam.yaml already references stubs/acme/iam/ after the copy above,
+# isvctl/configs/providers/acme/iam.yaml already references isvctl/configs/stubs/acme/iam/ after the copy above,
 # so the command below will pick up your implemented stubs immediately.
 uv run isvctl test run -f isvctl/configs/providers/acme/iam.yaml
 ```

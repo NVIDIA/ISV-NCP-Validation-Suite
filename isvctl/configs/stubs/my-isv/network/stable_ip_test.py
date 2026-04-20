@@ -71,7 +71,7 @@ def main() -> int:
     if DEMO_MODE:
         result["tests"] = {
             "create_instance": {"passed": True, "instance_id": "dummy-stable-instance"},
-            "record_ip": {"passed": True, "ip": "10.91.0.10"},
+            "record_ip": {"passed": True, "private_ip": "10.91.0.10"},
             "stop_instance": {"passed": True},
             "start_instance": {"passed": True},
             "ip_unchanged": {"passed": True, "ip_before": "10.91.0.10", "ip_after": "10.91.0.10"},

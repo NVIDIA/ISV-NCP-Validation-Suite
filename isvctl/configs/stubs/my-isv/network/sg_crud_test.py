@@ -155,7 +155,7 @@ def main() -> int:
         result["tests"] = {
             "create_vpc": {"passed": True},
             "create_sg": {"passed": True, "sg_id": "dummy-sg-crud"},
-            "read_sg": {"passed": True},
+            "read_sg": {"passed": True, "name": "isv-demo-sg", "description": "ISV demo security group"},
             "update_sg_add_rule": {"passed": True},
             "update_sg_modify_rule": {"passed": True},
             "update_sg_remove_rule": {"passed": True},

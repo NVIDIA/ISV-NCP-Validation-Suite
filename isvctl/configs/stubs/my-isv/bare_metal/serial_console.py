@@ -60,6 +60,7 @@ def main() -> int:
         result["console_available"] = True
         result["serial_access_enabled"] = True
         result["output_length"] = 4096
+        result["output_snippet"] = "... demo serial console output snippet ..."
         result["success"] = True
     else:
         result["error"] = "Not implemented - replace with your platform's serial console logic"

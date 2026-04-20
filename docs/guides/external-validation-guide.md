@@ -266,6 +266,7 @@ Preview the whole pipeline with no cloud:
 
 ```bash
 make demo-test   # sets ISVCTL_DEMO_MODE=1 and runs all 6 my-isv configs (~10s)
+# Domains: iam, control-plane, vm, bare_metal, network, image-registry
 ```
 
 ---

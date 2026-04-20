@@ -72,6 +72,7 @@ def main() -> int:
         "success": False,
         "platform": "network",
         "test_name": "traffic_flow",
+        "network_id": "",
         "tests": {
             "create_vpc": {"passed": False},
             "create_igw": {"passed": False},

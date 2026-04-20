@@ -118,12 +118,12 @@ ISVCTL_DEMO_MODE=1 uv run isvctl test run -f isvctl/configs/providers/my-isv/iam
 # Quickest path: copy the scaffolding, implement the stubs
 cp -r isvctl/configs/stubs/my-isv/ isvctl/configs/stubs/acme/
 cp -r isvctl/configs/providers/my-isv/ isvctl/configs/providers/acme/
+# Update stub paths in the copied provider configs (they still reference stubs/my-isv/):
+sed -i 's|stubs/my-isv/|stubs/acme/|g' isvctl/configs/providers/acme/iam.yaml
 # Implement these three Python stubs (each contains a TODO block to fill in):
 #   isvctl/configs/stubs/acme/iam/create_user.py
 #   isvctl/configs/stubs/acme/iam/test_credentials.py
 #   isvctl/configs/stubs/acme/iam/delete_user.py
-# isvctl/configs/providers/acme/iam.yaml already references isvctl/configs/stubs/acme/iam/ after the copy above,
-# so the command below will pick up your implemented stubs immediately.
 uv run isvctl test run -f isvctl/configs/providers/acme/iam.yaml
 ```
 

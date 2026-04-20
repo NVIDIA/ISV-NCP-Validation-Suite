@@ -113,7 +113,7 @@ def main() -> int:
         result["state"] = "running"
         result["reboot_initiated"] = True
         result["ssh_ready"] = True
-        result["uptime_seconds"] = 45.0
+        result["uptime_seconds"] = 45
         result["reboot_confirmed"] = True
         result["success"] = True
     else:

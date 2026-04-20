@@ -111,7 +111,7 @@ def main() -> int:
 
     if DEMO_MODE:
         result["resources_deleted"].append(f"vpc:{args.vpc_id}")
-        result["resources_deleted"].append("security_group:dummy-sg-shared")
+        result["resources_deleted"].append("security-group:dummy-sg-shared")
         result["resources_deleted"].append("subnet:dummy-subnet-a")
         result["resources_deleted"].append("subnet:dummy-subnet-b")
         result["message"] = "Shared VPC and associated resources deleted"

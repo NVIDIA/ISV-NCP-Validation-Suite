@@ -54,8 +54,8 @@ def main() -> int:
     parser.add_argument(
         "--create-access-key",
         action="store_true",
-        default=True,
-        help="Also create credentials for the user",
+        default=False,
+        help="Also create credentials for the user (store_true: only enabled when flag is passed)",
     )
     args = parser.parse_args()
 

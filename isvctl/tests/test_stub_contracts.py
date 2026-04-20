@@ -50,8 +50,9 @@ STUBS_DIR = CONFIGS_DIR / "stubs"
 def extract_argparse_flags(stub_path: Path) -> set[str]:
     """Return the set of ``--flag`` names the stub's argparse declares.
 
-    Walks the AST for any call of the form ``<parser>.add_argument("--foo", ...)``
-    and collects the first positional string argument when it starts with ``--``.
+    Walks the AST for any call of the form ``<parser>.add_argument(...)``
+    and collects every positional string argument that starts with ``--``.
+    Handles aliased forms like ``add_argument("-r", "--region")``.
     """
     try:
         tree = ast.parse(stub_path.read_text())
@@ -65,11 +66,9 @@ def extract_argparse_flags(stub_path: Path) -> set[str]:
         func = node.func
         if not (isinstance(func, ast.Attribute) and func.attr == "add_argument"):
             continue
-        if not node.args:
-            continue
-        first = node.args[0]
-        if isinstance(first, ast.Constant) and isinstance(first.value, str) and first.value.startswith("--"):
-            flags.add(first.value)
+        for arg in node.args:
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and arg.value.startswith("--"):
+                flags.add(arg.value)
     return flags
 
 
@@ -145,8 +144,8 @@ def _collect_yaml_checks() -> list[StepArgCheck]:
     for yaml_path in yaml_paths:
         try:
             doc = yaml.safe_load(yaml_path.read_text())
-        except yaml.YAMLError:  # pragma: no cover - yaml must parse
-            continue
+        except yaml.YAMLError as exc:  # pragma: no cover - yaml must parse
+            pytest.fail(f"Cannot parse {yaml_path}: {exc}")
         if not isinstance(doc, dict):
             continue
         for step in _iter_steps(doc):

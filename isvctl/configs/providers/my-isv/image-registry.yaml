@@ -25,10 +25,11 @@
 #    stubs come online.
 #
 # Note on field names:
-#   The image-registry domain deliberately uses both `state` AND
-#   `instance_state` on launch_instance, install_image_bm and
-#   install_config_bm: the canonical FieldExistsCheck requires
-#   `instance_state` literally, while InstanceStateCheck reads `state`.
+#   The BMaaS install steps (install_image_bm, install_config_bm)
+#   emit both `state` AND `instance_state`: the canonical
+#   FieldExistsCheck requires `instance_state` literally, while
+#   InstanceStateCheck reads `state`. `launch_instance` only needs
+#   `state` (its FieldExistsCheck does not require `instance_state`).
 #   Mirrors the AWS reference (verify_image_installed.py).
 #
 # Usage:

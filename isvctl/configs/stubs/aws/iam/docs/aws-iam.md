@@ -118,8 +118,8 @@ ISVCTL_DEMO_MODE=1 uv run isvctl test run -f isvctl/configs/providers/my-isv/iam
 # Quickest path: copy the scaffolding, implement the stubs
 cp -r isvctl/configs/stubs/my-isv/ isvctl/configs/stubs/acme/
 cp -r isvctl/configs/providers/my-isv/ isvctl/configs/providers/acme/
-# Edit stubs/acme/iam/{create_user,test_credentials,delete_user}.py
-# Point providers/acme/iam.yaml at stubs/acme/iam/ and run
+# Edit isvctl/configs/stubs/acme/iam/{create_user,test_credentials,delete_user}.py
+# Point isvctl/configs/providers/acme/iam.yaml at isvctl/configs/stubs/acme/iam/ and run
 uv run isvctl test run -f isvctl/configs/providers/acme/iam.yaml
 ```
 

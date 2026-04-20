@@ -123,7 +123,11 @@ def main() -> int:
         # ╚══════════════════════════════════════════════════════════════════╝
 
         if DEMO_MODE:
-            result["error"] = "Not implemented - replace with your platform's reinstall logic"
+            result["state"] = "running"
+            result["ssh_ready"] = True
+            result["reinstall_method"] = "demo_reimage"
+            result["reinstall_seconds"] = 1800
+            result["success"] = True
         else:
             result["error"] = "Not implemented - replace with your platform's reinstall logic"
 

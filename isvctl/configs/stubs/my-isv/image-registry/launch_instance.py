@@ -21,7 +21,7 @@ Required JSON output:
     "instance_id":       str  — unique instance identifier,
     "public_ip":         str  — public IP address for SSH,
     "key_path":          str  — local path to the SSH private key,
-    "instance_state":    str  — "running",
+    "state":             str  — "running" (read by InstanceStateCheck),
     "key_name":          str  — name of the key pair,
     "security_group_id": str  — security group / firewall rule ID,
     "instance_profile":  str  — IAM / instance profile name,
@@ -57,7 +57,7 @@ def main() -> int:
         "instance_id": "",
         "public_ip": "",
         "key_path": "",
-        "instance_state": "",
+        "state": "",
         "key_name": "",
         "security_group_id": "",
         "instance_profile": "",
@@ -76,7 +76,7 @@ def main() -> int:
     # ║  4. Launch GPU instance from the imported image                  ║
     # ║     → result["instance_id"] = "<instance-id>"                    ║
     # ║  5. Wait for the instance to reach "running" state               ║
-    # ║     → result["instance_state"] = "running"                       ║
+    # ║     → result["state"] = "running"                                ║
     # ║  6. Get the public IP                                            ║
     # ║     → result["public_ip"] = "<ip-address>"                       ║
     # ║  7. Set result["success"] = True                                 ║
@@ -84,23 +84,13 @@ def main() -> int:
 
     if DEMO_MODE:
         result["instance_id"] = "dummy-img-instance-0001"
-
         result["public_ip"] = "203.0.113.40"
-
         result["key_path"] = "/tmp/dummy-img-key.pem"
-
         result["key_name"] = "dummy-img-key"
-
         result["security_group_id"] = "dummy-sg-img"
-
         result["instance_profile"] = "dummy-img-profile"
-
-        result["instance_state"] = "running"
-
         result["state"] = "running"
-
         result["success"] = True
-
     else:
         result["error"] = "Not implemented - replace with your platform's instance launch logic"
 

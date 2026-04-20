@@ -250,7 +250,7 @@ python ./scripts/provision.py --name test 2>/dev/null | jq .
 
 ## Templates
 
-For common validation scenarios, **pre-built test suites** are available in [`isvctl/configs/tests/`](../../isvctl/configs/tests/README.md). These provide a copy-and-customize starting point with skeleton scripts and documented JSON contracts.
+For common validation scenarios, **pre-built test suites** are available in [`isvctl/configs/tests/`](../../isvctl/configs/tests/README.md), paired with the [`my-isv/`](../../isvctl/configs/stubs/my-isv/) reference scaffold under `isvctl/configs/stubs/` and matching provider configs in [`isvctl/configs/providers/my-isv/`](../../isvctl/configs/providers/my-isv/). These provide a copy-and-customize starting point with skeleton scripts and documented JSON contracts.
 
 | Template | What it tests | Stubs |
 |----------|---------------|-------|
@@ -262,16 +262,33 @@ For common validation scenarios, **pre-built test suites** are available in [`is
 | [`control-plane.yaml`](../../isvctl/configs/tests/control-plane.yaml) | API health, access key lifecycle, tenant lifecycle | 10 scripts |
 | [`image-registry.yaml`](../../isvctl/configs/tests/image-registry.yaml) | Image upload → VM launch → install config CRUD → BMaaS install → teardown | 6 scripts |
 
+The [`my-isv/`](../../isvctl/configs/stubs/my-isv/) directory is the reference scaffold that wires every template above into a full workflow (setup → test → teardown) using placeholder stubs. The command below runs a local *smoke test* of that pipeline — a demo execution that hits no cloud APIs and finishes in roughly 10 seconds — so you can verify the framework end-to-end before implementing real provider logic. Requires [`make`](https://www.gnu.org/software/make/) to be installed.
+
 ```bash
 # Preview the full pipeline under `my-isv` in demo mode (~10s, no cloud)
 make demo-test
 
-# Copy the my-isv scaffolding (stubs + provider configs) for your platform
+# Both directories are needed: stubs/ contains the skeleton Python/Bash implementations
+# of each provider operation (the scripts that run and output JSON — demo stubs pass
+# under ISVCTL_DEMO_MODE=1, real implementations call your cloud APIs), while providers/
+# contains the YAML config layer that wires those scripts to validation test suites and
+# defines which steps, phases, and checks apply to your platform.
 cp -r isvctl/configs/stubs/my-isv/ isvctl/configs/stubs/acme/
 cp -r isvctl/configs/providers/my-isv/ isvctl/configs/providers/acme/
-# Repoint providers/acme/*.yaml at stubs/acme/ and implement each TODO block.
+# Update providers/acme/*.yaml to reference stubs/acme/ and implement each TODO block.
 # Stubs fail with "Not implemented" by default; ISVCTL_DEMO_MODE=1 activates
-# the demo-success fallback for demo-testing before you wire real APIs.
+# the demo-success fallback so you can run the full pipeline before wiring real APIs.
+
+# Linux / macOS — prefix the env var inline:
+ISVCTL_DEMO_MODE=1 uv run isvctl test run -f isvctl/configs/providers/acme/vm.yaml
+
+# Windows CMD:
+#   set ISVCTL_DEMO_MODE=1 && uv run isvctl test run -f isvctl/configs/providers/acme/vm.yaml
+
+# Windows PowerShell:
+#   $env:ISVCTL_DEMO_MODE=1; uv run isvctl test run -f isvctl/configs/providers/acme/vm.yaml
+
+# Once stubs are implemented, run without the env var to call real APIs:
 uv run isvctl test run -f isvctl/configs/providers/acme/vm.yaml
 ```
 

@@ -20,13 +20,13 @@ Required JSON output (field names must match — TenantListedCheck reads these):
     "platform":      str                                — "control_plane",
     "tenants":       list[{tenant_name, tenant_id}]     — list of tenant objects,
     "count":         int                                — len(tenants),
-    "target_tenant": str                                — echoes --target-group,
+    "target_tenant": str                                — echoes --group-name,
     "found_target":  bool                               — true if target is in the list,
     "error":         str                                — error message (present when success is false)
 }
 
 Usage:
-    python list_tenants.py --region <region> --target-group my-tenant
+    python list_tenants.py --region <region> --group-name my-tenant
 
 AWS reference implementation:
     ../aws/control-plane/list_tenants.py
@@ -44,7 +44,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 def main() -> int:
     parser = argparse.ArgumentParser(description="List tenants / resource groups")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")
-    parser.add_argument("--target-group", required=True, help="Tenant name to look for")
+    parser.add_argument("--group-name", required=True, help="Tenant name to look for")
     args = parser.parse_args()
 
     result: dict = {
@@ -52,7 +52,7 @@ def main() -> int:
         "platform": "control_plane",
         "tenants": [],
         "count": 0,
-        "target_tenant": args.target_group,
+        "target_tenant": args.group_name,
         "found_target": False,
     }
 
@@ -62,17 +62,16 @@ def main() -> int:
     # ║  1. List all tenants / resource groups / projects                       ║
     # ║     → result["tenants"] = [{"tenant_name": "...", "tenant_id": "..."}]  ║
     # ║     → result["count"]   = len(result["tenants"])                        ║
-    # ║  2. Check if args.target_group is in the list                           ║
+    # ║  2. Check if args.group_name is in the list                             ║
     # ║     → result["found_target"] = True / False                             ║
     # ║  3. Set result["success"] = True                                        ║
     # ╚══════════════════════════════════════════════════════════════════════════╝
 
     if DEMO_MODE:
-        result["tenants"] = [{"tenant_name": args.target_group, "tenant_id": "dummy-tenant-id"}]
+        result["tenants"] = [{"tenant_name": args.group_name, "tenant_id": "dummy-tenant-id"}]
         result["count"] = len(result["tenants"])
         result["found_target"] = True
         result["success"] = True
-
     else:
         result["error"] = "Not implemented - replace with your platform's tenant listing logic"
 

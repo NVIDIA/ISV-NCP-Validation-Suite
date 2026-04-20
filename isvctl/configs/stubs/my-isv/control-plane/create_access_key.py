@@ -69,7 +69,6 @@ def main() -> int:
         result["access_key_id"] = "dummy-key-id"
         result["secret_access_key"] = "dummy-secret"
         result["success"] = True
-
     else:
         result["error"] = "Not implemented - replace with your platform's access key creation logic"
 

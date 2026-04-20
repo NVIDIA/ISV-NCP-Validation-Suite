@@ -67,7 +67,7 @@ make demo-test
 # Copy the scaffolding for your platform and implement each stub
 cp -r isvctl/configs/stubs/my-isv/ isvctl/configs/stubs/acme/
 cp -r isvctl/configs/providers/my-isv/ isvctl/configs/providers/acme/
-# Repoint providers/acme/*.yaml at stubs/acme/ and fill in the TODO blocks
+# Update providers/acme/*.yaml to reference stubs/acme/ and implement the stub functions where TODO markers appear
 uv run isvctl test run -f isvctl/configs/providers/acme/vm.yaml
 ```
 

@@ -51,6 +51,7 @@ def main() -> int:
         "platform": "control_plane",
         "access_key_id": args.access_key_id,
         "status": "",
+        "error": None,
     }
 
     # ╔══════════════════════════════════════════════════════════════════╗

@@ -81,6 +81,20 @@ def main() -> int:
     # ║  Example (pseudocode):                                           ║
     # ║    client = MyCloudClient(region=args.region)                    ║
     # ║                                                                  ║
+    # ║    # Terminate instances in the VPC                              ║
+    # ║    instances = client.list_instances(vpc_id=args.vpc_id)         ║
+    # ║    for instance in instances:                                    ║
+    # ║        client.terminate_instance(instance.id)                   ║
+    # ║        result["resources_deleted"].append(                       ║
+    # ║            f"instance:{instance.id}")                            ║
+    # ║    if instances:                                                 ║
+    # ║        client.wait_for_instances_terminated(instances)           ║
+    # ║                                                                  ║
+    # ║    # Delete key pairs associated with the VPC                    ║
+    # ║    for key in client.list_key_pairs(prefix="isv-"):              ║
+    # ║        client.delete_key_pair(key.name)                          ║
+    # ║        result["resources_deleted"].append(f"key:{key.name}")     ║
+    # ║                                                                  ║
     # ║    # Delete subnets                                              ║
     # ║    for subnet in client.list_subnets(vpc_id=args.vpc_id):        ║
     # ║        client.delete_subnet(subnet.id)                           ║
@@ -120,7 +134,6 @@ def main() -> int:
         result["error"] = "Not implemented - replace with your platform's VPC teardown logic"
 
     print(json.dumps(result, indent=2))
-
     return 0 if result["success"] else 1
 
 

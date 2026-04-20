@@ -23,7 +23,7 @@ mode so the validation contract can be exercised without real infrastructure.
 cp -r isvctl/configs/stubs/my-isv/ isvctl/configs/stubs/acme/
 cp -r isvctl/configs/providers/my-isv/ isvctl/configs/providers/acme/
 
-# 2. Repoint providers/acme/*.yaml at stubs/acme/ (sed or by hand)
+# 2. Update providers/acme/*.yaml to reference stubs/acme/ (sed or by hand)
 
 # 3. Implement each stub. Fill in the TODO block in each script; the default
 #    branch exits with "Not implemented" until you do.

@@ -52,6 +52,7 @@ def main() -> int:
         "platform": "control_plane",
         "rejected": False,
         "error_code": "",
+        "error": None,
     }
 
     # ╔══════════════════════════════════════════════════════════════════╗
@@ -72,7 +73,6 @@ def main() -> int:
         result["rejected"] = True
         result["error_code"] = "DummyTokenRejected"
         result["success"] = True
-
     else:
         result["error"] = "Not implemented - replace with your platform's key rejection verification logic"
 

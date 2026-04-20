@@ -72,7 +72,6 @@ def main() -> int:
         result["authenticated"] = True
         result["account_id"] = "dummy-account-123"
         result["success"] = True
-
     else:
         result["error"] = "Not implemented - replace with your platform's credential verification logic"
 

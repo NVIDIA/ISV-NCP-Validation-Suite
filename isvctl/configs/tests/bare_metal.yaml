@@ -301,7 +301,7 @@ commands:
       # ─── Step 11: Reinstall Instance ────────────────────────────────
       # Reinstall the node from its configured stock OS.
       # Skipped by default: can be very slow depending on platform.
-      # Set skip: false and implement stubs/my-isv/bare_metal/reinstall_instance.py to enable.
+      # Set skip: false and implement your provider's reinstall_instance.py from the canonical template to enable.
       # See ../aws/bare_metal.yaml + stubs/aws/bare_metal/reinstall_instance.py for reference.
       - name: reinstall_instance
         phase: test

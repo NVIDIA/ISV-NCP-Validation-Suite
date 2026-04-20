@@ -65,7 +65,25 @@ def main() -> int:
         },
     }
 
-    # TODO: Replace with your platform's image CRUD implementation
+    # ╔══════════════════════════════════════════════════════════════════╗
+    # ║  TODO: Replace this block with your platform's image CRUD        ║
+    # ║                                                                  ║
+    # ║  Example (pseudocode):                                           ║
+    # ║    client = MyImageRegistryClient(region=args.region)            ║
+    # ║    image  = client.get_image(args.image_id)                      ║
+    # ║    result["operations"]["get"] = {                               ║
+    # ║        "passed": True, "image_name": image.name,                 ║
+    # ║        "state": image.status}                                    ║
+    # ║    images = client.list_images()                                 ║
+    # ║    result["operations"]["list"] = {                              ║
+    # ║        "passed": True, "image_count": len(images)}               ║
+    # ║    copy   = client.copy_image(args.image_id, name="isv-copy")    ║
+    # ║    result["operations"]["create"] = {                            ║
+    # ║        "passed": True, "image_id": copy.id}                      ║
+    # ║    client.delete_image(copy.id)                                  ║
+    # ║    result["operations"]["delete"] = {"passed": True}             ║
+    # ║    result["success"] = True                                      ║
+    # ╚══════════════════════════════════════════════════════════════════╝
 
     if DEMO_MODE:
         result["operations"] = {
@@ -75,12 +93,10 @@ def main() -> int:
             "delete": {"passed": True},
         }
         result["success"] = True
-
     else:
         result["error"] = "Not implemented - replace with your platform's image CRUD logic"
 
     print(json.dumps(result, indent=2))
-
     return 0 if result["success"] else 1
 
 

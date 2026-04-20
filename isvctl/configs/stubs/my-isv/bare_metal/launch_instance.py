@@ -90,7 +90,7 @@ def main() -> int:
     # ── Dev workflow: reuse existing instance ──────────────────────────
     if os.environ.get("BM_INSTANCE_ID") and os.environ.get("BM_KEY_FILE"):
         instance_id = os.environ["BM_INSTANCE_ID"]
-        _key_file = os.environ["BM_KEY_FILE"]
+        key_file = os.environ["BM_KEY_FILE"]
         print(f"Reusing existing instance {instance_id}", file=sys.stderr)
 
         # ╔══════════════════════════════════════════════════════════════╗
@@ -110,7 +110,7 @@ def main() -> int:
         # ╚══════════════════════════════════════════════════════════════╝
 
         result["instance_id"] = instance_id
-        result["key_file"] = _key_file
+        result["key_file"] = key_file
         result["error"] = "Not implemented - replace with your platform's instance describe logic"
         print(json.dumps(result, indent=2))
         return 0 if result["success"] else 1

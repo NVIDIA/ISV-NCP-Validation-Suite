@@ -133,7 +133,6 @@ def main() -> int:
         result["error"] = "Not implemented - replace with your platform's subnet test logic"
 
     print(json.dumps(result, indent=2))
-
     return 0 if result["success"] else 1
 
 

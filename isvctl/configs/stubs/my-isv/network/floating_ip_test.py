@@ -81,12 +81,10 @@ def main() -> int:
             "verify_not_on_a": {"passed": True},
         }
         result["success"] = True
-
     else:
         result["error"] = "Not implemented - replace with your platform's floating IP test logic"
 
     print(json.dumps(result, indent=2))
-
     return 0 if result["success"] else 1
 
 

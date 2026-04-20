@@ -43,7 +43,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 def main() -> int:
     parser = argparse.ArgumentParser(description="Create tenant / resource group")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")
-    args = parser.parse_args()  # noqa: F841 — used in TODO block below
+    _args = parser.parse_args()  # TODO: use _args when implementing this stub
 
     result: dict = {
         "success": False,
@@ -65,7 +65,6 @@ def main() -> int:
         result["tenant_name"] = "dummy-tenant"
         result["tenant_id"] = "dummy-tenant-id"
         result["success"] = True
-
     else:
         result["error"] = "Not implemented - replace with your platform's tenant creation logic"
 

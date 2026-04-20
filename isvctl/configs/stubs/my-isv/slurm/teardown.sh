@@ -13,3 +13,4 @@
 set -eo pipefail
 
 echo "Teardown: No action taken (existing Slurm cluster)" >&2
+exit 0

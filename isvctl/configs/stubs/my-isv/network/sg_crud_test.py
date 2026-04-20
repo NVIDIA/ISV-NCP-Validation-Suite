@@ -87,7 +87,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Security Group CRUD lifecycle test (template)")
     parser.add_argument("--region", required=True, help="Cloud region")
     parser.add_argument("--cidr", default="10.95.0.0/16", help="CIDR block for test VPC")
-    parser.parse_args()  # parsed args used in TODO block below
+    _args = parser.parse_args()
 
     result: dict = {
         "success": False,
@@ -167,7 +167,6 @@ def main() -> int:
         result["error"] = "Not implemented - replace with your platform's SG CRUD logic"
 
     print(json.dumps(result, indent=2))
-
     return 0 if result["success"] else 1
 
 

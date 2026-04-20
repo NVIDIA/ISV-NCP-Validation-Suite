@@ -104,7 +104,7 @@ commands:
         args:
           - "--region"
           - "{{region}}"
-          - "--target-group"
+          - "--group-name"
           - "{{steps.create_tenant.tenant_name}}"
         timeout: 60
 

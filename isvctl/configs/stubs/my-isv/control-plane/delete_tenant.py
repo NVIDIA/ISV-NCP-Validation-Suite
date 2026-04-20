@@ -34,6 +34,7 @@ import argparse
 import json
 import os
 import sys
+from typing import Any
 
 # ISVCTL_DEMO_MODE=1 enables demo-success output (used by `make demo-test`).
 DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
@@ -45,7 +46,7 @@ def main() -> int:
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")
     args = parser.parse_args()
 
-    result: dict = {
+    result: dict[str, Any] = {
         "success": False,
         "platform": "control_plane",
         "resources_deleted": [],
@@ -64,7 +65,6 @@ def main() -> int:
         result["resources_deleted"].append(f"tenant:{args.group_name}")
         result["message"] = "Tenant deleted"
         result["success"] = True
-
     else:
         result["error"] = "Not implemented - replace with your platform's tenant deletion logic"
 

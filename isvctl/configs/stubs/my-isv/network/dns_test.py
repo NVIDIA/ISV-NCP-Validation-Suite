@@ -67,7 +67,29 @@ def main() -> int:
         },
     }
 
-    # TODO: Replace with your platform's localized DNS implementation
+    # ╔══════════════════════════════════════════════════════════════════╗
+    # ║  TODO: Replace this block with your platform's DNS test          ║
+    # ║                                                                  ║
+    # ║  Example (pseudocode):                                           ║
+    # ║    client = MyNetworkClient(region=args.region)                  ║
+    # ║    vpc    = client.create_vpc(cidr=args.cidr, dns_support=True)  ║
+    # ║    result["tests"]["create_vpc_with_dns"] = {"passed": True}     ║
+    # ║    zone   = client.create_hosted_zone(args.domain, vpc.id)       ║
+    # ║    result["tests"]["create_hosted_zone"] = {                     ║
+    # ║        "passed": True, "zone_id": zone.id}                       ║
+    # ║    fqdn   = f"web.{args.domain}"                                 ║
+    # ║    client.create_dns_record(zone.id, fqdn, "10.89.0.10")         ║
+    # ║    result["tests"]["create_dns_record"] = {                      ║
+    # ║        "passed": True, "fqdn": fqdn}                             ║
+    # ║    settings = client.get_vpc_dns_settings(vpc.id)                ║
+    # ║    assert settings.dns_support and settings.dns_hostnames         ║
+    # ║    result["tests"]["verify_dns_settings"] = {"passed": True}     ║
+    # ║    resolved = client.resolve_dns(fqdn, vpc.id)                   ║
+    # ║    result["tests"]["resolve_record"] = {                         ║
+    # ║        "passed": True, "fqdn": fqdn,                             ║
+    # ║        "resolved_ip": resolved.ip}                               ║
+    # ║    result["success"] = True                                      ║
+    # ╚══════════════════════════════════════════════════════════════════╝
 
     if DEMO_MODE:
         fqdn = f"web.{args.domain}"
@@ -79,12 +101,10 @@ def main() -> int:
             "resolve_record": {"passed": True, "fqdn": fqdn, "resolved_ip": "10.89.0.10"},
         }
         result["success"] = True
-
     else:
         result["error"] = "Not implemented - replace with your platform's localized DNS test logic"
 
     print(json.dumps(result, indent=2))
-
     return 0 if result["success"] else 1
 
 

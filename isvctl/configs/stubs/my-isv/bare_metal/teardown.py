@@ -56,7 +56,20 @@ def main() -> int:
     parser.add_argument("--delete-key-pair", action="store_true", help="Also delete key pair")
     parser.add_argument("--delete-security-group", action="store_true", help="Also delete security group")
     parser.add_argument("--skip-destroy", action="store_true", help="Skip actual destruction")
+    parser.add_argument(
+        "--key-pair-name", default="", help="Key pair name to delete (required when --delete-key-pair is set)"
+    )
+    parser.add_argument(
+        "--security-group-id",
+        default="",
+        help="Security group ID to delete (required when --delete-security-group is set)",
+    )
     args = parser.parse_args()
+
+    if args.delete_key_pair and not args.key_pair_name:
+        parser.error("--key-pair-name is required when --delete-key-pair is set")
+    if args.delete_security_group and not args.security_group_id:
+        parser.error("--security-group-id is required when --delete-security-group is set")
 
     result: dict = {
         "success": False,
@@ -92,13 +105,15 @@ def main() -> int:
     # ║                                                                  ║
     # ║    2. Delete key pair (if --delete-key-pair):                    ║
     # ║       if args.delete_key_pair:                                   ║
-    # ║           client.delete_key_pair(key_name)                       ║
-    # ║           result["resources_deleted"].append(f"key:{key_name}")  ║
+    # ║           client.delete_key_pair(args.key_pair_name)             ║
+    # ║           result["resources_deleted"].append(                    ║
+    # ║               f"key:{args.key_pair_name}")                       ║
     # ║                                                                  ║
     # ║    3. Delete security group (if --delete-security-group):        ║
     # ║       if args.delete_security_group:                             ║
-    # ║           client.delete_security_group(sg_id)                    ║
-    # ║           result["resources_deleted"].append(f"sg:{sg_id}")      ║
+    # ║           client.delete_security_group(args.security_group_id)   ║
+    # ║           result["resources_deleted"].append(                    ║
+    # ║               f"sg:{args.security_group_id}")                    ║
     # ║                                                                  ║
     # ║    result["success"] = True                                      ║
     # ║    result["message"] = "Bare-metal instance teardown completed"  ║

@@ -70,7 +70,7 @@ def main() -> int:
         print(json.dumps(result, indent=2))
         return 0
 
-    _disk_ids = [s.strip() for s in args.disk_ids.split(",") if s.strip()]
+    disk_ids = [s.strip() for s in args.disk_ids.split(",") if s.strip()]
 
     # ╔══════════════════════════════════════════════════════════════════╗
     # ║  TODO: Replace this block with your platform's implementation    ║
@@ -97,27 +97,20 @@ def main() -> int:
     if DEMO_MODE:
         if args.instance_id:
             result["resources_deleted"].append(f"instance:{args.instance_id}")
-
         if args.image_id:
             result["resources_deleted"].append(f"image:{args.image_id}")
-
-        for disk_id in _disk_ids:
+        for disk_id in disk_ids:
             result["resources_deleted"].append(f"snapshot:{disk_id}")
-
         if args.bucket_name:
             result["resources_deleted"].append(f"bucket:{args.bucket_name}")
-
         if args.key_name:
             result["resources_deleted"].append(f"keypair:{args.key_name}")
-
         if args.security_group_id:
             result["resources_deleted"].append(f"sg:{args.security_group_id}")
-
         if args.instance_profile:
             result["resources_deleted"].append(f"profile:{args.instance_profile}")
         result["message"] = "Image-registry resources deleted"
         result["success"] = True
-
     else:
         result["error"] = "Not implemented - replace with your platform's resource teardown logic"
 

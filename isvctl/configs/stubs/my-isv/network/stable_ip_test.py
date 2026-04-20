@@ -77,12 +77,10 @@ def main() -> int:
             "ip_unchanged": {"passed": True, "ip_before": "10.91.0.10", "ip_after": "10.91.0.10"},
         }
         result["success"] = True
-
     else:
         result["error"] = "Not implemented - replace with your platform's stable IP test logic"
 
     print(json.dumps(result, indent=2))
-
     return 0 if result["success"] else 1
 
 

@@ -53,7 +53,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    _services = [s.strip() for s in args.services.split(",")]
+    services = [s.strip() for s in args.services.split(",")]
 
     result: dict = {
         "success": False,
@@ -78,11 +78,10 @@ def main() -> int:
     if DEMO_MODE:
         result["account_id"] = "dummy-account-123"
 
-        for service in _services:
+        for service in services:
             result["tests"][service] = {"passed": True}
         result["tests"]["auth"] = {"passed": True}
         result["success"] = True
-
     else:
         result["error"] = "Not implemented - replace with your platform's API health-check logic"
 

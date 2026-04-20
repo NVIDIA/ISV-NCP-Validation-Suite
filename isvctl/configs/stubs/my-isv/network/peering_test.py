@@ -69,7 +69,27 @@ def main() -> int:
         },
     }
 
-    # TODO: Replace with your platform's VPC peering implementation
+    # ╔══════════════════════════════════════════════════════════════════╗
+    # ║  TODO: Replace this block with your platform's VPC peering       ║
+    # ║                                                                  ║
+    # ║  Example (pseudocode):                                           ║
+    # ║    client  = MyNetworkClient(region=args.region)                 ║
+    # ║    vpc_a   = client.create_vpc(cidr=args.cidr_a)                 ║
+    # ║    vpc_b   = client.create_vpc(cidr=args.cidr_b)                 ║
+    # ║    result["vpc_a"] = {"id": vpc_a.id, "cidr": args.cidr_a}       ║
+    # ║    result["vpc_b"] = {"id": vpc_b.id, "cidr": args.cidr_b}       ║
+    # ║    peering = client.create_peering(vpc_a.id, vpc_b.id)           ║
+    # ║    result["tests"]["create_peering"] = {                         ║
+    # ║        "passed": True, "peering_id": peering.id}                 ║
+    # ║    client.accept_peering(peering.id)                             ║
+    # ║    result["tests"]["accept_peering"] = {"passed": True}          ║
+    # ║    client.add_route(vpc_a.route_table, args.cidr_b, peering.id)  ║
+    # ║    client.add_route(vpc_b.route_table, args.cidr_a, peering.id)  ║
+    # ║    result["tests"]["add_routes"] = {"passed": True}              ║
+    # ║    assert client.get_peering(peering.id).status == "active"      ║
+    # ║    result["tests"]["peering_active"] = {"passed": True}          ║
+    # ║    result["success"] = True                                      ║
+    # ╚══════════════════════════════════════════════════════════════════╝
 
     if DEMO_MODE:
         result["vpc_a"] = {"id": "dummy-vpc-peer-a", "cidr": args.cidr_a}
@@ -83,12 +103,10 @@ def main() -> int:
             "peering_active": {"passed": True},
         }
         result["success"] = True
-
     else:
         result["error"] = "Not implemented - replace with your platform's VPC peering test logic"
 
     print(json.dumps(result, indent=2))
-
     return 0 if result["success"] else 1
 
 

@@ -31,7 +31,7 @@ else
 fi
 
 # Set KUBECONFIG for k3s if not already set and default config exists
-if [ -z "$KUBECONFIG" ] && [ -f /etc/rancher/k3s/k3s.yaml ]; then
+if [[ -z "$KUBECONFIG" && -f /etc/rancher/k3s/k3s.yaml ]]; then
     export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 fi
 

@@ -45,6 +45,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Delete IAM user (template) and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Delete IAM user (template)")
     parser.add_argument("--username", required=True, help="Username to delete")
     parser.add_argument("--skip-destroy", action="store_true", help="Skip actual deletion")

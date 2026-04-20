@@ -42,6 +42,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Get tenant / resource group details and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Get tenant / resource group details")
     parser.add_argument("--group-name", required=True, help="Tenant / group name to look up")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")

@@ -41,6 +41,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Disable an access key and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Disable an access key")
     parser.add_argument("--username", required=True, help="User who owns the key")
     parser.add_argument("--access-key-id", required=True, help="Key to disable")

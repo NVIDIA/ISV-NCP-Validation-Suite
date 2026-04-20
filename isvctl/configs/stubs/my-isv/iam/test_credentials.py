@@ -47,6 +47,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Test IAM credentials (template) and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Test IAM credentials (template)")
     parser.add_argument("--username", required=True, help="Username to test")
     parser.add_argument("--credential-id", required=True, help="Credential / API key ID")

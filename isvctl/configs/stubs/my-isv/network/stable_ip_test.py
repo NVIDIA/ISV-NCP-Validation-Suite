@@ -50,6 +50,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Stable private IP test (template) and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Stable private IP test (template)")
     parser.add_argument("--region", required=True, help="Cloud region")
     parser.add_argument("--cidr", default="10.91.0.0/16", help="CIDR for test VPC")

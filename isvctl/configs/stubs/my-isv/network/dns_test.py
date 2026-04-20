@@ -50,6 +50,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Localized DNS test (template) and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Localized DNS test (template)")
     parser.add_argument("--region", required=True, help="Cloud region")
     parser.add_argument("--cidr", default="10.89.0.0/16", help="CIDR for test VPC")

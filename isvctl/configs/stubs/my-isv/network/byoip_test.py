@@ -49,6 +49,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """BYOIP test (template) and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="BYOIP test (template)")
     parser.add_argument("--region", required=True, help="Cloud region")
     parser.add_argument("--custom-cidr", default="100.64.0.0/16", help="Custom CIDR to test")

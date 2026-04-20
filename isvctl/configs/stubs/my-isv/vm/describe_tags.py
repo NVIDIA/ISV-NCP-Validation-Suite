@@ -43,6 +43,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Describe VM instance tags and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Describe VM instance tags")
     parser.add_argument("--instance-id", required=True, help="Instance ID")
     parser.add_argument("--region", required=True, help="Cloud region")

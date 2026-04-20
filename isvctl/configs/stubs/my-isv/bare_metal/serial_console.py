@@ -42,6 +42,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Serial console access test (template) and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Serial console access test (template)")
     parser.add_argument("--instance-id", required=True, help="Instance ID")
     parser.add_argument("--region", required=True, help="Cloud region")

@@ -49,6 +49,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """CRUD custom OS images (template) and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="CRUD custom OS images (template)")
     parser.add_argument("--image-id", required=True, help="Source image ID from upload_image step")
     parser.add_argument("--region", required=True, help="Cloud region")

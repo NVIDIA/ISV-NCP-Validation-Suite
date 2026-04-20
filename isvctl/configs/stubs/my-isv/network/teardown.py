@@ -57,6 +57,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Teardown VPC / virtual network (template) and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Teardown VPC / virtual network (template)")
     parser.add_argument("--vpc-id", required=True, help="VPC / network ID to delete")
     parser.add_argument("--region", required=True, help="Cloud region")

@@ -50,6 +50,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Network connectivity test (template) and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Network connectivity test (template)")
     parser.add_argument("--vpc-id", required=True, help="VPC / network ID to test in")
     parser.add_argument("--subnet-ids", required=True, help="Comma-separated subnet IDs")

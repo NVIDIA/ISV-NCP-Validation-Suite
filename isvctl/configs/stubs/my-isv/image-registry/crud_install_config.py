@@ -50,6 +50,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """CRUD OS install configuration and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="CRUD OS install configuration")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")
     args = parser.parse_args()  # noqa: F841 -- used in TODO block below

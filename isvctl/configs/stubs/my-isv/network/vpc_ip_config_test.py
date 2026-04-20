@@ -61,6 +61,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """VPC IP configuration test (template) and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="VPC IP configuration test (template)")
     parser.add_argument("--vpc-id", required=True, help="VPC / network ID to inspect")
     parser.add_argument("--region", required=True, help="Cloud region")

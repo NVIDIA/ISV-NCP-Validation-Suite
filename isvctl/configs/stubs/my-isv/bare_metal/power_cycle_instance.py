@@ -59,6 +59,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Power-cycle bare-metal node (template) and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Power-cycle bare-metal node (template)")
     parser.add_argument("--instance-id", required=True, help="Instance identifier")
     parser.add_argument("--region", required=True, help="Cloud region")

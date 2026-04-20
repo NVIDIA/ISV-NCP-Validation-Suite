@@ -46,6 +46,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Launch GPU instance from imported image and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Launch GPU instance from imported image")
     parser.add_argument("--image-id", required=True, help="Imported machine image ID")
     parser.add_argument("--instance-type", required=True, help="Instance type / flavor")

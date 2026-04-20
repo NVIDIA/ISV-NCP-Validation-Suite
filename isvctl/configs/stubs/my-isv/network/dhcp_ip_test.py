@@ -55,6 +55,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """DHCP/IP management test (template) and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="DHCP/IP management test (template)")
     parser.add_argument("--vpc-id", required=True, help="VPC / network ID")
     parser.add_argument("--subnet-id", required=True, help="Subnet to launch instance in")

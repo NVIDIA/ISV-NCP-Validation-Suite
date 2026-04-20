@@ -42,6 +42,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Install OS image on bare-metal and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Install OS image on bare-metal")
     parser.add_argument("--image-id", required=True, help="OS image ID from the registry")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")

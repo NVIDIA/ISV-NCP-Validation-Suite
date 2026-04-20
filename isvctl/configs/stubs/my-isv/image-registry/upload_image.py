@@ -43,6 +43,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Upload and import VM image and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Upload and import VM image")
     parser.add_argument("--image-url", required=True, help="URL to download the VM image from")
     parser.add_argument(

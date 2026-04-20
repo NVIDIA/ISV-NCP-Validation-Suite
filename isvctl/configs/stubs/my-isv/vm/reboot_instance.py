@@ -53,6 +53,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Reboot VM instance and verify recovery and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Reboot VM instance and verify recovery")
     parser.add_argument("--instance-id", required=True, help="Instance ID to reboot")
     parser.add_argument("--region", required=True, help="Cloud region")

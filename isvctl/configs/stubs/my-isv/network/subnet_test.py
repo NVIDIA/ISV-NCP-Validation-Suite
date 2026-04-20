@@ -61,6 +61,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Subnet configuration test (template) and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Subnet configuration test (template)")
     parser.add_argument("--region", required=True, help="Cloud region")
     parser.add_argument("--cidr", default="10.98.0.0/16", help="CIDR block for test VPC")

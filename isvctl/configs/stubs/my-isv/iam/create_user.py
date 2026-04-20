@@ -50,6 +50,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Create IAM user (template) and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Create IAM user (template)")
     parser.add_argument("--username", default="isv-test-user", help="Username to create")
     parser.add_argument(

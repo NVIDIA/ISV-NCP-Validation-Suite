@@ -44,6 +44,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """List VM instances in a VPC/network and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="List VM instances in a VPC/network")
     parser.add_argument("--vpc-id", required=True, help="VPC or network identifier")
     parser.add_argument("--instance-id", help="Filter to a specific instance ID")

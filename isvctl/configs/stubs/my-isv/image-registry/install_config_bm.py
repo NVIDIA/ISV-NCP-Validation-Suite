@@ -43,6 +43,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Install OS config on bare-metal and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Install OS config on bare-metal")
     parser.add_argument("--config-id", required=True, help="Install config ID from the registry")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")

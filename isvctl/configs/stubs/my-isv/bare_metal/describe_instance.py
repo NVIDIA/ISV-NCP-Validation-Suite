@@ -49,6 +49,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Describe bare-metal instance (template) and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Describe bare-metal instance (template)")
     parser.add_argument("--instance-id", required=True, help="Instance identifier")
     parser.add_argument("--region", required=True, help="Cloud region")

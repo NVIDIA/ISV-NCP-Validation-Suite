@@ -60,6 +60,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Create VPC / virtual network (template) and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Create VPC / virtual network (template)")
     parser.add_argument("--name", default="isv-shared-vpc", help="Name tag for the VPC")
     parser.add_argument("--region", required=True, help="Cloud region")

@@ -44,6 +44,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Stop VM instance without destroying it and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Stop VM instance without destroying it")
     parser.add_argument("--instance-id", required=True, help="Instance ID to stop")
     parser.add_argument("--region", required=True, help="Cloud region")

@@ -41,6 +41,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Test access key authentication and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Test access key authentication")
     parser.add_argument("--access-key-id", required=True, help="Public credential identifier")
     parser.add_argument("--secret-access-key", required=True, help="Secret credential value")

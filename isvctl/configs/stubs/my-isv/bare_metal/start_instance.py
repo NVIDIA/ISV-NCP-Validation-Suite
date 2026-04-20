@@ -49,6 +49,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Power on stopped bare-metal node and verify recovery and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Power on stopped bare-metal node and verify recovery")
     parser.add_argument("--instance-id", required=True, help="Node ID to power on")
     parser.add_argument("--region", required=True, help="Cloud region")

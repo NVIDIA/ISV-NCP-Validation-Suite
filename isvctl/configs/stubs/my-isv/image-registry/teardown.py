@@ -46,6 +46,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Tear down ISO validation resources and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Tear down ISO validation resources")
     parser.add_argument("--instance-id", default="", help="Instance to terminate")
     parser.add_argument("--image-id", default="", help="Machine image to deregister")

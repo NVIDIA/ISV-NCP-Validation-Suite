@@ -51,6 +51,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """VPC CRUD lifecycle test (template) and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="VPC CRUD lifecycle test (template)")
     parser.add_argument("--region", required=True, help="Cloud region")
     parser.add_argument("--cidr", default="10.99.0.0/16", help="CIDR block for test VPC")

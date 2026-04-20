@@ -45,6 +45,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Tear down VM instance and resources and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Tear down VM instance and resources")
     parser.add_argument("--instance-id", required=True, help="Instance ID to terminate")
     parser.add_argument("--region", required=True, help="Cloud region")

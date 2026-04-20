@@ -41,6 +41,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Delete access key and test user and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Delete access key and test user")
     parser.add_argument("--username", required=True, help="User who owns the key")
     parser.add_argument("--access-key-id", required=True, help="Key to delete")

@@ -56,6 +56,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """VPC isolation test (template) and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="VPC isolation test (template)")
     parser.add_argument("--region", required=True, help="Cloud region")
     parser.add_argument("--cidr-a", default="10.97.0.0/16", help="CIDR block for VPC A")

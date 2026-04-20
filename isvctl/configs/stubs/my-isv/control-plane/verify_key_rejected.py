@@ -42,6 +42,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Verify disabled key is rejected and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Verify disabled key is rejected")
     parser.add_argument("--access-key-id", required=True, help="Disabled key to test")
     parser.add_argument("--secret-access-key", required=True, help="Secret for the disabled key")

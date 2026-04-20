@@ -63,6 +63,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Reinstall bare-metal node from stock OS (template) and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Reinstall bare-metal node from stock OS (template)")
     parser.add_argument("--instance-id", required=True, help="Instance identifier")
     parser.add_argument("--region", required=True, help="Cloud region")

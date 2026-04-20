@@ -50,6 +50,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Launch GPU VM instance and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Launch GPU VM instance")
     parser.add_argument("--name", default="isv-test-gpu", help="Instance name tag")
     parser.add_argument("--instance-type", required=True, help="GPU instance type")

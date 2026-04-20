@@ -41,6 +41,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
+    """Delete tenant / resource group and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Delete tenant / resource group")
     parser.add_argument("--group-name", required=True, help="Tenant / group to delete")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")

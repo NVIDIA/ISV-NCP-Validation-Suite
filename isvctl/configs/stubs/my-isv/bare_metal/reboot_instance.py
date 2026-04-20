@@ -41,7 +41,7 @@ Usage:
     python reboot_instance.py --instance-id <id> --region <region> \
         --key-file /tmp/key.pem --public-ip 54.x.x.x
 
-Reference implementation: ../aws/bare_metal/reboot_instance.py
+Reference implementation: ../../aws/bare_metal/reboot_instance.py
 """
 
 import argparse

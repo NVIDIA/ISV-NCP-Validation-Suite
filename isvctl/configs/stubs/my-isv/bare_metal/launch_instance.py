@@ -49,7 +49,7 @@ Usage:
     BM_INSTANCE_ID=i-xxx BM_KEY_FILE=/tmp/key.pem python launch_instance.py \
         --name isv-bm-test-gpu --instance-type <type> --region <region>
 
-Reference implementation: ../aws/bare_metal/launch_instance.py
+Reference implementation: ../../aws/bare_metal/launch_instance.py
 """
 
 import argparse

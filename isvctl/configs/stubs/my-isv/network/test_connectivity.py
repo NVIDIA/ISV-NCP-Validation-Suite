@@ -36,7 +36,7 @@ Usage:
     python test_connectivity.py --vpc-id vpc-abc123 \\
         --subnet-ids subnet-abc,subnet-def --sg-id sg-abc123 --region <region>
 
-Reference implementation: ../aws/network/test_connectivity.py
+Reference implementation: ../../aws/network/test_connectivity.py
 """
 
 import argparse

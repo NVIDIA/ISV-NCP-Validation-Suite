@@ -37,7 +37,7 @@ Required JSON output fields:
 Usage:
     python floating_ip_test.py --region <region> --cidr 10.92.0.0/16
 
-Reference implementation: ../aws/network/floating_ip_test.py
+Reference implementation: ../../aws/network/floating_ip_test.py
 """
 
 import argparse

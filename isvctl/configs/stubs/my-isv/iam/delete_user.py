@@ -31,7 +31,7 @@ Usage:
     python delete_user.py --username test-user-abc123
     python delete_user.py --username test-user-abc123 --skip-destroy
 
-Reference implementation: ../aws/iam/delete_user.py
+Reference implementation: ../../aws/iam/delete_user.py
 """
 
 import argparse

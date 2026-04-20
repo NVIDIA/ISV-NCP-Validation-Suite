@@ -43,7 +43,7 @@ On failure, set "success": false and include an "error" field.
 Usage:
     python traffic_test.py --region <region> --cidr 10.93.0.0/16
 
-Reference implementation: ../aws/network/traffic_test.py
+Reference implementation: ../../aws/network/traffic_test.py
 """
 
 import argparse

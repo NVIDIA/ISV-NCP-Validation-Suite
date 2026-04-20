@@ -36,7 +36,7 @@ Usage:
     # Also supports env var:
     BM_SKIP_TEARDOWN=true python teardown.py --instance-id <id> --region <region>
 
-Reference implementation: ../aws/bm/teardown.py
+Reference implementation: ../../aws/bare_metal/teardown.py
 """
 
 import argparse

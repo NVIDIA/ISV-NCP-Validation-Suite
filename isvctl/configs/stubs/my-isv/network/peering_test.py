@@ -37,7 +37,7 @@ Required JSON output fields:
 Usage:
     python peering_test.py --region <region> --cidr-a 10.88.0.0/16 --cidr-b 10.87.0.0/16
 
-Reference implementation: ../aws/network/peering_test.py
+Reference implementation: ../../aws/network/peering_test.py
 """
 
 import argparse

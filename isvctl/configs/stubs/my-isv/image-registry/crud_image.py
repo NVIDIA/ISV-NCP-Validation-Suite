@@ -35,7 +35,7 @@ Required JSON output:
 Usage:
     python crud_image.py --image-id <id> --region <region>
 
-Reference implementation: ../aws/image-registry/crud_image.py
+Reference implementation: ../../aws/image-registry/crud_image.py
 """
 
 import argparse

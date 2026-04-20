@@ -36,7 +36,7 @@ Required JSON output fields:
 Usage:
     python dns_test.py --region <region> --cidr 10.89.0.0/16
 
-Reference implementation: ../aws/network/dns_test.py
+Reference implementation: ../../aws/network/dns_test.py
 """
 
 import argparse

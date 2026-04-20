@@ -35,7 +35,7 @@ Required JSON output fields:
 Usage:
     python byoip_test.py --region <region> --custom-cidr 100.64.0.0/16
 
-Reference implementation: ../aws/network/byoip_test.py
+Reference implementation: ../../aws/network/byoip_test.py
 """
 
 import argparse

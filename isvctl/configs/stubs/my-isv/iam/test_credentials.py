@@ -33,7 +33,7 @@ Usage:
     python test_credentials.py --username test-user \\
         --credential-id AKID... --credential-secret SECRET...
 
-Reference implementation: ../aws/iam/test_credentials.py
+Reference implementation: ../../aws/iam/test_credentials.py
 """
 
 import argparse

@@ -36,7 +36,7 @@ Required JSON output fields:
 Usage:
     python stable_ip_test.py --region <region> --cidr 10.91.0.0/16
 
-Reference implementation: ../aws/network/stable_ip_test.py
+Reference implementation: ../../aws/network/stable_ip_test.py
 """
 
 import argparse

@@ -28,7 +28,7 @@ Required JSON output fields:
 Usage:
     python serial_console.py --instance-id <id> --region <region>
 
-Reference implementation: ../aws/vm/serial_console.py
+Reference implementation: ../../aws/vm/serial_console.py
 """
 
 import argparse

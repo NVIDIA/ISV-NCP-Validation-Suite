@@ -35,7 +35,7 @@ Required JSON output:
 Usage:
     python topology_placement.py --instance-id <id> --region <region>
 
-Reference implementation: ../aws/bare_metal/topology_placement.py
+Reference implementation: ../../aws/bare_metal/topology_placement.py
 """
 
 import argparse

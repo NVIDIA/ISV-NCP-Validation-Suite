@@ -41,7 +41,7 @@ Usage:
     python dhcp_ip_test.py --vpc-id vpc-abc123 --subnet-id subnet-abc \\
         --sg-id sg-abc123 --region <region>
 
-Reference implementation: ../aws/network/dhcp_ip_test.py
+Reference implementation: ../../aws/network/dhcp_ip_test.py
 """
 
 import argparse

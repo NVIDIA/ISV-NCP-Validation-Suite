@@ -62,7 +62,7 @@ On failure, set "success": false and include an "error" field.
 Usage:
     python sg_crud_test.py --region <region> --cidr 10.95.0.0/16
 
-Reference implementation: ../aws/network/sg_crud_test.py
+Reference implementation: ../../aws/network/sg_crud_test.py
 """
 
 import argparse

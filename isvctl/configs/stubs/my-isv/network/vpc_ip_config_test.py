@@ -47,7 +47,7 @@ On failure, set "success": false and include an "error" field.
 Usage:
     python vpc_ip_config_test.py --vpc-id vpc-abc123 --region <region>
 
-Reference implementation: ../aws/network/vpc_ip_config_test.py
+Reference implementation: ../../aws/network/vpc_ip_config_test.py
 """
 
 import argparse

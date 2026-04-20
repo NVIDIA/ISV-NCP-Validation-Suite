@@ -66,13 +66,9 @@ def main() -> int:
 
     if DEMO_MODE:
         result["tenant_name"] = args.group_name
-
         result["tenant_id"] = "dummy-tenant-id"
-
         result["description"] = "Dummy tenant for living example"
-
         result["success"] = True
-
     else:
         result["error"] = "Not implemented - replace with your platform's tenant detail retrieval logic"
 

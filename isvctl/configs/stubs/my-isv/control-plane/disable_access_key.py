@@ -65,9 +65,7 @@ def main() -> int:
 
     if DEMO_MODE:
         result["status"] = "Inactive"
-
         result["success"] = True
-
     else:
         result["error"] = "Not implemented - replace with your platform's key disable logic"
 

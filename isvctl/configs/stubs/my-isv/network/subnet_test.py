@@ -47,7 +47,7 @@ On failure, set "success": false and include an "error" field.
 Usage:
     python subnet_test.py --region <region> --cidr 10.98.0.0/16 --subnet-count 4
 
-Reference implementation: ../aws/network/subnet_test.py
+Reference implementation: ../../aws/network/subnet_test.py
 """
 
 import argparse

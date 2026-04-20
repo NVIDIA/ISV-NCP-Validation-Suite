@@ -161,6 +161,16 @@ def get_kubectl_command() -> list[str]:
     return ["kubectl"]
 
 
+def get_kubectl_base_shell() -> str:
+    """Return the kubectl invocation as a shell-quoted string.
+
+    Use this when interpolating kubectl into a shell command string (e.g.
+    passing to ``run_command`` or composing pipes). For argv-style calls
+    (``subprocess.run``), use :func:`get_kubectl_command` instead.
+    """
+    return " ".join(shlex.quote(part) for part in get_kubectl_command())
+
+
 def run_kubectl(
     args: list[str],
     timeout: int = 30,

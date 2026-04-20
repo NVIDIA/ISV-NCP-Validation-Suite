@@ -226,7 +226,11 @@ commands:
           - "--region"
           - "{{region}}"
           - "--delete-key-pair"
+          - "--key-pair-name"
+          - "{{steps.launch_instance.key_name}}"
           - "--delete-security-group"
+          - "--security-group-id"
+          - "{{steps.launch_instance.security_group_id}}"
           - "{{teardown_flag}}"
         timeout: 60
 

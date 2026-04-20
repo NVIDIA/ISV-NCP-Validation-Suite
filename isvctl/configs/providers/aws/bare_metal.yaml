@@ -186,7 +186,7 @@ commands:
         timeout: 1800
 
       # Power-cycle: hard power off + power on (cold start)
-      # Force=True bypasses OS shutdown -- equivalent to pulling the power
+      # Force=True bypasses OS shutdown - equivalent to pulling the power
       - name: power_cycle_instance
         phase: test
         command: "python3 ../../stubs/aws/bare_metal/power_cycle_instance.py"

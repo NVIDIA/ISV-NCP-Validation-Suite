@@ -26,6 +26,6 @@ uv run isvctl test run -f isvctl/configs/providers/aws/vm.yaml
 
 ## See Also
 
-- [AWS Reference Implementation](../../../../docs/references/aws.md) -- Full overview of templates vs AWS, usage patterns
-- [Test Suites](../../tests/README.md) -- Provider-agnostic test definitions
-- [AWS Stub Scripts](../../stubs/aws/) -- The scripts these configs invoke
+- [AWS Reference Implementation](../../../../docs/references/aws.md) - Full overview of templates vs AWS, usage patterns
+- [Test Suites](../../tests/README.md) - Provider-agnostic test definitions
+- [AWS Stub Scripts](../../stubs/aws/) - The scripts these configs invoke

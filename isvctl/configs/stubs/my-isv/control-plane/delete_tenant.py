@@ -11,16 +11,16 @@
 
 """Delete a tenant / resource group / project.
 
-Provider-agnostic template -- replace the TODO section with your platform's
+Provider-agnostic template  - replace the TODO section with your platform's
 tenant deletion calls.
 
 Required JSON output:
 {
-    "success":           bool      -- true if tenant deleted,
-    "platform":          str       -- "control_plane",
-    "resources_deleted": list[str] -- names/IDs of deleted resources,
-    "message":           str       -- human-readable summary,
-    "error":             str       -- (optional) human-readable error details, present when success is false
+    "success":           bool       - true if tenant deleted,
+    "platform":          str        - "control_plane",
+    "resources_deleted": list[str]  - names/IDs of deleted resources,
+    "message":           str        - human-readable summary,
+    "error":             str        - (optional) human-readable error details, present when success is false
 }
 
 Usage:
@@ -58,7 +58,7 @@ def main() -> int:
     # ║  TODO: Replace this block with your platform's implementation    ║
     # ║                                                                  ║
     # ║  1. Delete the tenant / resource group / project                 ║
-    # ║     -> result["resources_deleted"].append("tenant:<name>")        ║
+    # ║     -> result["resources_deleted"].append("tenant:<name>")       ║
     # ║  2. Set result["message"] and result["success"] = True           ║
     # ╚══════════════════════════════════════════════════════════════════╝
 

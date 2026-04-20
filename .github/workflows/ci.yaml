@@ -176,7 +176,7 @@ jobs:
       - demo-test
       - security-secret-scan
       - security-codeql-scan
-      # - security-trivy-scan  # Disabled -- see comment above (Trivy supply chain compromise)
+      # - security-trivy-scan  # Disabled - see comment above (Trivy supply chain compromise)
     steps:
       - name: Check Pipeline Status
         run: |

@@ -11,17 +11,17 @@
 
 """Verify that a disabled access key is rejected on authentication.
 
-Provider-agnostic template -- replace the TODO section with your platform's
+Provider-agnostic template - replace the TODO section with your platform's
 credential verification calls. This script should EXPECT authentication to
 fail; success means the key was properly rejected.
 
-Required JSON output (field names must match -- AccessKeyRejectedCheck reads these):
+Required JSON output (field names must match - AccessKeyRejectedCheck reads these):
 {
-    "success":    bool -- true if the disabled key was correctly rejected,
-    "platform":   str  -- "control_plane",
-    "rejected":   bool -- true if authentication was denied,
-    "error_code": str  -- category of rejection (e.g. "InvalidClientTokenId"),
-    "error":      str  -- (optional) error message, present when success is false
+    "success":    bool  - true if the disabled key was correctly rejected,
+    "platform":   str   - "control_plane",
+    "rejected":   bool  - true if authentication was denied,
+    "error_code": str   - category of rejection (e.g. "InvalidClientTokenId"),
+    "error":      str   - (optional) error message, present when success is false
 }
 
 Usage:
@@ -47,7 +47,7 @@ def main() -> int:
     parser.add_argument("--access-key-id", required=True, help="Disabled key to test")
     parser.add_argument("--secret-access-key", required=True, help="Secret for the disabled key")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")
-    args = parser.parse_args()  # noqa: F841 -- used in TODO block below
+    _args = parser.parse_args()
 
     result: dict[str, Any] = {
         "success": False,
@@ -63,12 +63,12 @@ def main() -> int:
     # ║  1. Attempt to authenticate using the disabled credentials       ║
     # ║     (args.access_key_id, args.secret_access_key)                 ║
     # ║  2. If authentication FAILS (expected):                          ║
-    # ║     -> result["rejected"]   = True                                ║
-    # ║     -> result["error_code"] = "<rejection-error-code>"            ║
-    # ║     -> result["success"]    = True                                ║
-    # ║  3. If authentication SUCCEEDS (unexpected -- key not disabled):  ║
-    # ║     -> result["rejected"]   = False                               ║
-    # ║     -> result["error"]      = "Key was not rejected"              ║
+    # ║     -> result["rejected"]   = True                               ║
+    # ║     -> result["error_code"] = "<rejection-error-code>"           ║
+    # ║     -> result["success"]    = True                               ║
+    # ║  3. If authentication SUCCEEDS (unexpected - key not disabled):  ║
+    # ║     -> result["rejected"]   = False                              ║
+    # ║     -> result["error"]      = "Key was not rejected"             ║
     # ╚══════════════════════════════════════════════════════════════════╝
 
     if DEMO_MODE:

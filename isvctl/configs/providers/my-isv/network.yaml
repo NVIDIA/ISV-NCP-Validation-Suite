@@ -226,7 +226,7 @@ tests:
   settings:
     region: "my-isv-region-1"
 
-  # Skip SSH-based DhcpIpManagementCheck -- it'd try to SSH into the dummy
+  # Skip SSH-based DhcpIpManagementCheck - it'd try to SSH into the dummy
   # instance. Real ISVs remove this exclusion as their stubs come online.
   exclude:
     markers: ["ssh"]

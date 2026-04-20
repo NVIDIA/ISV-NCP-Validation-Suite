@@ -11,20 +11,20 @@
 
 """Check cloud API connectivity and health.
 
-Provider-agnostic template -- replace the TODO section with your platform's
+Provider-agnostic template - replace the TODO section with your platform's
 API client calls (e.g. OpenStack SDK, GCP client, Azure SDK, etc.).
 
 Required JSON output:
 {
-    "success":    bool   -- true if authentication and at least core services reachable,
-    "platform":   str    -- "control_plane",
-    "account_id": str    -- authenticated identity / account / project ID,
+    "success":    bool    - true if authentication and at least core services reachable,
+    "platform":   str     - "control_plane",
+    "account_id": str     - authenticated identity / account / project ID,
     "tests": {
         "auth":          {"passed": bool},
         "<service_name>": {"passed": bool}
         ...one entry per service checked...
     },
-    "error": str -- (optional) error message, present when success is false
+    "error": str  - (optional) error message, present when success is false
 }
 
 Usage:

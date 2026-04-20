@@ -28,7 +28,7 @@ uv run isvctl --help
 
 ### Try it without cloud credentials (~10s)
 
-The fastest way to see the framework run is the `my-isv` scaffold -- a set of
+The fastest way to see the framework run is the `my-isv` scaffold - a set of
 copy-and-fill-in stubs with a demo-mode fallback that makes every validation
 pass without touching a real cloud:
 
@@ -129,7 +129,7 @@ See [Remote Deployment Guide](guides/remote-deployment.md) for details.
 | `ISV_CLIENT_SECRET` | Required for result upload to ISV Lab Service |
 | `NGC_API_KEY` | Required for NIM model benchmarks |
 | `KUBECTL` | Optional kubectl-compatible CLI prefix (overrides auto-detection; for Kubernetes tests) |
-| `K8S_PROVIDER` | Kubernetes provider hint -- `microk8s`, `k3s`, `minikube`, or `kubectl` (auto-detected if unset; overridden by `KUBECTL`) |
+| `K8S_PROVIDER` | Kubernetes provider hint - `microk8s`, `k3s`, `minikube`, or `kubectl` (auto-detected if unset; overridden by `KUBECTL`) |
 
 ## Next Steps
 

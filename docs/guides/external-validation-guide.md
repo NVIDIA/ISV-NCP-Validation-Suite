@@ -98,7 +98,7 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-Bash, Go, Terraform wrappers, or any language works -- as long as valid JSON goes to stdout. See the [Configuration Guide](configuration.md#script-output-and-schema-validation) for more script examples.
+Bash, Go, Terraform wrappers, or any language works - as long as valid JSON goes to stdout. See the [Configuration Guide](configuration.md#script-output-and-schema-validation) for more script examples.
 
 ---
 
@@ -250,7 +250,7 @@ python ./scripts/provision.py --name test 2>/dev/null | jq .
 
 ## Templates and scaffolds
 
-For common validation scenarios, don't write your config from scratch -- the
+For common validation scenarios, don't write your config from scratch - the
 repo ships a ready-made scaffold:
 
 - [**my-isv scaffold**](../../isvctl/configs/stubs/my-isv/README.md) --
@@ -259,7 +259,7 @@ repo ships a ready-made scaffold:
   and a demo-mode fallback.
 - [**Test suite contracts**](../../isvctl/configs/tests/README.md) --
   per-step JSON-field breakdown for every domain.
-- [**AWS reference**](../references/aws.md) -- a complete working
+- [**AWS reference**](../references/aws.md) - a complete working
   implementation of every stub in the scaffold.
 
 Preview the whole pipeline with no cloud:

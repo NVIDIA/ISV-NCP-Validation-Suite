@@ -179,7 +179,7 @@ def run_validations_via_pytest(
             ]
             if k_filters:
                 logger.warning(
-                    f"No tests matched -k '{k_filters[0]}' -- check spelling or run without -k to see available tests"
+                    f"No tests matched -k '{k_filters[0]}' - check spelling or run without -k to see available tests"
                 )
 
         return exit_code, results

@@ -10,7 +10,7 @@
 
 """Contract test that detects stub / config drift.
 
-**Canonical-YAML <-> stub CLI** -- every ``--flag`` passed via ``args:`` in any
+**Canonical-YAML <-> stub CLI** - every ``--flag`` passed via ``args:`` in any
 ``tests/*.yaml`` or ``providers/**/*.yaml`` step must be accepted by the
 argparse declaration of the stub it invokes. Catches the original
 ``create_user.py --create-access-key`` bug that kicked this work off.

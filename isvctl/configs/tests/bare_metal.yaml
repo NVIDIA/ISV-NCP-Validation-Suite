@@ -379,7 +379,7 @@ tests:
   description: "Bare metal (BMaaS) GPU validation tests"
 
   settings:
-    # Provider-specific -- override in your provider config
+    # Provider-specific - override in your provider config
     region: ""
     instance_type: "{{instance_type}}" # Supply your platform-equivalent bare-metal/GPU instance type
     teardown_flag: "{{(env.BM_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"

@@ -170,7 +170,7 @@ This output is validated and becomes the `{{inventory.*}}` available in template
 
 ### Directory Organization
 
-Place your provider-specific lifecycle scripts under `configs/stubs/<your-isv-name>/`, mirroring the structure of the `my-isv/` reference scaffold (e.g. `configs/stubs/acme/k8s/setup.sh`). The `configs/stubs/aws/` directory is a fully-implemented reference -- follow its layout and JSON output contracts when building your own stubs.
+Place your provider-specific lifecycle scripts under `configs/stubs/<your-isv-name>/`, mirroring the structure of the `my-isv/` reference scaffold (e.g. `configs/stubs/acme/k8s/setup.sh`). The `configs/stubs/aws/` directory is a fully-implemented reference - follow its layout and JSON output contracts when building your own stubs.
 
 Stubs can be written in any language. They must:
 

@@ -11,17 +11,17 @@
 
 """Get detailed information about a specific tenant / resource group.
 
-Provider-agnostic template -- replace the TODO section with your platform's
+Provider-agnostic template - replace the TODO section with your platform's
 tenant detail retrieval calls.
 
 Required JSON output:
 {
-    "success":     bool -- true if tenant info retrieved,
-    "platform":    str  -- "control_plane",
-    "tenant_name": str  -- human-readable name,
-    "tenant_id":   str  -- unique identifier,
-    "description": str  -- tenant description or metadata,
-    "error":       str  -- (optional) error message, present when success is false
+    "success":     bool  - true if tenant info retrieved,
+    "platform":    str   - "control_plane",
+    "tenant_name": str   - human-readable name,
+    "tenant_id":   str   - unique identifier,
+    "description": str   - tenant description or metadata,
+    "error":       str   - (optional) error message, present when success is false
 }
 
 Usage:

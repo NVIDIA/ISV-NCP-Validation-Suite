@@ -5,7 +5,7 @@ the [my-isv scaffold stubs](../../stubs/my-isv/). Each config `import:`s a
 test suite and overrides the commands with paths into `stubs/my-isv/`.
 
 The stubs ship with a demo-mode fallback, so these configs run end-to-end
-out of the box under `ISVCTL_DEMO_MODE=1` -- that's what `make demo-test`
+out of the box under `ISVCTL_DEMO_MODE=1` - that's what `make demo-test`
 exercises.
 
 ## Configs
@@ -25,10 +25,10 @@ These configs exclude validations that require SSH into a real host
 (`exclude.markers: [ssh]`) and skip steps that need real cloud APIs
 (e.g. `deploy_nim`), because dummy stubs can't spin up real hosts.
 Each YAML's header comment documents exactly which checks are excluded
-and why -- remove those exclusions as your real stubs come online.
+and why - remove those exclusions as your real stubs come online.
 
 ## See also
 
-- [`stubs/my-isv/`](../../stubs/my-isv/) -- the scaffold these configs invoke (start here)
-- [`tests/README.md`](../../tests/README.md) -- per-step JSON-field breakdown
-- [AWS provider configs](../aws/) -- a working reference implementation using the same pattern
+- [`stubs/my-isv/`](../../stubs/my-isv/) - the scaffold these configs invoke (start here)
+- [`tests/README.md`](../../tests/README.md) - per-step JSON-field breakdown
+- [AWS provider configs](../aws/) - a working reference implementation using the same pattern

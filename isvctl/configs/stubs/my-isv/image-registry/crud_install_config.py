@@ -11,7 +11,7 @@
 
 """CRUD an OS install configuration (e.g., iPXE config, Carbide profile).
 
-Provider-agnostic template -- replace the TODO section with your platform's
+Provider-agnostic template - replace the TODO section with your platform's
 install configuration management API calls.
 
 This script is SELF-CONTAINED: it creates a config, reads it back, updates
@@ -19,17 +19,17 @@ it, and deletes it, reporting pass/fail for each operation.
 
 Required JSON output:
 {
-    "success":     bool   -- true if all CRUD operations passed,
-    "platform":    str    -- "image_registry",
-    "config_id":   str    -- identifier of the created config,
-    "config_name": str    -- human-readable config name,
+    "success":     bool    - true if all CRUD operations passed,
+    "platform":    str     - "image_registry",
+    "config_id":   str     - identifier of the created config,
+    "config_name": str     - human-readable config name,
     "operations": {
         "create": {"passed": bool},
         "read":   {"passed": bool},
         "update": {"passed": bool},
         "delete": {"passed": bool}
     },
-    "error":       str    -- (optional) error message, present when success is false
+    "error":       str     - (optional) error message, present when success is false
 }
 
 Usage:
@@ -53,7 +53,7 @@ def main() -> int:
     """CRUD OS install configuration and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="CRUD OS install configuration")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")
-    args = parser.parse_args()  # noqa: F841 -- used in TODO block below
+    _args = parser.parse_args()
 
     result: dict[str, Any] = {
         "success": False,

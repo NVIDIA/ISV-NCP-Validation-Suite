@@ -221,7 +221,7 @@ class StableIdentifierCheck(BaseValidation):
             return
 
         if not reference_id:
-            self.set_failed("No 'reference_id' configured -- cannot verify stability")
+            self.set_failed("No 'reference_id' configured - cannot verify stability")
             return
 
         if instance_id == reference_id:

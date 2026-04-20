@@ -76,7 +76,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 
 
 def main() -> int:
-    """Run Security Group CRUD lifecycle test (template -- not implemented).
+    """Run Security Group CRUD lifecycle test (template - not implemented).
 
     Parses --region and --cidr CLI args and prints a JSON result indicating
     the test is not yet implemented. Replace the TODO block with your

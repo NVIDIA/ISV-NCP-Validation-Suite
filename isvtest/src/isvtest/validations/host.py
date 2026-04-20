@@ -733,7 +733,7 @@ class HostSoftwareCheck(BaseValidation):
             # ==============================================================
             # 3. SBIOS (System BIOS / UEFI firmware)
             # ==============================================================
-            # BIOS vendor (sysfs first -- no root needed; dmidecode as fallback)
+            # BIOS vendor (sysfs first - no root needed; dmidecode as fallback)
             exit_code, stdout, _ = run_ssh_command(
                 ssh,
                 "cat /sys/class/dmi/id/bios_vendor 2>/dev/null "
@@ -1002,7 +1002,7 @@ class DriverCheck(BaseValidation):
             else:
                 self.report_subtest("nvidia_driver", False, "NVIDIA driver not found")
 
-            # Check CUDA toolkit -- try PATH first (AWS DL AMI), then fall back to
+            # Check CUDA toolkit - try PATH first (AWS DL AMI), then fall back to
             # NVIDIA's canonical install location (/usr/local/cuda/bin/nvcc).
             # Required for NCPs like GCP DL VM where CUDA is installed but not
             # exported on the login PATH.
@@ -1316,7 +1316,7 @@ class TrainingCheck(BaseValidation):
     Validates the full distributed training stack by running a small MLP
     with DistributedDataParallel across all GPUs.  Uses ``torchrun`` to
     launch one process per GPU, with NCCL gradient synchronisation every
-    step -- the same communication path real training workloads use.
+    step - the same communication path real training workloads use.
 
     Validates:
       - Forward / backward / optimizer work on every GPU

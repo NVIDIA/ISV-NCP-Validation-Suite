@@ -11,18 +11,18 @@
 
 """List tenants / resource groups and verify a target exists.
 
-Provider-agnostic template -- replace the TODO section with your platform's
+Provider-agnostic template - replace the TODO section with your platform's
 multi-tenancy listing calls.
 
-Required JSON output (field names must match -- TenantListedCheck reads these):
+Required JSON output (field names must match - TenantListedCheck reads these):
 {
-    "success":       bool                               -- true if listing succeeded,
-    "platform":      str                                -- "control_plane",
-    "tenants":       list[{tenant_name, tenant_id}]     -- list of tenant objects,
-    "count":         int                                -- len(tenants),
-    "target_tenant": str                                -- echoes --group-name,
-    "found_target":  bool                               -- true if target is in the list,
-    "error":         str                                -- error message (present when success is false)
+    "success":       bool                                - true if listing succeeded,
+    "platform":      str                                 - "control_plane",
+    "tenants":       list[{tenant_name, tenant_id}]      - list of tenant objects,
+    "count":         int                                 - len(tenants),
+    "target_tenant": str                                 - echoes --group-name,
+    "found_target":  bool                                - true if target is in the list,
+    "error":         str                                 - error message (present when success is false)
 }
 
 Usage:

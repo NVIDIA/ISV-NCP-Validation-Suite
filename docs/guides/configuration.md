@@ -50,7 +50,7 @@ Pre-built configs are provided in `isvctl/configs/`:
 
 | Config | Description |
 | ------ | ----------- |
-| `providers/my-isv/*.yaml` | [my-isv scaffold](../../isvctl/configs/stubs/my-isv/README.md) -- copy-and-fill-in for your own platform (runs end-to-end under `ISVCTL_DEMO_MODE=1`) |
+| `providers/my-isv/*.yaml` | [my-isv scaffold](../../isvctl/configs/stubs/my-isv/README.md) - copy-and-fill-in for your own platform (runs end-to-end under `ISVCTL_DEMO_MODE=1`) |
 | `providers/aws/control-plane.yaml` | AWS API health, access key lifecycle, tenant management |
 | `providers/aws/network.yaml` | AWS VPC network validation (6 test suites) |
 | `providers/aws/vm.yaml` | AWS EC2 GPU instance tests |
@@ -256,7 +256,7 @@ validations:
         partition_name: "gpu"
 ```
 
-The part before the dash must match an existing validation class name (e.g., `K8sNimHelmWorkload`, `SlurmPartition`). The suffix after the dash is a label -- it can be any descriptive string. Each variant runs as a separate test case with its own parameters and appears independently in test results and coverage.
+The part before the dash must match an existing validation class name (e.g., `K8sNimHelmWorkload`, `SlurmPartition`). The suffix after the dash is a label - it can be any descriptive string. Each variant runs as a separate test case with its own parameters and appears independently in test results and coverage.
 
 **Rules:**
 
@@ -287,7 +287,7 @@ tests:
     instance_type: "gpu.large"
 ```
 
-The import path is relative to the importing file. The imported config provides the base step list, phases, and validations. Nested dictionaries (like `tests.settings`) are deep-merged, but list fields (like `commands.<platform>.steps`) are **replaced as a whole** -- if you set `steps:` in the provider config, include the full desired list. See the [AWS reference implementation](../references/aws.md) for working examples.
+The import path is relative to the importing file. The imported config provides the base step list, phases, and validations. Nested dictionaries (like `tests.settings`) are deep-merged, but list fields (like `commands.<platform>.steps`) are **replaced as a whole** - if you set `steps:` in the provider config, include the full desired list. See the [AWS reference implementation](../references/aws.md) for working examples.
 
 ## Template Variables
 
@@ -594,10 +594,10 @@ tests:
 
 | Key | Behavior | Bypassed by `-k` / `-m`? |
 | --- | -------- | ------------------------ |
-| `platforms` | Removes tests whose markers include the listed platform (e.g., `bare_metal`, `kubernetes`) | No -- always applied |
-| `markers` | Removes tests whose markers include any of the listed values (e.g., `workload`, `slow`) | Yes -- explicit `-k` or `-m` overrides |
-| `tests` | Removes tests matching by exact name, prefix, or parametrized ID (e.g., `K8sNcclWorkload`, `K8sNimHelmWorkload-3b`) | No -- always applied |
-| `files` | Removes tests whose source file matches (e.g., `test_host.py`) | No -- always applied |
+| `platforms` | Removes tests whose markers include the listed platform (e.g., `bare_metal`, `kubernetes`) | No - always applied |
+| `markers` | Removes tests whose markers include any of the listed values (e.g., `workload`, `slow`) | Yes - explicit `-k` or `-m` overrides |
+| `tests` | Removes tests matching by exact name, prefix, or parametrized ID (e.g., `K8sNcclWorkload`, `K8sNimHelmWorkload-3b`) | No - always applied |
+| `files` | Removes tests whose source file matches (e.g., `test_host.py`) | No - always applied |
 
 ### Examples
 

@@ -182,7 +182,7 @@ Source: https://github.com/certifi/python-certifi/blob/master/LICENSE
 
 This package contains a modified version of ca-bundle.crt:
 
-ca-bundle.crt -- Bundle of CA Root Certificates
+ca-bundle.crt - Bundle of CA Root Certificates
 
 This is a bundle of X.509 certificates of public Certificate Authorities
 (CA). These were automatically extracted from Mozilla's root certificates

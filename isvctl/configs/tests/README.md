@@ -1,6 +1,6 @@
 # Validation Test Suites
 
-Provider-agnostic test suites -- the **contract** layer of the framework.
+Provider-agnostic test suites - the **contract** layer of the framework.
 Each YAML defines *what* to validate; [provider configs](../providers/) import
 them and supply *how* (platform-specific scripts).
 
@@ -134,7 +134,7 @@ Validations use `sinfo`/`srun` directly: partitions, GPU allocation, job schedul
 
 ## Related Documentation
 
-- [my-isv Scaffold](../stubs/my-isv/README.md) -- Copy-and-fill-in stubs for your own platform
-- [External Validation Guide](../../../docs/guides/external-validation-guide.md) -- Writing scripts, config format, running validations
-- [Configuration Guide](../../../docs/guides/configuration.md) -- Full config reference (steps, schemas, templates)
-- [AWS Reference Implementation](../../../docs/references/aws.md) -- Working AWS examples for all test suites
+- [my-isv Scaffold](../stubs/my-isv/README.md) - Copy-and-fill-in stubs for your own platform
+- [External Validation Guide](../../../docs/guides/external-validation-guide.md) - Writing scripts, config format, running validations
+- [Configuration Guide](../../../docs/guides/configuration.md) - Full config reference (steps, schemas, templates)
+- [AWS Reference Implementation](../../../docs/references/aws.md) - Working AWS examples for all test suites

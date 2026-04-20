@@ -214,7 +214,7 @@ tests:
   platform: image_registry
 
   settings:
-    # Provider-specific -- override in your provider config
+    # Provider-specific - override in your provider config
     region: ""
     image_url: "https://cloud-images.ubuntu.com/releases/noble/release/ubuntu-24.04-server-cloudimg-amd64.vmdk"
     image_format: "vmdk"

@@ -11,17 +11,17 @@
 
 """Tear down all resources created during ISO validation.
 
-Provider-agnostic template -- replace the TODO section with your platform's
+Provider-agnostic template - replace the TODO section with your platform's
 resource cleanup calls. Each resource should be deleted independently so
 partial cleanup succeeds even if some deletions fail.
 
 Required JSON output:
 {
-    "success":           bool      -- true if all resources deleted,
-    "platform":          str       -- "image_registry",
-    "resources_deleted": list[str] -- names/IDs of deleted resources,
-    "message":           str       -- human-readable summary,
-    "error":             str       -- (optional) error message, present when success is false
+    "success":           bool       - true if all resources deleted,
+    "platform":          str        - "image_registry",
+    "resources_deleted": list[str]  - names/IDs of deleted resources,
+    "message":           str        - human-readable summary,
+    "error":             str        - (optional) error message, present when success is false
 }
 
 Usage:

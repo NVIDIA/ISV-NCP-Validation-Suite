@@ -11,17 +11,17 @@
 
 """Create a test user and generate an access key / API token.
 
-Provider-agnostic template -- replace the TODO section with your platform's
+Provider-agnostic template  - replace the TODO section with your platform's
 identity management calls (e.g. Keystone, IAM, service accounts, etc.).
 
 Required JSON output:
 {
-    "success":          bool -- true if user and key created,
-    "platform":         str  -- "control_plane",
-    "username":         str  -- name of the created test user,
-    "access_key_id":    str  -- public credential identifier,
-    "secret_access_key": str -- secret credential value,
-    "error":             str -- (optional) error message, present when success is false
+    "success":          bool  - true if user and key created,
+    "platform":         str   - "control_plane",
+    "username":         str   - name of the created test user,
+    "access_key_id":    str   - public credential identifier,
+    "secret_access_key": str  - secret credential value,
+    "error":             str  - (optional) error message, present when success is false
 }
 
 Usage:
@@ -45,7 +45,7 @@ def main() -> int:
     """Create test user and access key and emit structured JSON result."""
     parser = argparse.ArgumentParser(description="Create test user and access key")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")
-    args = parser.parse_args()  # noqa: F841 -- used in TODO block below
+    args = parser.parse_args()  # noqa: F841 - used in TODO block below
 
     result: dict[str, Any] = {
         "success": False,

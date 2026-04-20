@@ -11,21 +11,21 @@
 
 """Launch a GPU instance from an imported machine image.
 
-Provider-agnostic template -- replace the TODO section with your platform's
+Provider-agnostic template - replace the TODO section with your platform's
 compute instance creation calls.
 
 Required JSON output:
 {
-    "success":           bool -- true if instance is running,
-    "platform":          str  -- "image_registry",
-    "instance_id":       str  -- unique instance identifier,
-    "public_ip":         str  -- public IP address for SSH,
-    "key_path":          str  -- local path to the SSH private key,
-    "state":             str  -- "running" (read by InstanceStateCheck),
-    "key_name":          str  -- name of the key pair,
-    "security_group_id": str  -- security group / firewall rule ID,
-    "instance_profile":  str  -- IAM / instance profile name,
-    "error":             str  -- (optional) error message, present when success is false
+    "success":           bool  - true if instance is running,
+    "platform":          str   - "image_registry",
+    "instance_id":       str   - unique instance identifier,
+    "public_ip":         str   - public IP address for SSH,
+    "key_path":          str   - local path to the SSH private key,
+    "state":             str   - "running" (read by InstanceStateCheck),
+    "key_name":          str   - name of the key pair,
+    "security_group_id": str   - security group / firewall rule ID,
+    "instance_profile":  str   - IAM / instance profile name,
+    "error":             str   - (optional) error message, present when success is false
 }
 
 Usage:
@@ -51,7 +51,7 @@ def main() -> int:
     parser.add_argument("--image-id", required=True, help="Imported machine image ID")
     parser.add_argument("--instance-type", required=True, help="Instance type / flavor")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")
-    args = parser.parse_args()  # noqa: F841 -- used in TODO block below
+    _args = parser.parse_args()
 
     result: dict[str, Any] = {
         "success": False,

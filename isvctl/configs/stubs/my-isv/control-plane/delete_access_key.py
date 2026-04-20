@@ -11,7 +11,7 @@
 
 """Delete an access key and its associated test user.
 
-Provider-agnostic template -- replace the TODO section with your platform's
+Provider-agnostic template - replace the TODO section with your platform's
 credential and user cleanup calls.
 
 Required JSON output:
@@ -59,9 +59,9 @@ def main() -> int:
     # ║  TODO: Replace this block with your platform's implementation             ║
     # ║                                                                           ║
     # ║  Available arguments:                                                     ║
-    # ║    args.username       -- user who owns the key                           ║
-    # ║    args.access_key_id  -- key to delete                                   ║
-    # ║    args.region         -- cloud region                                    ║
+    # ║    args.username        - user who owns the key                           ║
+    # ║    args.access_key_id   - key to delete                                   ║
+    # ║    args.region          - cloud region                                    ║
     # ║                                                                           ║
     # ║  1. Delete the access key / API token                                     ║
     # ║     -> result["resources_deleted"].append(f"access_key:{...access_key_id}")║

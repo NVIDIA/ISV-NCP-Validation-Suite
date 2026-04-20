@@ -11,17 +11,17 @@
 
 """Install an OS image on a bare-metal system.
 
-Provider-agnostic template -- replace the TODO section with your platform's
+Provider-agnostic template - replace the TODO section with your platform's
 bare-metal provisioning API calls to install an OS from a registry image.
 
 Required JSON output:
 {
-    "success":        bool -- true if BM instance provisioned and running,
-    "platform":       str  -- "image_registry",
-    "instance_id":    str  -- bare-metal instance identifier,
-    "image_id":       str  -- image used for provisioning,
-    "instance_state": str  -- "running",
-    "error":          str  -- (optional) error message, present when success is false
+    "success":        bool  - true if BM instance provisioned and running,
+    "platform":       str   - "image_registry",
+    "instance_id":    str   - bare-metal instance identifier,
+    "image_id":       str   - image used for provisioning,
+    "instance_state": str   - "running",
+    "error":          str   - (optional) error message, present when success is false
 }
 
 Usage:

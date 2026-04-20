@@ -126,10 +126,10 @@ def create_key_pair(
     # Check if key already exists
     try:
         ec2.describe_key_pairs(KeyNames=[key_name])
-        # Key exists -- if we have the file locally, reuse it
+        # Key exists - if we have the file locally, reuse it
         if key_path.exists():
             return str(key_path)
-        # Key exists but no local file -- delete and recreate
+        # Key exists but no local file - delete and recreate
         ec2.delete_key_pair(KeyName=key_name)
     except ClientError as e:
         if e.response["Error"]["Code"] != "InvalidKeyPair.NotFound":
@@ -273,7 +273,7 @@ def get_architecture_for_instance_type(instance_type: str) -> str:
         return "arm64"
 
     # General Graviton detection: ends with 'g' after a digit
-    # e.g., c7g, m7g, r7g, t4g -- but NOT g4dn, g5, p4d (x86 GPU instances)
+    # e.g., c7g, m7g, r7g, t4g - but NOT g4dn, g5, p4d (x86 GPU instances)
     if len(family) >= 2 and family[-1] == "g" and family[-2].isdigit():
         if not family.startswith(("g", "p")):
             return "arm64"

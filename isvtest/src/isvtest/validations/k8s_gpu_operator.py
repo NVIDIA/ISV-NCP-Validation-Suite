@@ -12,7 +12,7 @@ import shlex
 from typing import ClassVar
 
 from isvtest.config.settings import get_k8s_gpu_operator_namespace
-from isvtest.core.k8s import get_kubectl_command
+from isvtest.core.k8s import get_kubectl_base_shell
 from isvtest.core.validation import BaseValidation
 
 
@@ -24,8 +24,7 @@ class K8sGpuOperatorNamespaceCheck(BaseValidation):
         # Prefer config value, fall back to global setting
         namespace = self.config.get("namespace") or get_k8s_gpu_operator_namespace()
 
-        kubectl_parts = get_kubectl_command()
-        kubectl_base = " ".join(shlex.quote(part) for part in kubectl_parts)
+        kubectl_base = get_kubectl_base_shell()
 
         result = self.run_command(f"{kubectl_base} get namespace {shlex.quote(namespace)}")
 
@@ -44,8 +43,7 @@ class K8sGpuOperatorPodsCheck(BaseValidation):
         # Prefer config value, fall back to global setting
         namespace = self.config.get("namespace") or get_k8s_gpu_operator_namespace()
 
-        kubectl_parts = get_kubectl_command()
-        kubectl_base = " ".join(shlex.quote(part) for part in kubectl_parts)
+        kubectl_base = get_kubectl_base_shell()
 
         result = self.run_command(f"{kubectl_base} get pods -n {shlex.quote(namespace)}")
 

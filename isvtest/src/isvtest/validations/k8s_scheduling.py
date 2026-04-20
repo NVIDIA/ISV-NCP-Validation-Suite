@@ -11,7 +11,7 @@
 import shlex
 from typing import ClassVar
 
-from isvtest.core.k8s import get_kubectl_command
+from isvtest.core.k8s import get_kubectl_base_shell
 from isvtest.core.validation import BaseValidation
 
 
@@ -22,8 +22,7 @@ class K8sGpuLabelsCheck(BaseValidation):
     def run(self) -> None:
         label_selector = self.config.get("label_selector", "nvidia.com/gpu.present=true")
 
-        kubectl_parts = get_kubectl_command()
-        kubectl_base = " ".join(shlex.quote(part) for part in kubectl_parts)
+        kubectl_base = get_kubectl_base_shell()
 
         cmd = f"{kubectl_base} get nodes -l {shlex.quote(label_selector)} --no-headers"
         result = self.run_command(cmd)
@@ -76,8 +75,7 @@ class K8sGpuCapacityCheck(BaseValidation):
         # Need to escape dot for jsonpath if it exists (e.g. nvidia.com/gpu -> nvidia\.com/gpu)
         escaped_resource = resource_name.replace(".", "\\.")
 
-        kubectl_parts = get_kubectl_command()
-        kubectl_base = " ".join(shlex.quote(part) for part in kubectl_parts)
+        kubectl_base = get_kubectl_base_shell()
 
         # Check for resource in node capacity
         cmd = f'{kubectl_base} get nodes -o jsonpath=\'{{range .items[*]}}{{.metadata.name}}{{"\\t"}}{{.status.capacity.{escaped_resource}}}{{"\\n"}}{{end}}\''

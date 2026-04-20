@@ -8,10 +8,9 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-import shlex
 from typing import ClassVar
 
-from isvtest.core.k8s import get_kubectl_command
+from isvtest.core.k8s import get_kubectl_base_shell
 from isvtest.core.validation import BaseValidation
 
 
@@ -23,8 +22,7 @@ class K8sPodHealthCheck(BaseValidation):
         # Configurable ignore phases
         ignore_phases = self.config.get("ignore_phases", [])
 
-        kubectl_parts = get_kubectl_command()
-        kubectl_base = " ".join(shlex.quote(part) for part in kubectl_parts)
+        kubectl_base = get_kubectl_base_shell()
 
         # We generally query for everything NOT running/succeeded
         cmd = f"{kubectl_base} get pods -A --no-headers --field-selector status.phase!=Running,status.phase!=Succeeded"
@@ -64,8 +62,7 @@ class K8sNoPendingPodsCheck(BaseValidation):
     markers: ClassVar[list[str]] = ["kubernetes"]
 
     def run(self) -> None:
-        kubectl_parts = get_kubectl_command()
-        kubectl_base = " ".join(shlex.quote(part) for part in kubectl_parts)
+        kubectl_base = get_kubectl_base_shell()
 
         cmd = f"{kubectl_base} get pods -A --field-selector status.phase=Pending --no-headers"
         result = self.run_command(cmd)
@@ -93,8 +90,7 @@ class K8sNoErrorPodsCheck(BaseValidation):
     markers: ClassVar[list[str]] = ["kubernetes"]
 
     def run(self) -> None:
-        kubectl_parts = get_kubectl_command()
-        kubectl_base = " ".join(shlex.quote(part) for part in kubectl_parts)
+        kubectl_base = get_kubectl_base_shell()
 
         # Configurable error states
         error_states = self.config.get(

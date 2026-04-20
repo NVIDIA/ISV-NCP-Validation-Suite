@@ -9,10 +9,9 @@
 # its affiliates is strictly prohibited.
 
 import json
-import shlex
 from typing import ClassVar
 
-from isvtest.core.k8s import get_kubectl_command
+from isvtest.core.k8s import get_kubectl_base_shell
 from isvtest.core.validation import BaseValidation
 
 
@@ -34,8 +33,7 @@ class K8sNodeCountCheck(BaseValidation):
             self.set_failed(f"Invalid expected count: {expected_count}")
             return
 
-        kubectl_parts = get_kubectl_command()
-        kubectl_base = " ".join(shlex.quote(part) for part in kubectl_parts)
+        kubectl_base = get_kubectl_base_shell()
         cmd = f"{kubectl_base} get nodes --no-headers | wc -l"
 
         result = self.run_command(cmd)
@@ -62,8 +60,7 @@ class K8sNodeReadyCheck(BaseValidation):
     markers: ClassVar[list[str]] = ["kubernetes"]
 
     def run(self) -> None:
-        kubectl_parts = get_kubectl_command()
-        kubectl_base = " ".join(shlex.quote(part) for part in kubectl_parts)
+        kubectl_base = get_kubectl_base_shell()
 
         # Use JSON output for safer parsing
         cmd = f"{kubectl_base} get nodes -o json"
@@ -128,8 +125,7 @@ class K8sExpectedNodesCheck(BaseValidation):
             return
 
         # Get actual nodes
-        kubectl_parts = get_kubectl_command()
-        kubectl_base = " ".join(shlex.quote(part) for part in kubectl_parts)
+        kubectl_base = get_kubectl_base_shell()
         cmd = f"{kubectl_base} get nodes -o jsonpath='{{.items[*].metadata.name}}'"
 
         result = self.run_command(cmd)

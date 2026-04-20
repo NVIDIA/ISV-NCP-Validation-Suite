@@ -9,12 +9,11 @@
 # its affiliates is strictly prohibited.
 
 import json
-import shlex
 from typing import ClassVar
 
 import pytest
 
-from isvtest.core.k8s import get_kubectl_command
+from isvtest.core.k8s import get_kubectl_base_shell
 from isvtest.core.validation import BaseValidation
 
 
@@ -26,8 +25,7 @@ class K8sMigConfigCheck(BaseValidation):
         require_mig = self.config.get("require_mig", False)
         expected_labels = self.config.get("expected_labels", {})
 
-        kubectl_parts = get_kubectl_command()
-        kubectl_base = " ".join(shlex.quote(part) for part in kubectl_parts)
+        kubectl_base = get_kubectl_base_shell()
 
         # Get all nodes JSON to check labels
         cmd = f"{kubectl_base} get nodes -o json"

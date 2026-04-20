@@ -9,14 +9,13 @@
 # its affiliates is strictly prohibited.
 
 import json
-import shlex
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import ClassVar
 
 from isvtest.config.settings import get_k8s_namespace
-from isvtest.core.k8s import get_kubectl_command
+from isvtest.core.k8s import get_kubectl_base_shell
 from isvtest.core.nvidia import count_gpus_from_full_output, parse_driver_version
 from isvtest.core.validation import BaseValidation
 
@@ -50,10 +49,7 @@ class K8sNvidiaSmiCheck(BaseValidation):
 
     def _run_ephemeral_pods(self, timeout: int = 60) -> dict[str, dict]:
         """Run ephemeral pods on all GPU nodes and return results."""
-        kubectl_parts = get_kubectl_command()
-        # Ensure we quote parts correctly, but spaces in parts (like "microk8s kubectl")
-        # need to be handled carefully if passed as a single string to run_command
-        kubectl_base = " ".join(shlex.quote(part) for part in kubectl_parts)
+        kubectl_base = get_kubectl_base_shell()
         namespace = get_k8s_namespace()
 
         # 1. Identify GPU nodes

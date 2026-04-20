@@ -69,7 +69,7 @@ def main() -> int:
         current_state = instance["State"]["Name"]
 
         if current_state == "stopped":
-            # Already stopped — idempotent no-op
+            # Already stopped -- idempotent no-op
             result["state"] = current_state
             result["stop_initiated"] = True
             result["success"] = True

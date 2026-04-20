@@ -11,16 +11,16 @@
 
 """Delete an access key and its associated test user.
 
-Provider-agnostic template — replace the TODO section with your platform's
+Provider-agnostic template -- replace the TODO section with your platform's
 credential and user cleanup calls.
 
 Required JSON output:
 {
-    "success":           bool      — true if cleanup succeeded,
-    "platform":          str       — "control_plane",
-    "resources_deleted": list[str] — names/IDs of deleted resources,
-    "message":           str       — human-readable summary,
-    "error":             str       — (optional) error message, present when success is false
+    "success":           bool      -- true if cleanup succeeded,
+    "platform":          str       -- "control_plane",
+    "resources_deleted": list[str] -- names/IDs of deleted resources,
+    "message":           str       -- human-readable summary,
+    "error":             str       -- (optional) error message, present when success is false
 }
 
 Usage:
@@ -58,13 +58,13 @@ def main() -> int:
     # ║  TODO: Replace this block with your platform's implementation           ║
     # ║                                                                         ║
     # ║  Available arguments:                                                   ║
-    # ║    args.username       — user who owns the key                          ║
-    # ║    args.access_key_id  — key to delete                                  ║
+    # ║    args.username       -- user who owns the key                          ║
+    # ║    args.access_key_id  -- key to delete                                  ║
     # ║                                                                         ║
     # ║  1. Delete the access key / API token                                   ║
-    # ║     → result["resources_deleted"].append(f"access_key:{args.access_key_id}")  ║
+    # ║     -> result["resources_deleted"].append(f"access_key:{args.access_key_id}")  ║
     # ║  2. Delete the test user / service account                              ║
-    # ║     → result["resources_deleted"].append(f"user:{args.username}")        ║
+    # ║     -> result["resources_deleted"].append(f"user:{args.username}")        ║
     # ║  3. Set result["message"] and result["success"] = True                  ║
     # ╚══════════════════════════════════════════════════════════════════════════╝
 

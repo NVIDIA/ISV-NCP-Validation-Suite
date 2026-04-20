@@ -11,17 +11,17 @@
 
 """Get detailed information about a specific tenant / resource group.
 
-Provider-agnostic template — replace the TODO section with your platform's
+Provider-agnostic template -- replace the TODO section with your platform's
 tenant detail retrieval calls.
 
 Required JSON output:
 {
-    "success":     bool — true if tenant info retrieved,
-    "platform":    str  — "control_plane",
-    "tenant_name": str  — human-readable name,
-    "tenant_id":   str  — unique identifier,
-    "description": str  — tenant description or metadata,
-    "error":       str  — (optional) error message, present when success is false
+    "success":     bool -- true if tenant info retrieved,
+    "platform":    str  -- "control_plane",
+    "tenant_name": str  -- human-readable name,
+    "tenant_id":   str  -- unique identifier,
+    "description": str  -- tenant description or metadata,
+    "error":       str  -- (optional) error message, present when success is false
 }
 
 Usage:
@@ -59,9 +59,9 @@ def main() -> int:
     # ║  TODO: Replace this block with your platform's implementation    ║
     # ║                                                                  ║
     # ║  1. Fetch details for the tenant named args.group_name           ║
-    # ║     → result["tenant_name"] = "<name>"                           ║
-    # ║     → result["tenant_id"]   = "<id>"                             ║
-    # ║     → result["description"] = "<description or metadata>"        ║
+    # ║     -> result["tenant_name"] = "<name>"                           ║
+    # ║     -> result["tenant_id"]   = "<id>"                             ║
+    # ║     -> result["description"] = "<description or metadata>"        ║
     # ║  2. Set result["success"] = True                                 ║
     # ╚══════════════════════════════════════════════════════════════════╝
 

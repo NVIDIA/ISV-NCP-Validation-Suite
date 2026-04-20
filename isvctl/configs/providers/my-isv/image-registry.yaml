@@ -136,6 +136,6 @@ tests:
     instance_type: "my-isv.gpu.1x"
 
   # Skip SSH-based vm_ssh check (ConnectivityCheck + OsCheck on
-  # launch_instance) — would try to SSH into the dummy public_ip.
+  # launch_instance) -- would try to SSH into the dummy public_ip.
   exclude:
     markers: ["ssh"]

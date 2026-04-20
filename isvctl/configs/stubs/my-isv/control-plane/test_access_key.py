@@ -11,16 +11,16 @@
 
 """Test that a previously created access key can authenticate.
 
-Provider-agnostic template — replace the TODO section with your platform's
+Provider-agnostic template -- replace the TODO section with your platform's
 credential verification calls.
 
 Required JSON output:
 {
-    "success":       bool — true if authentication succeeded,
-    "platform":      str  — "control_plane",
-    "authenticated": bool — true if the key successfully authenticated,
-    "account_id":    str  — identity / account returned by the API,
-    "error":         str  — optional error message when authentication fails (omitted on success)
+    "success":       bool -- true if authentication succeeded,
+    "platform":      str  -- "control_plane",
+    "authenticated": bool -- true if the key successfully authenticated,
+    "account_id":    str  -- identity / account returned by the API,
+    "error":         str  -- optional error message when authentication fails (omitted on success)
 }
 
 Usage:
@@ -45,7 +45,7 @@ def main() -> int:
     parser.add_argument("--access-key-id", required=True, help="Public credential identifier")
     parser.add_argument("--secret-access-key", required=True, help="Secret credential value")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")
-    args = parser.parse_args()  # noqa: F841 — used in TODO block below
+    args = parser.parse_args()  # noqa: F841 -- used in TODO block below
 
     result: dict[str, Any] = {
         "success": False,
@@ -61,12 +61,12 @@ def main() -> int:
     # ║     (args.access_key_id, args.secret_access_key)                 ║
     # ║  2. Call a "get identity" / "whoami" endpoint                    ║
     # ║  3. On success:                                                  ║
-    # ║     → result["authenticated"] = True                             ║
-    # ║     → result["account_id"]    = "<returned-account-id>"          ║
-    # ║     → result["success"]       = True                             ║
+    # ║     -> result["authenticated"] = True                             ║
+    # ║     -> result["account_id"]    = "<returned-account-id>"          ║
+    # ║     -> result["success"]       = True                             ║
     # ║  4. On failure:                                                  ║
-    # ║     → result["authenticated"] = False                            ║
-    # ║     → result["error"]         = "<error-message>"                ║
+    # ║     -> result["authenticated"] = False                            ║
+    # ║     -> result["error"]         = "<error-message>"                ║
     # ╚══════════════════════════════════════════════════════════════════╝
 
     if DEMO_MODE:

@@ -181,7 +181,7 @@ tests:
     instance_type: "my-isv.gpu.1x"
 
   # Skip SSH-based host checks (ConnectivityCheck, GpuCheck, DriverCheck,
-  # CpuInfoCheck, CloudInitCheck, NIM checks, etc.) — they'd try to connect
+  # CpuInfoCheck, CloudInitCheck, NIM checks, etc.) -- they'd try to connect
   # to the dummy public_ip. Pure JSON-contract checks still run.
   exclude:
     markers: ["ssh"]

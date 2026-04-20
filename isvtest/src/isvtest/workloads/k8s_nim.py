@@ -138,7 +138,7 @@ class K8sNimInferenceWorkload(BaseWorkloadCheck):
 
         With ``WaitForFirstConsumer`` storage classes (e.g. EKS gp3), the PVC
         stays Pending until a pod references it, so we only verify the resource
-        exists — not that it's Bound.
+        exists -- not that it's Bound.
 
         Returns:
             True if PVC exists or was created, False on error.

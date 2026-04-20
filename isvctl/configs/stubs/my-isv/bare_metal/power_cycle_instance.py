@@ -23,7 +23,7 @@ This script is called during the "test" phase. It must:
 
 Power-cycle vs reboot:
   - Reboot (step 8) is an OS-level restart; the hardware stays powered.
-  - Power-cycle is a full hardware reset: power off → power on. This validates
+  - Power-cycle is a full hardware reset: power off -> power on. This validates
     that the node recovers from complete power loss, exercising firmware
     initialization, BIOS POST, and a cold OS boot.
 

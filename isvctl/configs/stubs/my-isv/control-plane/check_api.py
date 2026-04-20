@@ -11,20 +11,20 @@
 
 """Check cloud API connectivity and health.
 
-Provider-agnostic template — replace the TODO section with your platform's
+Provider-agnostic template -- replace the TODO section with your platform's
 API client calls (e.g. OpenStack SDK, GCP client, Azure SDK, etc.).
 
 Required JSON output:
 {
-    "success":    bool   — true if authentication and at least core services reachable,
-    "platform":   str    — "control_plane",
-    "account_id": str    — authenticated identity / account / project ID,
+    "success":    bool   -- true if authentication and at least core services reachable,
+    "platform":   str    -- "control_plane",
+    "account_id": str    -- authenticated identity / account / project ID,
     "tests": {
         "auth":          {"passed": bool},
         "<service_name>": {"passed": bool}
         ...one entry per service checked...
     },
-    "error": str — (optional) error message, present when success is false
+    "error": str -- (optional) error message, present when success is false
 }
 
 Usage:
@@ -68,7 +68,7 @@ def main() -> int:
     # ║                                                                  ║
     # ║  1. Authenticate to your cloud API (SDK client, token, etc.)     ║
     # ║  2. Retrieve the caller identity / account ID                    ║
-    # ║     → result["account_id"] = "<your-account-id>"                 ║
+    # ║     -> result["account_id"] = "<your-account-id>"                 ║
     # ║  3. For each service in `services`:                              ║
     # ║     a. Call a lightweight read-only endpoint                     ║
     # ║     b. Record the result:                                        ║

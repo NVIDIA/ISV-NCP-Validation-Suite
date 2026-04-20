@@ -221,7 +221,7 @@ class StableIdentifierCheck(BaseValidation):
             return
 
         if not reference_id:
-            self.set_failed("No 'reference_id' configured — cannot verify stability")
+            self.set_failed("No 'reference_id' configured -- cannot verify stability")
             return
 
         if instance_id == reference_id:
@@ -358,7 +358,7 @@ class InstanceTagCheck(BaseValidation):
 
     Step output:
         instance_id: Instance identifier
-        tags: Dict of tag key→value pairs
+        tags: Dict of tag key->value pairs
         tag_count: Number of tags
     """
 
@@ -439,7 +439,7 @@ class SerialConsoleCheck(BaseValidation):
             details.append("no output (Nitro instance)")
             self.log.warning(
                 f"Serial access enabled but no console output for {instance_id} "
-                f"— expected on Nitro instances, but verify if this is not a Nitro instance"
+                f"-- expected on Nitro instances, but verify if this is not a Nitro instance"
             )
 
         self.set_passed(f"Serial console available for {instance_id} ({', '.join(details)})")

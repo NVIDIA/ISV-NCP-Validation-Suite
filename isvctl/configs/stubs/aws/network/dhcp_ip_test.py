@@ -9,7 +9,7 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-"""DHCP/IP management test — AWS reference implementation.
+"""DHCP/IP management test -- AWS reference implementation.
 
 Creates an EC2 key pair, launches a t3.micro instance in the specified subnet,
 and outputs SSH connection details for the DhcpIpManagementCheck validation.
@@ -48,7 +48,7 @@ from botocore.exceptions import ClientError
 from common.ec2 import create_key_pair
 from common.errors import classify_aws_error, handle_aws_errors
 
-# Ubuntu 22.04 LTS AMI (us-west-2) — update per region as needed
+# Ubuntu 22.04 LTS AMI (us-west-2) -- update per region as needed
 DEFAULT_AMI = "ami-0735c191cf914754d"
 INSTANCE_TYPE = "t3.micro"
 KEY_NAME_PREFIX = "isv-dhcp-test-key"

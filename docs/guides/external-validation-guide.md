@@ -250,16 +250,16 @@ python ./scripts/provision.py --name test 2>/dev/null | jq .
 
 ## Templates and scaffolds
 
-For common validation scenarios, don't write your config from scratch — the
+For common validation scenarios, don't write your config from scratch -- the
 repo ships a ready-made scaffold:
 
-- [**my-isv scaffold**](../../isvctl/configs/stubs/my-isv/README.md) —
+- [**my-isv scaffold**](../../isvctl/configs/stubs/my-isv/README.md) --
   copy-and-fill-in stubs covering IAM, control-plane, VM, bare metal,
   network, image registry, k8s, and Slurm. Each stub has a `TODO:` block
   and a demo-mode fallback.
-- [**Test suite contracts**](../../isvctl/configs/tests/README.md) —
+- [**Test suite contracts**](../../isvctl/configs/tests/README.md) --
   per-step JSON-field breakdown for every domain.
-- [**AWS reference**](../references/aws.md) — a complete working
+- [**AWS reference**](../references/aws.md) -- a complete working
   implementation of every stub in the scaffold.
 
 Preview the whole pipeline with no cloud:

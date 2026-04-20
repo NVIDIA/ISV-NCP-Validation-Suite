@@ -11,16 +11,16 @@
 
 """Disable / deactivate an access key.
 
-Provider-agnostic template — replace the TODO section with your platform's
+Provider-agnostic template -- replace the TODO section with your platform's
 credential management calls (e.g. set key status to inactive, revoke token).
 
 Required JSON output:
 {
-    "success":       bool — true if key was disabled,
-    "platform":      str  — "control_plane",
-    "access_key_id": str  — the key that was disabled,
-    "status":        str  — "Inactive" (must match exactly; AccessKeyDisabledCheck compares case-sensitively),
-    "error":         str or null — error message when disabling fails; null/absent on success
+    "success":       bool -- true if key was disabled,
+    "platform":      str  -- "control_plane",
+    "access_key_id": str  -- the key that was disabled,
+    "status":        str  -- "Inactive" (must match exactly; AccessKeyDisabledCheck compares case-sensitively),
+    "error":         str or null -- error message when disabling fails; null/absent on success
 }
 
 Usage:
@@ -61,8 +61,8 @@ def main() -> int:
     # ║  1. Disable / deactivate the access key                          ║
     # ║     (e.g. set status to Inactive, revoke the token)              ║
     # ║  2. On success:                                                  ║
-    # ║     → result["status"]  = "Inactive"                             ║
-    # ║     → result["success"] = True                                   ║
+    # ║     -> result["status"]  = "Inactive"                             ║
+    # ║     -> result["success"] = True                                   ║
     # ╚══════════════════════════════════════════════════════════════════╝
 
     if DEMO_MODE:

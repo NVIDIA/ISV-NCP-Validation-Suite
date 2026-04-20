@@ -11,17 +11,17 @@
 
 """Create a test user and generate an access key / API token.
 
-Provider-agnostic template — replace the TODO section with your platform's
+Provider-agnostic template -- replace the TODO section with your platform's
 identity management calls (e.g. Keystone, IAM, service accounts, etc.).
 
 Required JSON output:
 {
-    "success":          bool — true if user and key created,
-    "platform":         str  — "control_plane",
-    "username":         str  — name of the created test user,
-    "access_key_id":    str  — public credential identifier,
-    "secret_access_key": str — secret credential value,
-    "error":             str — (optional) error message, present when success is false
+    "success":          bool -- true if user and key created,
+    "platform":         str  -- "control_plane",
+    "username":         str  -- name of the created test user,
+    "access_key_id":    str  -- public credential identifier,
+    "secret_access_key": str -- secret credential value,
+    "error":             str -- (optional) error message, present when success is false
 }
 
 Usage:
@@ -44,7 +44,7 @@ DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
 def main() -> int:
     parser = argparse.ArgumentParser(description="Create test user and access key")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")
-    args = parser.parse_args()  # noqa: F841 — used in TODO block below
+    args = parser.parse_args()  # noqa: F841 -- used in TODO block below
 
     result: dict[str, Any] = {
         "success": False,
@@ -58,10 +58,10 @@ def main() -> int:
     # ║  TODO: Replace this block with your platform's implementation    ║
     # ║                                                                  ║
     # ║  1. Create a test user / service account                         ║
-    # ║     → result["username"] = "<created-username>"                  ║
+    # ║     -> result["username"] = "<created-username>"                  ║
     # ║  2. Generate an access key or API token for the user             ║
-    # ║     → result["access_key_id"]     = "<key-id>"                   ║
-    # ║     → result["secret_access_key"] = "<secret>"                   ║
+    # ║     -> result["access_key_id"]     = "<key-id>"                   ║
+    # ║     -> result["secret_access_key"] = "<secret>"                   ║
     # ║  3. Set result["success"] = True                                 ║
     # ╚══════════════════════════════════════════════════════════════════╝
 

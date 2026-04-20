@@ -56,7 +56,7 @@ Running phases: ['setup', 'test', 'teardown']
 
 ## Adding your own platform
 
-Start from the **[my-isv scaffold](isvctl/configs/stubs/my-isv/README.md)** —
+Start from the **[my-isv scaffold](isvctl/configs/stubs/my-isv/README.md)** --
 copy-and-fill-in stubs covering every validation domain (IAM, control-plane,
 VM, bare metal, network, image registry, k8s, Slurm), with a demo-mode
 fallback so you can preview the whole pipeline before writing any code:

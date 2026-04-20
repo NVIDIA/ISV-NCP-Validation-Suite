@@ -14,7 +14,7 @@
 Unlike reboot (OS-level restart), this performs a full hardware power-cycle:
 force-stop the instance, wait for it to reach "stopped", then start it and
 wait for recovery. This exercises firmware initialization, BIOS POST, and
-a cold OS boot — validating that the node recovers from complete power loss.
+a cold OS boot -- validating that the node recovers from complete power loss.
 
 Usage:
     python power_cycle_instance.py --instance-id i-xxx --region us-west-2 \\
@@ -98,7 +98,7 @@ def main() -> int:
         # ============================================================
         # Step 2: Force-stop the instance (hard power off)
         # Force=True sends an immediate power-off signal, bypassing
-        # the OS shutdown sequence — equivalent to pulling the power.
+        # the OS shutdown sequence -- equivalent to pulling the power.
         # ============================================================
         print(f"Force-stopping bare-metal instance {args.instance_id}...", file=sys.stderr)
         ec2.stop_instances(InstanceIds=[args.instance_id], Force=True)
@@ -128,7 +128,7 @@ def main() -> int:
 
         # ============================================================
         # Step 5: Wait for instance status checks to pass
-        # Full POST/BIOS/OS boot cycle — longer than a reboot
+        # Full POST/BIOS/OS boot cycle -- longer than a reboot
         # ============================================================
         print("Waiting for bare-metal instance status checks (POST/BIOS/OS boot)...", file=sys.stderr)
         waiter = ec2.get_waiter("instance_status_ok")

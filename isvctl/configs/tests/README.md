@@ -1,6 +1,6 @@
 # Validation Test Suites
 
-Provider-agnostic test suites — the **contract** layer of the framework.
+Provider-agnostic test suites -- the **contract** layer of the framework.
 Each YAML defines *what* to validate; [provider configs](../providers/) import
 them and supply *how* (platform-specific scripts).
 
@@ -12,12 +12,12 @@ them and supply *how* (platform-specific scripts).
 
 | Test Suite | Domain | Stubs | AWS Reference |
 |------------|--------|-------|---------------|
-| [`iam.yaml`](iam.yaml) | User lifecycle (create → verify → delete) | [`stubs/my-isv/iam/`](../stubs/my-isv/iam/) (3 scripts) | [`providers/aws/iam.yaml`](../providers/aws/iam.yaml) |
+| [`iam.yaml`](iam.yaml) | User lifecycle (create -> verify -> delete) | [`stubs/my-isv/iam/`](../stubs/my-isv/iam/) (3 scripts) | [`providers/aws/iam.yaml`](../providers/aws/iam.yaml) |
 | [`network.yaml`](network.yaml) | VPC CRUD, subnets, isolation, SG CRUD, security, connectivity, traffic, DDI, SDN | [`stubs/my-isv/network/`](../stubs/my-isv/network/) (16 scripts) | [`providers/aws/network.yaml`](../providers/aws/network.yaml) |
-| [`vm.yaml`](vm.yaml) | GPU VM lifecycle: launch → tags → stop/start → reboot → describe → NIM → teardown | [`stubs/my-isv/vm/`](../stubs/my-isv/vm/) (9 scripts) | [`providers/aws/vm.yaml`](../providers/aws/vm.yaml) |
-| [`bare_metal.yaml`](bare_metal.yaml) | BMaaS lifecycle: launch → tags → topology → serial → stop/start → reboot → power-cycle → NIM → teardown | [`stubs/my-isv/bare_metal/`](../stubs/my-isv/bare_metal/) (12 scripts) | [`providers/aws/bare_metal.yaml`](../providers/aws/bare_metal.yaml) |
+| [`vm.yaml`](vm.yaml) | GPU VM lifecycle: launch -> tags -> stop/start -> reboot -> describe -> NIM -> teardown | [`stubs/my-isv/vm/`](../stubs/my-isv/vm/) (9 scripts) | [`providers/aws/vm.yaml`](../providers/aws/vm.yaml) |
+| [`bare_metal.yaml`](bare_metal.yaml) | BMaaS lifecycle: launch -> tags -> topology -> serial -> stop/start -> reboot -> power-cycle -> NIM -> teardown | [`stubs/my-isv/bare_metal/`](../stubs/my-isv/bare_metal/) (12 scripts) | [`providers/aws/bare_metal.yaml`](../providers/aws/bare_metal.yaml) |
 | [`k8s.yaml`](k8s.yaml) | Kubernetes GPU cluster: nodes, GPU operator, scheduling, workloads | [`stubs/my-isv/k8s/`](../stubs/my-isv/k8s/) (9 shell: generic + k3s/microk8s/minikube variants) | [`providers/aws/eks.yaml`](../providers/aws/eks.yaml) |
-| [`slurm.yaml`](slurm.yaml) | Slurm HPC cluster: partitions, jobs, GPU allocation | [`stubs/my-isv/slurm/`](../stubs/my-isv/slurm/) (2 shell) | — |
+| [`slurm.yaml`](slurm.yaml) | Slurm HPC cluster: partitions, jobs, GPU allocation | [`stubs/my-isv/slurm/`](../stubs/my-isv/slurm/) (2 shell) | -- |
 | [`control-plane.yaml`](control-plane.yaml) | API health, access key lifecycle, tenant lifecycle | [`stubs/my-isv/control-plane/`](../stubs/my-isv/control-plane/) (10 scripts) | [`providers/aws/control-plane.yaml`](../providers/aws/control-plane.yaml) |
 | [`image-registry.yaml`](image-registry.yaml) | Image upload, CRUD, VM launch, install config, BMaaS provisioning | [`stubs/my-isv/image-registry/`](../stubs/my-isv/image-registry/) (7 scripts) | [`providers/aws/image-registry.yaml`](../providers/aws/image-registry.yaml) |
 
@@ -135,7 +135,7 @@ Validations use `sinfo`/`srun` directly: partitions, GPU allocation, job schedul
 
 ## Related Documentation
 
-- [my-isv Scaffold](../stubs/my-isv/README.md) — Copy-and-fill-in stubs for your own platform
-- [External Validation Guide](../../../docs/guides/external-validation-guide.md) — Writing scripts, config format, running validations
-- [Configuration Guide](../../../docs/guides/configuration.md) — Full config reference (steps, schemas, templates)
-- [AWS Reference Implementation](../../../docs/references/aws.md) — Working AWS examples for all test suites
+- [my-isv Scaffold](../stubs/my-isv/README.md) -- Copy-and-fill-in stubs for your own platform
+- [External Validation Guide](../../../docs/guides/external-validation-guide.md) -- Writing scripts, config format, running validations
+- [Configuration Guide](../../../docs/guides/configuration.md) -- Full config reference (steps, schemas, templates)
+- [AWS Reference Implementation](../../../docs/references/aws.md) -- Working AWS examples for all test suites

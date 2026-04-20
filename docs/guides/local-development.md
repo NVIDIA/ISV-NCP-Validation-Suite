@@ -52,7 +52,7 @@ uv run isvctl test run -f isvctl/configs/providers/aws/iam.yaml
 ### Kubernetes Tests
 
 Three local Kubernetes providers are supported: MicroK8s, Minikube, and k3s.
-Only one can hold the GPU at a time — stop the others before switching.
+Only one can hold the GPU at a time -- stop the others before switching.
 
 #### MicroK8s
 

@@ -11,18 +11,18 @@
 
 """Install an OS install configuration on a bare-metal system.
 
-Provider-agnostic template — replace the TODO section with your platform's
+Provider-agnostic template -- replace the TODO section with your platform's
 bare-metal provisioning API calls to install an OS using a config profile
 (e.g., iPXE config, Carbide profile).
 
 Required JSON output:
 {
-    "success":        bool — true if BM instance provisioned and running,
-    "platform":       str  — "image_registry",
-    "instance_id":    str  — bare-metal instance identifier,
-    "config_id":      str  — install config used for provisioning,
-    "instance_state": str  — "running",
-    "error":          str  — (optional) error message, present when success is false
+    "success":        bool -- true if BM instance provisioned and running,
+    "platform":       str  -- "image_registry",
+    "instance_id":    str  -- bare-metal instance identifier,
+    "config_id":      str  -- install config used for provisioning,
+    "instance_state": str  -- "running",
+    "error":          str  -- (optional) error message, present when success is false
 }
 
 Usage:

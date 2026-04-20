@@ -2,7 +2,7 @@
 # Format: https://trivy.dev/docs/latest/configuration/filtering/#trivyignoreyaml
 #
 # All entries are reviewed and accepted misconfiguration findings.
-# CI enforces fail-on-findings: true — any NEW finding will break the pipeline.
+# CI enforces fail-on-findings: true -- any NEW finding will break the pipeline.
 #
 # Why no 'paths' scoping: Trivy resolves Terraform module sources and reports
 # findings against virtual paths (e.g. terraform-aws-modules/eks/aws/main.tf)
@@ -12,8 +12,8 @@
 
 misconfigurations:
   # ---------------------------------------------------------------------------
-  # KSV-0014 — Container should set securityContext.readOnlyRootFilesystem
-  # KSV-0118 — Workload uses the default security context (allows root)
+  # KSV-0014 -- Container should set securityContext.readOnlyRootFilesystem
+  # KSV-0118 -- Workload uses the default security context (allows root)
   #
   # Affected files:
   #   isvtest/src/isvtest/workloads/manifests/k8s/nccl_allreduce_job.yaml
@@ -29,7 +29,7 @@ misconfigurations:
 
   - id: AVD-KSV-0014
     statement: >
-      GPU workload containers require a writable root filesystem — NCCL writes
+      GPU workload containers require a writable root filesystem -- NCCL writes
       benchmark logs, NIM writes model cache, init containers set directory
       permissions, and the inference-test sidecar installs curl at runtime.
 
@@ -40,9 +40,9 @@ misconfigurations:
       Non-root execution is not supported by these upstream images.
 
   # ---------------------------------------------------------------------------
-  # AWS-0040 — Public cluster access is enabled
-  # AWS-0041 — Cluster allows access from a public CIDR
-  # AWS-0104 — Security group rule allows unrestricted egress
+  # AWS-0040 -- Public cluster access is enabled
+  # AWS-0041 -- Cluster allows access from a public CIDR
+  # AWS-0104 -- Security group rule allows unrestricted egress
   #
   # Affected files:
   #   isvctl/configs/stubs/aws/eks/terraform/main.tf   (EFS security group)

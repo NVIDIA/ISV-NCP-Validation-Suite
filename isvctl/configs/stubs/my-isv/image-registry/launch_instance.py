@@ -11,21 +11,21 @@
 
 """Launch a GPU instance from an imported machine image.
 
-Provider-agnostic template — replace the TODO section with your platform's
+Provider-agnostic template -- replace the TODO section with your platform's
 compute instance creation calls.
 
 Required JSON output:
 {
-    "success":           bool — true if instance is running,
-    "platform":          str  — "image_registry",
-    "instance_id":       str  — unique instance identifier,
-    "public_ip":         str  — public IP address for SSH,
-    "key_path":          str  — local path to the SSH private key,
-    "state":             str  — "running" (read by InstanceStateCheck),
-    "key_name":          str  — name of the key pair,
-    "security_group_id": str  — security group / firewall rule ID,
-    "instance_profile":  str  — IAM / instance profile name,
-    "error":             str  — (optional) error message, present when success is false
+    "success":           bool -- true if instance is running,
+    "platform":          str  -- "image_registry",
+    "instance_id":       str  -- unique instance identifier,
+    "public_ip":         str  -- public IP address for SSH,
+    "key_path":          str  -- local path to the SSH private key,
+    "state":             str  -- "running" (read by InstanceStateCheck),
+    "key_name":          str  -- name of the key pair,
+    "security_group_id": str  -- security group / firewall rule ID,
+    "instance_profile":  str  -- IAM / instance profile name,
+    "error":             str  -- (optional) error message, present when success is false
 }
 
 Usage:
@@ -50,7 +50,7 @@ def main() -> int:
     parser.add_argument("--image-id", required=True, help="Imported machine image ID")
     parser.add_argument("--instance-type", required=True, help="Instance type / flavor")
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")
-    args = parser.parse_args()  # noqa: F841 — used in TODO block below
+    args = parser.parse_args()  # noqa: F841 -- used in TODO block below
 
     result: dict[str, Any] = {
         "success": False,
@@ -68,18 +68,18 @@ def main() -> int:
     # ║  TODO: Replace this block with your platform's implementation    ║
     # ║                                                                  ║
     # ║  1. Create an SSH key pair                                       ║
-    # ║     → result["key_name"] = "<key-pair-name>"                     ║
-    # ║     → result["key_path"] = "<path-to-private-key>"               ║
+    # ║     -> result["key_name"] = "<key-pair-name>"                     ║
+    # ║     -> result["key_path"] = "<path-to-private-key>"               ║
     # ║  2. Create a security group / firewall rule (allow SSH)          ║
-    # ║     → result["security_group_id"] = "<sg-id>"                    ║
+    # ║     -> result["security_group_id"] = "<sg-id>"                    ║
     # ║  3. (Optional) Create an instance profile / service account      ║
-    # ║     → result["instance_profile"] = "<profile-name>"              ║
+    # ║     -> result["instance_profile"] = "<profile-name>"              ║
     # ║  4. Launch GPU instance from the imported image                  ║
-    # ║     → result["instance_id"] = "<instance-id>"                    ║
+    # ║     -> result["instance_id"] = "<instance-id>"                    ║
     # ║  5. Wait for the instance to reach "running" state               ║
-    # ║     → result["state"] = "running"                                ║
+    # ║     -> result["state"] = "running"                                ║
     # ║  6. Get the public IP                                            ║
-    # ║     → result["public_ip"] = "<ip-address>"                       ║
+    # ║     -> result["public_ip"] = "<ip-address>"                       ║
     # ║  7. Set result["success"] = True                                 ║
     # ╚══════════════════════════════════════════════════════════════════╝
 

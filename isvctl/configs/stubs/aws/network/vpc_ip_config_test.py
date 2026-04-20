@@ -9,7 +9,7 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-"""VPC IP configuration test — AWS reference implementation.
+"""VPC IP configuration test -- AWS reference implementation.
 
 Inspects VPC DHCP options, subnet CIDRs, and auto-assign IP settings.
 Outputs structured JSON for the VpcIpConfigCheck validation.

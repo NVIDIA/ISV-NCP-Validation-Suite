@@ -11,17 +11,17 @@
 
 """Create a tenant, resource group, or project.
 
-Provider-agnostic template — replace the TODO section with your platform's
+Provider-agnostic template -- replace the TODO section with your platform's
 multi-tenancy API calls (e.g. OpenStack projects, Azure resource groups,
 GCP projects, etc.).
 
 Required JSON output:
 {
-    "success":     bool — true if tenant created,
-    "platform":    str  — "control_plane",
-    "tenant_name": str  — human-readable name of the tenant,
-    "tenant_id":   str  — unique identifier for the tenant,
-    "error":       str  — (optional) error message, present when success is false
+    "success":     bool -- true if tenant created,
+    "platform":    str  -- "control_plane",
+    "tenant_name": str  -- human-readable name of the tenant,
+    "tenant_id":   str  -- unique identifier for the tenant,
+    "error":       str  -- (optional) error message, present when success is false
 }
 
 Usage:
@@ -57,8 +57,8 @@ def main() -> int:
     # ║  TODO: Replace this block with your platform's implementation    ║
     # ║                                                                  ║
     # ║  1. Create a tenant / resource group / project                   ║
-    # ║     → result["tenant_name"] = "<tenant-name>"                    ║
-    # ║     → result["tenant_id"]   = "<tenant-id>"                      ║
+    # ║     -> result["tenant_name"] = "<tenant-name>"                    ║
+    # ║     -> result["tenant_id"]   = "<tenant-id>"                      ║
     # ║  2. Set result["success"] = True                                 ║
     # ╚══════════════════════════════════════════════════════════════════╝
 

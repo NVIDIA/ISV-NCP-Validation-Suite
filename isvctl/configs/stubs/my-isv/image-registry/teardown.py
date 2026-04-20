@@ -11,17 +11,17 @@
 
 """Tear down all resources created during ISO validation.
 
-Provider-agnostic template — replace the TODO section with your platform's
+Provider-agnostic template -- replace the TODO section with your platform's
 resource cleanup calls. Each resource should be deleted independently so
 partial cleanup succeeds even if some deletions fail.
 
 Required JSON output:
 {
-    "success":           bool      — true if all resources deleted,
-    "platform":          str       — "image_registry",
-    "resources_deleted": list[str] — names/IDs of deleted resources,
-    "message":           str       — human-readable summary,
-    "error":             str       — (optional) error message, present when success is false
+    "success":           bool      -- true if all resources deleted,
+    "platform":          str       -- "image_registry",
+    "resources_deleted": list[str] -- names/IDs of deleted resources,
+    "message":           str       -- human-readable summary,
+    "error":             str       -- (optional) error message, present when success is false
 }
 
 Usage:
@@ -79,19 +79,19 @@ def main() -> int:
     # ║  Delete each resource, appending to resources_deleted:           ║
     # ║                                                                  ║
     # ║  1. Terminate the instance (args.instance_id)                    ║
-    # ║     → result["resources_deleted"].append("instance:<id>")        ║
+    # ║     -> result["resources_deleted"].append("instance:<id>")        ║
     # ║  2. Deregister / delete the machine image (args.image_id)        ║
-    # ║     → result["resources_deleted"].append("image:<id>")           ║
+    # ║     -> result["resources_deleted"].append("image:<id>")           ║
     # ║  3. Delete disks (disk_ids)                                      ║
-    # ║     → result["resources_deleted"].append("snapshot:<id>")        ║
+    # ║     -> result["resources_deleted"].append("snapshot:<id>")        ║
     # ║  4. Delete the storage bucket (args.bucket_name)                 ║
-    # ║     → result["resources_deleted"].append("bucket:<name>")        ║
+    # ║     -> result["resources_deleted"].append("bucket:<name>")        ║
     # ║  5. Delete the key pair (args.key_name)                          ║
-    # ║     → result["resources_deleted"].append("keypair:<name>")       ║
+    # ║     -> result["resources_deleted"].append("keypair:<name>")       ║
     # ║  6. Delete the security group (args.security_group_id)           ║
-    # ║     → result["resources_deleted"].append("sg:<id>")              ║
+    # ║     -> result["resources_deleted"].append("sg:<id>")              ║
     # ║  7. Delete the instance profile (args.instance_profile)          ║
-    # ║     → result["resources_deleted"].append("profile:<name>")       ║
+    # ║     -> result["resources_deleted"].append("profile:<name>")       ║
     # ║  8. Set result["message"] and result["success"] = True           ║
     # ╚══════════════════════════════════════════════════════════════════╝
 

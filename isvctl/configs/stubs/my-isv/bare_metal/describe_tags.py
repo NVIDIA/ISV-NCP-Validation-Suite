@@ -16,7 +16,7 @@ platform's API calls to fetch instance tags/labels.
 
 This script must:
   1. Query your platform API for the tags on the given instance
-  2. Return them as a flat key→value dict in the JSON output
+  2. Return them as a flat key->value dict in the JSON output
 
 Required JSON output fields:
   success     (bool)  - whether the operation succeeded

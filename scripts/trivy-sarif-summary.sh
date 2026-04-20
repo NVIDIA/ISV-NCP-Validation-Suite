@@ -48,7 +48,7 @@ trap 'rm -f "$OUT"' EXIT
 	    else ($t | split("\n")[0])
 	    end
 	  ) as $msg |
-	  "- **\(.ruleId // "?")** [\(.level)] — \($msg | if length > 200 then .[0:197] + "..." else . end) — `\(.locations[0].physicalLocation.artifactLocation.uri // "?"):\(.locations[0].physicalLocation.region.startLine // "")`"
+	  "- **\(.ruleId // "?")** [\(.level)] -- \($msg | if length > 200 then .[0:197] + "..." else . end) -- `\(.locations[0].physicalLocation.artifactLocation.uri // "?"):\(.locations[0].physicalLocation.region.startLine // "")`"
 	' "$SARIF"
 } >"$OUT"
 

@@ -12,7 +12,7 @@
 """DHCP/IP management test - TEMPLATE (replace with your platform implementation).
 
 This script is called during the "test" phase. It must:
-  1. Create an SSH key pair dynamically (idempotent — reuse if exists)
+  1. Create an SSH key pair dynamically (idempotent -- reuse if exists)
   2. Launch an instance in the specified subnet
   3. Wait for SSH to become reachable
   4. Print a JSON object to stdout with SSH connection details

@@ -11,18 +11,18 @@
 
 """Download a VM image, upload to cloud storage, and import as a machine image.
 
-Provider-agnostic template — replace the TODO section with your platform's
+Provider-agnostic template -- replace the TODO section with your platform's
 image import pipeline (e.g. Glance for OpenStack, Compute Images for GCP,
 Managed Images for Azure, etc.).
 
 Required JSON output:
 {
-    "success":        bool      — true if image imported successfully,
-    "platform":       str       — "image_registry",
-    "image_id":       str       — ID of the imported machine image,
-    "storage_bucket": str       — name of the storage bucket / container,
-    "disk_ids":       list[str] — snapshot or disk IDs created during import,
-    "error":          str       — (optional) error message, present when success is false
+    "success":        bool      -- true if image imported successfully,
+    "platform":       str       -- "image_registry",
+    "image_id":       str       -- ID of the imported machine image,
+    "storage_bucket": str       -- name of the storage bucket / container,
+    "disk_ids":       list[str] -- snapshot or disk IDs created during import,
+    "error":          str       -- (optional) error message, present when success is false
 }
 
 Usage:
@@ -51,7 +51,7 @@ def main() -> int:
         help="Image format (vmdk, vhd, ova, raw, qcow2)",
     )
     parser.add_argument("--region", required=True, help="Cloud region / availability zone")
-    args = parser.parse_args()  # noqa: F841 — used in TODO block below
+    args = parser.parse_args()  # noqa: F841 -- used in TODO block below
 
     result: dict[str, Any] = {
         "success": False,
@@ -66,12 +66,12 @@ def main() -> int:
     # ║                                                                  ║
     # ║  1. Download the image from args.image_url                       ║
     # ║  2. Upload to cloud storage (object store, bucket, container)    ║
-    # ║     → result["storage_bucket"] = "<bucket-name>"                 ║
+    # ║     -> result["storage_bucket"] = "<bucket-name>"                 ║
     # ║  3. Import as a machine image (AMI, Glance image, etc.)          ║
-    # ║     → result["image_id"] = "<imported-image-id>"                 ║
+    # ║     -> result["image_id"] = "<imported-image-id>"                 ║
     # ║  4. Wait for import to complete                                  ║
     # ║  5. Record any snapshots or disks created                        ║
-    # ║     → result["disk_ids"] = ["<snapshot-or-disk-id>", ...]        ║
+    # ║     -> result["disk_ids"] = ["<snapshot-or-disk-id>", ...]        ║
     # ║  6. Set result["success"] = True                                 ║
     # ╚══════════════════════════════════════════════════════════════════╝
 

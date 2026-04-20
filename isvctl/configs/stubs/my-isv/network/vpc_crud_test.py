@@ -18,7 +18,7 @@ This script is called during the "test" phase. It is SELF-CONTAINED:
   4. Delete the VPC
   5. Print a JSON object to stdout
 
-Required JSON output fields (read by VpcCrudCheck — must use these exact keys):
+Required JSON output fields (read by VpcCrudCheck -- must use these exact keys):
   {
     "success": true,                       # boolean - did all CRUD steps pass?
     "platform": "network",                 # string  - always "network"

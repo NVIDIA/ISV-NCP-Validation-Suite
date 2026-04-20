@@ -50,7 +50,7 @@ Pre-built configs are provided in `isvctl/configs/`:
 
 | Config | Description |
 | ------ | ----------- |
-| `providers/my-isv/*.yaml` | [my-isv scaffold](../../isvctl/configs/stubs/my-isv/README.md) — copy-and-fill-in for your own platform (runs end-to-end under `ISVCTL_DEMO_MODE=1`) |
+| `providers/my-isv/*.yaml` | [my-isv scaffold](../../isvctl/configs/stubs/my-isv/README.md) -- copy-and-fill-in for your own platform (runs end-to-end under `ISVCTL_DEMO_MODE=1`) |
 | `providers/aws/control-plane.yaml` | AWS API health, access key lifecycle, tenant management |
 | `providers/aws/network.yaml` | AWS VPC network validation (6 test suites) |
 | `providers/aws/vm.yaml` | AWS EC2 GPU instance tests |
@@ -287,7 +287,7 @@ tests:
     instance_type: "gpu.large"
 ```
 
-The import path is relative to the importing file. The imported config provides the base step list, phases, and validations. Nested dictionaries (like `tests.settings`) are deep-merged, but list fields (like `commands.<platform>.steps`) are **replaced as a whole** — if you set `steps:` in the provider config, include the full desired list. See the [AWS reference implementation](../references/aws.md) for working examples.
+The import path is relative to the importing file. The imported config provides the base step list, phases, and validations. Nested dictionaries (like `tests.settings`) are deep-merged, but list fields (like `commands.<platform>.steps`) are **replaced as a whole** -- if you set `steps:` in the provider config, include the full desired list. See the [AWS reference implementation](../references/aws.md) for working examples.
 
 ## Template Variables
 

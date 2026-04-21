@@ -398,6 +398,12 @@
           "title": "Gpu Operator Namespace",
           "type": "string"
         },
+        "control_plane_namespace": {
+          "default": "kube-system",
+          "description": "Namespace where control-plane components run",
+          "title": "Control Plane Namespace",
+          "type": "string"
+        },
         "runtime_class": {
           "default": "nvidia",
           "description": "Kubernetes RuntimeClass for GPU pods",

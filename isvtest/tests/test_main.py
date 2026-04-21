@@ -196,3 +196,22 @@ class TestTransformValidationsForPytest:
         keys = self._keys(result)
         assert "StepSuccessCheck-cat_a" in keys
         assert "StepSuccessCheck-cat_b" in keys
+
+    def test_same_class_same_category_gets_counter(self) -> None:
+        """Same class repeated in one category gets a numeric disambiguator."""
+        step_outputs = {
+            "step_a": {"ok": True},
+            "step_b": {"ok": True},
+        }
+        step_phases = {"step_a": "test", "step_b": "test"}
+        validations: dict[str, Any] = {
+            "checks": [
+                {"StepSuccessCheck": {"step": "step_a"}},
+                {"StepSuccessCheck": {"step": "step_b"}},
+            ],
+        }
+        result = _transform_validations_for_pytest(validations, step_outputs, step_phases, "test")
+        keys = self._keys(result)
+        assert "StepSuccessCheck-checks" in keys
+        assert "StepSuccessCheck-checks-2" in keys
+        assert len(keys) == 2

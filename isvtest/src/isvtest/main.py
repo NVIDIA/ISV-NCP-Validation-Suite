@@ -300,13 +300,22 @@ def _transform_validations_for_pytest(
     # "-category" so downstream dict-keyed storage keeps every instance.
     # Uses the existing ClassName-variant convention that pytest_generate_tests
     # already supports via suffix matching.
+    # When the same class appears twice in the same category (e.g. legacy list
+    # format), append a counter: ClassName-category-2, ClassName-category-3, etc.
     name_counts: dict[str, int] = {}
     for class_name, _, _ in entries:
         name_counts[class_name] = name_counts.get(class_name, 0) + 1
 
+    pair_counts: dict[tuple[str, str], int] = {}
     result: list[dict[str, Any]] = []
     for class_name, category, resolved_params in entries:
-        key = f"{class_name}-{category}" if name_counts[class_name] > 1 else class_name
+        if name_counts[class_name] == 1:
+            key = class_name
+        else:
+            pair = (class_name, category)
+            pair_counts[pair] = pair_counts.get(pair, 0) + 1
+            suffix = category if pair_counts[pair] == 1 else f"{category}-{pair_counts[pair]}"
+            key = f"{class_name}-{suffix}"
         result.append({key: resolved_params})
 
     return result

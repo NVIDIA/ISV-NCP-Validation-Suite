@@ -164,6 +164,9 @@ class KubernetesOutput(BaseModel):
     control_plane_address: str | None = Field(default=None, description="Control plane IP/hostname")
     kubeconfig_path: str | None = Field(default=None, description="Path to kubeconfig file")
     gpu_operator_namespace: str = Field(default="nvidia-gpu-operator", description="GPU operator namespace")
+    control_plane_namespace: str = Field(
+        default="kube-system", description="Namespace where control-plane components run"
+    )
     runtime_class: str = Field(default="nvidia", description="Kubernetes RuntimeClass for GPU pods")
     gpu_resource_name: str = Field(default="nvidia.com/gpu", description="GPU resource name")
 

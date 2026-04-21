@@ -260,10 +260,12 @@ class K8sControlPlaneLogsCheck(BaseValidation):
             )
             return
         if not pods_by_component:
+            missing = sorted(unresolved)
             self.set_failed(
                 f"No control-plane pods found in namespace {namespace!r} and no "
-                f"`commands` mapping configured. Supply `commands` for managed "
-                f"clusters (one shell command per component that prints log lines)."
+                f"`commands` entries configured for component(s): {missing}. "
+                f"Supply `commands` for managed clusters (one shell command per "
+                f"component that prints log lines)."
             )
             return
         self.set_failed(

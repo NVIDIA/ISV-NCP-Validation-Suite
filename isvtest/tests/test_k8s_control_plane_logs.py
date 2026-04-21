@@ -144,7 +144,8 @@ class TestAutoDispatch:
         check.run_command = fake  # type: ignore[assignment]
         check.run()
         assert not check.passed
-        assert "no `commands` mapping configured" in check.message
+        assert "no `commands` entries configured for component(s)" in check.message
+        assert "kube-apiserver" in check.message
 
     def test_auto_surfaces_kubectl_error_when_probe_fails(self) -> None:
         """When ``kubectl get pods`` itself errors, the failure must blame
@@ -161,7 +162,7 @@ class TestAutoDispatch:
         assert not check.passed
         assert "Unable to list pods" in check.message
         assert "i/o timeout" in check.message
-        assert "no `commands` mapping configured" not in check.message
+        assert "no `commands` entries configured" not in check.message
 
     def test_auto_surfaces_kubectl_error_even_when_commands_cover_all_components(self) -> None:
         """A probe failure (kubeconfig/RBAC/context broken) must not be

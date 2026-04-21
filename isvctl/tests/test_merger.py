@@ -384,8 +384,8 @@ class TestImportEndToEnd:
     CONFIGS_DIR = Path(__file__).parent.parent / "configs"
 
     def test_aws_iam_inherits_test_validations(self) -> None:
-        """providers/aws/iam.yaml imports tests/iam.yaml and gets its validations."""
-        result = merge_yaml_files([self.CONFIGS_DIR / "providers" / "aws" / "iam.yaml"])
+        """providers/aws/config/iam.yaml imports suites/iam.yaml and gets its validations."""
+        result = merge_yaml_files([self.CONFIGS_DIR / "providers" / "aws" / "config" / "iam.yaml"])
 
         assert "commands" in result, "AWS provider must supply commands"
         assert "tests" in result, "Merged config must have tests"
@@ -398,13 +398,13 @@ class TestImportEndToEnd:
 
     def test_aws_iam_commands_override_test_stubs(self) -> None:
         """AWS commands replace the test definition's placeholder stubs."""
-        result = merge_yaml_files([self.CONFIGS_DIR / "providers" / "aws" / "iam.yaml"])
+        result = merge_yaml_files([self.CONFIGS_DIR / "providers" / "aws" / "config" / "iam.yaml"])
         steps = result["commands"]["iam"]["steps"]
-        assert any("aws/iam" in s["command"] for s in steps)
+        assert any("scripts/iam" in s["command"] for s in steps)
 
     def test_aws_eks_inherits_k8s_validations(self) -> None:
-        """providers/aws/eks.yaml imports tests/k8s.yaml and gets K8s checks."""
-        result = merge_yaml_files([self.CONFIGS_DIR / "providers" / "aws" / "eks.yaml"])
+        """providers/aws/config/eks.yaml imports suites/k8s.yaml and gets K8s checks."""
+        result = merge_yaml_files([self.CONFIGS_DIR / "providers" / "aws" / "config" / "eks.yaml"])
 
         assert "commands" in result
         assert "tests" in result
@@ -414,7 +414,7 @@ class TestImportEndToEnd:
         assert result["tests"]["platform"] == "kubernetes"
 
     def test_microk8s_inherits_k8s_validations(self) -> None:
-        """providers/microk8s.yaml imports tests/k8s.yaml and adds overrides."""
+        """providers/microk8s.yaml imports suites/k8s.yaml and adds overrides."""
         result = merge_yaml_files([self.CONFIGS_DIR / "providers" / "microk8s.yaml"])
 
         assert "tests" in result
@@ -424,7 +424,7 @@ class TestImportEndToEnd:
         assert "reframe" in validations  # microk8s adds reframe checks
 
     def test_minikube_inherits_k8s_validations(self) -> None:
-        """providers/minikube.yaml imports tests/k8s.yaml and adds overrides."""
+        """providers/minikube.yaml imports suites/k8s.yaml and adds overrides."""
         result = merge_yaml_files([self.CONFIGS_DIR / "providers" / "minikube.yaml"])
 
         assert "tests" in result
@@ -434,7 +434,7 @@ class TestImportEndToEnd:
         assert "reframe" in validations  # minikube adds reframe checks
 
     def test_k3s_inherits_k8s_validations(self) -> None:
-        """providers/k3s.yaml imports tests/k8s.yaml and adds overrides."""
+        """providers/k3s.yaml imports suites/k8s.yaml and adds overrides."""
         result = merge_yaml_files([self.CONFIGS_DIR / "providers" / "k3s.yaml"])
 
         assert "tests" in result

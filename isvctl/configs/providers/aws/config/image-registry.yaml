@@ -1,0 +1,132 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# AWS ISO/VMDK Import Validation Configuration
+#
+# Imports validations from the provider-agnostic image registry canonical config.
+# This file only provides AWS-specific commands (boto3 stubs) and settings.
+#
+# Note: The canonical config includes BM install steps (install_image_bm,
+# install_config_bm) that AWS doesn't implement here. Their validation groups
+# are auto-skipped since the steps don't exist in this config.
+#
+# Steps:
+#   1. upload_image - boto3: Downloads VMDK, uploads to S3, imports as AMI (setup)
+#   2. crud_image - boto3: Get, list, copy, delete AMI lifecycle (test)
+#   3. launch_instance - boto3: Creates GPU instance from imported image (test)
+#   4. crud_install_config - boto3: EC2 Launch Template lifecycle (test)
+#   5. teardown - boto3: Cleans up all resources (teardown)
+#
+# Usage:
+#   uv run isvctl test run -f isvctl/configs/providers/aws/config/image-registry.yaml
+#
+# Environment Variables:
+#   - AWS_REGION: AWS region (default: us-west-2)
+#   - AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN: AWS credentials
+#   - AWS_ISO_SKIP_TEARDOWN: Set to "true" to skip teardown (for debugging)
+#
+# Required IAM Permissions:
+#   ec2:ImportImage, ec2:DescribeImportImageTasks, ec2:CancelImportTask,
+#   ec2:RunInstances, ec2:TerminateInstances, ec2:DescribeImages,
+#   ec2:DeregisterImage, ec2:DeleteSnapshot, ec2:DescribeInstances,
+#   s3:CreateBucket, s3:DeleteBucket, s3:PutObject, s3:DeleteObject, s3:ListBucket,
+#   iam:CreateRole, iam:DeleteRole, iam:PutRolePolicy, iam:DeleteRolePolicy,
+#   iam:GetRole, iam:CreateInstanceProfile, iam:DeleteInstanceProfile,
+#   iam:AddRoleToInstanceProfile, iam:RemoveRoleFromInstanceProfile
+
+import:
+  - ../../../suites/image-registry.yaml
+
+version: "1.0"
+
+commands:
+  image_registry:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      # Step 1: Upload VMDK and import as AMI (long-running: 15-60 min)
+      - name: upload_image
+        phase: setup
+        command: "python3 ../scripts/image-registry/upload_image.py"
+        args:
+          - "--image-url"
+          - "{{image_url}}"
+          - "--image-format"
+          - "{{image_format}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 3600
+
+      # Step 2: CRUD image operations (get, list, copy, delete)
+      - name: crud_image
+        phase: test
+        command: "python3 ../scripts/image-registry/crud_image.py"
+        args:
+          - "--image-id"
+          - "{{steps.upload_image.image_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 600
+
+      # Step 3: Launch GPU instance from imported image
+      - name: launch_instance
+        phase: test
+        command: "python3 ../scripts/image-registry/launch_instance.py"
+        args:
+          - "--ami-id"
+          - "{{steps.upload_image.image_id}}"
+          - "--instance-type"
+          - "{{instance_type}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 600
+
+      # Step 4: CRUD OS install config (EC2 Launch Template lifecycle)
+      - name: crud_install_config
+        phase: test
+        command: "python3 ../scripts/image-registry/crud_install_config.py"
+        args:
+          - "--region"
+          - "{{region}}"
+        timeout: 120
+
+      # Step 5: Cleanup all resources
+      - name: teardown
+        phase: teardown
+        command: "python3 ../scripts/image-registry/teardown.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--ami-id"
+          - "{{steps.upload_image.image_id}}"
+          - "--snapshot-ids"
+          - "{{steps.upload_image.disk_ids | join(',')}}"
+          - "--bucket-name"
+          - "{{steps.upload_image.storage_bucket}}"
+          - "--key-name"
+          - "{{steps.launch_instance.key_name}}"
+          - "--security-group-id"
+          - "{{steps.launch_instance.security_group_id}}"
+          - "--instance-profile"
+          - "{{steps.launch_instance.instance_profile}}"
+          - "--region"
+          - "{{region}}"
+          - "{{teardown_flag}}"
+        timeout: 1800
+
+tests:
+  cluster_name: "aws-image-registry-validation"
+  description: "AWS VM Import ISO/VMDK validation tests"
+
+  settings:
+    region: "us-west-2"
+    image_url: "https://cloud-images.ubuntu.com/releases/noble/release/ubuntu-24.04-server-cloudimg-amd64.vmdk"
+    image_format: "vmdk"
+    instance_type: "g4dn.xlarge"
+    teardown_flag: "{{(env.AWS_ISO_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"

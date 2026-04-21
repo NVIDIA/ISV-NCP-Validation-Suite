@@ -16,7 +16,7 @@
 #   isvctl test run -f isvctl/configs/providers/microk8s.yaml
 #   isvctl test run -f isvctl/configs/providers/microk8s.yaml -- -v -s
 
-import: ../tests/k8s.yaml
+import: ../suites/k8s.yaml
 
 version: "1.0"
 
@@ -26,11 +26,11 @@ commands:
     steps:
       - name: setup
         phase: setup
-        command: "../stubs/my-isv/k8s/setup_microk8s.sh"
+        command: "my-isv/scripts/k8s/setup_microk8s.sh"
         timeout: 60
       - name: teardown
         phase: teardown
-        command: "../stubs/my-isv/k8s/teardown_microk8s.sh"
+        command: "my-isv/scripts/k8s/teardown_microk8s.sh"
         timeout: 30
 
 tests:

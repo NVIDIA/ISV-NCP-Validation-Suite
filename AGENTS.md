@@ -59,13 +59,13 @@ make clean          # Clean build artifacts and test outputs
 
 ```bash
 # isvctl - Main entry point for cluster validation
-uv run isvctl test run -f isvctl/configs/tests/k8s.yaml
-uv run isvctl test run -f isvctl/configs/tests/slurm.yaml -- -v -s -k "test_name"
-uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml      # AWS EKS validation
-uv run isvctl test run -f isvctl/configs/providers/aws/network.yaml  # AWS Network validation
+uv run isvctl test run -f isvctl/configs/suites/k8s.yaml
+uv run isvctl test run -f isvctl/configs/suites/slurm.yaml -- -v -s -k "test_name"
+uv run isvctl test run -f isvctl/configs/providers/aws/config/eks.yaml      # AWS EKS validation
+uv run isvctl test run -f isvctl/configs/providers/aws/config/network.yaml  # AWS Network validation
 
 # Remote deployment
-uv run isvctl deploy run <target-ip> -f isvctl/configs/tests/k8s.yaml
+uv run isvctl deploy run <target-ip> -f isvctl/configs/suites/k8s.yaml
 uv run isvctl deploy run <target-ip> -j <jumphost> -u ubuntu -f config.yaml
 
 # isvreporter - Upload test results to ISV Lab Service
@@ -121,26 +121,26 @@ Config (YAML) -> Script (any language) -> JSON output -> Validations (assertions
   - `transfer.py` - SCP file transfer with jumphost proxy
 - `cleaner/` - Resource cleanup operations
 
-**Configuration Files**: Located in `isvctl/configs/tests/` (test definitions) and `isvctl/configs/providers/` (provider implementations)
+**Configuration Files**: Located in `isvctl/configs/suites/` (test definitions) and `isvctl/configs/providers/` (provider implementations)
 
 - Configs define step-based commands with phases and validations
 - Support Jinja2 templating: `"{{steps.create_network.vpc_id}}"`, `"{{region}}"` - the orchestrator warns when templates reference steps that haven't run or fields that don't exist, helping catch typos and rename mismatches
 - Multiple configs can be merged with later files overriding earlier ones
 
-**Stubs (ISV Scripts)**: Located in `isvctl/configs/stubs/`. Three trees:
+**Provider Scripts**: Located in `isvctl/configs/providers/`. Each provider has a `scripts/` subdirectory:
 
-- `stubs/my-isv/` - the **scaffold**: copy-and-fill-in Python/Bash stubs for
+- `providers/my-isv/scripts/` - the **scaffold**: copy-and-fill-in Python/Bash scripts for
   every domain (iam, control-plane, vm, bare_metal, network, image-registry,
-  k8s, slurm). Each Python stub has a TODO block and a
+  k8s, slurm). Each Python script has a TODO block and a
   `DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"` gate:
   default run returns `"Not implemented - ..."` errors;
   `ISVCTL_DEMO_MODE=1` (what `make demo-test` sets) returns dummy-success
-  output. See `stubs/my-isv/README.md` for the full explainer. ISVs copy
+  output. See `providers/my-isv/scripts/README.md` for the full explainer. ISVs copy
   this tree as their starting point.
-- `stubs/aws/` - fully implemented AWS reference using boto3/Terraform,
-  organized by domain (`aws/network/`, `aws/vm/`, `aws/iam/`, ...).
-- `stubs/common/` - shared utilities used across providers (SSH helpers,
-  NIM deploy/teardown). `stubs/aws/common/` holds AWS-only helpers
+- `providers/aws/scripts/` - fully implemented AWS reference using boto3/Terraform,
+  organized by domain (`aws/scripts/network/`, `aws/scripts/vm/`, `aws/scripts/iam/`, ...).
+- `providers/common/` - shared utilities used across providers (SSH helpers,
+  NIM deploy/teardown). `providers/aws/scripts/common/` holds AWS-only helpers
   (error handling, EC2/VPC).
 - Each script is self-contained and can be run manually for debugging.
 
@@ -314,13 +314,13 @@ commands:
     steps:
       - name: create_network
         phase: setup
-        command: "python ./stubs/aws/network/create_vpc.py"
+        command: "python ./providers/aws/scripts/network/create_vpc.py"
         args: ["--name", "test-vpc", "--region", "{{region}}"]
         timeout: 300
 
       - name: teardown
         phase: teardown
-        command: "python ./stubs/aws/network/teardown.py"
+        command: "python ./providers/aws/scripts/network/teardown.py"
         args: ["--vpc-id", "{{steps.create_network.network_id}}"]
 
 tests:
@@ -357,14 +357,17 @@ tests:
 | `AWS_ACCESS_KEY_ID` | AWS access key | AWS scripts |
 | `AWS_SECRET_ACCESS_KEY` | AWS secret key | AWS scripts |
 | `AWS_REGION` | AWS region | AWS scripts |
-| `KUBECTL` | Optional kubectl-compatible CLI prefix (parsed with POSIX shlex in Python, word-split in shell stubs; overrides `K8S_PROVIDER` detection) | isvtest (`get_kubectl_command`), isvctl k8s stubs |
+| `KUBECTL` | Optional kubectl-compatible CLI prefix (parsed with POSIX shlex in Python, word-split in shell scripts; overrides `K8S_PROVIDER` detection) | isvtest (`get_kubectl_command`), isvctl k8s scripts |
 
 ## Directory Structure Notes
 
 - Workspace root `pyproject.toml` defines workspace members
 - Each package has its own `pyproject.toml` with dependencies
 - All source code in `src/` subdirectory per package
-- Config files in `isvctl/configs/tests/` (test definitions) and `isvctl/configs/providers/` (provider implementations)
-- ISV stubs (scripts) in `isvctl/configs/stubs/`
-- Shared AWS utilities in `isvctl/configs/stubs/aws/common/`
+- Validation suites in `isvctl/configs/suites/` (provider-agnostic contracts)
+- Provider configs and scripts in `isvctl/configs/providers/` (one folder per provider: `aws/`, `my-isv/`, etc.)
+  - `providers/<name>/config/` - YAML wiring that imports a suite and supplies commands
+  - `providers/<name>/scripts/` - executable scripts (Python/Bash) that perform the actual work
+- Shared cross-provider utilities in `isvctl/configs/providers/common/`
+- Shared AWS utilities in `isvctl/configs/providers/aws/scripts/common/`
 - Schemas in `isvctl/schemas/` (JSON Schema files)

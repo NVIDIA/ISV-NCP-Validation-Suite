@@ -1,31 +1,31 @@
 # AWS Provider Configs
 
-Provider configs that wire the [provider-agnostic test suites](../../tests/README.md) to AWS-specific [stub scripts](../../stubs/aws/). Each YAML imports a test suite and overrides commands with `boto3`/Terraform implementations.
+Provider configs that wire the [provider-agnostic test suites](../../suites/README.md) to AWS-specific [scripts](scripts/). Each YAML imports a suite and overrides commands with `boto3`/Terraform implementations.
 
 ## Configs
 
 | Config | Domain | Guide |
 |--------|--------|-------|
-| [`iam.yaml`](iam.yaml) | User lifecycle (create -> verify -> delete) | [AWS IAM Guide](../../stubs/aws/iam/docs/aws-iam.md) |
-| [`network.yaml`](network.yaml) | VPC CRUD, subnets, isolation, SG CRUD, security, connectivity | [AWS Network Guide](../../stubs/aws/network/docs/aws-network.md) |
-| [`vm.yaml`](vm.yaml) | GPU VM lifecycle (launch -> stop/start -> reboot -> NIM) | [AWS VM Guide](../../stubs/aws/vm/docs/aws-vm.md) |
-| [`bare_metal.yaml`](bare_metal.yaml) | BMaaS lifecycle (launch -> topology -> serial -> NIM) | [AWS Bare Metal Guide](../../stubs/aws/bare_metal/docs/aws-bm.md) |
-| [`eks.yaml`](eks.yaml) | Kubernetes GPU cluster (nodes, GPU operator, workloads) | [AWS EKS Guide](../../stubs/aws/eks/docs/aws-eks.md) |
-| [`control-plane.yaml`](control-plane.yaml) | API health, access keys, tenant lifecycle | [AWS Control Plane Guide](../../stubs/aws/control-plane/docs/aws-control-plane.md) |
-| [`image-registry.yaml`](image-registry.yaml) | Image upload, CRUD, VM launch, install config | [AWS Image Registry Guide](../../stubs/aws/image-registry/docs/aws-image-registry.md) |
+| [`config/iam.yaml`](config/iam.yaml) | User lifecycle (create -> verify -> delete) | [AWS IAM Guide](scripts/iam/docs/aws-iam.md) |
+| [`config/network.yaml`](config/network.yaml) | VPC CRUD, subnets, isolation, SG CRUD, security, connectivity | [AWS Network Guide](scripts/network/docs/aws-network.md) |
+| [`config/vm.yaml`](config/vm.yaml) | GPU VM lifecycle (launch -> stop/start -> reboot -> NIM) | [AWS VM Guide](scripts/vm/docs/aws-vm.md) |
+| [`config/bare_metal.yaml`](config/bare_metal.yaml) | BMaaS lifecycle (launch -> topology -> serial -> NIM) | [AWS Bare Metal Guide](scripts/bare_metal/docs/aws-bm.md) |
+| [`config/eks.yaml`](config/eks.yaml) | Kubernetes GPU cluster (nodes, GPU operator, workloads) | [AWS EKS Guide](scripts/eks/docs/aws-eks.md) |
+| [`config/control-plane.yaml`](config/control-plane.yaml) | API health, access keys, tenant lifecycle | [AWS Control Plane Guide](scripts/control-plane/docs/aws-control-plane.md) |
+| [`config/image-registry.yaml`](config/image-registry.yaml) | Image upload, CRUD, VM launch, install config | [AWS Image Registry Guide](scripts/image-registry/docs/aws-image-registry.md) |
 
 ## Quick Start
 
 ```bash
 # Prerequisites: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION set
 
-uv run isvctl test run -f isvctl/configs/providers/aws/iam.yaml
-uv run isvctl test run -f isvctl/configs/providers/aws/network.yaml
-uv run isvctl test run -f isvctl/configs/providers/aws/vm.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/config/iam.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/config/network.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/config/vm.yaml
 ```
 
 ## See Also
 
-- [AWS Reference Implementation](../../../../docs/references/aws.md) - Full overview of templates vs AWS, usage patterns
-- [Test Suites](../../tests/README.md) - Provider-agnostic test definitions
-- [AWS Stub Scripts](../../stubs/aws/) - The scripts these configs invoke
+- [AWS Reference Implementation](../../../../docs/references/aws.md) - Full overview of suites vs AWS, usage patterns
+- [Validation Suites](../../suites/README.md) - Provider-agnostic test definitions
+- [AWS Scripts](scripts/) - The scripts these configs invoke

@@ -37,16 +37,16 @@ Run AWS validation tests:
 
 ```bash
 # Control plane validation (API health, IAM, tenants)
-uv run isvctl test run -f isvctl/configs/providers/aws/control-plane.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/config/control-plane.yaml
 
 # Network validation (VPC, subnets, security groups)
-uv run isvctl test run -f isvctl/configs/providers/aws/network.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/config/network.yaml
 
 # VM validation (EC2 instances)
-uv run isvctl test run -f isvctl/configs/providers/aws/vm.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/config/vm.yaml
 
 # IAM user lifecycle
-uv run isvctl test run -f isvctl/configs/providers/aws/iam.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/config/iam.yaml
 ```
 
 ### Kubernetes Tests
@@ -166,7 +166,7 @@ Run scripts directly to debug:
 
 ```bash
 # Run a script directly
-python isvctl/configs/stubs/aws/control-plane/check_api.py \
+python isvctl/configs/providers/aws/scripts/control-plane/check_api.py \
   --region us-west-2 \
   --services ec2,s3,iam,sts
 

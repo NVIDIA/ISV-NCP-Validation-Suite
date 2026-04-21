@@ -11,7 +11,7 @@
 """Contract test that detects stub / config drift.
 
 **Canonical-YAML <-> stub CLI** - every ``--flag`` passed via ``args:`` in any
-``tests/*.yaml`` or ``providers/**/*.yaml`` step must be accepted by the
+``suites/*.yaml`` or ``providers/**/*.yaml`` step must be accepted by the
 argparse declaration of the stub it invokes. Catches the original
 ``create_user.py --create-access-key`` bug that kicked this work off.
 
@@ -39,7 +39,6 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIGS_DIR = REPO_ROOT / "isvctl" / "configs"
-STUBS_DIR = CONFIGS_DIR / "stubs"
 
 
 # --------------------------------------------------------------------------
@@ -95,8 +94,8 @@ class StepArgCheck:
 def _resolve_stub_path(yaml_path: Path, command: str) -> Path | None:
     """Extract the stub script path from a ``command:`` string and resolve it.
 
-    ``command`` looks like ``"python3 ../stubs/my-isv/iam/create_user.py"`` or
-    ``"../stubs/my-isv/k8s/setup.sh"``. Returns ``None`` when the command
+    ``command`` looks like ``"python3 ../scripts/iam/create_user.py"`` or
+    ``"my-isv/scripts/k8s/setup.sh"``. Returns ``None`` when the command
     doesn't reference a Python stub we can statically analyse.
     """
     tokens = shlex.split(command)
@@ -141,7 +140,13 @@ def _yaml_flag_tokens(args: list[str]) -> list[str]:
 def _collect_yaml_checks() -> list[StepArgCheck]:
     """Walk every tests/ and providers/ YAML and collect one check per step."""
     checks: list[StepArgCheck] = []
-    yaml_paths = sorted([*CONFIGS_DIR.glob("tests/*.yaml"), *CONFIGS_DIR.glob("providers/**/*.yaml")])
+    yaml_paths = sorted(
+        [
+            *CONFIGS_DIR.glob("suites/*.yaml"),
+            *CONFIGS_DIR.glob("providers/*.yaml"),  # k3s.yaml, microk8s.yaml, minikube.yaml
+            *CONFIGS_DIR.glob("providers/*/config/*.yaml"),  # aws/config/*.yaml, my-isv/config/*.yaml
+        ]
+    )
     for yaml_path in yaml_paths:
         try:
             doc = yaml.safe_load(yaml_path.read_text())

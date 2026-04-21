@@ -45,7 +45,7 @@ misconfigurations:
   # AWS-0104 - Security group rule allows unrestricted egress
   #
   # Affected files:
-  #   isvctl/configs/stubs/aws/eks/terraform/main.tf   (EFS security group)
+  #   isvctl/configs/providers/aws/scripts/eks/terraform/main.tf   (EFS security group)
   #   terraform-aws-modules/eks/aws/main.tf            (resolved module source)
   #   terraform-aws-modules/eks/aws/node_groups.tf     (resolved module source)
   #

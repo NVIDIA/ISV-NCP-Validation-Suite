@@ -1,0 +1,70 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# AWS IAM Validation Configuration
+#
+# Imports validations from the provider-agnostic IAM template.
+# This file only provides AWS-specific commands (boto3 stubs) and settings.
+#
+# Steps:
+#   1. create_user - boto3: Creates IAM user with access keys (setup)
+#   2. test_credentials - boto3: Verifies credentials work (test)
+#   3. teardown - boto3: Deletes user (teardown)
+#
+# Usage:
+#   uv run isvctl test run -f isvctl/configs/providers/aws/config/iam.yaml
+
+import:
+  - ../../../suites/iam.yaml
+
+version: "1.0"
+
+commands:
+  iam:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: create_user
+        phase: setup
+        command: "python ../scripts/iam/create_user.py"
+        args:
+          - "--username"
+          - "isv-test-user"
+          - "--create-access-key"
+        timeout: 60
+
+      - name: test_credentials
+        phase: test
+        command: "python ../scripts/iam/test_credentials.py"
+        args:
+          - "--access-key-id"
+          - "{{steps.create_user.access_key_id}}"
+          - "--secret-access-key"
+          - "{{steps.create_user.secret_access_key}}"
+          - "--region"
+          - "{{region}}"
+        sensitive_args: ["--secret-access-key"]
+        timeout: 60
+
+      - name: teardown
+        phase: teardown
+        command: "python ../scripts/iam/delete_user.py"
+        args:
+          - "--username"
+          - "{{steps.create_user.username}}"
+          - "{{teardown_flag}}"
+        timeout: 120
+
+tests:
+  cluster_name: "aws-iam-validation"
+  description: "AWS IAM user lifecycle validation"
+
+  settings:
+    region: "us-west-2"
+    teardown_flag: "{{(env.AWS_IAM_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"

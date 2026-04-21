@@ -146,7 +146,7 @@ uv --directory=isvreporter run pytest -v
 Integration tests require access to a real cluster:
 
 ```bash
-uv run isvctl test run -f isvctl/configs/tests/k8s.yaml
+uv run isvctl test run -f isvctl/configs/suites/k8s.yaml
 uv run isvctl test run -f isvctl/configs/providers/microk8s.yaml
 uv run isvctl test run -f isvctl/configs/providers/minikube.yaml
 uv run isvctl test run -f isvctl/configs/providers/k3s.yaml

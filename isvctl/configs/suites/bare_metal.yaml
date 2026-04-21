@@ -1,0 +1,290 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# Bare Metal (BMaaS) Validation - Canonical Contract
+#
+# Validations-only contract for bare metal. Provider configs import this
+# file and supply their own commands (steps + scripts).
+#
+# This file defines WHAT to validate, not HOW to run it. Each validation
+# only inspects JSON output fields. As long as your scripts output the
+# right fields, the validations pass regardless of which cloud you use.
+#
+# Quick start:
+#   1. Copy providers/my-isv/bare_metal.yaml to providers/<your-platform>/bare_metal.yaml
+#   2. Replace stub paths with your platform scripts
+#   3. Run: uv run isvctl test run -f isvctl/configs/providers/<your-platform>/bare_metal.yaml
+#
+# See also:
+#   - my-isv living example: providers/my-isv/bare_metal.yaml
+#   - AWS reference: providers/aws/config/bare_metal.yaml + providers/aws/scripts/bare_metal/
+#   - Per-step field breakdown: tests/README.md
+
+version: "1.0"
+
+tests:
+  platform: bare_metal
+  cluster_name: "bm-validation"
+  description: "Bare metal (BMaaS) GPU validation tests"
+
+  settings:
+    # Provider-specific - override in your provider config
+    region: ""
+    instance_type: "{{instance_type}}" # Supply your platform-equivalent bare-metal/GPU instance type
+    teardown_flag: "{{(env.BM_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"
+
+  # ─── Validations ─────────────────────────────────────────────────
+  # These are PROVIDER-AGNOSTIC. They only check JSON field names/values.
+  validations:
+    setup_checks:
+      step: launch_instance
+      checks:
+        InstanceStateCheck:
+          expected_state: "running"
+
+    list_instances:
+      step: list_instances
+      checks:
+        InstanceListCheck:
+          min_count: 1
+
+    tag_checks:
+      step: verify_tags
+      checks:
+        InstanceTagCheck:
+          required_keys: ["Name", "CreatedBy"]
+
+    topology_placement:
+      step: topology_placement
+      checks:
+        StepSuccessCheck: {}
+        TopologyPlacementCheck: {}
+
+    serial_console:
+      step: serial_console
+      checks:
+        SerialConsoleCheck: {}
+
+    cloud_init:
+      step: launch_instance
+      checks:
+        CloudInitCheck: {}
+
+    instance_info:
+      step: describe_instance
+      checks:
+        InstanceStateCheck:
+          expected_state: "running"
+
+    ssh:
+      step: describe_instance
+      checks:
+        ConnectivityCheck: {}
+        OsCheck:
+          expected_os: "ubuntu"
+
+    gpu:
+      step: describe_instance
+      checks:
+        GpuCheck:
+          expected_gpus: 8
+
+    host_os:
+      step: describe_instance
+      checks:
+        VcpuPinningCheck: {}
+        PciBusCheck:
+          expected_gpus: 8
+        HostSoftwareCheck: {}
+
+    # GPU stress test - PyTorch matrix multiplications on all GPUs
+    gpu_stress:
+      step: describe_instance
+      checks:
+        GpuStressCheck:
+          runtime: 30
+          memory_gb: 16
+
+    # NCCL AllReduce - validates GPU-to-GPU communication (NVLink/NVSwitch)
+    nccl:
+      step: describe_instance
+      checks:
+        NcclCheck: {}
+
+    # DDP training workload - validates full training stack
+    training:
+      step: describe_instance
+      checks:
+        TrainingCheck:
+          steps: 50
+
+    # Network / interconnect checks
+    nvlink:
+      step: describe_instance
+      checks:
+        NvlinkCheck: {}
+
+    infiniband:
+      step: describe_instance
+      checks:
+        InfiniBandCheck: {}
+
+    ethernet:
+      step: describe_instance
+      checks:
+        EthernetCheck:
+          ping_target: "8.8.8.8"
+
+    driver_info:
+      step: describe_instance
+      checks:
+        DriverCheck: {}
+
+    cpu_info:
+      step: describe_instance
+      checks:
+        CpuInfoCheck: {}
+
+    container_runtime:
+      step: describe_instance
+      checks:
+        ContainerRuntimeCheck: {}
+
+    stop_checks:
+      step: stop_instance
+      checks:
+        InstanceStopCheck: {}
+
+    start_checks:
+      step: start_instance
+      checks:
+        InstanceStartCheck: {}
+        StableIdentifierCheck:
+          reference_id: "{{steps.launch_instance.instance_id}}"
+
+    start_ssh:
+      step: start_instance
+      checks:
+        ConnectivityCheck: {}
+        OsCheck:
+          expected_os: "ubuntu"
+
+    start_gpu:
+      step: start_instance
+      checks:
+        GpuCheck: {}
+
+    reboot_checks:
+      step: reboot_instance
+      checks:
+        InstanceRebootCheck:
+          max_uptime: 600
+        StableIdentifierCheck:
+          reference_id: "{{steps.launch_instance.instance_id}}"
+
+    reboot_state:
+      step: reboot_instance
+      checks:
+        InstanceStateCheck:
+          expected_state: "running"
+
+    reboot_ssh:
+      step: reboot_instance
+      checks:
+        ConnectivityCheck: {}
+        OsCheck:
+          expected_os: "ubuntu"
+
+    reboot_gpu:
+      step: reboot_instance
+      checks:
+        GpuCheck:
+          expected_gpus: 8
+
+    power_cycle_checks:
+      step: power_cycle_instance
+      checks:
+        InstancePowerCycleCheck:
+          max_recovery_time: 900
+        StableIdentifierCheck:
+          reference_id: "{{steps.launch_instance.instance_id}}"
+
+    power_cycle_state:
+      step: power_cycle_instance
+      checks:
+        InstanceStateCheck:
+          expected_state: "running"
+
+    power_cycle_ssh:
+      step: power_cycle_instance
+      checks:
+        ConnectivityCheck: {}
+        OsCheck:
+          expected_os: "ubuntu"
+
+    power_cycle_gpu:
+      step: power_cycle_instance
+      checks:
+        GpuCheck:
+          expected_gpus: 8
+
+    # Reinstall validations (skipped when reinstall_instance step is skipped)
+    reinstall_state:
+      step: reinstall_instance
+      checks:
+        InstanceStateCheck:
+          expected_state: "running"
+
+    reinstall_ssh:
+      step: reinstall_instance
+      checks:
+        ConnectivityCheck: {}
+        OsCheck:
+          expected_os: "ubuntu"
+
+    reinstall_gpu:
+      step: reinstall_instance
+      checks:
+        GpuCheck: {}
+
+    nim_health:
+      step: deploy_nim
+      checks:
+        NimHealthCheck: {}
+
+    nim_models:
+      step: deploy_nim
+      checks:
+        NimModelCheck: {}
+
+    nim_inference:
+      step: deploy_nim
+      checks:
+        NimInferenceCheck:
+          prompt: "What is CUDA?"
+          max_tokens: 50
+
+    nim_teardown:
+      step: teardown_nim
+      checks:
+        StepSuccessCheck: {}
+
+    teardown_checks:
+      step: teardown
+      checks:
+        StepSuccessCheck: {}
+
+    sanitization:
+      step: verify_teardown
+      checks:
+        StepSuccessCheck: {}
+
+  exclude:
+    markers: []

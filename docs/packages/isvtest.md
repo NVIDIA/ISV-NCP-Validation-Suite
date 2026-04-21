@@ -4,7 +4,7 @@
 > `isvtest` is the internal validation engine used by `isvctl`.
 >
 > ```bash
-> isvctl test run -f isvctl/configs/tests/k8s.yaml
+> isvctl test run -f isvctl/configs/suites/k8s.yaml
 > ```
 
 A validation framework for NVIDIA ISV Lab environments supporting bare-metal servers, virtual machines, Kubernetes clusters, and Slurm HPC systems.
@@ -16,9 +16,9 @@ A validation framework for NVIDIA ISV Lab environments supporting bare-metal ser
 uv sync
 
 # Use via isvctl (recommended)
-isvctl test run -f isvctl/configs/tests/k8s.yaml
-isvctl test run -f isvctl/configs/providers/my-isv/vm.yaml
-isvctl test run -f isvctl/configs/providers/my-isv/bare_metal.yaml
+isvctl test run -f isvctl/configs/suites/k8s.yaml
+isvctl test run -f isvctl/configs/providers/my-isv/config/vm.yaml
+isvctl test run -f isvctl/configs/providers/my-isv/config/bare_metal.yaml
 ```
 
 ## Architecture
@@ -206,12 +206,12 @@ commands:
     steps:
       - name: launch_instance
         phase: setup
-        command: "python3 ../stubs/my-isv/vm/launch_instance.py"
+        command: "python3 ../providers/my-isv/scripts/vm/launch_instance.py"
         timeout: 600
 
       - name: stop_instance
         phase: test
-        command: "python3 ../stubs/my-isv/vm/stop_instance.py"
+        command: "python3 ../providers/my-isv/scripts/vm/stop_instance.py"
         timeout: 600
 
 tests:
@@ -236,7 +236,7 @@ tests:
           reference_id: "{{steps.launch_instance.instance_id}}"
 ```
 
-Canonical test configs live in `isvctl/configs/tests/` (vm.yaml, bare_metal.yaml, network.yaml, etc.). Provider-specific configs in `isvctl/configs/providers/<provider>/` import the canonical config and override commands with platform stubs.
+Canonical test configs live in `isvctl/configs/suites/` (vm.yaml, bare_metal.yaml, network.yaml, etc.). Provider-specific configs in `isvctl/configs/providers/<provider>/` import the canonical config and override commands with platform stubs.
 
 ## Test Markers
 

@@ -44,7 +44,7 @@ export AWS_SESSION_TOKEN=...  # only required for temporary/SSO credentials
 Execution:
 
 ```bash
-$ uv run isvctl test run -f isvctl/configs/providers/aws/control-plane.yaml
+$ uv run isvctl test run -f isvctl/configs/providers/aws/config/control-plane.yaml
 Loaded configuration (1 import).
 Validating configuration...
 
@@ -56,7 +56,7 @@ Running phases: ['setup', 'test', 'teardown']
 
 ## Adding your own platform
 
-See the **[my-isv scaffold](isvctl/configs/stubs/my-isv/README.md)** --
+See the **[my-isv scaffold](isvctl/configs/providers/my-isv/scripts/README.md)** --
 copy-and-fill-in stubs with a demo-mode fallback. Preview the whole pipeline
 before writing any code:
 
@@ -79,8 +79,8 @@ See [docs/](docs/) for full documentation:
 
 ### References
 
-- [my-isv Scaffold](isvctl/configs/stubs/my-isv/README.md) - Copy-and-fill-in stubs for adding your own platform
-- [Validation Test Suites](isvctl/configs/tests/README.md) - Provider-agnostic validation contract
+- [my-isv Scaffold](isvctl/configs/providers/my-isv/scripts/README.md) - Copy-and-fill-in stubs for adding your own platform
+- [Validation Test Suites](isvctl/configs/suites/README.md) - Provider-agnostic validation contract
 - [AWS Reference Implementation](docs/references/aws.md) - Working AWS examples for all validation domains
 
 ### Package Reference

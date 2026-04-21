@@ -12,7 +12,7 @@ The update is sent when:
    You run:
 
    ```bash
-   isvctl test run -f configs/tests/k8s.yaml --lab-id ${ISV_LAB_ID}
+   isvctl test run -f configs/suites/k8s.yaml --lab-id ${ISV_LAB_ID}
    ```
 
    The same process that creates the test run (STARTED) later calls the API again to set SUCCESS or FAILED after all phases (setup -> test -> teardown) finish. If this process exits normally, the run is updated.
@@ -51,10 +51,10 @@ export ISV_CLIENT_SECRET="..."
 export NGC_API_KEY="..."  # optional, for NIM tests
 
 # Kubernetes
-isvctl test run -f configs/tests/k8s.yaml --lab-id ${ISV_LAB_ID}
+isvctl test run -f configs/suites/k8s.yaml --lab-id ${ISV_LAB_ID}
 
 # Slurm
-isvctl test run -f configs/tests/slurm.yaml --lab-id ${ISV_LAB_ID}
+isvctl test run -f configs/suites/slurm.yaml --lab-id ${ISV_LAB_ID}
 ```
 
 Do **not** use `--no-upload` if you want results reported. The same process will:
@@ -98,7 +98,7 @@ Ensure the step that runs **after** the tests **always** calls update, even when
   Check which phase hangs (setup, test, or teardown) from logs. Common causes: waiting on a cluster resource, Slurm job that never completes, or a validation that blocks. Fix the stub or validation, or exclude slow tests during initial runs:
 
   ```bash
-  isvctl test run -f configs/tests/k8s.yaml --lab-id ${ISV_LAB_ID} -- -m "not workload"
+  isvctl test run -f configs/suites/k8s.yaml --lab-id ${ISV_LAB_ID} -- -m "not workload"
   ```
 
 - **OOM / kill**

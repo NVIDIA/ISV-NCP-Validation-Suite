@@ -1,0 +1,117 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# Image Registry Validation - Canonical Contract
+#
+# Validations-only contract for image registry. Provider configs import
+# this file and supply their own commands (steps + scripts).
+#
+# This file defines WHAT to validate, not HOW to run it. Each validation
+# only inspects JSON output fields. As long as your scripts output the
+# right fields, the validations pass regardless of which cloud you use.
+#
+# Quick start:
+#   1. Copy providers/my-isv/image-registry.yaml to providers/<your-platform>/image-registry.yaml
+#   2. Replace stub paths with your platform scripts
+#   3. Run: uv run isvctl test run -f isvctl/configs/providers/<your-platform>/image-registry.yaml
+#
+# See also:
+#   - my-isv living example: providers/my-isv/image-registry.yaml
+#   - AWS reference: providers/aws/config/image-registry.yaml + providers/aws/scripts/image-registry/
+#   - Per-step field breakdown: tests/README.md
+
+version: "1.0"
+
+tests:
+  cluster_name: "image-registry-validation"
+  description: "Image registry validation tests"
+  platform: image_registry
+
+  settings:
+    # Provider-specific - override in your provider config
+    region: ""
+    image_url: "https://cloud-images.ubuntu.com/releases/noble/release/ubuntu-24.04-server-cloudimg-amd64.vmdk"
+    image_format: "vmdk"
+    instance_type: ""
+    teardown_flag: "{{(env.IR_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"
+
+  # ─── Validations ─────────────────────────────────────────────────
+  # These are PROVIDER-AGNOSTIC. They only check JSON field names/values.
+  validations:
+    # --- OS Image Upload ---
+    image_upload:
+      step: upload_image
+      checks:
+        StepSuccessCheck: {}
+        FieldExistsCheck:
+          fields: ["image_id", "storage_bucket", "disk_ids"]
+
+    # --- Image CRUD ---
+    image_crud:
+      step: crud_image
+      checks:
+        StepSuccessCheck: {}
+        FieldExistsCheck:
+          fields: ["image_id", "operations"]
+        CrudOperationsCheck:
+          operations: ["get", "list", "create", "delete"]
+
+    # --- VM Launch from Image ---
+    vm_from_image:
+      step: launch_instance
+      checks:
+        StepSuccessCheck: {}
+        FieldExistsCheck:
+          fields: ["instance_id", "public_ip", "key_path"]
+        InstanceStateCheck:
+          expected_state: "running"
+
+    vm_ssh:
+      step: launch_instance
+      checks:
+        ConnectivityCheck: {}
+        OsCheck:
+          expected_os: "ubuntu"
+
+    # --- OS Install Config CRUD ---
+    install_config_crud:
+      step: crud_install_config
+      checks:
+        StepSuccessCheck: {}
+        FieldExistsCheck:
+          fields: ["config_id", "config_name", "operations"]
+
+    # --- OS Image on BMaaS ---
+    bm_from_image:
+      step: install_image_bm
+      checks:
+        StepSuccessCheck: {}
+        FieldExistsCheck:
+          fields: ["instance_id", "image_id", "instance_state"]
+        InstanceStateCheck:
+          expected_state: "running"
+
+    # --- OS Install Config on BMaaS ---
+    bm_from_config:
+      step: install_config_bm
+      checks:
+        StepSuccessCheck: {}
+        FieldExistsCheck:
+          fields: ["instance_id", "config_id", "instance_state"]
+        InstanceStateCheck:
+          expected_state: "running"
+
+    teardown_checks:
+      step: teardown
+      checks:
+        StepSuccessCheck: {}
+
+  exclude:
+    markers: []

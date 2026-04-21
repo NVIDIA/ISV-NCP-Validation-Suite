@@ -10,7 +10,7 @@ Validation framework for NVIDIA ISV Lab environments.
 ```bash
 # From workspace root
 uv sync
-uv run isvctl test run -f isvctl/configs/tests/k8s.yaml
+uv run isvctl test run -f isvctl/configs/suites/k8s.yaml
 ```
 
 ## Documentation

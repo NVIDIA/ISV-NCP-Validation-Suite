@@ -1,0 +1,141 @@
+# Validation Contracts
+
+Provider-agnostic validation contracts. Each YAML defines *what* to
+validate (checks, expected fields, thresholds) but not *how* to run it.
+[Provider configs](../providers/) import these files and supply the
+commands (steps + scripts) that produce JSON for the validations to check.
+
+- **Adding your own platform?** Start at the [my-isv scaffold](../providers/my-isv/scripts/README.md).
+- **New to the framework?** See the [External Validation Guide](../../../docs/guides/external-validation-guide.md).
+- **Try it without cloud credentials:** `make demo-test`.
+
+Suites:
+[`iam`](iam.yaml),
+[`network`](network.yaml),
+[`vm`](vm.yaml),
+[`bare_metal`](bare_metal.yaml),
+[`k8s`](k8s.yaml),
+[`slurm`](slurm.yaml),
+[`control-plane`](control-plane.yaml),
+[`image-registry`](image-registry.yaml).
+For the domain / script-count / AWS-reference overview see the
+[my-isv scaffold README](../providers/my-isv/scripts/README.md#domains).
+
+## Test Suite Details
+
+### IAM (`iam.yaml`)
+
+| Step | Phase | Script | Key JSON Fields |
+|------|-------|--------|-----------------|
+| `create_user` | setup | `providers/my-isv/scripts/iam/create_user.py` | `username`, `user_id`, `access_key_id`, `secret_access_key` |
+| `test_credentials` | test | `providers/my-isv/scripts/iam/test_credentials.py` | `account_id`, `tests.identity.passed`, `tests.access.passed` |
+| `teardown` | teardown | `providers/my-isv/scripts/iam/delete_user.py` | `resources_deleted`, `message` |
+
+### Network (`network.yaml`)
+
+| Step | Phase | Script | What It Tests |
+|------|-------|--------|---------------|
+| `create_network` | setup | `providers/my-isv/scripts/network/create_vpc.py` | Shared VPC creation |
+| `vpc_crud` | test | `providers/my-isv/scripts/network/vpc_crud_test.py` | Create/Read/Update/Delete lifecycle |
+| `subnet_config` | test | `providers/my-isv/scripts/network/subnet_test.py` | Multi-AZ subnet distribution |
+| `vpc_isolation` | test | `providers/my-isv/scripts/network/isolation_test.py` | Security boundaries between VPCs |
+| `sg_crud` | test | `providers/my-isv/scripts/network/sg_crud_test.py` | Security group create/read/update/delete lifecycle |
+| `security_blocking` | test | `providers/my-isv/scripts/network/security_test.py` | Firewall/ACL blocking rules |
+| `connectivity_test` | test | `providers/my-isv/scripts/network/test_connectivity.py` | Instance network assignment |
+| `traffic_validation` | test | `providers/my-isv/scripts/network/traffic_test.py` | Ping allowed/blocked, internet |
+| `vpc_ip_config` | test | `providers/my-isv/scripts/network/vpc_ip_config_test.py` | DHCP options, subnet CIDRs, auto-assign IP |
+| `dhcp_ip_test` | test | `providers/my-isv/scripts/network/dhcp_ip_test.py` | DHCP lease, IP match, DNS options via SSH |
+| `byoip_test` | test | `providers/my-isv/scripts/network/byoip_test.py` | Bring-Your-Own-IP with custom CIDRs |
+| `stable_ip_test` | test | `providers/my-isv/scripts/network/stable_ip_test.py` | IP persistence across stop/start |
+| `floating_ip_test` | test | `providers/my-isv/scripts/network/floating_ip_test.py` | Atomic IP switch between instances |
+| `dns_test` | test | `providers/my-isv/scripts/network/dns_test.py` | Custom internal domain resolution |
+| `peering_test` | test | `providers/my-isv/scripts/network/peering_test.py` | Cross-VPC connectivity |
+| `teardown` | teardown | `providers/my-isv/scripts/network/teardown.py` | VPC cleanup |
+
+### VM (`vm.yaml`)
+
+| Step | Phase | Script | Key JSON Fields |
+|------|-------|--------|-----------------|
+| `launch_instance` | setup | `providers/my-isv/scripts/vm/launch_instance.py` | `instance_id`, `public_ip`, `key_file`, `vpc_id` |
+| `list_instances` | test | `providers/my-isv/scripts/vm/list_instances.py` | `instances`, `total_count` |
+| `verify_tags` | test | `providers/my-isv/scripts/vm/describe_tags.py` | `instance_id`, `tags`, `tag_count` |
+| `serial_console` | test | `providers/my-isv/scripts/vm/serial_console.py` | `console_available`, `serial_access_enabled` |
+| `stop_instance` | test | `providers/my-isv/scripts/vm/stop_instance.py` | `instance_id`, `state`, `stop_initiated` |
+| `start_instance` | test | `providers/my-isv/scripts/vm/start_instance.py` | `instance_id`, `state`, `public_ip`, `ssh_ready` |
+| `reboot_instance` | test | `providers/my-isv/scripts/vm/reboot_instance.py` | `reboot_initiated`, `ssh_ready`, `uptime_seconds` |
+| `describe_instance` | test | `providers/my-isv/scripts/vm/describe_instance.py` | `instance_id`, `state`, `public_ip`, `key_file` |
+| `deploy_nim` | test | `providers/common/deploy_nim.py` | `container_id`, `health_endpoint` |
+| `teardown_nim` | teardown | `providers/common/teardown_nim.py` | `message` |
+| `teardown` | teardown | `providers/my-isv/scripts/vm/teardown.py` | `resources_deleted`, `message` |
+
+### Bare Metal (`bare_metal.yaml`)
+
+| Step | Phase | Script | Key JSON Fields |
+|------|-------|--------|-----------------|
+| `launch_instance` | setup | `providers/my-isv/scripts/bare_metal/launch_instance.py` | `instance_id`, `public_ip`, `key_file`, `vpc_id` |
+| `list_instances` | test | `providers/my-isv/scripts/vm/list_instances.py` | Reuses VM script |
+| `verify_tags` | test | `providers/my-isv/scripts/bare_metal/describe_tags.py` | `instance_id`, `tags`, `tag_count` |
+| `topology_placement` | test | `providers/my-isv/scripts/bare_metal/topology_placement.py` | `placement_supported`, `operations` |
+| `serial_console` | test | `providers/my-isv/scripts/bare_metal/serial_console.py` | `console_available`, `serial_access_enabled` |
+| `stop_instance` | test | `providers/my-isv/scripts/bare_metal/stop_instance.py` | `instance_id`, `state`, `stop_initiated` |
+| `start_instance` | test | `providers/my-isv/scripts/bare_metal/start_instance.py` | `instance_id`, `state`, `public_ip`, `ssh_ready` |
+| `reboot_instance` | test | `providers/my-isv/scripts/bare_metal/reboot_instance.py` | `reboot_initiated`, `ssh_ready`, `uptime_seconds` |
+| `power_cycle_instance` | test | `providers/my-isv/scripts/bare_metal/power_cycle_instance.py` | `instance_id`, `state`, `public_ip`, `ssh_ready` |
+| `describe_instance` | test | `providers/my-isv/scripts/bare_metal/describe_instance.py` | `state`, `public_ip`, `key_file` |
+| `reinstall_instance` | test | `providers/my-isv/scripts/bare_metal/reinstall_instance.py` | `instance_state` (skipped by default) |
+| `deploy_nim` | test | `providers/common/deploy_nim.py` | Shared NIM deployment |
+| `teardown_nim` | teardown | `providers/common/teardown_nim.py` | Shared NIM cleanup |
+| `teardown` | teardown | `providers/my-isv/scripts/bare_metal/teardown.py` | `resources_deleted`, `message` |
+| `verify_teardown` | teardown | `providers/my-isv/scripts/bare_metal/verify_terminated.py` | `checks.instance_terminated`, `checks.sg_deleted` |
+
+### Kubernetes (`k8s.yaml`)
+
+| Step | Phase | Script |
+|------|-------|--------|
+| `setup` | setup | `providers/my-isv/scripts/k8s/setup.sh` |
+| `teardown` | teardown | `providers/my-isv/scripts/k8s/teardown.sh` |
+
+Validations use `kubectl` directly (or a custom CLI via the `KUBECTL` env var): node counts, GPU operator, pod health, NCCL/NIM workloads.
+
+### Slurm (`slurm.yaml`)
+
+| Step | Phase | Script |
+|------|-------|--------|
+| `setup` | setup | `providers/my-isv/scripts/slurm/setup.sh` |
+| `teardown` | teardown | `providers/my-isv/scripts/slurm/teardown.sh` |
+
+Validations use `sinfo`/`srun` directly: partitions, GPU allocation, job scheduling.
+
+### Control Plane (`control-plane.yaml`)
+
+| Step | Phase | Script | Key JSON Fields |
+|------|-------|--------|-----------------|
+| `check_api` | setup | `providers/my-isv/scripts/control-plane/check_api.py` | `account_id`, `tests` |
+| `create_access_key` | setup | `providers/my-isv/scripts/control-plane/create_access_key.py` | `username`, `access_key_id` |
+| `create_tenant` | setup | `providers/my-isv/scripts/control-plane/create_tenant.py` | `tenant_name`, `tenant_id` |
+| `test_access_key` | test | `providers/my-isv/scripts/control-plane/test_access_key.py` | `authenticated`, `account_id` |
+| `disable_access_key` | test | `providers/my-isv/scripts/control-plane/disable_access_key.py` | `status` |
+| `verify_key_rejected` | test | `providers/my-isv/scripts/control-plane/verify_key_rejected.py` | `rejected`, `error_code` |
+| `list_tenants` | test | `providers/my-isv/scripts/control-plane/list_tenants.py` | `found_target`, `target_tenant`, `count` |
+| `get_tenant` | test | `providers/my-isv/scripts/control-plane/get_tenant.py` | `tenant_name`, `description` |
+| `delete_access_key` | teardown | `providers/my-isv/scripts/control-plane/delete_access_key.py` | `resources_deleted` |
+| `delete_tenant` | teardown | `providers/my-isv/scripts/control-plane/delete_tenant.py` | `resources_deleted` |
+
+### Image Registry (`image-registry.yaml`)
+
+| Step | Phase | Script | Key JSON Fields |
+|------|-------|--------|-----------------|
+| `upload_image` | setup | `providers/my-isv/scripts/image-registry/upload_image.py` | `image_id`, `storage_bucket`, `disk_ids` |
+| `crud_image` | test | `providers/my-isv/scripts/image-registry/crud_image.py` | `image_id`, `operations` |
+| `launch_instance` | test | `providers/my-isv/scripts/image-registry/launch_instance.py` | `instance_id`, `public_ip`, `key_path` |
+| `crud_install_config` | test | `providers/my-isv/scripts/image-registry/crud_install_config.py` | `config_id`, `config_name`, `operations` |
+| `install_image_bm` | test | `providers/my-isv/scripts/image-registry/install_image_bm.py` | `instance_id`, `image_id`, `instance_state` |
+| `install_config_bm` | test | `providers/my-isv/scripts/image-registry/install_config_bm.py` | `instance_id`, `config_id`, `instance_state`, `state` |
+| `teardown` | teardown | `providers/my-isv/scripts/image-registry/teardown.py` | `resources_deleted`, `message` |
+
+## Related Documentation
+
+- [my-isv Scaffold](../providers/my-isv/scripts/README.md) - Copy-and-fill-in scripts for your own platform
+- [External Validation Guide](../../../docs/guides/external-validation-guide.md) - Writing scripts, config format, running validations
+- [Configuration Guide](../../../docs/guides/configuration.md) - Full config reference (steps, schemas, templates)
+- [AWS Reference Implementation](../../../docs/references/aws.md) - Working AWS examples for all test suites

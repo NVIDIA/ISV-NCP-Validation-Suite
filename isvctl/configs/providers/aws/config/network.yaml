@@ -1,0 +1,270 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# AWS Network Validation Configuration
+#
+# Imports validations from the provider-agnostic network canonical config.
+# This file only provides AWS-specific commands (boto3 stubs) and settings.
+#
+# Comprehensive network testing with 14 test suites:
+#   1. VPC CRUD - Create, Read, Update, Delete VPC lifecycle
+#   2. Subnet Configuration - Multi-AZ subnet distribution
+#   3. VPC Isolation - Security boundaries between VPCs
+#  4a. Security Group CRUD - Create, Read, Update, Delete SG lifecycle
+#  4b. Security Blocking - SG/NACL blocking rules (negative tests)
+#   5. Connectivity - Instance network assignment
+#   6. Traffic Validation - Real ping tests via SSM
+#   7. VPC IP Config - DHCP options, subnet CIDRs, auto-assign IP (DDI)
+#   8. DHCP IP Management - DHCP lease, IP match, DNS options via SSH (DDI)
+#   9. BYOIP - Bring-Your-Own-IP with custom CIDRs
+#  10. Stable Private IP - IP persistence across stop/start
+#  11. Floating IP - Atomic IP switch between instances (<10s)
+#  12. Localized DNS - Custom internal domain resolution
+#  13. VPC Peering - Cross-VPC connectivity with full bandwidth
+#
+# Usage:
+#   uv run isvctl test run -f isvctl/configs/providers/aws/config/network.yaml
+#
+# Run specific tests:
+#   uv run isvctl test run -f isvctl/configs/providers/aws/config/network.yaml -- -k "vpc_crud"
+#   uv run isvctl test run -f isvctl/configs/providers/aws/config/network.yaml -- -k "isolation"
+#   uv run isvctl test run -f isvctl/configs/providers/aws/config/network.yaml -- -k "byoip"
+#   uv run isvctl test run -f isvctl/configs/providers/aws/config/network.yaml -- -k "peering"
+#
+# Estimated runtime: ~25-30 minutes for all tests
+
+import:
+  - ../../../suites/network.yaml
+
+version: "1.0"
+
+commands:
+  network:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      # Setup: Create shared VPC for connectivity tests
+      - name: create_network
+        phase: setup
+        command: "python3 ../scripts/network/create_vpc.py"
+        args:
+          - "--name"
+          - "isv-shared-vpc"
+          - "--region"
+          - "{{region}}"
+          - "--cidr"
+          - "10.0.0.0/16"
+        timeout: 300
+
+      # Test 1: VPC CRUD Operations (~30s)
+      - name: vpc_crud
+        phase: test
+        command: "python3 ../scripts/network/vpc_crud_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--cidr"
+          - "10.99.0.0/16"
+        timeout: 120
+        output_schema: vpc_crud
+
+      # Test 2: Subnet Configuration (~30s)
+      - name: subnet_config
+        phase: test
+        command: "python3 ../scripts/network/subnet_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--cidr"
+          - "10.98.0.0/16"
+          - "--subnet-count"
+          - "4"
+        timeout: 120
+        output_schema: subnet_config
+
+      # Test 3: VPC Isolation (~30s)
+      - name: vpc_isolation
+        phase: test
+        command: "python3 ../scripts/network/isolation_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--cidr-a"
+          - "10.97.0.0/16"
+          - "--cidr-b"
+          - "10.96.0.0/16"
+        timeout: 120
+        output_schema: vpc_isolation
+
+      # Test 4a: Security Group CRUD (~30s)
+      - name: sg_crud
+        phase: test
+        command: "python3 ../scripts/network/sg_crud_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--cidr"
+          - "10.95.0.0/16"
+        timeout: 120
+        output_schema: sg_crud
+
+      # Test 4b: Security Blocking (~30s)
+      - name: security_blocking
+        phase: test
+        command: "python3 ../scripts/network/security_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--cidr"
+          - "10.94.0.0/16"
+        timeout: 120
+        output_schema: security_blocking
+
+      # Test 5: Connectivity Test (~3 min)
+      - name: connectivity_test
+        phase: test
+        command: "python3 ../scripts/network/test_connectivity.py"
+        args:
+          - "--vpc-id"
+          - "{{steps.create_network.network_id}}"
+          - "--subnet-ids"
+          - "{{steps.create_network.subnets | map(attribute='subnet_id') | join(',')}}"
+          - "--sg-id"
+          - "{{steps.create_network.security_group_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 600
+        output_schema: connectivity_result
+
+      # Test 6: Traffic Validation (~5-7 min)
+      - name: traffic_validation
+        phase: test
+        command: "python3 ../scripts/network/traffic_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--cidr"
+          - "10.93.0.0/16"
+        timeout: 900
+        output_schema: traffic_flow
+
+      # Test 7: VPC IP Configuration (DDI) (~10s)
+      - name: vpc_ip_config
+        phase: test
+        command: "python3 ../scripts/network/vpc_ip_config_test.py"
+        args:
+          - "--vpc-id"
+          - "{{steps.create_network.network_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 120
+        output_schema: vpc_ip_config
+
+      # Test 8: DHCP IP Management (DDI) (~3 min)
+      - name: dhcp_ip_test
+        phase: test
+        command: "python3 ../scripts/network/dhcp_ip_test.py"
+        args:
+          - "--vpc-id"
+          - "{{steps.create_network.network_id}}"
+          - "--subnet-id"
+          - "{{steps.create_network.subnets[0].subnet_id}}"
+          - "--sg-id"
+          - "{{steps.create_network.security_group_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 300
+        output_schema: dhcp_ip
+
+      # Test 9: BYOIP (~30s)
+      - name: byoip_test
+        phase: test
+        command: "python3 ../scripts/network/byoip_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--custom-cidr"
+          - "100.64.0.0/16"
+          - "--standard-cidr"
+          - "10.90.0.0/16"
+        timeout: 120
+        output_schema: byoip
+
+      # Test 10: Stable Private IP (~5 min)
+      - name: stable_ip_test
+        phase: test
+        command: "python3 ../scripts/network/stable_ip_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--cidr"
+          - "10.91.0.0/16"
+        timeout: 600
+        output_schema: stable_ip
+
+      # Test 11: Floating IP Switch (~5 min)
+      - name: floating_ip_test
+        phase: test
+        command: "python3 ../scripts/network/floating_ip_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--cidr"
+          - "10.92.0.0/16"
+          - "--max-switch-seconds"
+          - "10"
+        timeout: 600
+        output_schema: floating_ip
+
+      # Test 12: Localized DNS (~60s)
+      - name: dns_test
+        phase: test
+        command: "python3 ../scripts/network/dns_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--cidr"
+          - "10.89.0.0/16"
+          - "--domain"
+          - "internal.isv.test"
+        timeout: 120
+        output_schema: localized_dns
+
+      # Test 13: VPC Peering (~30s)
+      - name: peering_test
+        phase: test
+        command: "python3 ../scripts/network/peering_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--cidr-a"
+          - "10.88.0.0/16"
+          - "--cidr-b"
+          - "10.87.0.0/16"
+        timeout: 120
+        output_schema: vpc_peering
+
+      # Teardown: Clean up shared VPC from create_network
+      - name: teardown
+        phase: teardown
+        command: "python3 ../scripts/network/teardown.py"
+        args:
+          - "--vpc-id"
+          - "{{steps.create_network.network_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 300
+        output_schema: teardown
+
+tests:
+  cluster_name: "aws-network-validation"
+  description: "Comprehensive AWS VPC and network validation tests"
+
+  settings:
+    region: "us-west-2"

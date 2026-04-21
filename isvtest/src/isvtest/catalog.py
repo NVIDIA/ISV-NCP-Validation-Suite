@@ -15,7 +15,7 @@ discover_all_tests() and serializing each BaseValidation subclass's metadata.
 The catalog is version-keyed by the installed isvtest package version.
 
 Platform tagging uses two sources (union of both):
-  1. Config files - which checks appear in each isvctl/configs/tests/*.yaml
+  1. Config files - which checks appear in each isvctl/configs/suites/*.yaml
   2. Class markers - e.g. markers=["bare_metal"] implies BARE_METAL platform
 
 This ensures checks get a platform badge in the UI even when they aren't listed
@@ -36,14 +36,14 @@ logger = logging.getLogger(__name__)
 # Configs that define the canonical test list per platform.
 # Relative to the isvctl/configs/ directory.
 PLATFORM_CONFIGS: dict[str, list[str]] = {
-    "KUBERNETES": ["tests/k8s.yaml"],
-    "SLURM": ["tests/slurm.yaml"],
-    "BARE_METAL": ["tests/bare_metal.yaml"],
-    "CONTROL_PLANE": ["tests/control-plane.yaml"],
-    "IAM": ["tests/iam.yaml"],
-    "NETWORK": ["tests/network.yaml"],
-    "VM": ["tests/vm.yaml"],
-    "IMAGE_REGISTRY": ["tests/image-registry.yaml"],
+    "KUBERNETES": ["suites/k8s.yaml"],
+    "SLURM": ["suites/slurm.yaml"],
+    "BARE_METAL": ["suites/bare_metal.yaml"],
+    "CONTROL_PLANE": ["suites/control-plane.yaml"],
+    "IAM": ["suites/iam.yaml"],
+    "NETWORK": ["suites/network.yaml"],
+    "VM": ["suites/vm.yaml"],
+    "IMAGE_REGISTRY": ["suites/image-registry.yaml"],
 }
 
 # Maps class-level markers to platform strings so checks that aren't listed

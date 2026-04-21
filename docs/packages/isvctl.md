@@ -25,7 +25,7 @@ uv run isvctl --help
 
 ```bash
 # Validate a Kubernetes cluster
-isvctl test run -f isvctl/configs/tests/k8s.yaml
+isvctl test run -f isvctl/configs/suites/k8s.yaml
 
 # Validate a local MicroK8s
 isvctl test run -f isvctl/configs/providers/microk8s.yaml
@@ -37,10 +37,10 @@ isvctl test run -f isvctl/configs/providers/minikube.yaml
 isvctl test run -f isvctl/configs/providers/k3s.yaml
 
 # Validate a Slurm cluster
-isvctl test run -f isvctl/configs/tests/slurm.yaml
+isvctl test run -f isvctl/configs/suites/slurm.yaml
 
 # Pass extra pytest args
-isvctl test run -f isvctl/configs/tests/k8s.yaml -- -v -s -k "NodeCount"
+isvctl test run -f isvctl/configs/suites/k8s.yaml -- -v -s -k "NodeCount"
 ```
 
 ## Directory Structure
@@ -48,19 +48,16 @@ isvctl test run -f isvctl/configs/tests/k8s.yaml -- -v -s -k "NodeCount"
 ```text
 isvctl/
 ├── configs/
-│   ├── tests/         # Canonical test suites (vm.yaml, bare_metal.yaml, network.yaml, ...)
-│   ├── providers/     # Provider configs (aws/, microk8s.yaml, minikube.yaml, k3s.yaml)
-│   └── stubs/         # Lifecycle scripts (provider-agnostic templates + aws/ reference)
-│       ├── vm/                # VM lifecycle stubs
-│       ├── bare_metal/        # Bare metal lifecycle stubs
-│       ├── network/           # Network validation stubs
-│       ├── control-plane/     # API/IAM/tenant stubs
-│       ├── iam/               # User lifecycle stubs
-│       ├── image-registry/    # Image CRUD stubs
-│       ├── common/            # Shared stubs (NIM deploy/teardown)
-│       ├── k8s/               # Kubernetes setup/teardown
-│       ├── slurm/             # Slurm setup/teardown
-│       └── aws/               # AWS reference implementations
+│   ├── suites/        # Provider-agnostic validation contracts (vm.yaml, bare_metal.yaml, ...)
+│   ├── providers/     # Per-provider configs and scripts
+│   │   ├── aws/
+│   │   │   ├── config/        # AWS YAML bindings (import suite + supply commands)
+│   │   │   └── scripts/       # AWS lifecycle scripts (boto3/Terraform implementations)
+│   │   ├── my-isv/
+│   │   │   ├── config/        # my-isv YAML bindings (copy-and-fill-in starting point)
+│   │   │   └── scripts/       # my-isv lifecycle scripts (copy-and-fill-in stubs)
+│   │   └── common/            # Shared scripts used across providers (NIM deploy/teardown)
+│   └── overrides.yaml # Example override file for customizing any suite
 ├── schemas/           # JSON Schema for validation
 ├── scripts/           # Helper scripts
 ├── src/               # isvctl Python source
@@ -73,19 +70,19 @@ isvctl/
 
 ```bash
 # Full lifecycle: setup (query inventory) -> test -> teardown
-isvctl test run -f isvctl/configs/tests/k8s.yaml
+isvctl test run -f isvctl/configs/suites/k8s.yaml
 
 # Run only the test phase (skip inventory query)
-isvctl test run -f isvctl/configs/tests/k8s.yaml --phase test
+isvctl test run -f isvctl/configs/suites/k8s.yaml --phase test
 
 # Run only teardown (cleanup from a previous run)
-isvctl test run -f isvctl/configs/tests/k8s.yaml --phase teardown
+isvctl test run -f isvctl/configs/suites/k8s.yaml --phase teardown
 
 # Dry run - validate config without executing
-isvctl test run -f isvctl/configs/tests/k8s.yaml --dry-run
+isvctl test run -f isvctl/configs/suites/k8s.yaml --dry-run
 
 # Verbose with pytest options
-isvctl test run -f isvctl/configs/tests/k8s.yaml -- -v -s --tb=short
+isvctl test run -f isvctl/configs/suites/k8s.yaml -- -v -s --tb=short
 ```
 
 ### Merge Multiple Configs
@@ -104,7 +101,7 @@ isvctl test run -f config.yaml --set context.node_count=8
 
 ```bash
 # Check configuration syntax and schema
-isvctl test validate -f isvctl/configs/tests/k8s.yaml
+isvctl test validate -f isvctl/configs/suites/k8s.yaml
 ```
 
 ## Configuration Schema
@@ -122,11 +119,11 @@ commands:
     steps:
       - name: setup
         phase: setup
-        command: "../stubs/my-isv/k8s/setup.sh"  # replace "my-isv" with your ISV name
+        command: "my-isv/scripts/k8s/setup.sh"  # replace "my-isv" with your ISV name
         timeout: 120
       - name: teardown
         phase: teardown
-        command: "../stubs/my-isv/k8s/teardown.sh"  # replace "my-isv" with your ISV name
+        command: "my-isv/scripts/k8s/teardown.sh"  # replace "my-isv" with your ISV name
         timeout: 30
 
 tests:
@@ -170,11 +167,11 @@ This output is validated and becomes the `{{inventory.*}}` available in template
 
 ### Directory Organization
 
-Place your provider-specific lifecycle scripts under `configs/stubs/<your-isv-name>/`, mirroring the structure of the `stubs/my-isv/` template scaffold (e.g. `configs/stubs/acme/k8s/setup.sh`). The stubs directory contains three trees:
+Place your provider-specific lifecycle scripts under `configs/providers/<your-isv-name>/scripts/`, mirroring the structure of the `providers/my-isv/scripts/` scaffold (e.g. `configs/providers/acme/scripts/k8s/setup.sh`). The providers directory contains:
 
-- `stubs/my-isv/` - copy-and-fill-in template stubs for every domain
-- `stubs/aws/` - fully-implemented AWS reference (follow its layout and JSON output contracts)
-- `stubs/common/` - shared utilities used across providers
+- `providers/my-isv/scripts/` - copy-and-fill-in template scripts for every domain
+- `providers/aws/scripts/` - fully-implemented AWS reference (follow its layout and JSON output contracts)
+- `providers/common/` - shared utilities used across providers
 
 Stubs can be written in any language. They must:
 
@@ -227,10 +224,10 @@ See [Remote Deployment Guide](../guides/remote-deployment.md) for full details.
 
 ```bash
 # Deploy and run tests on remote machine
-uv run isvctl deploy run 192.168.1.100 -u ubuntu -f isvctl/configs/tests/k8s.yaml
+uv run isvctl deploy run 192.168.1.100 -u ubuntu -f isvctl/configs/suites/k8s.yaml
 
 # With jumphost
-uv run isvctl deploy run 192.168.1.100 -j jumphost.example.com -u ubuntu -f isvctl/configs/tests/k8s.yaml
+uv run isvctl deploy run 192.168.1.100 -j jumphost.example.com -u ubuntu -f isvctl/configs/suites/k8s.yaml
 ```
 
 ## Development

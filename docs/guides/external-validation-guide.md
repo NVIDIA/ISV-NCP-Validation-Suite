@@ -253,11 +253,11 @@ python ./scripts/provision.py --name test 2>/dev/null | jq .
 For common validation scenarios, don't write your config from scratch - the
 repo ships a ready-made scaffold:
 
-- [**my-isv scaffold**](../../isvctl/configs/stubs/my-isv/README.md) --
+- [**my-isv scaffold**](../../isvctl/configs/providers/my-isv/scripts/README.md) --
   copy-and-fill-in stubs covering IAM, control-plane, VM, bare metal,
   network, image registry, k8s, and Slurm. Each stub has a `TODO:` block
   and a demo-mode fallback.
-- [**Test suite contracts**](../../isvctl/configs/tests/README.md) --
+- [**Test suite contracts**](../../isvctl/configs/suites/README.md) --
   per-step JSON-field breakdown for every domain.
 - [**AWS reference**](../references/aws.md) - a complete working
   implementation of every stub in the scaffold.
@@ -274,7 +274,7 @@ make demo-test   # sets ISVCTL_DEMO_MODE=1 and runs all 6 my-isv configs (~10s)
 ## Related Documentation
 
 - [Configuration Guide](configuration.md) - Full config reference (steps, schemas, validations, templates)
-- [Validation Test Suites](../../isvctl/configs/tests/README.md) - Provider-agnostic test suites with step-by-step details
+- [Validation Test Suites](../../isvctl/configs/suites/README.md) - Provider-agnostic test suites with step-by-step details
 - [AWS Reference Implementation](../references/aws.md) - Working AWS examples for all templates
 - [isvctl Package](../packages/isvctl.md) - CLI documentation
 - [Local Development](local-development.md) - Development setup

@@ -14,7 +14,7 @@
 # Copy this file, uncomment what you need, and pass it as a second -f flag.
 #
 # Usage:
-#   isvctl test run -f isvctl/configs/tests/k8s.yaml -f isvctl/configs/overrides.yaml
+#   isvctl test run -f isvctl/configs/suites/k8s.yaml -f isvctl/configs/overrides.yaml
 #   isvctl test run -f isvctl/configs/providers/microk8s.yaml -f isvctl/configs/overrides.yaml
 
 # Exclude specific tests by name

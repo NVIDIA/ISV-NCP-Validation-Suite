@@ -1,15 +1,15 @@
 # AWS Reference Implementation
 
-The AWS implementation is a complete, working example of the ISV validation framework. Use it as a reference when implementing the [provider-agnostic templates](../../isvctl/configs/tests/README.md) for your own platform.
+The AWS implementation is a complete, working example of the ISV validation framework. Use it as a reference when implementing the [provider-agnostic templates](../../isvctl/configs/suites/README.md) for your own platform.
 
 ## How Templates and AWS Relate
 
 ```text
-Template (provider-agnostic)             AWS Reference (working example)
-─────────────────────────────            ─────────────────────────────────
-tests/vm.yaml                            providers/aws/vm.yaml
-stubs/my-isv/vm/launch_instance.py       stubs/aws/vm/launch_instance.py
-     ↑ TODO block + demo-mode fallback         ↑ full boto3 implementation
+Template (provider-agnostic)                         AWS Reference (working example)
+─────────────────────────────────────────            ──────────────────────────────────────────────
+suites/vm.yaml                                       providers/aws/config/vm.yaml
+providers/my-isv/scripts/vm/launch_instance.py       providers/aws/scripts/vm/launch_instance.py
+     ↑ TODO block + demo-mode fallback                     ↑ full boto3 implementation
 ```
 
 Each template has a corresponding AWS config and scripts that show exactly how to fill in the TODO blocks.
@@ -18,35 +18,35 @@ Each template has a corresponding AWS config and scripts that show exactly how t
 
 | Domain | Config | Scripts | Docs | Test Suite |
 |--------|--------|---------|------|------------|
-| **IAM** | [`providers/aws/iam.yaml`](../../isvctl/configs/providers/aws/iam.yaml) | [`stubs/aws/iam/`](../../isvctl/configs/stubs/aws/iam/) | [Guide](../../isvctl/configs/stubs/aws/iam/docs/aws-iam.md) | [`tests/iam.yaml`](../../isvctl/configs/tests/iam.yaml) |
-| **Network** | [`providers/aws/network.yaml`](../../isvctl/configs/providers/aws/network.yaml) | [`stubs/aws/network/`](../../isvctl/configs/stubs/aws/network/) | [Guide](../../isvctl/configs/stubs/aws/network/docs/aws-network.md) | [`tests/network.yaml`](../../isvctl/configs/tests/network.yaml) |
-| **VM** | [`providers/aws/vm.yaml`](../../isvctl/configs/providers/aws/vm.yaml) | [`stubs/aws/vm/`](../../isvctl/configs/stubs/aws/vm/) | [Guide](../../isvctl/configs/stubs/aws/vm/docs/aws-vm.md) | [`tests/vm.yaml`](../../isvctl/configs/tests/vm.yaml) |
-| **Bare Metal** | [`providers/aws/bare_metal.yaml`](../../isvctl/configs/providers/aws/bare_metal.yaml) | [`stubs/aws/bare_metal/`](../../isvctl/configs/stubs/aws/bare_metal/) | [Guide](../../isvctl/configs/stubs/aws/bare_metal/docs/aws-bm.md) | [`tests/bare_metal.yaml`](../../isvctl/configs/tests/bare_metal.yaml) |
-| **EKS** | [`providers/aws/eks.yaml`](../../isvctl/configs/providers/aws/eks.yaml) | [`stubs/aws/eks/`](../../isvctl/configs/stubs/aws/eks/) | [Guide](../../isvctl/configs/stubs/aws/eks/docs/aws-eks.md) | [`tests/k8s.yaml`](../../isvctl/configs/tests/k8s.yaml) |
-| **Control Plane** | [`providers/aws/control-plane.yaml`](../../isvctl/configs/providers/aws/control-plane.yaml) | [`stubs/aws/control-plane/`](../../isvctl/configs/stubs/aws/control-plane/) | [Guide](../../isvctl/configs/stubs/aws/control-plane/docs/aws-control-plane.md) | [`tests/control-plane.yaml`](../../isvctl/configs/tests/control-plane.yaml) |
-| **Image Registry** | [`providers/aws/image-registry.yaml`](../../isvctl/configs/providers/aws/image-registry.yaml) | [`stubs/aws/image-registry/`](../../isvctl/configs/stubs/aws/image-registry/) | [Guide](../../isvctl/configs/stubs/aws/image-registry/docs/aws-image-registry.md) | [`tests/image-registry.yaml`](../../isvctl/configs/tests/image-registry.yaml) |
+| **IAM** | [`providers/aws/config/iam.yaml`](../../isvctl/configs/providers/aws/config/iam.yaml) | [`providers/aws/scripts/iam/`](../../isvctl/configs/providers/aws/scripts/iam/) | [Guide](../../isvctl/configs/providers/aws/scripts/iam/docs/aws-iam.md) | [`suites/iam.yaml`](../../isvctl/configs/suites/iam.yaml) |
+| **Network** | [`providers/aws/config/network.yaml`](../../isvctl/configs/providers/aws/config/network.yaml) | [`providers/aws/scripts/network/`](../../isvctl/configs/providers/aws/scripts/network/) | [Guide](../../isvctl/configs/providers/aws/scripts/network/docs/aws-network.md) | [`suites/network.yaml`](../../isvctl/configs/suites/network.yaml) |
+| **VM** | [`providers/aws/config/vm.yaml`](../../isvctl/configs/providers/aws/config/vm.yaml) | [`providers/aws/scripts/vm/`](../../isvctl/configs/providers/aws/scripts/vm/) | [Guide](../../isvctl/configs/providers/aws/scripts/vm/docs/aws-vm.md) | [`suites/vm.yaml`](../../isvctl/configs/suites/vm.yaml) |
+| **Bare Metal** | [`providers/aws/config/bare_metal.yaml`](../../isvctl/configs/providers/aws/config/bare_metal.yaml) | [`providers/aws/scripts/bare_metal/`](../../isvctl/configs/providers/aws/scripts/bare_metal/) | [Guide](../../isvctl/configs/providers/aws/scripts/bare_metal/docs/aws-bm.md) | [`suites/bare_metal.yaml`](../../isvctl/configs/suites/bare_metal.yaml) |
+| **EKS** | [`providers/aws/config/eks.yaml`](../../isvctl/configs/providers/aws/config/eks.yaml) | [`providers/aws/scripts/eks/`](../../isvctl/configs/providers/aws/scripts/eks/) | [Guide](../../isvctl/configs/providers/aws/scripts/eks/docs/aws-eks.md) | [`suites/k8s.yaml`](../../isvctl/configs/suites/k8s.yaml) |
+| **Control Plane** | [`providers/aws/config/control-plane.yaml`](../../isvctl/configs/providers/aws/config/control-plane.yaml) | [`providers/aws/scripts/control-plane/`](../../isvctl/configs/providers/aws/scripts/control-plane/) | [Guide](../../isvctl/configs/providers/aws/scripts/control-plane/docs/aws-control-plane.md) | [`suites/control-plane.yaml`](../../isvctl/configs/suites/control-plane.yaml) |
+| **Image Registry** | [`providers/aws/config/image-registry.yaml`](../../isvctl/configs/providers/aws/config/image-registry.yaml) | [`providers/aws/scripts/image-registry/`](../../isvctl/configs/providers/aws/scripts/image-registry/) | [Guide](../../isvctl/configs/providers/aws/scripts/image-registry/docs/aws-image-registry.md) | [`suites/image-registry.yaml`](../../isvctl/configs/suites/image-registry.yaml) |
 
-Shared AWS utilities (error handling, EC2/VPC helpers) are in [`stubs/aws/common/`](../../isvctl/configs/stubs/aws/common/).
+Shared AWS utilities (error handling, EC2/VPC helpers) are in [`providers/aws/scripts/common/`](../../isvctl/configs/providers/aws/scripts/common/).
 
 ## Running AWS Validations
 
 ```bash
 # Prerequisites: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION set
 
-uv run isvctl test run -f isvctl/configs/providers/aws/iam.yaml
-uv run isvctl test run -f isvctl/configs/providers/aws/network.yaml
-uv run isvctl test run -f isvctl/configs/providers/aws/vm.yaml
-uv run isvctl test run -f isvctl/configs/providers/aws/bare_metal.yaml
-uv run isvctl test run -f isvctl/configs/providers/aws/eks.yaml
-uv run isvctl test run -f isvctl/configs/providers/aws/control-plane.yaml
-uv run isvctl test run -f isvctl/configs/providers/aws/image-registry.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/config/iam.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/config/network.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/config/vm.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/config/bare_metal.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/config/eks.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/config/control-plane.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/config/image-registry.yaml
 ```
 
 ## Using AWS as a Reference
 
 When implementing a template for your platform:
 
-1. Open the template stub (e.g., `stubs/my-isv/vm/launch_instance.py`)
-2. Open the AWS equivalent side-by-side (e.g., `stubs/aws/vm/launch_instance.py`)
+1. Open the template script (e.g., `providers/my-isv/scripts/vm/launch_instance.py`)
+2. Open the AWS equivalent side-by-side (e.g., `providers/aws/scripts/vm/launch_instance.py`)
 3. Replace the TODO block with your platform's API calls, keeping the same JSON output fields
 4. Read the AWS domain guide (linked above) for context on what each test validates and why

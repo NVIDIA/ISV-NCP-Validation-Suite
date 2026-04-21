@@ -80,9 +80,9 @@ demo-test: ## Run all my-isv living examples with ISVCTL_DEMO_MODE=1
 		echo "=========================================="; \
 		echo "Demo test: $$domain"; \
 		echo "=========================================="; \
-		echo "Running cmd: ISVCTL_DEMO_MODE=1 uv run isvctl test run -f isvctl/configs/providers/my-isv/$$domain.yaml"; \
+		echo "Running cmd: ISVCTL_DEMO_MODE=1 uv run isvctl test run -f isvctl/configs/providers/my-isv/config/$$domain.yaml"; \
 		ISVCTL_DEMO_MODE=1 uv run isvctl test run \
-			-f isvctl/configs/providers/my-isv/$$domain.yaml || exit 1; \
+			-f isvctl/configs/providers/my-isv/config/$$domain.yaml || exit 1; \
 	done
 	@echo ""
 	@echo "✅ All my-isv living examples passed in demo mode!"

@@ -39,7 +39,7 @@ make demo-test
 This runs all 6 my-isv provider configs end-to-end under `ISVCTL_DEMO_MODE=1`.
 No credentials, no cloud resources created. Great sanity check after
 install, and the starting point if you're adding a new platform --
-see [`stubs/my-isv/`](../isvctl/configs/stubs/my-isv/).
+see [`providers/my-isv/scripts/`](../isvctl/configs/providers/my-isv/scripts/).
 
 ### Running Validation Tests
 
@@ -47,13 +47,13 @@ see [`stubs/my-isv/`](../isvctl/configs/stubs/my-isv/).
 
 ```bash
 # AWS control plane validation
-uv run isvctl test run -f isvctl/configs/providers/aws/control-plane.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/config/control-plane.yaml
 
 # AWS network validation
-uv run isvctl test run -f isvctl/configs/providers/aws/network.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/config/network.yaml
 
 # Kubernetes cluster
-uv run isvctl test run -f isvctl/configs/tests/k8s.yaml
+uv run isvctl test run -f isvctl/configs/suites/k8s.yaml
 
 # Local MicroK8s
 uv run isvctl test run -f isvctl/configs/providers/microk8s.yaml
@@ -65,17 +65,17 @@ uv run isvctl test run -f isvctl/configs/providers/minikube.yaml
 uv run isvctl test run -f isvctl/configs/providers/k3s.yaml
 
 # Slurm cluster
-uv run isvctl test run -f isvctl/configs/tests/slurm.yaml
+uv run isvctl test run -f isvctl/configs/suites/slurm.yaml
 ```
 
 **From installed wheel:**
 
 ```bash
 # Kubernetes
-isvctl test run -f configs/tests/k8s.yaml
+isvctl test run -f configs/suites/k8s.yaml
 
 # Slurm (may require sudo for docker access)
-sudo -E env "PATH=$PATH" isvctl test run -f configs/tests/slurm.yaml
+sudo -E env "PATH=$PATH" isvctl test run -f configs/suites/slurm.yaml
 ```
 
 > **Note:** Slurm tests using docker containers may require `sudo` if the Slurm user
@@ -86,19 +86,19 @@ sudo -E env "PATH=$PATH" isvctl test run -f configs/tests/slurm.yaml
 
 ```bash
 # Verbose output (shows script output on failure)
-isvctl test run -f configs/tests/k8s.yaml -v
+isvctl test run -f configs/suites/k8s.yaml -v
 
 # Pass extra pytest args
-isvctl test run -f configs/tests/k8s.yaml -- -v -s -k "NodeCount"
+isvctl test run -f configs/suites/k8s.yaml -- -v -s -k "NodeCount"
 
 # Upload results to ISV Lab Service
-isvctl test run -f configs/tests/k8s.yaml --lab-id 35
+isvctl test run -f configs/suites/k8s.yaml --lab-id 35
 
 # With ISV software version metadata
-isvctl test run -f configs/tests/k8s.yaml --lab-id 35 --isv-software-version "2.1.0-rc3"
+isvctl test run -f configs/suites/k8s.yaml --lab-id 35 --isv-software-version "2.1.0-rc3"
 
 # Dry run (validate config without executing)
-isvctl test run -f configs/tests/k8s.yaml --dry-run
+isvctl test run -f configs/suites/k8s.yaml --dry-run
 ```
 
 When you use `--lab-id`, the same process creates the test run (shown as STARTED in the portal) and, after all phases complete, updates it to SUCCESS or FAILED. **If the process is killed, times out, or hangs before that update, the run stays STARTED.** See [Troubleshooting: Test runs stuck in STARTED](guides/troubleshooting-started-tests.md) for causes and fixes.
@@ -108,10 +108,10 @@ When you use `--lab-id`, the same process creates the test run (shown as STARTED
 Deploy and run tests on a remote machine:
 
 ```bash
-uv run isvctl deploy run <target-ip> -f isvctl/configs/tests/k8s.yaml
+uv run isvctl deploy run <target-ip> -f isvctl/configs/suites/k8s.yaml
 
 # With jumphost for air-gapped environments
-uv run isvctl deploy run <target-ip> -j <jumphost>:<port> -u ubuntu -f isvctl/configs/tests/k8s.yaml
+uv run isvctl deploy run <target-ip> -j <jumphost>:<port> -u ubuntu -f isvctl/configs/suites/k8s.yaml
 ```
 
 See [Remote Deployment Guide](guides/remote-deployment.md) for details.
@@ -133,8 +133,8 @@ See [Remote Deployment Guide](guides/remote-deployment.md) for details.
 
 ## Next Steps
 
-- [my-isv Scaffold](../isvctl/configs/stubs/my-isv/README.md) - Adding your own platform? Start here
-- [Validation Test Suites](../isvctl/configs/tests/README.md) - The platform-agnostic validation contract
+- [my-isv Scaffold](../isvctl/configs/providers/my-isv/scripts/README.md) - Adding your own platform? Start here
+- [Validation Test Suites](../isvctl/configs/suites/README.md) - The platform-agnostic validation contract
 - [AWS Reference Implementation](references/aws.md) - Working AWS examples to study
 - [Configuration Guide](guides/configuration.md) - Config file format and options
 - [External Validation Guide](guides/external-validation-guide.md) - Custom validations without modifying the repo

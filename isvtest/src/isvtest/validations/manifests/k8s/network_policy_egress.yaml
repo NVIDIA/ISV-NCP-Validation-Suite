@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# Egress NetworkPolicy for K8sNetworkPolicyCheck.
+#
+# Applied to pods labeled role=allowed-client. Allows egress traffic only to
+# pods labeled role=server. All other egress (including to other-server) is
+# denied. DNS is intentionally NOT allowed — the validation probes by pod IP.
+#
+# Placeholders (replaced by K8sNetworkPolicyCheck at runtime):
+#   __NAMESPACE__ - ephemeral test namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: isvtest-netpol-egress
+  namespace: __NAMESPACE__
+spec:
+  podSelector:
+    matchLabels:
+      role: allowed-client
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              role: server

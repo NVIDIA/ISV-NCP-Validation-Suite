@@ -62,6 +62,10 @@ class Settings:
         Dual-Stack Node Validation Configuration (K8S22):
         K8S_REQUIRE_DUAL_STACK: Whether the cluster must be dual-stack
             ("true", "false", or "auto", default: "auto")
+
+        NetworkPolicy Validation Configuration (K8S22):
+        K8S_NETPOL_IMAGE: Container image for NetworkPolicy probe pods
+            (default: registry.k8s.io/e2e-test-images/agnhost:2.47)
     """
 
     validation_timeout: int = int(os.getenv("VALIDATION_TIMEOUT", "300"))
@@ -318,6 +322,18 @@ def get_k8s_require_dual_stack() -> str:
         The validation itself normalizes these to bool / ``"auto"``.
     """
     return os.getenv("K8S_REQUIRE_DUAL_STACK", "auto")
+
+
+def get_k8s_network_policy_image() -> str:
+    """Get container image for NetworkPolicy probe pods.
+
+    The image must provide the ``agnhost`` binary (supports both ``connect``
+    and ``netexec`` subcommands).
+
+    Returns:
+        Container image URL (default: registry.k8s.io/e2e-test-images/agnhost:2.47)
+    """
+    return os.getenv("K8S_NETPOL_IMAGE", "registry.k8s.io/e2e-test-images/agnhost:2.47")
 
 
 settings = Settings()

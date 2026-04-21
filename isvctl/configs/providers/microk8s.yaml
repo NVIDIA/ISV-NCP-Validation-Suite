@@ -86,3 +86,5 @@ tests:
       - slow
       - workload
       - reframe
+    tests:
+      - K8sControlPlaneLogsCheck # TODO: need control plane logging

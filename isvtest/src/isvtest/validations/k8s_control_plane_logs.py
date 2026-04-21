@@ -202,6 +202,20 @@ class K8sControlPlaneLogsCheck(BaseValidation):
                 probe_error=probe_error,
             )
             return None
+
+        # Auto mode: a probe_error means kubectl itself failed (kubeconfig,
+        # RBAC, or context), not "no matching pods". Don't mask that by
+        # falling through to commands for every component — the operator
+        # needs to see the access failure and explicitly choose `mode: command`.
+        if mode == "auto" and probe_error is not None:
+            self.set_failed(
+                f"Unable to list pods in namespace {namespace!r} (kubectl error: "
+                f"{probe_error}). Auto mode cannot verify which components should "
+                f"use kubectl vs. commands — fix cluster access or set "
+                f"`mode: command` to use the `commands` mapping explicitly."
+            )
+            return None
+
         return plan
 
     def _fail_unresolved(

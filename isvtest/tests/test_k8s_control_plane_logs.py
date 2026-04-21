@@ -163,6 +163,29 @@ class TestAutoDispatch:
         assert "i/o timeout" in check.message
         assert "no `commands` mapping configured" not in check.message
 
+    def test_auto_surfaces_kubectl_error_even_when_commands_cover_all_components(self) -> None:
+        """A probe failure (kubeconfig/RBAC/context broken) must not be
+        masked by falling through to commands for every component — the
+        operator needs to know cluster access is broken."""
+        check = K8sControlPlaneLogsCheck(
+            config={
+                "mode": "auto",
+                "components": ["kube-apiserver"],
+                "commands": {"kube-apiserver": "echo hi"},
+            }
+        )
+
+        def fake(cmd: str, *a: Any, **kw: Any) -> CommandResult:
+            if "get pods" in cmd:
+                return _fail(stderr="Unable to connect to the server: dial tcp: i/o timeout")
+            raise AssertionError(f"unexpected {cmd}")
+
+        check.run_command = fake  # type: ignore[assignment]
+        check.run()
+        assert not check.passed
+        assert "Unable to list pods" in check.message
+        assert "i/o timeout" in check.message
+
     def test_auto_picks_kubectl_when_pods_present(self) -> None:
         check = K8sControlPlaneLogsCheck(config={"mode": "auto", "components": ["kube-apiserver"]})
         run_commands: list[str] = []

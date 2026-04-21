@@ -125,13 +125,24 @@ def delete_ami(ec2_client: Any, ami_id: str, snapshot_ids: list[str] | None = No
 
 
 def delete_bucket(s3_client: Any, bucket_name: str) -> bool:
-    """Delete S3 bucket and all objects."""
+    """Delete S3 bucket and all objects, including versioned objects and delete markers."""
     if not bucket_name:
         return True
 
     print(f"Deleting bucket {bucket_name}...", file=sys.stderr)
     try:
-        # Delete all objects first
+        # Delete all versioned objects and delete markers (handles versioning-enabled buckets)
+        version_paginator = s3_client.get_paginator("list_object_versions")
+        for page in version_paginator.paginate(Bucket=bucket_name):
+            objects_to_delete = []
+            for version in page.get("Versions", []):
+                objects_to_delete.append({"Key": version["Key"], "VersionId": version["VersionId"]})
+            for marker in page.get("DeleteMarkers", []):
+                objects_to_delete.append({"Key": marker["Key"], "VersionId": marker["VersionId"]})
+            if objects_to_delete:
+                s3_client.delete_objects(Bucket=bucket_name, Delete={"Objects": objects_to_delete})
+
+        # Delete any remaining non-versioned objects (unversioned bucket or missed objects)
         paginator = s3_client.get_paginator("list_objects_v2")
         for page in paginator.paginate(Bucket=bucket_name):
             objects = page.get("Contents", [])

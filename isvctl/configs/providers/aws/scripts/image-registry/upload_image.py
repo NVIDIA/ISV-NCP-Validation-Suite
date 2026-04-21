@@ -88,7 +88,7 @@ def create_vmimport_role(iam_client: Any) -> bool:
                 "Effect": "Allow",
                 "Principal": {"Service": "vmie.amazonaws.com"},
                 "Action": "sts:AssumeRole",
-                "Condition": {"StringEquals": {"sts:Externalid": "vmimport"}},
+                "Condition": {"StringEquals": {"sts:ExternalId": "vmimport"}},
             }
         ],
     }

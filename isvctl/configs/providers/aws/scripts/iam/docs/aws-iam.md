@@ -118,8 +118,6 @@ ISVCTL_DEMO_MODE=1 uv run isvctl test run -f isvctl/configs/providers/my-isv/con
 # Quickest path: copy the scaffolding, implement the scripts
 cp -r isvctl/configs/providers/my-isv/scripts/ isvctl/configs/providers/acme/scripts/
 cp -r isvctl/configs/providers/my-isv/config/  isvctl/configs/providers/acme/config/
-# Update script paths in the copied provider configs (they still reference my-isv/scripts/):
-sed -i 's|../scripts/|../scripts/|g' isvctl/configs/providers/acme/config/iam.yaml
 # Implement these three Python scripts (each contains a TODO block to fill in):
 #   isvctl/configs/providers/acme/scripts/iam/create_user.py
 #   isvctl/configs/providers/acme/scripts/iam/test_credentials.py

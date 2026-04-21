@@ -182,6 +182,7 @@ tests:
   settings:
     region: "my-isv-region-1"
     instance_type: "my-isv.gpu.1x"
+    teardown_flag: "{{(env.VM_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"
 
   # Skip SSH-based host checks (ConnectivityCheck, GpuCheck, DriverCheck,
   # CpuInfoCheck, CloudInitCheck, NIM checks, etc.) - they'd try to connect

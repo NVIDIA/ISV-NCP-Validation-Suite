@@ -91,6 +91,8 @@ tests:
           expected_labels:
             "nvidia.com/mig.capable": "true"
             "nvidia.com/mig.strategy": "single"
+        K8sDualStackNodeCheck:
+          require_dual_stack: "auto"   # true | false | "auto"
 
     k8s_identity:
       checks:

@@ -26,11 +26,25 @@ _CMD_SNIPPET_LEN = 80
 
 
 class K8sControlPlaneLogsCheck(BaseValidation):
+    """Verify Kubernetes control-plane logs can be viewed or exported.
+
+    Supports ``kubectl`` (in-cluster static pods), ``command`` (managed
+    distributions that expose logs via an out-of-cluster tool such as
+    ``aws logs tail``), and ``auto`` (per-component fallback from kubectl
+    to the configured command).
+    """
+
     description: ClassVar[str] = "Verify Kubernetes control-plane logs can be viewed or exported."
     timeout: ClassVar[int] = 120
     markers: ClassVar[list[str]] = ["kubernetes"]
 
     def run(self) -> None:
+        """Parse the check config, resolve each component, and retrieve its logs.
+
+        On any validation failure (bad config, unresolved component, empty
+        output, non-zero exit), marks the check failed via ``set_failed``
+        and returns; on success marks it passed via ``set_passed``.
+        """
         cfg = self._parse_config()
         if cfg is None:
             return
@@ -53,6 +67,12 @@ class K8sControlPlaneLogsCheck(BaseValidation):
         )
 
     def _parse_config(self) -> dict[str, Any] | None:
+        """Validate and normalize ``self.config`` into a plan-ready mapping.
+
+        Returns a dict with ``mode``, ``components``, ``min_log_lines``,
+        ``tail``, ``namespace``, ``since``, and ``commands`` on success.
+        On any invalid input calls ``set_failed`` and returns ``None``.
+        """
         mode = str(self.config.get("mode", "auto")).lower()
         if mode not in _VALID_MODES:
             self.set_failed(f"Invalid mode: {mode!r} (expected one of {list(_VALID_MODES)})")
@@ -123,6 +143,11 @@ class K8sControlPlaneLogsCheck(BaseValidation):
         }
 
     def _parse_positive_int(self, key: str, *, default: int) -> int | None:
+        """Read ``self.config[key]`` as an ``int >= 1`` (rejecting ``bool``).
+
+        Returns the parsed integer, or ``None`` after ``set_failed`` when
+        the value is a bool, non-numeric, or less than 1.
+        """
         raw = self.config.get(key, default)
         if isinstance(raw, bool):
             self.set_failed(f"`{key}` must be an integer, got bool: {raw!r}")
@@ -187,6 +212,11 @@ class K8sControlPlaneLogsCheck(BaseValidation):
         pods_by_component: dict[str, str],
         probe_error: str | None,
     ) -> None:
+        """Emit a mode-specific ``set_failed`` message for unresolved components.
+
+        Distinguishes between kubectl probe failure, absent pods, and missing
+        ``commands`` entries so the operator sees actionable remediation.
+        """
         if mode == "kubectl":
             if probe_error and not pods_by_component:
                 self.set_failed(
@@ -236,6 +266,13 @@ class K8sControlPlaneLogsCheck(BaseValidation):
         since: str | None,
         min_log_lines: int,
     ) -> None:
+        """Run each ``(component, path, target)`` entry and aggregate results.
+
+        For ``path == "kubectl"`` builds a ``kubectl logs`` invocation with
+        ``--tail`` and optional ``--since``; otherwise runs ``target`` as a
+        shell command. Each component must emit at least ``min_log_lines``
+        non-empty lines. Concludes with ``set_passed`` or ``set_failed``.
+        """
         failures: list[str] = []
         summaries: list[str] = []
         kubectl_base = get_kubectl_base_shell()
@@ -350,12 +387,14 @@ class K8sControlPlaneLogsCheck(BaseValidation):
 
 
 def _count_nonempty_lines(text: str) -> int:
+    """Return the number of lines in ``text`` that contain non-whitespace."""
     if not text:
         return 0
     return sum(1 for line in text.splitlines() if line.strip())
 
 
 def _format_via(paths: set[str]) -> str:
+    """Render the retrieval-path set as a human-readable ``via`` label."""
     if paths == {"kubectl"}:
         return "kubectl"
     if paths == {"command"}:

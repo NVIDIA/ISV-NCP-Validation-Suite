@@ -24,10 +24,12 @@ from isvtest.validations.k8s_control_plane_logs import (
 
 
 def _ok(stdout: str = "", stderr: str = "") -> CommandResult:
+    """Return a successful ``CommandResult`` (exit code 0) with the given output streams."""
     return CommandResult(exit_code=0, stdout=stdout, stderr=stderr, duration=0.0)
 
 
 def _fail(stdout: str = "", stderr: str = "", exit_code: int = 1) -> CommandResult:
+    """Return a failing ``CommandResult`` with the given non-zero exit code and output streams."""
     return CommandResult(exit_code=exit_code, stdout=stdout, stderr=stderr, duration=0.0)
 
 
@@ -38,6 +40,8 @@ def _pod_list(*pairs: tuple[str, str]) -> str:
 
 
 class TestCountNonemptyLines:
+    """Unit tests for the ``_count_nonempty_lines`` helper."""
+
     @pytest.mark.parametrize(
         ("text", "expected"),
         [
@@ -55,6 +59,8 @@ class TestCountNonemptyLines:
 
 
 class TestInputValidation:
+    """Config-level input validation: reject malformed ``mode``, ``components``, ``commands``, ``tail`` and ``min_log_lines`` up front with clear errors."""
+
     def test_invalid_mode_fails(self) -> None:
         check = K8sControlPlaneLogsCheck(config={"mode": "bogus"})
         check.run()
@@ -125,6 +131,8 @@ class TestInputValidation:
 
 
 class TestAutoDispatch:
+    """``mode: auto`` dispatch: route each component to kubectl or command based on pod discovery, and surface actionable errors when neither path can serve it."""
+
     def test_auto_hard_fails_when_no_pods_and_no_commands(self) -> None:
         check = K8sControlPlaneLogsCheck(config={"mode": "auto", "components": ["kube-apiserver"]})
 
@@ -249,6 +257,8 @@ class TestAutoDispatch:
 
 
 class TestKubectlPath:
+    """``mode: kubectl`` path: pod discovery (label then name-prefix fallback), ``--tail``/``--since`` forwarding, and failure handling when logs are missing, too short, or error out."""
+
     def test_kubectl_path_passes_when_each_component_returns_logs(self) -> None:
         check = K8sControlPlaneLogsCheck(
             config={
@@ -415,6 +425,8 @@ class TestKubectlPath:
 
 
 class TestCommandPath:
+    """``mode: command`` path: run the per-component command, enforce line-count thresholds, and report which command failed and why."""
+
     def test_command_path_passes_when_each_command_returns_logs(self) -> None:
         check = K8sControlPlaneLogsCheck(
             config={

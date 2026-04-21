@@ -131,6 +131,33 @@ tests:
     k8s_observability:
       checks:
         K8sApiServerMetricsCheck: {}
+        K8sControlPlaneLogsCheck:
+          # mode=auto resolves each component independently: kubectl when a
+          # control-plane pod exists in `namespace`, else `commands[component]`.
+          # This covers hybrid clusters (some components as static pods, others
+          # managed externally). Managed-provider examples:
+          #   commands:
+          #     kube-apiserver: >-
+          #       aws logs tail /aws/eks/my-cluster/cluster
+          #       --log-stream-name-prefix kube-apiserver- --since 5m
+          #     kube-scheduler: >-
+          #       gcloud logging read
+          #       'resource.type=k8s_cluster AND logName:kube-scheduler'
+          #       --limit 20 --freshness 5m
+          #     kube-controller-manager: >-
+          #       az monitor log-analytics query -w $LAW_ID --analytics-query
+          #       "KubeEvents | where ObjectKind == 'kube-controller-manager'
+          #       | take 20"
+          # `namespace` is only used by the kubectl path; `since` is forwarded
+          # to `kubectl logs --since` and ignored in command mode.
+          mode: auto
+          components:
+            - kube-apiserver
+            - kube-scheduler
+            - kube-controller-manager
+          min_log_lines: 1
+          namespace: "{{ steps.setup.kubernetes.control_plane_namespace | default('kube-system') }}"
+          tail: 20
 
   exclude:
     markers: []

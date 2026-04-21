@@ -18,14 +18,14 @@
 # right fields, the validations pass regardless of which IAM system you use.
 #
 # Quick start:
-#   1. Copy providers/my-isv/iam.yaml to providers/<your-platform>/iam.yaml
+#   1. Copy providers/my-isv/config/iam.yaml to providers/<your-platform>/config/iam.yaml
 #   2. Replace stub paths with your platform scripts
-#   3. Run: uv run isvctl test run -f isvctl/configs/providers/<your-platform>/iam.yaml
+#   3. Run: uv run isvctl test run -f isvctl/configs/providers/<your-platform>/config/iam.yaml
 #
 # See also:
-#   - my-isv living example: providers/my-isv/iam.yaml
+#   - my-isv living example: providers/my-isv/config/iam.yaml
 #   - AWS reference: providers/aws/config/iam.yaml + providers/aws/scripts/iam/
-#   - Per-step field breakdown: tests/README.md
+#   - Per-step field breakdown: ../suites/README.md
 
 version: "1.0"
 

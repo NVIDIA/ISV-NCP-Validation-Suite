@@ -173,7 +173,7 @@ def run(
     Use -- to pass additional arguments to pytest/isvtest.
 
     Examples:
-        isvctl test run -f lab.yaml -f commands.yaml -f tests/k8s.yaml
+        isvctl test run -f lab.yaml -f commands.yaml -f suites/k8s.yaml
         isvctl test run -f config.yaml --set context.node_count=8
         isvctl test run -f config.yaml --phase setup
         isvctl test run -f config.yaml -- -v -s -k "test_name"

@@ -18,14 +18,14 @@
 # right fields, the validations pass regardless of which cloud you use.
 #
 # Quick start:
-#   1. Copy providers/my-isv/bare_metal.yaml to providers/<your-platform>/bare_metal.yaml
+#   1. Copy providers/my-isv/config/bare_metal.yaml to providers/<your-platform>/config/bare_metal.yaml
 #   2. Replace stub paths with your platform scripts
-#   3. Run: uv run isvctl test run -f isvctl/configs/providers/<your-platform>/bare_metal.yaml
+#   3. Run: uv run isvctl test run -f isvctl/configs/providers/<your-platform>/config/bare_metal.yaml
 #
 # See also:
-#   - my-isv living example: providers/my-isv/bare_metal.yaml
+#   - my-isv living example: providers/my-isv/config/bare_metal.yaml
 #   - AWS reference: providers/aws/config/bare_metal.yaml + providers/aws/scripts/bare_metal/
-#   - Per-step field breakdown: tests/README.md
+#   - Per-step field breakdown: ../suites/README.md
 
 version: "1.0"
 

@@ -50,14 +50,14 @@ Pre-built configs are provided in `isvctl/configs/`:
 
 | Config | Description |
 | ------ | ----------- |
-| `providers/my-isv/*.yaml` | [my-isv scaffold](../../isvctl/configs/providers/my-isv/scripts/README.md) - copy-and-fill-in for your own platform (runs end-to-end under `ISVCTL_DEMO_MODE=1`) |
-| `providers/aws/control-plane.yaml` | AWS API health, access key lifecycle, tenant management |
-| `providers/aws/network.yaml` | AWS VPC network validation (6 test suites) |
-| `providers/aws/vm.yaml` | AWS EC2 GPU instance tests |
-| `providers/aws/iam.yaml` | AWS IAM user lifecycle |
-| `providers/aws/eks.yaml` | AWS EKS with GPU nodes |
-| `tests/k8s.yaml` | Standard Kubernetes cluster |
-| `tests/slurm.yaml` | Slurm HPC cluster |
+| `providers/my-isv/config/*.yaml` | [my-isv scaffold](../../isvctl/configs/providers/my-isv/scripts/README.md) - copy-and-fill-in for your own platform (runs end-to-end under `ISVCTL_DEMO_MODE=1`) |
+| `providers/aws/config/control-plane.yaml` | AWS API health, access key lifecycle, tenant management |
+| `providers/aws/config/network.yaml` | AWS VPC network validation (6 test suites) |
+| `providers/aws/config/vm.yaml` | AWS EC2 GPU instance tests |
+| `providers/aws/config/iam.yaml` | AWS IAM user lifecycle |
+| `providers/aws/config/eks.yaml` | AWS EKS with GPU nodes |
+| `suites/k8s.yaml` | Standard Kubernetes cluster |
+| `suites/slurm.yaml` | Slurm HPC cluster |
 
 ## Basic Usage
 
@@ -270,15 +270,15 @@ Provider configs can import a canonical test suite and override command definiti
 
 ```yaml
 # isvctl/configs/providers/my-isv/config/vm.yaml
-import: ../../tests/vm.yaml
+import: ../../../suites/vm.yaml
 
 commands:
   vm:
     steps:
       - name: launch_instance
-        command: "python3 ../../providers/my-isv/scripts/vm/launch_instance.py"
+        command: "python3 ../scripts/vm/launch_instance.py"
       - name: stop_instance
-        command: "python3 ../../providers/my-isv/scripts/vm/stop_instance.py"
+        command: "python3 ../scripts/vm/stop_instance.py"
       # ... list the full set of steps you need
 
 tests:

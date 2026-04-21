@@ -18,14 +18,14 @@
 # right fields, the validations pass regardless of which cloud you use.
 #
 # Quick start:
-#   1. Copy providers/my-isv/network.yaml to providers/<your-platform>/network.yaml
+#   1. Copy providers/my-isv/config/network.yaml to providers/<your-platform>/config/network.yaml
 #   2. Replace stub paths with your platform scripts
-#   3. Run: uv run isvctl test run -f isvctl/configs/providers/<your-platform>/network.yaml
+#   3. Run: uv run isvctl test run -f isvctl/configs/providers/<your-platform>/config/network.yaml
 #
 # See also:
-#   - my-isv living example: providers/my-isv/network.yaml
+#   - my-isv living example: providers/my-isv/config/network.yaml
 #   - AWS reference: providers/aws/config/network.yaml + providers/aws/scripts/network/
-#   - Per-step field breakdown: tests/README.md
+#   - Per-step field breakdown: ../suites/README.md
 
 version: "1.0"
 

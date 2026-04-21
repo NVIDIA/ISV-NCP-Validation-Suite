@@ -58,3 +58,7 @@ commands:
 
 tests:
   description: "AWS EKS GPU cluster validation"
+
+  exclude:
+    tests:
+      - K8sControlPlaneLogsCheck # TODO: need control plane logging

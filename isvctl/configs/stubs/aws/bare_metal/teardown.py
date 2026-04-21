@@ -89,7 +89,7 @@ def main() -> int:
         ec2.terminate_instances(InstanceIds=[args.instance_id])
         result["deleted"]["instances"].append(args.instance_id)
 
-        # Wait for termination -- bare-metal can take 15-20+ minutes.
+        # Wait for termination - bare-metal can take 15-20+ minutes.
         # If the waiter times out, that's OK: the terminate call succeeded
         # and AWS will finish it. We still proceed to clean up other resources.
         try:

@@ -18,7 +18,7 @@ import re
 from dataclasses import dataclass
 
 # Regex patterns for NCCL benchmark output.
-# The "#" prefix is optional -- present in some container output, absent in others.
+# The "#" prefix is optional - present in some container output, absent in others.
 _RE_AVG_BUS_BW = re.compile(r"#?\s*Avg bus bandwidth\s*:\s*([\d.]+)")
 _RE_OUT_OF_BOUNDS = re.compile(r"#?\s*Out of bounds values\s*:\s*(\d+)")
 _NCCL_DATA_TYPES = {"float", "half", "double", "int8", "int32", "uint8", "uint32", "int64", "uint64", "bfloat16"}

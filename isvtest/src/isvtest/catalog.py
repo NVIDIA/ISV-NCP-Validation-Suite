@@ -15,8 +15,8 @@ discover_all_tests() and serializing each BaseValidation subclass's metadata.
 The catalog is version-keyed by the installed isvtest package version.
 
 Platform tagging uses two sources (union of both):
-  1. Config files -- which checks appear in each isvctl/configs/tests/*.yaml
-  2. Class markers -- e.g. markers=["bare_metal"] implies BARE_METAL platform
+  1. Config files - which checks appear in each isvctl/configs/tests/*.yaml
+  2. Class markers - e.g. markers=["bare_metal"] implies BARE_METAL platform
 
 This ensures checks get a platform badge in the UI even when they aren't listed
 in a YAML config (e.g. Bm* checks that only run on-host, not via SSH).

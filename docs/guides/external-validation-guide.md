@@ -98,7 +98,7 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-Bash, Go, Terraform wrappers, or any language works -- as long as valid JSON goes to stdout. See the [Configuration Guide](configuration.md#script-output-and-schema-validation) for more script examples.
+Bash, Go, Terraform wrappers, or any language works - as long as valid JSON goes to stdout. See the [Configuration Guide](configuration.md#script-output-and-schema-validation) for more script examples.
 
 ---
 
@@ -248,28 +248,26 @@ python ./scripts/provision.py --name test 2>/dev/null | jq .
 
 ---
 
-## Templates
+## Templates and scaffolds
 
-For common validation scenarios, **pre-built test suites** are available in [`isvctl/configs/tests/`](../../isvctl/configs/tests/README.md). These provide a copy-and-customize starting point with skeleton scripts and documented JSON contracts.
+For common validation scenarios, don't write your config from scratch - the
+repo ships a ready-made scaffold:
 
-| Template | What it tests | Stubs |
-|----------|---------------|-------|
-| [`iam.yaml`](../../isvctl/configs/tests/iam.yaml) | User create → verify credentials → delete | 3 scripts |
-| [`network.yaml`](../../isvctl/configs/tests/network.yaml) | VPC CRUD, subnets, isolation, security, connectivity, traffic | 8 scripts |
-| [`vm.yaml`](../../isvctl/configs/tests/vm.yaml) | Launch GPU VM → list → reboot → NIM deploy → teardown | 4 scripts + 2 shared |
-| [`bare_metal.yaml`](../../isvctl/configs/tests/bare_metal.yaml) | Launch bare-metal → tags → topology → stop/start → reboot → power-cycle → NIM → teardown | 13 scripts + 2 shared |
-| [`k8s.yaml`](../../isvctl/configs/tests/k8s.yaml) | Provision K8s GPU cluster → validate nodes/GPU/workloads → teardown | 2 scripts |
-| [`control-plane.yaml`](../../isvctl/configs/tests/control-plane.yaml) | API health, access key lifecycle, tenant lifecycle | 10 scripts |
-| [`image-registry.yaml`](../../isvctl/configs/tests/image-registry.yaml) | Image upload → VM launch → install config CRUD → BMaaS install → teardown | 6 scripts |
+- [**my-isv scaffold**](../../isvctl/configs/stubs/my-isv/README.md) --
+  copy-and-fill-in stubs covering IAM, control-plane, VM, bare metal,
+  network, image registry, k8s, and Slurm. Each stub has a `TODO:` block
+  and a demo-mode fallback.
+- [**Test suite contracts**](../../isvctl/configs/tests/README.md) --
+  per-step JSON-field breakdown for every domain.
+- [**AWS reference**](../references/aws.md) - a complete working
+  implementation of every stub in the scaffold.
+
+Preview the whole pipeline with no cloud:
 
 ```bash
-# Copy the templates and implement for your platform
-cp -r isvctl/configs/tests/ isvctl/configs/my-isv/
-# Edit the stub scripts (each has a TODO block showing what to implement)
-uv run isvctl test run -f isvctl/configs/my-isv/vm.yaml
+make demo-test   # sets ISVCTL_DEMO_MODE=1 and runs all 6 my-isv configs (~10s)
+# Domains: iam, control-plane, vm, bare_metal, network, image-registry
 ```
-
-Each template has a matching **AWS reference implementation** you can study as a working example. See the [AWS Reference Guide](../references/aws.md) for details.
 
 ---
 

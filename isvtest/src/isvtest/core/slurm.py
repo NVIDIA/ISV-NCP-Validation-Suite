@@ -418,9 +418,9 @@ def detect_container_runtime(validator: "BaseValidation") -> str:
     Prioritizes MPI-capable runtimes that integrate with srun for true
     multi-node communication:
 
-    1. pyxis/enroot -- best Slurm integration (``--container-image`` via SPANK plugin)
-    2. singularity/apptainer -- native srun support
-    3. docker -- fallback (no native srun MPI integration)
+    1. pyxis/enroot - best Slurm integration (``--container-image`` via SPANK plugin)
+    2. singularity/apptainer - native srun support
+    3. docker - fallback (no native srun MPI integration)
 
     Args:
         validator: BaseValidation instance for running commands.

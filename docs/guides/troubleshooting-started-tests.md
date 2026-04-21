@@ -15,7 +15,7 @@ The update is sent when:
    isvctl test run -f configs/tests/k8s.yaml --lab-id ${ISV_LAB_ID}
    ```
 
-   The same process that creates the test run (STARTED) later calls the API again to set SUCCESS or FAILED after all phases (setup → test → teardown) finish. If this process exits normally, the run is updated.
+   The same process that creates the test run (STARTED) later calls the API again to set SUCCESS or FAILED after all phases (setup -> test -> teardown) finish. If this process exits normally, the run is updated.
 
 2. **Split flow (create + script + update)**
    You use a CI/CD or script that:
@@ -31,8 +31,8 @@ If the step that is supposed to call **update** never runs, the run stays STARTE
 |----------|-----------------------|--------|
 | Process killed | Job/container timeout, OOM, or manual kill before the code that calls `update` runs. | STARTED |
 | Process hangs | A validation or step never returns (e.g. waiting on a resource, deadlock). The process never reaches the line that calls `update`. | STARTED |
-| Split workflow | "Create" runs in one job/container; tests run in another. The second job never calls `update` (or doesn’t have the test run ID). | STARTED |
-| Wrong working directory | Test run ID is saved to `_output/testrun_id.txt` in the CWD of the process that created the run. If the process that should call `update` runs in a different directory or container and doesn’t pass `--test-run-id`, it can’t find the ID and may skip update. | STARTED |
+| Split workflow | "Create" runs in one job/container; tests run in another. The second job never calls `update` (or doesn't have the test run ID). | STARTED |
+| Wrong working directory | Test run ID is saved to `_output/testrun_id.txt` in the CWD of the process that created the run. If the process that should call `update` runs in a different directory or container and doesn't pass `--test-run-id`, it can't find the ID and may skip update. | STARTED |
 | after_script not run | In CI, if the main script is cancelled, times out, or fails in a way that skips `after_script`, the update step never runs. | STARTED |
 
 Runs that show **Executed by: isvctl** and reach SUCCESS/FAILED are using the single-command flow where the same process both creates and updates the run. Runs that show a user email (e.g. **Executed by: <user@partner.com>**) and stay STARTED are often using a split or custom flow where the update step is missing or never executed.
@@ -60,12 +60,12 @@ isvctl test run -f configs/tests/slurm.yaml --lab-id ${ISV_LAB_ID}
 Do **not** use `--no-upload` if you want results reported. The same process will:
 
 1. Create the test run (portal shows STARTED).
-2. Run setup → test → teardown.
+2. Run setup -> test -> teardown.
 3. Call the API again with SUCCESS or FAILED (and optional JUnit/log).
 
 If the process is killed or hangs before step 3, the run will still stay STARTED; in that case fix timeouts/hangs (see below).
 
-## If you must use a split flow (create → script → update)
+## If you must use a split flow (create -> script -> update)
 
 Ensure the step that runs **after** the tests **always** calls update, even when the test step fails or is cancelled:
 
@@ -85,14 +85,14 @@ Ensure the step that runs **after** the tests **always** calls update, even when
    # create run, set TRAP_TEST_RUN_ID, run tests, then update with real status in the normal path
    ```
 
-   Then in the normal path (when tests finish) call update with SUCCESS or FAILED; on EXIT (cancel, timeout, crash) the trap can at least send FAILED so the run doesn’t stay STARTED.
+   Then in the normal path (when tests finish) call update with SUCCESS or FAILED; on EXIT (cancel, timeout, crash) the trap can at least send FAILED so the run doesn't stay STARTED.
 
-3. **CI: Prefer a single job** that runs `isvctl test run ... --lab-id ...` so create and update are in one process. If you use separate jobs, the second job must receive the test run ID and call update in a block that runs even on failure (e.g. `after_script` that always runs, or a dedicated “report status” job that gets the ID from the first job).
+3. **CI: Prefer a single job** that runs `isvctl test run ... --lab-id ...` so create and update are in one process. If you use separate jobs, the second job must receive the test run ID and call update in a block that runs even on failure (e.g. `after_script` that always runs, or a dedicated "report status" job that gets the ID from the first job).
 
 ## If the process hangs or is killed
 
 - **Timeouts**
-  Increase job/container timeout so that the full suite (including setup/teardown) can finish. Long-running workload tests (e.g. NIM) can take 15–30+ minutes.
+  Increase job/container timeout so that the full suite (including setup/teardown) can finish. Long-running workload tests (e.g. NIM) can take 15-30+ minutes.
 
 - **Hangs**
   Check which phase hangs (setup, test, or teardown) from logs. Common causes: waiting on a cluster resource, Slurm job that never completes, or a validation that blocks. Fix the stub or validation, or exclude slow tests during initial runs:

@@ -105,15 +105,26 @@ Note: The resource restriction (`isv-test-*`) limits operations to test users on
 
 ## For Other Providers
 
-To implement IAM validation for a different provider,
-**start with the template**: [`configs/tests/`](../../../../tests/) contains
-a provider-agnostic `iam.yaml` and skeleton stub scripts you can copy and fill in.
+To implement IAM validation for a different provider, **start with the my-isv
+living example**: [`stubs/my-isv/iam/`](../../../my-isv/iam/) contains
+template stubs with TODO blocks and a `DEMO_MODE` gate, and
+[`providers/my-isv/iam.yaml`](../../../../providers/my-isv/iam.yaml) wires
+them to the canonical [`tests/iam.yaml`](../../../../tests/iam.yaml).
 
 ```bash
-# Quickest path: copy the template, implement the stubs
-cp -r isvctl/configs/tests/ isvctl/configs/my-isv/
-# Edit: my-isv/stubs/iam/create_user.py, test_credentials.py, delete_user.py
-uv run isvctl test run -f isvctl/configs/my-isv/iam.yaml
+# See the full pipeline run in demo mode (no real IAM platform needed)
+ISVCTL_DEMO_MODE=1 uv run isvctl test run -f isvctl/configs/providers/my-isv/iam.yaml
+
+# Quickest path: copy the scaffolding, implement the stubs
+cp -r isvctl/configs/stubs/my-isv/ isvctl/configs/stubs/acme/
+cp -r isvctl/configs/providers/my-isv/ isvctl/configs/providers/acme/
+# Update stub paths in the copied provider configs (they still reference stubs/my-isv/):
+sed -i 's|stubs/my-isv/|stubs/acme/|g' isvctl/configs/providers/acme/iam.yaml
+# Implement these three Python stubs (each contains a TODO block to fill in):
+#   isvctl/configs/stubs/acme/iam/create_user.py
+#   isvctl/configs/stubs/acme/iam/test_credentials.py
+#   isvctl/configs/stubs/acme/iam/delete_user.py
+uv run isvctl test run -f isvctl/configs/providers/acme/iam.yaml
 ```
 
 For more advanced integration, see the options below:

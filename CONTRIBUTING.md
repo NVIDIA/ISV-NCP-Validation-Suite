@@ -50,9 +50,9 @@ ISV NCP Validation Suite is a monorepo with three packages:
 
 | Package | Purpose |
 |---------|---------|
-| **isvctl** | CLI controller — orchestrates setup, test, and teardown phases via step-based configs |
-| **isvtest** | Validation engine — pytest-based framework with dynamic test discovery |
-| **isvreporter** | Results reporter — uploads test results to the ISV Lab Service API |
+| **isvctl** | CLI controller - orchestrates setup, test, and teardown phases via step-based configs |
+| **isvtest** | Validation engine - pytest-based framework with dynamic test discovery |
+| **isvreporter** | Results reporter - uploads test results to the ISV Lab Service API |
 
 Changes often span packages. For example, adding a new validation involves `isvtest` (test class), `isvctl` (config schema / stubs), and possibly `isvreporter` (result format). Please consider cross-package impact when contributing.
 
@@ -174,7 +174,7 @@ See the [Local Development Guide](docs/guides/local-development.md) for MicroK8s
 - Keep pull requests focused on a single change.
 - Ensure all CI checks pass before requesting review.
 - Be responsive to feedback and code review comments.
-- Assign reviewer as `NCP ISV Lab Maintainer` — at least one engineer will review the PR.
+- Assign reviewer as `NCP ISV Lab Maintainer` - at least one engineer will review the PR.
 
 ## Developer Certificate of Origin (DCO)
 
@@ -292,9 +292,9 @@ ISV-NCP-Validation-Suite/
 
 ## Related Documentation
 
-- [Getting Started](docs/getting-started.md) — Installation and usage
-- [Configuration](docs/guides/configuration.md) — Config file format and options
-- [Local Development](docs/guides/local-development.md) — MicroK8s, Minikube, and k3s setup for local testing
+- [Getting Started](docs/getting-started.md) - Installation and usage
+- [Configuration](docs/guides/configuration.md) - Config file format and options
+- [Local Development](docs/guides/local-development.md) - MicroK8s, Minikube, and k3s setup for local testing
 
 ## License
 

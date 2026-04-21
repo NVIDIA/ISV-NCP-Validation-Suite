@@ -550,9 +550,9 @@ class VpcIpConfigCheck(BaseValidation):
         min_ips_per_subnet: Minimum IPs per subnet (default: 16)
         auto_assign_ip_mode: How the NCP exposes external IPs (default: "subnet"):
             - "subnet": at least one subnet must have ``auto_assign_public_ip``
-              truthy (AWS model — MapPublicIpOnLaunch)
+              truthy (AWS model - MapPublicIpOnLaunch)
             - "instance": external IPs are attached per instance at launch time
-              (GCP model — accessConfig), so subnet-level flags don't apply;
+              (GCP model - accessConfig), so subnet-level flags don't apply;
               the subtest reports PASS with informational status
             - "disabled": no public IPs expected for this deployment; the
               subtest reports PASS with informational status

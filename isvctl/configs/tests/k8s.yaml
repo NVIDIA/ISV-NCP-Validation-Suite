@@ -31,11 +31,11 @@ commands:
     steps:
       - name: setup
         phase: setup
-        command: "../stubs/k8s/setup.sh"
+        command: "../stubs/my-isv/k8s/setup.sh"
         timeout: 120
       - name: teardown
         phase: teardown
-        command: "../stubs/k8s/teardown.sh"
+        command: "../stubs/my-isv/k8s/teardown.sh"
         timeout: 30
 
 # =============================================================================

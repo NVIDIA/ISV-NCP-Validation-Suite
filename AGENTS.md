@@ -29,6 +29,8 @@ make build          # Build all packages (wheels output to dist/)
 
 ```bash
 make test           # Run tests for all packages
+make demo-test     # Run all 6 my-isv provider configs end-to-end in demo mode
+                    # (sets ISVCTL_DEMO_MODE=1; no cloud needed; ~10s)
 uv run pytest       # Run tests in current package directory
 
 # isvtest has separate markers:
@@ -122,16 +124,25 @@ Config (YAML) -> Script (any language) -> JSON output -> Validations (assertions
 **Configuration Files**: Located in `isvctl/configs/tests/` (test definitions) and `isvctl/configs/providers/` (provider implementations)
 
 - Configs define step-based commands with phases and validations
-- Support Jinja2 templating: `"{{steps.create_network.vpc_id}}"`, `"{{region}}"` — the orchestrator warns when templates reference steps that haven't run or fields that don't exist, helping catch typos and rename mismatches
+- Support Jinja2 templating: `"{{steps.create_network.vpc_id}}"`, `"{{region}}"` - the orchestrator warns when templates reference steps that haven't run or fields that don't exist, helping catch typos and rename mismatches
 - Multiple configs can be merged with later files overriding earlier ones
 
-**Stubs (ISV Scripts)**: Located in `isvctl/configs/stubs/`
+**Stubs (ISV Scripts)**: Located in `isvctl/configs/stubs/`. Three trees:
 
-- Platform setup/teardown shell scripts: `stubs/k8s/setup.sh`, `stubs/slurm/setup.sh`, etc.
-- Tag verification scripts: `stubs/vm/describe_tags.py`, `stubs/bare_metal/describe_tags.py`
-- AWS Python scripts organized by domain: `stubs/aws/network/`, `stubs/aws/vm/`, `stubs/aws/iam/`, etc.
-- Shared AWS utilities: `stubs/aws/common/` (error handling, EC2 helpers, VPC helpers)
-- Each script is self-contained and can be run manually for debugging
+- `stubs/my-isv/` - the **scaffold**: copy-and-fill-in Python/Bash stubs for
+  every domain (iam, control-plane, vm, bare_metal, network, image-registry,
+  k8s, slurm). Each Python stub has a TODO block and a
+  `DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"` gate:
+  default run returns `"Not implemented - ..."` errors;
+  `ISVCTL_DEMO_MODE=1` (what `make demo-test` sets) returns dummy-success
+  output. See `stubs/my-isv/README.md` for the full explainer. ISVs copy
+  this tree as their starting point.
+- `stubs/aws/` - fully implemented AWS reference using boto3/Terraform,
+  organized by domain (`aws/network/`, `aws/vm/`, `aws/iam/`, ...).
+- `stubs/common/` - shared utilities used across providers (SSH helpers,
+  NIM deploy/teardown). `stubs/aws/common/` holds AWS-only helpers
+  (error handling, EC2/VPC).
+- Each script is self-contained and can be run manually for debugging.
 
 ### isvtest - Validation Framework
 

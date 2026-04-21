@@ -21,7 +21,7 @@
 
 Launched via ``torchrun --nproc_per_node=<gpus>``.  Each process trains
 on one GPU using DistributedDataParallel, which synchronises gradients
-across all GPUs via NCCL AllReduce every step -- the same communication
+across all GPUs via NCCL AllReduce every step - the same communication
 path real training workloads use.
 
 Validates:

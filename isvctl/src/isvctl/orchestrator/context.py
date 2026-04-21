@@ -273,9 +273,9 @@ class Context:
 
         Detects two cases that ``ChainableUndefined`` would silently absorb:
 
-        1. **Step not run** — ``steps.setup`` is empty because ``--phase test``
+        1. **Step not run** - ``steps.setup`` is empty because ``--phase test``
            skipped setup.
-        2. **Field not found** — ``steps.setup`` has output but the referenced
+        2. **Field not found** - ``steps.setup`` has output but the referenced
            field doesn't exist (typo, rename, wrong variable).
 
         Emits a one-time warning per unique path so operators know defaults
@@ -305,7 +305,7 @@ class Context:
                 self._context_warnings.append(msg)
                 continue
 
-            # Step has output — walk the path to check for missing fields
+            # Step has output - walk the path to check for missing fields
             node = steps_data
             for i, part in enumerate(parts):
                 if isinstance(node, dict) and part in node:

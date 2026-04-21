@@ -206,12 +206,12 @@ commands:
     steps:
       - name: launch_instance
         phase: setup
-        command: "python3 ../stubs/vm/launch_instance.py"
+        command: "python3 ../stubs/my-isv/vm/launch_instance.py"
         timeout: 600
 
       - name: stop_instance
         phase: test
-        command: "python3 ../stubs/vm/stop_instance.py"
+        command: "python3 ../stubs/my-isv/vm/stop_instance.py"
         timeout: 600
 
 tests:

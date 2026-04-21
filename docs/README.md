@@ -7,6 +7,7 @@ Welcome to the documentation for NVIDIA ISV NCP Validation Suite - a collection 
 ### Getting Started
 
 - [Getting Started](getting-started.md) - Installation and first steps
+- [my-isv Scaffold](../isvctl/configs/stubs/my-isv/README.md) - Adding your own platform? Start here (copy-and-fill-in stubs with a demo-mode fallback)
 
 ### Package Reference
 

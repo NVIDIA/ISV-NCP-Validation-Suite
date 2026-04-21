@@ -122,11 +122,11 @@ commands:
     steps:
       - name: setup
         phase: setup
-        command: "../stubs/k8s/setup.sh"
+        command: "../stubs/my-isv/k8s/setup.sh"  # replace "my-isv" with your ISV name
         timeout: 120
       - name: teardown
         phase: teardown
-        command: "../stubs/k8s/teardown.sh"
+        command: "../stubs/my-isv/k8s/teardown.sh"  # replace "my-isv" with your ISV name
         timeout: 30
 
 tests:
@@ -167,6 +167,14 @@ Setup stubs must output JSON to stdout:
 This output is validated and becomes the `{{inventory.*}}` available in templates.
 
 ## Writing Custom Stubs
+
+### Directory Organization
+
+Place your provider-specific lifecycle scripts under `configs/stubs/<your-isv-name>/`, mirroring the structure of the `stubs/my-isv/` template scaffold (e.g. `configs/stubs/acme/k8s/setup.sh`). The stubs directory contains three trees:
+
+- `stubs/my-isv/` - copy-and-fill-in template stubs for every domain
+- `stubs/aws/` - fully-implemented AWS reference (follow its layout and JSON output contracts)
+- `stubs/common/` - shared utilities used across providers
 
 Stubs can be written in any language. They must:
 

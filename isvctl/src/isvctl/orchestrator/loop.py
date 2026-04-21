@@ -324,7 +324,7 @@ class Orchestrator:
                 # - If setup was requested alongside teardown (full lifecycle), skip
                 #   teardown only when setup steps never actually executed.
                 # - If teardown was requested alone (e.g., `--phase teardown`), run
-                #   it unconditionally — the user is explicitly cleaning up resources
+                #   it unconditionally - the user is explicitly cleaning up resources
                 #   from a previous run.
                 if is_teardown:
                     setup_was_requested = "setup" in requested_phase_names or Phase.ALL in requested_phases

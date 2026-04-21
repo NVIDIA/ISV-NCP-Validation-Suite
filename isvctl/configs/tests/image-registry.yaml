@@ -8,205 +8,26 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-# Image Registry Validation - Canonical Configuration
+# Image Registry Validation - Canonical Contract
 #
-# THE canonical image registry test suite. Provider configs import this
-# file and override commands with platform-specific stubs.
+# Validations-only contract for image registry. Provider configs import
+# this file and supply their own commands (steps + scripts).
 #
-# Architecture:
-#   - Scripts: Platform-specific (YOU implement these) - handle cloud operations
-#   - Validations: Platform-agnostic (provided) - just check JSON output
-#   - Schema: Uses generic field names (image_id, config_id, instance_id)
+# This file defines WHAT to validate, not HOW to run it. Each validation
+# only inspects JSON output fields. As long as your scripts output the
+# right fields, the validations pass regardless of which cloud you use.
 #
-# Contract:
-#   Each script MUST print a JSON object to stdout. The validations
-#   only inspect that JSON. As long as your scripts output the right
-#   fields, the validations pass regardless of which cloud you use.
-#
-# Steps:
-#   1. upload_image           (setup)    - Upload OS image to registry
-#   2. crud_image             (test)     - CRUD operations on the uploaded image
-#   3. launch_instance        (test)     - Launch VM from imported image
-#   4. create_install_config  (test)     - CRUD an OS install configuration
-#   5. install_image_bm       (test)     - Install OS image on bare-metal
-#   6. install_config_bm      (test)     - Install OS config on bare-metal
-#   7. teardown               (teardown) - Clean up all resources
-#
-# Note: In the AWS reference implementation, the BM install/verify steps
-#   (install_image_bm, install_config_bm) are in ../aws/bare_metal.yaml instead of
-#   here, as verify_image and verify_config steps within the BM lifecycle.
-#
-# Quick start (new provider):
-#   1. Create your provider folder: mkdir -p isvctl/configs/providers/my-isv/
-#   2. Create providers/my-isv/image-registry.yaml with: import: ../../tests/image-registry.yaml
-#   3. Override commands with your platform stubs
-#   4. Run: uv run isvctl test run -f isvctl/configs/providers/my-isv/image-registry.yaml
+# Quick start:
+#   1. Copy providers/my-isv/image-registry.yaml to providers/<your-platform>/image-registry.yaml
+#   2. Replace stub paths with your platform scripts
+#   3. Run: uv run isvctl test run -f isvctl/configs/providers/<your-platform>/image-registry.yaml
 #
 # See also:
-#   - AWS reference implementation: ../aws/image-registry.yaml + ../stubs/aws/image-registry/
-#   - JSON schemas: isvctl/src/isvctl/config/output_schemas.py
+#   - my-isv living example: providers/my-isv/image-registry.yaml
+#   - AWS reference: providers/aws/image-registry.yaml + stubs/aws/image-registry/
+#   - Per-step field breakdown: tests/README.md
 
 version: "1.0"
-
-commands:
-  image_registry:
-    phases: ["setup", "test", "teardown"]
-    steps:
-      # ─── Step 1: Upload Image ──────────────────────────────────────
-      # YOUR SCRIPT must output JSON with at minimum:
-      #   {
-      #     "success": true,
-      #     "platform": "image_registry",
-      #     "image_id": "<imported-image-id>",
-      #     "storage_bucket": "<bucket-or-storage-name>",
-      #     "disk_ids": ["<snapshot-or-disk-id>"]
-      #   }
-      - name: upload_image
-        phase: setup
-        command: "python3 ../stubs/image-registry/upload_image.py"
-        args:
-          - "--image-url"
-          - "{{image_url}}"
-          - "--image-format"
-          - "{{image_format}}"
-          - "--region"
-          - "{{region}}"
-        timeout: 3600
-
-      # ─── Step 2: CRUD Image ───────────────────────────────────────
-      # YOUR SCRIPT must get, list, create (copy), and delete an image.
-      #   {
-      #     "success": true,
-      #     "platform": "image_registry",
-      #     "image_id": "<source-image-id>",
-      #     "operations": {
-      #       "get":    {"passed": true, "image_name": "...", "state": "available"},
-      #       "list":   {"passed": true, "image_count": 2},
-      #       "create": {"passed": true, "image_id": "<copy-image-id>"},
-      #       "delete": {"passed": true}
-      #     }
-      #   }
-      - name: crud_image
-        phase: test
-        command: "python3 ../stubs/image-registry/crud_image.py"
-        args:
-          - "--image-id"
-          - "{{steps.upload_image.image_id}}"
-          - "--region"
-          - "{{region}}"
-        timeout: 600
-
-      # ─── Step 3: Launch Instance from Image ────────────────────────
-      # YOUR SCRIPT must output JSON with at minimum:
-      #   {
-      #     "success": true,
-      #     "platform": "image_registry",
-      #     "instance_id": "<unique-id>",
-      #     "public_ip": "<ip-address>",
-      #     "key_path": "<path-to-ssh-key>",
-      #     "instance_state": "running",
-      #     "key_name": "<key-pair-name>",
-      #     "security_group_id": "<sg-id>",
-      #     "instance_profile": "<profile-name>"
-      #   }
-      - name: launch_instance
-        phase: test
-        command: "python3 ../stubs/image-registry/launch_instance.py"
-        args:
-          - "--image-id"
-          - "{{steps.upload_image.image_id}}"
-          - "--instance-type"
-          - "{{instance_type}}"
-          - "--region"
-          - "{{region}}"
-        timeout: 600
-
-      # ─── Step 4: CRUD OS Install Configuration ────────────────────
-      # YOUR SCRIPT must create, read, update, and delete an OS
-      # install configuration (e.g., iPXE config, Carbide profile).
-      #   {
-      #     "success": true,
-      #     "platform": "image_registry",
-      #     "config_id": "<config-id>",
-      #     "config_name": "<config-name>",
-      #     "operations": {
-      #       "create": {"passed": true},
-      #       "read":   {"passed": true},
-      #       "update": {"passed": true},
-      #       "delete": {"passed": true}
-      #     }
-      #   }
-      - name: crud_install_config
-        phase: test
-        command: "python3 ../stubs/image-registry/crud_install_config.py"
-        args:
-          - "--region"
-          - "{{region}}"
-        timeout: 300
-
-      # ─── Step 5: Install OS Image on Bare-Metal ──────────────────
-      # YOUR SCRIPT must provision a BM node from the uploaded OS image.
-      #   {
-      #     "success": true,
-      #     "platform": "image_registry",
-      #     "instance_id": "<bm-instance-id>",
-      #     "image_id": "<image-used>",
-      #     "instance_state": "running"
-      #   }
-      - name: install_image_bm
-        phase: test
-        command: "python3 ../stubs/image-registry/install_image_bm.py"
-        args:
-          - "--image-id"
-          - "{{steps.upload_image.image_id}}"
-          - "--region"
-          - "{{region}}"
-        timeout: 1800
-
-      # ─── Step 6: Install OS Config on Bare-Metal ─────────────────
-      # YOUR SCRIPT must provision a BM node using an install config.
-      #   {
-      #     "success": true,
-      #     "platform": "image_registry",
-      #     "instance_id": "<bm-instance-id>",
-      #     "config_id": "<config-used>",
-      #     "instance_state": "running"
-      #   }
-      - name: install_config_bm
-        phase: test
-        command: "python3 ../stubs/image-registry/install_config_bm.py"
-        args:
-          - "--config-id"
-          - "{{steps.crud_install_config.config_id}}"
-          - "--region"
-          - "{{region}}"
-        timeout: 1800
-
-      # ─── Step 7: Teardown ──────────────────────────────────────────
-      # YOUR SCRIPT must clean up all resources: instances, images,
-      # configs, storage, keys, security groups.
-      - name: teardown
-        phase: teardown
-        command: "python3 ../stubs/image-registry/teardown.py"
-        args:
-          - "--instance-id"
-          - "{{steps.launch_instance.instance_id}}"
-          - "--image-id"
-          - "{{steps.upload_image.image_id}}"
-          - "--disk-ids"
-          - "{{steps.upload_image.disk_ids | join(',')}}"
-          - "--bucket-name"
-          - "{{steps.upload_image.storage_bucket}}"
-          - "--key-name"
-          - "{{steps.launch_instance.key_name}}"
-          - "--security-group-id"
-          - "{{steps.launch_instance.security_group_id}}"
-          - "--instance-profile"
-          - "{{steps.launch_instance.instance_profile}}"
-          - "--region"
-          - "{{region}}"
-          - "{{teardown_flag}}"
-        timeout: 1800
 
 tests:
   cluster_name: "image-registry-validation"
@@ -214,7 +35,7 @@ tests:
   platform: image_registry
 
   settings:
-    # Provider-specific -- override in your provider config
+    # Provider-specific - override in your provider config
     region: ""
     image_url: "https://cloud-images.ubuntu.com/releases/noble/release/ubuntu-24.04-server-cloudimg-amd64.vmdk"
     image_format: "vmdk"

@@ -1,0 +1,232 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# my-isv Network Validation Configuration - Living Example
+#
+# Imports validations from the provider-agnostic network template and wires
+# the commands to the generic template stubs in stubs/my-isv/network/*. Those
+# stubs ship with dummy-success values so this example runs end-to-end
+# without any real cloud network infrastructure.
+#
+# Coverage:
+#   This example exercises all 13 pure JSON-contract validations
+#   (NetworkProvisionedCheck, VpcCrudCheck, SubnetConfigCheck,
+#    VpcIsolationCheck, SgCrudCheck, SecurityBlockingCheck,
+#    NetworkConnectivityCheck, TrafficFlowCheck, VpcIpConfigCheck,
+#    ByoipCheck, StablePrivateIpCheck, FloatingIpCheck, LocalizedDnsCheck,
+#    VpcPeeringCheck, StepSuccessCheck). The DhcpIpManagementCheck
+#    validation needs to SSH into a real instance, so it is excluded
+#    via `exclude.markers: [ssh]`; the dhcp_ip_test step is also
+#    `skip: true` for the same reason.
+#
+# Usage:
+#   uv run isvctl test run -f isvctl/configs/providers/my-isv/network.yaml
+
+import:
+  - ../../tests/network.yaml
+
+version: "1.0"
+
+commands:
+  network:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: create_network
+        phase: setup
+        command: "python ../../stubs/my-isv/network/create_vpc.py"
+        args:
+          - "--name"
+          - "isv-shared-vpc"
+          - "--region"
+          - "{{region}}"
+          - "--cidr"
+          - "10.0.0.0/16"
+        timeout: 60
+
+      - name: vpc_crud
+        phase: test
+        command: "python ../../stubs/my-isv/network/vpc_crud_test.py"
+        args: ["--region", "{{region}}", "--cidr", "10.99.0.0/16"]
+        timeout: 60
+        output_schema: vpc_crud
+
+      - name: subnet_config
+        phase: test
+        command: "python ../../stubs/my-isv/network/subnet_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--cidr"
+          - "10.98.0.0/16"
+          - "--subnet-count"
+          - "4"
+        timeout: 60
+        output_schema: subnet_config
+
+      - name: vpc_isolation
+        phase: test
+        command: "python ../../stubs/my-isv/network/isolation_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--cidr-a"
+          - "10.97.0.0/16"
+          - "--cidr-b"
+          - "10.96.0.0/16"
+        timeout: 60
+        output_schema: vpc_isolation
+
+      - name: sg_crud
+        phase: test
+        command: "python ../../stubs/my-isv/network/sg_crud_test.py"
+        args: ["--region", "{{region}}", "--cidr", "10.95.0.0/16"]
+        timeout: 60
+        output_schema: sg_crud
+
+      - name: security_blocking
+        phase: test
+        command: "python ../../stubs/my-isv/network/security_test.py"
+        args: ["--region", "{{region}}", "--cidr", "10.94.0.0/16"]
+        timeout: 60
+        output_schema: security_blocking
+
+      - name: connectivity_test
+        phase: test
+        command: "python ../../stubs/my-isv/network/test_connectivity.py"
+        args:
+          - "--vpc-id"
+          - "{{steps.create_network.network_id}}"
+          - "--subnet-ids"
+          - "{{steps.create_network.subnets | map(attribute='subnet_id') | join(',')}}"
+          - "--sg-id"
+          - "{{steps.create_network.security_group_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 60
+        output_schema: connectivity_result
+
+      - name: traffic_validation
+        phase: test
+        command: "python ../../stubs/my-isv/network/traffic_test.py"
+        args: ["--region", "{{region}}", "--cidr", "10.93.0.0/16"]
+        timeout: 60
+        output_schema: traffic_flow
+
+      - name: vpc_ip_config
+        phase: test
+        command: "python ../../stubs/my-isv/network/vpc_ip_config_test.py"
+        args:
+          - "--vpc-id"
+          - "{{steps.create_network.network_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 60
+        output_schema: vpc_ip_config
+
+      # Skipped: DhcpIpManagementCheck SSHes into a real instance; the dummy
+      # stub can't satisfy it. The step itself is skipped to keep the example
+      # consistent (no orphan step output).
+      - name: dhcp_ip_test
+        phase: test
+        skip: true
+        command: "python ../../stubs/my-isv/network/dhcp_ip_test.py"
+        args:
+          - "--vpc-id"
+          - "{{steps.create_network.network_id}}"
+          - "--subnet-id"
+          - "{{steps.create_network.subnets[0].subnet_id}}"
+          - "--sg-id"
+          - "{{steps.create_network.security_group_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 60
+        output_schema: dhcp_ip
+
+      - name: byoip_test
+        phase: test
+        command: "python ../../stubs/my-isv/network/byoip_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--custom-cidr"
+          - "100.64.0.0/16"
+          - "--standard-cidr"
+          - "10.90.0.0/16"
+        timeout: 60
+        output_schema: byoip
+
+      - name: stable_ip_test
+        phase: test
+        command: "python ../../stubs/my-isv/network/stable_ip_test.py"
+        args: ["--region", "{{region}}", "--cidr", "10.91.0.0/16"]
+        timeout: 60
+        output_schema: stable_ip
+
+      - name: floating_ip_test
+        phase: test
+        command: "python ../../stubs/my-isv/network/floating_ip_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--cidr"
+          - "10.92.0.0/16"
+          - "--max-switch-seconds"
+          - "10"
+        timeout: 60
+        output_schema: floating_ip
+
+      - name: dns_test
+        phase: test
+        command: "python ../../stubs/my-isv/network/dns_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--cidr"
+          - "10.89.0.0/16"
+          - "--domain"
+          - "internal.my-isv.test"
+        timeout: 60
+        output_schema: localized_dns
+
+      - name: peering_test
+        phase: test
+        command: "python ../../stubs/my-isv/network/peering_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--cidr-a"
+          - "10.88.0.0/16"
+          - "--cidr-b"
+          - "10.87.0.0/16"
+        timeout: 60
+        output_schema: vpc_peering
+
+      - name: teardown
+        phase: teardown
+        command: "python ../../stubs/my-isv/network/teardown.py"
+        args:
+          - "--vpc-id"
+          - "{{steps.create_network.network_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 60
+        output_schema: teardown
+
+tests:
+  cluster_name: "my-isv-network-validation"
+  description: "my-isv network lifecycle validation (generic stubs, dummy overrides)"
+
+  settings:
+    region: "my-isv-region-1"
+
+  # Skip SSH-based DhcpIpManagementCheck - it'd try to SSH into the dummy
+  # instance. Real ISVs remove this exclusion as their stubs come online.
+  exclude:
+    markers: ["ssh"]

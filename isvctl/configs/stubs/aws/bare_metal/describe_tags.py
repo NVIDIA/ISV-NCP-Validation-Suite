@@ -12,7 +12,7 @@
 """Retrieve user-defined tags on an AWS bare-metal EC2 instance.
 
 Fetches all tags applied to the instance via the EC2 API and returns them
-as a flat key→value dict. Required-key validation is handled by
+as a flat key->value dict. Required-key validation is handled by
 InstanceTagCheck in the validation layer.
 
 Usage:
@@ -68,7 +68,7 @@ def main() -> int:
         instance = reservations[0]["Instances"][0]
         raw_tags = instance.get("Tags", [])
 
-        # Convert [{Key: k, Value: v}, ...] → {k: v}
+        # Convert [{Key: k, Value: v}, ...] -> {k: v}
         tags = {t["Key"]: t["Value"] for t in raw_tags}
         result["tags"] = tags
         result["tag_count"] = len(tags)

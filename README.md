@@ -54,19 +54,15 @@ Running phases: ['setup', 'test', 'teardown']
 [PASS] All phases completed successfully
 ```
 
-## Running against your own platform
+## Adding your own platform
 
-Start from the **provider-agnostic templates** — copy, implement the stub scripts for your cloud/platform, and run:
+See the **[my-isv scaffold](isvctl/configs/stubs/my-isv/README.md)** --
+copy-and-fill-in stubs with a demo-mode fallback. Preview the whole pipeline
+before writing any code:
 
 ```bash
-cp -r isvctl/configs/tests/ isvctl/configs/my-isv/
-# Edit the stub scripts for your platform
-uv run isvctl test run -f isvctl/configs/my-isv/vm.yaml
+make demo-test
 ```
-
-Templates are available for: [IAM](isvctl/configs/tests/iam.yaml) | [Network](isvctl/configs/tests/network.yaml) | [VM](isvctl/configs/tests/vm.yaml) | [Bare Metal](isvctl/configs/tests/bare_metal.yaml) | [Kubernetes](isvctl/configs/tests/k8s.yaml) | [Control Plane](isvctl/configs/tests/control-plane.yaml) | [Image Registry](isvctl/configs/tests/image-registry.yaml)
-
-See the [Templates README](isvctl/configs/tests/README.md) for the full guide, and the [AWS Reference Implementation](docs/references/aws.md) as a working example.
 
 ## Documentation
 
@@ -83,7 +79,8 @@ See [docs/](docs/) for full documentation:
 
 ### References
 
-- [Validation Templates](isvctl/configs/tests/README.md) - Provider-agnostic templates for adding your platform
+- [my-isv Scaffold](isvctl/configs/stubs/my-isv/README.md) - Copy-and-fill-in stubs for adding your own platform
+- [Validation Test Suites](isvctl/configs/tests/README.md) - Provider-agnostic validation contract
 - [AWS Reference Implementation](docs/references/aws.md) - Working AWS examples for all validation domains
 
 ### Package Reference

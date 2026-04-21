@@ -26,11 +26,11 @@ commands:
     steps:
       - name: setup
         phase: setup
-        command: "../stubs/slurm/setup.sh"
+        command: "../stubs/my-isv/slurm/setup.sh"
         timeout: 120
       - name: teardown
         phase: teardown
-        command: "../stubs/slurm/teardown.sh"
+        command: "../stubs/my-isv/slurm/teardown.sh"
         timeout: 30
 
 # =============================================================================

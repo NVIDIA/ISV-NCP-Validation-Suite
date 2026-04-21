@@ -5,11 +5,11 @@ The AWS implementation is a complete, working example of the ISV validation fram
 ## How Templates and AWS Relate
 
 ```text
-Template (provider-agnostic)          AWS Reference (working example)
-─────────────────────────────         ─────────────────────────────────
-tests/vm.yaml                         providers/aws/vm.yaml
-tests/stubs/vm/launch_instance.py     stubs/aws/vm/launch_instance.py
-           ↑ skeleton + TODO                    ↑ full boto3 implementation
+Template (provider-agnostic)             AWS Reference (working example)
+─────────────────────────────            ─────────────────────────────────
+tests/vm.yaml                            providers/aws/vm.yaml
+stubs/my-isv/vm/launch_instance.py       stubs/aws/vm/launch_instance.py
+     ↑ TODO block + demo-mode fallback         ↑ full boto3 implementation
 ```
 
 Each template has a corresponding AWS config and scripts that show exactly how to fill in the TODO blocks.
@@ -46,7 +46,7 @@ uv run isvctl test run -f isvctl/configs/providers/aws/image-registry.yaml
 
 When implementing a template for your platform:
 
-1. Open the template stub (e.g., `stubs/vm/launch_instance.py`)
+1. Open the template stub (e.g., `stubs/my-isv/vm/launch_instance.py`)
 2. Open the AWS equivalent side-by-side (e.g., `stubs/aws/vm/launch_instance.py`)
 3. Replace the TODO block with your platform's API calls, keeping the same JSON output fields
 4. Read the AWS domain guide (linked above) for context on what each test validates and why

@@ -12,7 +12,7 @@
 """Retrieve user-defined tags on an AWS EC2 instance.
 
 Fetches all tags applied to the instance via the EC2 API and returns them
-as a flat key→value dict. Validates that the expected isvtest tags
+as a flat key->value dict. Validates that the expected isvtest tags
 (Name, CreatedBy) are present.
 
 Usage:
@@ -67,7 +67,7 @@ def main() -> int:
         instance = reservations[0]["Instances"][0]
         raw_tags = instance.get("Tags", [])
 
-        # Convert [{Key: k, Value: v}, ...] → {k: v}
+        # Convert [{Key: k, Value: v}, ...] -> {k: v}
         tags = {t["Key"]: t["Value"] for t in raw_tags}
         result["tags"] = tags
         result["tag_count"] = len(tags)

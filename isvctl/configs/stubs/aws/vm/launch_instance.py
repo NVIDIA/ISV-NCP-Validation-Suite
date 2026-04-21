@@ -138,7 +138,7 @@ def reuse_existing_instance(region: str) -> int:
 
         # Start the instance if it's stopped
         if state == "stopped":
-            print(f"  Instance {instance_id} is stopped — starting it...", file=sys.stderr)
+            print(f"  Instance {instance_id} is stopped - starting it...", file=sys.stderr)
             ec2.start_instances(InstanceIds=[instance_id])
             waiter = ec2.get_waiter("instance_status_ok")
             waiter.wait(InstanceIds=[instance_id], WaiterConfig={"Delay": 15, "MaxAttempts": 40})

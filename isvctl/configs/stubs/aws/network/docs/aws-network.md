@@ -542,7 +542,7 @@ Increase timeout in config:
 aws ec2 describe-vpcs --filters "Name=tag:CreatedBy,Values=isvtest" \
   --query 'Vpcs[*].[VpcId,Tags[?Key==`Name`].Value|[0],State]' --output table
 
-# Delete orphaned VPCs (must remove dependent resources first — see below)
+# Delete orphaned VPCs (must remove dependent resources first - see below)
 VPC_ID="vpc-xxx"
 ```
 

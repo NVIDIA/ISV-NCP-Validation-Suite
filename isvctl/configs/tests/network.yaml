@@ -8,311 +8,26 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-# Network Validation - Canonical Configuration
+# Network Validation - Canonical Contract
 #
-# THE canonical network test suite. Provider configs import this file
-# and override commands with platform-specific stubs.
+# Validations-only contract for network. Provider configs import this
+# file and supply their own commands (steps + scripts).
 #
-# Architecture:
-#   - Scripts: Platform-specific (YOU implement these) - do all network work
-#   - Validations: Platform-agnostic (provided) - just check JSON output
+# This file defines WHAT to validate, not HOW to run it. Each validation
+# only inspects JSON output fields. As long as your scripts output the
+# right fields, the validations pass regardless of which cloud you use.
 #
-# Contract:
-#   Each script MUST print a JSON object to stdout. The validations
-#   only inspect that JSON. As long as your scripts output the right
-#   fields, the validations pass regardless of which cloud you use.
-#
-# Test suites:
-#   1. VPC CRUD - Create, Read, Update, Delete lifecycle
-#   2. Subnet Configuration - Multi-AZ subnet distribution
-#   3. VPC Isolation - Security boundaries between VPCs
-#  4a. Security Group CRUD - Create, Read, Update, Delete SG lifecycle
-#  4b. Security Blocking - Firewall / ACL blocking rules (negative tests)
-#   5. Connectivity - Instance network assignment
-#   6. Traffic Validation - Real ping tests between instances
-#   7. VPC IP Config - DHCP options, subnet CIDRs, auto-assign IP (DDI)
-#   8. DHCP IP Management - DHCP lease, IP match, DNS options via SSH (DDI)
-#   9. BYOIP - Bring-Your-Own-IP with non-conflicting custom CIDRs
-#  10. Stable Private IP - IP persistence across stop/start
-#  11. Floating IP - Atomic IP switch between instances (<10s)
-#  12. Localized DNS - Custom internal domain resolution
-#  13. VPC Peering - Cross-VPC connectivity with full bandwidth
-#
-# Quick start (new provider):
-#   1. Create your provider folder: mkdir -p isvctl/configs/providers/my-isv/
-#   2. Create providers/my-isv/network.yaml with: import: ../../tests/network.yaml
-#   3. Override commands with your platform stubs
-#   4. Run: uv run isvctl test run -f isvctl/configs/providers/my-isv/network.yaml
+# Quick start:
+#   1. Copy providers/my-isv/network.yaml to providers/<your-platform>/network.yaml
+#   2. Replace stub paths with your platform scripts
+#   3. Run: uv run isvctl test run -f isvctl/configs/providers/<your-platform>/network.yaml
 #
 # See also:
-#   - AWS reference implementation: ../aws/network.yaml + ../stubs/aws/network/
-#   - JSON schemas: isvctl/src/isvctl/config/output_schemas.py
+#   - my-isv living example: providers/my-isv/network.yaml
+#   - AWS reference: providers/aws/network.yaml + stubs/aws/network/
+#   - Per-step field breakdown: tests/README.md
 
 version: "1.0"
-
-commands:
-  network:
-    phases: ["setup", "test", "teardown"]
-    steps:
-      # ─── Setup: Create Shared VPC ──────────────────────────────────
-      # YOUR SCRIPT must output JSON with at minimum:
-      #   {
-      #     "success": true,
-      #     "platform": "network",
-      #     "network_id": "<vpc-or-network-id>",
-      #     "subnets": [{"subnet_id": "..."}],
-      #     "security_group_id": "<sg-id>"
-      #   }
-      - name: create_network
-        phase: setup
-        command: "python3 ../stubs/network/create_vpc.py"
-        args:
-          - "--name"
-          - "isv-shared-vpc"
-          - "--region"
-          - "{{region}}"
-          - "--cidr"
-          - "10.0.0.0/16"
-        timeout: 300
-
-      # ─── Test 1: VPC CRUD Operations ───────────────────────────────
-      # Self-contained test. Creates its own VPC, tests CRUD, cleans up.
-      # YOUR SCRIPT must output JSON matching the vpc_crud schema.
-      - name: vpc_crud
-        phase: test
-        command: "python3 ../stubs/network/vpc_crud_test.py"
-        args:
-          - "--region"
-          - "{{region}}"
-          - "--cidr"
-          - "10.99.0.0/16"
-        timeout: 120
-        output_schema: vpc_crud
-
-      # ─── Test 2: Subnet Configuration ──────────────────────────────
-      # Self-contained test. Creates VPC with multiple subnets, verifies.
-      # YOUR SCRIPT must output JSON matching the subnet_config schema.
-      - name: subnet_config
-        phase: test
-        command: "python3 ../stubs/network/subnet_test.py"
-        args:
-          - "--region"
-          - "{{region}}"
-          - "--cidr"
-          - "10.98.0.0/16"
-          - "--subnet-count"
-          - "4"
-        timeout: 120
-        output_schema: subnet_config
-
-      # ─── Test 3: VPC Isolation ─────────────────────────────────────
-      # Self-contained test. Creates two VPCs, verifies no cross-access.
-      # YOUR SCRIPT must output JSON matching the vpc_isolation schema.
-      - name: vpc_isolation
-        phase: test
-        command: "python3 ../stubs/network/isolation_test.py"
-        args:
-          - "--region"
-          - "{{region}}"
-          - "--cidr-a"
-          - "10.97.0.0/16"
-          - "--cidr-b"
-          - "10.96.0.0/16"
-        timeout: 120
-        output_schema: vpc_isolation
-
-      # ─── Test 4a: Security Group CRUD ───────────────────────────────
-      # Self-contained test. Creates SG, reads, updates rules, deletes.
-      # YOUR SCRIPT must output JSON matching the sg_crud schema.
-      - name: sg_crud
-        phase: test
-        command: "python3 ../stubs/network/sg_crud_test.py"
-        args:
-          - "--region"
-          - "{{region}}"
-          - "--cidr"
-          - "10.95.0.0/16"
-        timeout: 120
-        output_schema: sg_crud
-
-      # ─── Test 4b: Security Blocking ────────────────────────────────
-      # Self-contained test. Tests firewall/ACL blocking rules.
-      # YOUR SCRIPT must output JSON matching the security_blocking schema.
-      - name: security_blocking
-        phase: test
-        command: "python3 ../stubs/network/security_test.py"
-        args:
-          - "--region"
-          - "{{region}}"
-          - "--cidr"
-          - "10.94.0.0/16"
-        timeout: 120
-        output_schema: security_blocking
-
-      # ─── Test 5: Connectivity ──────────────────────────────────────
-      # Uses the shared VPC from create_network step.
-      # YOUR SCRIPT must output JSON matching the connectivity_result schema.
-      - name: connectivity_test
-        phase: test
-        command: "python3 ../stubs/network/test_connectivity.py"
-        args:
-          - "--vpc-id"
-          - "{{steps.create_network.network_id}}"
-          - "--subnet-ids"
-          - "{{steps.create_network.subnets | map(attribute='subnet_id') | join(',')}}"
-          - "--sg-id"
-          - "{{steps.create_network.security_group_id}}"
-          - "--region"
-          - "{{region}}"
-        timeout: 600
-        output_schema: connectivity_result
-
-      # ─── Test 6: Traffic Validation ────────────────────────────────
-      # Self-contained test. Real traffic tests between instances.
-      # YOUR SCRIPT must output JSON matching the traffic_flow schema.
-      - name: traffic_validation
-        phase: test
-        command: "python3 ../stubs/network/traffic_test.py"
-        args:
-          - "--region"
-          - "{{region}}"
-          - "--cidr"
-          - "10.93.0.0/16"
-        timeout: 900
-        output_schema: traffic_flow
-
-      # ─── Test 7: VPC IP Configuration (DDI) ──────────────────────────
-      # Uses the shared VPC from create_network step.
-      # YOUR SCRIPT must output JSON with: cidr, subnets (with
-      # auto_assign_public_ip, available_ips), dhcp_options (with
-      # domain_name_servers, domain_name).
-      - name: vpc_ip_config
-        phase: test
-        command: "python3 ../stubs/network/vpc_ip_config_test.py"
-        args:
-          - "--vpc-id"
-          - "{{steps.create_network.network_id}}"
-          - "--region"
-          - "{{region}}"
-        timeout: 120
-        output_schema: vpc_ip_config
-
-      # ─── Test 8: DHCP IP Management (DDI) ────────────────────────────
-      # Uses the shared VPC from create_network step.
-      # Launches an instance and outputs SSH details for DhcpIpManagementCheck.
-      # YOUR SCRIPT must output JSON with: public_ip, private_ip,
-      # key_file, ssh_user.
-      - name: dhcp_ip_test
-        phase: test
-        command: "python3 ../stubs/network/dhcp_ip_test.py"
-        args:
-          - "--vpc-id"
-          - "{{steps.create_network.network_id}}"
-          - "--subnet-id"
-          - "{{steps.create_network.subnets[0].subnet_id}}"
-          - "--sg-id"
-          - "{{steps.create_network.security_group_id}}"
-          - "--region"
-          - "{{region}}"
-        timeout: 300
-        output_schema: dhcp_ip
-
-      # ─── Test 9: BYOIP (Bring-Your-Own-IP) ──────────────────────────
-      # Self-contained test. Creates VPCs with custom CIDRs, verifies.
-      # YOUR SCRIPT must output JSON matching the byoip schema.
-      - name: byoip_test
-        phase: test
-        command: "python3 ../stubs/network/byoip_test.py"
-        args:
-          - "--region"
-          - "{{region}}"
-          - "--custom-cidr"
-          - "100.64.0.0/16"
-          - "--standard-cidr"
-          - "10.90.0.0/16"
-        timeout: 120
-        output_schema: byoip
-
-      # ─── Test 10: Stable Private IP ─────────────────────────────────
-      # Self-contained test. Creates instance, stops/starts, verifies IP.
-      # YOUR SCRIPT must output JSON matching the stable_ip schema.
-      - name: stable_ip_test
-        phase: test
-        command: "python3 ../stubs/network/stable_ip_test.py"
-        args:
-          - "--region"
-          - "{{region}}"
-          - "--cidr"
-          - "10.91.0.0/16"
-        timeout: 600
-        output_schema: stable_ip
-
-      # ─── Test 11: Floating IP Switch ────────────────────────────────
-      # Self-contained test. Switches floating IP between instances.
-      # YOUR SCRIPT must output JSON matching the floating_ip schema.
-      - name: floating_ip_test
-        phase: test
-        command: "python3 ../stubs/network/floating_ip_test.py"
-        args:
-          - "--region"
-          - "{{region}}"
-          - "--cidr"
-          - "10.92.0.0/16"
-          - "--max-switch-seconds"
-          - "10"
-        timeout: 600
-        output_schema: floating_ip
-
-      # ─── Test 12: Localized DNS ────────────────────────────────────
-      # Self-contained test. Creates private DNS zone, verifies resolution.
-      # YOUR SCRIPT must output JSON matching the localized_dns schema.
-      - name: dns_test
-        phase: test
-        command: "python3 ../stubs/network/dns_test.py"
-        args:
-          - "--region"
-          - "{{region}}"
-          - "--cidr"
-          - "10.89.0.0/16"
-          - "--domain"
-          - "internal.isv.test"
-        timeout: 120
-        output_schema: localized_dns
-
-      # ─── Test 13: VPC Peering ──────────────────────────────────────
-      # Self-contained test. Creates two VPCs, peers them, verifies.
-      # YOUR SCRIPT must output JSON matching the vpc_peering schema.
-      - name: peering_test
-        phase: test
-        command: "python3 ../stubs/network/peering_test.py"
-        args:
-          - "--region"
-          - "{{region}}"
-          - "--cidr-a"
-          - "10.88.0.0/16"
-          - "--cidr-b"
-          - "10.87.0.0/16"
-        timeout: 120
-        output_schema: vpc_peering
-
-      # ─── Teardown: Clean up shared VPC ─────────────────────────────
-      # YOUR SCRIPT must output JSON with at minimum:
-      #   {
-      #     "success": true,
-      #     "platform": "network",
-      #     "resources_deleted": [...],
-      #     "message": "..."
-      #   }
-      - name: teardown
-        phase: teardown
-        command: "python3 ../stubs/network/teardown.py"
-        args:
-          - "--vpc-id"
-          - "{{steps.create_network.network_id}}"
-          - "--region"
-          - "{{region}}"
-        timeout: 300
-        output_schema: teardown
 
 tests:
   cluster_name: "network-validation"
@@ -320,7 +35,7 @@ tests:
   platform: network
 
   settings:
-    # Provider-specific -- override in your provider config
+    # Provider-specific - override in your provider config
     region: ""
 
   # ─── Validations ─────────────────────────────────────────────────

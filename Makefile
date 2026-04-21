@@ -1,10 +1,12 @@
 .PHONY: help pre-commit build test coverage clean lint format install bump-patch bump-fix bump-minor bump-feat bump-major bump bump-check \
-	security-trivy security-trivy-detail security-trufflehog ci-security
+	security-trivy security-trivy-detail security-trufflehog ci-security demo-test
+
+MY_ISV_DOMAINS := iam control-plane vm bare_metal network image-registry
 
 PACKAGES := isvctl isvreporter isvtest
 BUMP_SCRIPT := scripts/bump-version.py
 
-# DISABLED (2026-03-24): Trivy supply chain compromise — see GHSA-69fq-xp46-6x23.
+# DISABLED (2026-03-24): Trivy supply chain compromise - see GHSA-69fq-xp46-6x23.
 # Do NOT pull aquasec/trivy images from Docker Hub until Aqua Security regains control.
 # When re-enabling, pin by digest and verify against a trusted source (GitHub release, not Docker Hub).
 # TRIVY_IMAGE ?= aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c  # 0.69.3 (last known-good release)
@@ -44,7 +46,7 @@ format: ## Format code with ruff on all packages
 		(cd $$pkg && uvx ruff format src/) || exit 1; \
 	done
 
-# DISABLED (2026-03-24): Trivy supply chain compromise — see GHSA-69fq-xp46-6x23.
+# DISABLED (2026-03-24): Trivy supply chain compromise - see GHSA-69fq-xp46-6x23.
 # security-trivy: ## Trivy fs scan (HIGH/CRITICAL; Docker). Writes $(TRIVY_SARIF), prints per-finding summary; fails on un-ignored findings
 # security-trivy-detail: ## List each finding from $(TRIVY_SARIF) (jq)
 security-trivy security-trivy-detail:
@@ -57,7 +59,7 @@ security-trufflehog: ## Run TruffleHog secret scan (Docker; verified/unknown, --
 	docker run --rm -v "$(CURDIR):/work" -w /work $(TRUFFLEHOG_IMAGE) filesystem /work \
 		--results=verified,unknown --only-verified --fail
 
-ci-security: security-trufflehog ## Run local equivalents of CI security scans (Trivy disabled — GHSA-69fq-xp46-6x23)
+ci-security: security-trufflehog ## Run local equivalents of CI security scans (Trivy disabled - GHSA-69fq-xp46-6x23)
 
 test: ## Run tests for all packages
 	@for pkg in $(PACKAGES); do \
@@ -70,6 +72,21 @@ test: ## Run tests for all packages
 	done
 	@echo ""
 	@echo "✅ All tests passed!"
+
+demo-test: ## Run all my-isv living examples with ISVCTL_DEMO_MODE=1
+	@echo "Running my-isv living examples in demo mode..."
+	@for domain in $(MY_ISV_DOMAINS); do \
+		echo ""; \
+		echo "=========================================="; \
+		echo "Demo test: $$domain"; \
+		echo "=========================================="; \
+		echo "Running cmd: ISVCTL_DEMO_MODE=1 uv run isvctl test run -f isvctl/configs/providers/my-isv/$$domain.yaml"; \
+		ISVCTL_DEMO_MODE=1 uv run isvctl test run \
+			-f isvctl/configs/providers/my-isv/$$domain.yaml || exit 1; \
+	done
+	@echo ""
+	@echo "✅ All my-isv living examples passed in demo mode!"
+	@echo "Domains: $(MY_ISV_DOMAINS)"
 
 coverage: ## Run tests with coverage and generate combined report
 	@echo "Running tests with coverage..."

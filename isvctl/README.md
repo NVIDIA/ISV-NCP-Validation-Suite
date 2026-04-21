@@ -26,6 +26,7 @@ See [docs/packages/isvctl.md](../docs/packages/isvctl.md) for full documentation
 
 ## Related
 
+- [my-isv Scaffold](configs/stubs/my-isv/README.md) - Adding your own platform? Start here
+- [Validation Test Suites](configs/tests/README.md) - Provider-agnostic validation contract
 - [Configuration Guide](../docs/guides/configuration.md)
 - [Remote Deployment](../docs/guides/remote-deployment.md)
-- [Validation Templates](configs/tests/README.md) - Provider-agnostic templates for partner handoff (IAM, etc.)

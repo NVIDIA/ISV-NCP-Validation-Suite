@@ -474,7 +474,7 @@ class TestVpcIpConfigCheck:
                 ],
             }
         )
-        # No auto_assign_ip_mode set → default "subnet" → must fail since
+        # No auto_assign_ip_mode set -> default "subnet" -> must fail since
         # no subnet has auto_assign_public_ip=True.
         v = VpcIpConfigCheck(config=cfg)
         result = v.execute()

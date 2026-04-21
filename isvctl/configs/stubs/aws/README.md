@@ -15,10 +15,10 @@ These scripts are invoked by the [AWS provider configs](../../providers/aws/).
 | [`eks/`](eks/) | EKS cluster setup/teardown (Terraform) | [AWS EKS Guide](eks/docs/aws-eks.md) |
 | [`control-plane/`](control-plane/) | API checks, access keys, tenant management | [AWS Control Plane Guide](control-plane/docs/aws-control-plane.md) |
 | [`image-registry/`](image-registry/) | Image upload/CRUD, install configs, BM provisioning | [AWS Image Registry Guide](image-registry/docs/aws-image-registry.md) |
-| [`common/`](common/) | Shared utilities (error handling, EC2/VPC helpers) | — |
+| [`common/`](common/) | Shared utilities (error handling, EC2/VPC helpers) | - |
 
 ## See Also
 
-- [AWS Reference Implementation](../../../../docs/references/aws.md) — Full overview, how templates map to AWS
-- [AWS Provider Configs](../../providers/aws/) — YAML configs that invoke these scripts
-- [External Validation Guide](../../../../docs/guides/external-validation-guide.md) — Writing scripts, JSON output format
+- [AWS Reference Implementation](../../../../docs/references/aws.md) - Full overview, how templates map to AWS
+- [AWS Provider Configs](../../providers/aws/) - YAML configs that invoke these scripts
+- [External Validation Guide](../../../../docs/guides/external-validation-guide.md) - Writing scripts, JSON output format

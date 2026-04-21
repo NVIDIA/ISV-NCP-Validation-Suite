@@ -116,7 +116,7 @@ def check_headers(files: list[Path]) -> int:
             content = fpath.read_text(encoding="utf-8")
             if not has_spdx_header(content):
                 missing += 1
-                print(f"  ! {rel} — missing SPDX header")
+                print(f"  ! {rel} - missing SPDX header")
         except Exception as e:
             missing += 1
             print(f"  ! {rel} ERROR: {e}", file=sys.stderr)

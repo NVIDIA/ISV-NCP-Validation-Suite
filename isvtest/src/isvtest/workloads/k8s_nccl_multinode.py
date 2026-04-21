@@ -270,7 +270,7 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
 
         if mode == "auto":
             if has_cd:
-                self.log.info("ComputeDomain CRD detected -- enabling MNNVL/IMEX for NVLink fabric access")
+                self.log.info("ComputeDomain CRD detected - enabling MNNVL/IMEX for NVLink fabric access")
             return has_cd
 
         return has_cd
@@ -345,7 +345,7 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
 
         completed, phase = self._wait_for_mpijob_completion(launcher_pod, job_name, namespace, timeout)
 
-        # Collect logs before cleanup -- pods still exist with cleanPodPolicy: Running
+        # Collect logs before cleanup - pods still exist with cleanPodPolicy: Running
         logs = get_pod_logs(launcher_pod, namespace, container="launcher", timeout=60)
 
         if not completed:
@@ -442,7 +442,7 @@ class K8sNcclMultiNodeWorkload(BaseWorkloadCheck):
                     self.log.error(f"Launcher pod crash-looping (restarts: {restart_count})")
                     return True, "Failed"
             elif result.returncode != 0:
-                # Pod may have been deleted -- check MPIJob directly
+                # Pod may have been deleted - check MPIJob directly
                 pass
 
             # 2. Check MPIJob status conditions directly

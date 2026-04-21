@@ -8,278 +8,26 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-# VM (Virtual Machine) Validation - Canonical Configuration
+# VM (Virtual Machine) Validation - Canonical Contract
 #
-# THE canonical VM test suite. Provider configs import this file and
-# override commands with platform-specific stubs.
+# Validations-only contract for VM. Provider configs import this file
+# and supply their own commands (steps + scripts).
 #
-# Architecture:
-#   - Scripts: Platform-specific (YOU implement these) - do all VM work
-#   - Validations: Platform-agnostic (provided) - just check JSON output
+# This file defines WHAT to validate, not HOW to run it. Each validation
+# only inspects JSON output fields. As long as your scripts output the
+# right fields, the validations pass regardless of which cloud you use.
 #
-# Contract:
-#   Each script MUST print a JSON object to stdout. The validations
-#   only inspect that JSON. As long as your scripts output the right
-#   fields, the validations pass regardless of which cloud you use.
-#
-# Steps:
-#   1. launch_instance    (setup)    - Provision GPU VM, output IP/key
-#   2. list_instances     (test)     - List instances, verify target exists
-#   3. verify_tags        (test)     - Verify user-defined tags on instance
-#   4. serial_console     (test)     - Retrieve serial console output (read-only)
-#   5. stop_instance      (test)     - Stop VM, verify stopped state
-#   6. start_instance     (test)     - Start stopped VM, verify recovery
-#   7. reboot_instance    (test)     - Reboot VM, validate recovery
-#   8. describe_instance  (test)     - Describe current state + SSH info
-#                                      (runs after reboot; host-level validations
-#                                       anchor here to prove lifecycle survival)
-#   9. deploy_nim         (test)     - Deploy NIM container via SSH
-#  10. teardown_nim       (teardown) - Stop NIM container via SSH
-#  11. teardown           (teardown) - Terminate VM and cleanup
-#
-# Quick start (new provider):
-#   1. Create your provider folder: mkdir -p isvctl/configs/providers/my-isv/
-#   2. Create providers/my-isv/vm.yaml with: import: ../../tests/vm.yaml
-#   3. Override commands with your platform stubs
-#   4. Run: uv run isvctl test run -f isvctl/configs/providers/my-isv/vm.yaml
+# Quick start:
+#   1. Copy providers/my-isv/vm.yaml to providers/<your-platform>/vm.yaml
+#   2. Replace stub paths with your platform scripts
+#   3. Run: uv run isvctl test run -f isvctl/configs/providers/<your-platform>/vm.yaml
 #
 # See also:
-#   - AWS reference implementation: ../aws/vm.yaml + ../stubs/aws/vm/
-#   - JSON schemas: isvctl/src/isvctl/config/output_schemas.py
+#   - my-isv living example: providers/my-isv/vm.yaml
+#   - AWS reference: providers/aws/vm.yaml + stubs/aws/vm/
+#   - Per-step field breakdown: tests/README.md
 
 version: "1.0"
-
-commands:
-  vm:
-    phases: ["setup", "test", "teardown"]
-    steps:
-      # ─── Step 1: Launch Instance ───────────────────────────────────
-      # YOUR SCRIPT must output JSON with at minimum:
-      #   {
-      #     "success": true,
-      #     "platform": "vm",
-      #     "instance_id": "<unique-id>",
-      #     "public_ip": "<ip-address>",
-      #     "key_file": "<path-to-ssh-key>",
-      #     "vpc_id": "<network-id>",
-      #     "state": "running",
-      #     "security_group_id": "<sg-id>",
-      #     "key_name": "<key-pair-name>"
-      #   }
-      - name: launch_instance
-        phase: setup
-        command: "python3 ../stubs/vm/launch_instance.py"
-        args:
-          - "--name"
-          - "isv-test-gpu"
-          - "--instance-type"
-          - "{{instance_type}}"
-          - "--region"
-          - "{{region}}"
-        timeout: 600
-
-      # ─── Step 2: List Instances ────────────────────────────────────
-      # YOUR SCRIPT must output JSON with at minimum:
-      #   {
-      #     "success": true,
-      #     "platform": "vm",
-      #     "instances": [{"instance_id": "...", "state": "running"}],
-      #     "total_count": 1
-      #   }
-      - name: list_instances
-        phase: test
-        command: "python3 ../stubs/vm/list_instances.py"
-        args:
-          - "--vpc-id"
-          - "{{steps.launch_instance.vpc_id}}"
-          - "--instance-id"
-          - "{{steps.launch_instance.instance_id}}"
-          - "--region"
-          - "{{region}}"
-        timeout: 120
-
-      # ─── Step 3: Verify Tags ──────────────────────────────────────
-      # YOUR SCRIPT must output JSON with at minimum:
-      #   {
-      #     "success": true,
-      #     "platform": "vm",
-      #     "instance_id": "<id>",
-      #     "tags": {"Name": "...", ...},
-      #     "tag_count": <int>
-      #   }
-      - name: verify_tags
-        phase: test
-        command: "python3 ../stubs/vm/describe_tags.py"
-        args:
-          - "--instance-id"
-          - "{{steps.launch_instance.instance_id}}"
-          - "--region"
-          - "{{region}}"
-        timeout: 60
-
-      # ─── Step 4: Serial Console Access ──────────────────────────────
-      # Read-only; doesn't depend on lifecycle ops, so runs before them.
-      # YOUR SCRIPT must output JSON with at minimum:
-      #   {
-      #     "success": true,
-      #     "platform": "vm",
-      #     "instance_id": "<id>",
-      #     "console_available": true,
-      #     "serial_access_enabled": true,
-      #     "output_length": 4096
-      #   }
-      - name: serial_console
-        phase: test
-        command: "python3 ../stubs/vm/serial_console.py"
-        args:
-          - "--instance-id"
-          - "{{steps.launch_instance.instance_id}}"
-          - "--region"
-          - "{{region}}"
-        timeout: 60
-
-      # ─── Step 5: Stop Instance ────────────────────────────────────
-      # YOUR SCRIPT must output JSON with at minimum:
-      #   {
-      #     "success": true,
-      #     "platform": "vm",
-      #     "instance_id": "...",
-      #     "state": "stopped",
-      #     "stop_initiated": true
-      #   }
-      - name: stop_instance
-        phase: test
-        command: "python3 ../stubs/vm/stop_instance.py"
-        args:
-          - "--instance-id"
-          - "{{steps.launch_instance.instance_id}}"
-          - "--region"
-          - "{{region}}"
-        timeout: 600
-
-      # ─── Step 6: Start Instance ───────────────────────────────────
-      # YOUR SCRIPT must output JSON with at minimum:
-      #   {
-      #     "success": true,
-      #     "platform": "vm",
-      #     "instance_id": "...",
-      #     "state": "running",
-      #     "public_ip": "...",
-      #     "key_file": "...",
-      #     "start_initiated": true,
-      #     "ssh_ready": true
-      #   }
-      - name: start_instance
-        phase: test
-        command: "python3 ../stubs/vm/start_instance.py"
-        args:
-          - "--instance-id"
-          - "{{steps.launch_instance.instance_id}}"
-          - "--region"
-          - "{{region}}"
-          - "--key-file"
-          - "{{steps.launch_instance.key_file}}"
-          - "--public-ip"
-          - "{{steps.launch_instance.public_ip}}"
-        timeout: 300
-
-      # ─── Step 7: Reboot Instance ──────────────────────────────────
-      # YOUR SCRIPT must output JSON with at minimum:
-      #   {
-      #     "success": true,
-      #     "platform": "vm",
-      #     "instance_id": "...",
-      #     "state": "running",
-      #     "public_ip": "...",
-      #     "key_file": "...",
-      #     "uptime_seconds": <int>,
-      #     "ssh_connectivity": true
-      #   }
-      - name: reboot_instance
-        phase: test
-        command: "python3 ../stubs/vm/reboot_instance.py"
-        args:
-          - "--instance-id"
-          - "{{steps.launch_instance.instance_id}}"
-          - "--region"
-          - "{{region}}"
-          - "--key-file"
-          - "{{steps.launch_instance.key_file}}"
-          - "--public-ip"
-          - "{{steps.start_instance.public_ip}}"
-        timeout: 600
-
-      # ─── Step 8: Describe Instance ─────────────────────────────────
-      # Runs AFTER reboot so the IP is current (stop/start may reassign).
-      # This step is the SSH/GPU/host validation anchor: host-level checks
-      # bind to describe_instance so they prove the host survived the full
-      # stop/start/reboot lifecycle (driver, Docker, pinning, etc.).
-      # YOUR SCRIPT must output JSON with at minimum:
-      #   {
-      #     "success": true,
-      #     "platform": "vm",
-      #     "instance_id": "...",
-      #     "state": "running",
-      #     "public_ip": "...",
-      #     "key_file": "..."
-      #   }
-      - name: describe_instance
-        phase: test
-        command: "python3 ../stubs/vm/describe_instance.py"
-        args:
-          - "--instance-id"
-          - "{{steps.launch_instance.instance_id}}"
-          - "--region"
-          - "{{region}}"
-          - "--key-file"
-          - "{{steps.launch_instance.key_file}}"
-        timeout: 120
-
-      # ─── Step 9: Deploy NIM Container ─────────────────────────────
-      # Uses post-reboot IP/key since reboot may reassign the public IP.
-      # See stubs/common/deploy_nim.py for the JSON contract.
-      - name: deploy_nim
-        phase: test
-        command: "python3 ../stubs/common/deploy_nim.py"
-        args:
-          - "--host"
-          - "{{steps.reboot_instance.public_ip}}"
-          - "--key-file"
-          - "{{steps.reboot_instance.key_file}}"
-        timeout: 1800
-
-      # ─── Step 10: Teardown NIM ────────────────────────────────────
-      # Uses post-reboot IP/key to match what deploy_nim used.
-      - name: teardown_nim
-        phase: teardown
-        command: "python3 ../stubs/common/teardown_nim.py"
-        args:
-          - "--host"
-          - "{{steps.reboot_instance.public_ip}}"
-          - "--key-file"
-          - "{{steps.reboot_instance.key_file}}"
-        timeout: 120
-
-      # ─── Step 11: Teardown Instance ───────────────────────────────
-      # YOUR SCRIPT must output JSON with at minimum:
-      #   {
-      #     "success": true,
-      #     "platform": "vm",
-      #     "resources_deleted": [...],
-      #     "message": "..."
-      #   }
-      - name: teardown
-        phase: teardown
-        command: "python3 ../stubs/vm/teardown.py"
-        args:
-          - "--instance-id"
-          - "{{steps.launch_instance.instance_id}}"
-          - "--region"
-          - "{{region}}"
-          - "--delete-key-pair"
-          - "--delete-security-group"
-          - "{{teardown_flag}}"
-        timeout: 600
 
 tests:
   platform: vm
@@ -287,7 +35,7 @@ tests:
   description: "VM (virtual machine) GPU validation tests"
 
   settings:
-    # Provider-specific -- override in your provider config
+    # Provider-specific - override in your provider config
     region: ""
     instance_type: ""
     teardown_flag: "{{(env.VM_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"

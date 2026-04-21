@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+"""Install an OS install configuration on a bare-metal system.
+
+Provider-agnostic template - replace the TODO section with your platform's
+bare-metal provisioning API calls to install an OS using a config profile
+(e.g., iPXE config, Carbide profile).
+
+Required JSON output:
+{
+    "success":        bool  - true if BM instance provisioned and running,
+    "platform":       str   - "image_registry",
+    "instance_id":    str   - bare-metal instance identifier,
+    "config_id":      str   - install config used for provisioning,
+    "instance_state": str   - "running" (descriptive contract field),
+    "state":          str   - "running" (read by InstanceStateCheck validator),
+    "error":          str   - (optional) error message, present when success is false
+}
+
+Usage:
+    python install_config_bm.py --config-id cfg-xxx --region <region>
+
+AWS reference implementation:
+    ../aws/image-registry/install_config_bm.py
+"""
+
+import argparse
+import json
+import os
+import sys
+from typing import Any
+
+# ISVCTL_DEMO_MODE=1 enables demo-success output (used by `make demo-test`).
+DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE") == "1"
+
+
+def main() -> int:
+    """Install OS config on bare-metal and emit structured JSON result."""
+    parser = argparse.ArgumentParser(description="Install OS config on bare-metal")
+    parser.add_argument("--config-id", required=True, help="Install config ID from the registry")
+    parser.add_argument("--region", required=True, help="Cloud region / availability zone")
+    args = parser.parse_args()
+
+    result: dict[str, Any] = {
+        "success": False,
+        "platform": "image_registry",
+        "instance_id": "",
+        "config_id": args.config_id,
+        "instance_state": "",
+        "state": "",
+    }
+
+    # ╔══════════════════════════════════════════════════════════════════╗
+    # ║  TODO: Replace this block with your platform's implementation    ║
+    # ║                                                                  ║
+    # ║  1. Provision a bare-metal node using the install config         ║
+    # ║     instance = provision_bm_from_config(                         ║
+    # ║         config_id=args.config_id, region=args.region,            ║
+    # ║     )                                                            ║
+    # ║     result["instance_id"] = instance.id                          ║
+    # ║                                                                  ║
+    # ║  2. Wait for the node to reach "running" state                   ║
+    # ║     wait_for_running(instance.id)                                ║
+    # ║     result["instance_state"] = "running"                         ║
+    # ║                                                                  ║
+    # ║  3. Set result["success"] = True                                 ║
+    # ╚══════════════════════════════════════════════════════════════════╝
+
+    if DEMO_MODE:
+        result["instance_id"] = "dummy-bm-config-0001"
+        result["instance_state"] = "running"
+        result["state"] = "running"
+        result["success"] = True
+    else:
+        result["error"] = "Not implemented - replace with your platform's BM config install logic"
+
+    print(json.dumps(result, indent=2))
+    return 0 if result["success"] else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -269,14 +269,14 @@ class TestOutputSchemaMapping:
     def test_setup_does_not_map_to_cluster(self) -> None:
         """'setup' must NOT auto-map to the cluster schema.
 
-        The name 'setup' is used by slurm, k8s, bare_metal, etc. — each with
+        The name 'setup' is used by slurm, k8s, bare_metal, etc. - each with
         different output shapes. Mapping it to 'cluster' broke every non-EKS
         platform (#191). Configs that need cluster validation should set
         output_schema: cluster explicitly.
         """
         schema = get_schema_for_step("setup")
         assert schema != "cluster", (
-            "'setup' must not map to 'cluster' — it is used across platforms "
+            "'setup' must not map to 'cluster' - it is used across platforms "
             "with different output shapes. Use output_schema in step config instead."
         )
 

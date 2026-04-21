@@ -1,0 +1,71 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# my-isv IAM Validation Configuration - Living Example
+#
+# Imports validations from the provider-agnostic IAM template and wires the
+# commands to the generic template stubs in stubs/my-isv/iam/*. Those stubs ship
+# with dummy-success values so this example runs end-to-end out of the box
+# without any real IAM platform, proving the stubs + validations contract.
+#
+# Steps:
+#   1. create_user      - stubs/my-isv/iam/create_user.py      (setup)
+#   2. test_credentials - stubs/my-isv/iam/test_credentials.py (test)
+#   3. teardown         - stubs/my-isv/iam/delete_user.py      (teardown)
+#
+# Usage:
+#   uv run isvctl test run -f isvctl/configs/providers/my-isv/iam.yaml
+
+import:
+  - ../../tests/iam.yaml
+
+version: "1.0"
+
+commands:
+  iam:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: create_user
+        phase: setup
+        command: "python ../../stubs/my-isv/iam/create_user.py"
+        args:
+          - "--username"
+          - "isv-test-user"
+          - "--create-access-key"
+        timeout: 60
+
+      - name: test_credentials
+        phase: test
+        command: "python ../../stubs/my-isv/iam/test_credentials.py"
+        args:
+          - "--username"
+          - "{{steps.create_user.username}}"
+          - "--credential-id"
+          - "{{steps.create_user.access_key_id}}"
+          - "--credential-secret"
+          - "{{steps.create_user.secret_access_key}}"
+        sensitive_args: ["--credential-secret"]
+        timeout: 60
+
+      - name: teardown
+        phase: teardown
+        command: "python ../../stubs/my-isv/iam/delete_user.py"
+        args:
+          - "--username"
+          - "{{steps.create_user.username}}"
+          - "{{teardown_flag}}"
+        timeout: 120
+
+tests:
+  cluster_name: "my-isv-iam-validation"
+  description: "my-isv IAM user lifecycle validation (generic stubs, dummy overrides)"
+
+  settings:
+    teardown_flag: "{{(env.IAM_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"

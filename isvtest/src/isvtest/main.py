@@ -222,7 +222,12 @@ def _transform_validations_for_pytest(
     Returns:
         List of validation dicts in pytest-compatible format
     """
-    result = []
+    # Two-pass approach: collect entries first, then qualify duplicate class
+    # names with a "-category" suffix so each becomes a unique pytest param.
+    # Without this, get_validations_for_category collapses them into a dict
+    # and only the last occurrence survives (e.g. InstanceStateCheck on
+    # launch_instance vs describe_instance vs reboot_instance).
+    entries: list[tuple[str, str, dict[str, Any]]] = []  # (class_name, category, params)
 
     for category, category_config in validations.items():
         if category in ADAPTER_HANDLED_CATEGORIES:
@@ -289,7 +294,20 @@ def _transform_validations_for_pytest(
             # Add category for result reporting
             resolved_params["_category"] = category
 
-            result.append({name: resolved_params})
+            entries.append((name, category, resolved_params))
+
+    # Detect class names that appear more than once and qualify them with
+    # "-category" so downstream dict-keyed storage keeps every instance.
+    # Uses the existing ClassName-variant convention that pytest_generate_tests
+    # already supports via suffix matching.
+    name_counts: dict[str, int] = {}
+    for class_name, _, _ in entries:
+        name_counts[class_name] = name_counts.get(class_name, 0) + 1
+
+    result: list[dict[str, Any]] = []
+    for class_name, category, resolved_params in entries:
+        key = f"{class_name}-{category}" if name_counts[class_name] > 1 else class_name
+        result.append({key: resolved_params})
 
     return result
 

@@ -40,6 +40,7 @@ class TestTransformValidationsForPytest:
 
     @pytest.fixture()
     def step_outputs(self) -> dict[str, dict[str, Any]]:
+        """Simulated step outputs keyed by step name."""
         return {
             "launch_instance": {"instance_id": "i-abc", "state": "running"},
             "describe_instance": {"instance_id": "i-abc", "state": "running"},
@@ -48,6 +49,7 @@ class TestTransformValidationsForPytest:
 
     @pytest.fixture()
     def step_phases(self) -> dict[str, str]:
+        """Mapping of step names to the phase they belong to."""
         return {
             "launch_instance": "setup",
             "describe_instance": "test",

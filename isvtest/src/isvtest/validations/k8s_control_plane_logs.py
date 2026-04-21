@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 import shlex
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from isvtest.core.k8s import get_kubectl_base_shell
 from isvtest.core.validation import BaseValidation
@@ -52,7 +52,7 @@ class K8sControlPlaneLogsCheck(BaseValidation):
             min_log_lines=cfg["min_log_lines"],
         )
 
-    def _parse_config(self) -> dict | None:
+    def _parse_config(self) -> dict[str, Any] | None:
         mode = str(self.config.get("mode", "auto")).lower()
         if mode not in _VALID_MODES:
             self.set_failed(f"Invalid mode: {mode!r} (expected one of {list(_VALID_MODES)})")

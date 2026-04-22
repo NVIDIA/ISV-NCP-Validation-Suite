@@ -17,7 +17,11 @@ from unittest.mock import patch
 from isvctl.config.schema import PlatformCommands, RunConfig, StepConfig, ValidationConfig
 from isvctl.orchestrator.context import Context
 from isvctl.orchestrator.loop import Orchestrator, Phase
-from isvctl.orchestrator.step_executor import StepExecutor
+from isvctl.orchestrator.step_executor import (
+    MissingStepRefError,
+    StepExecutor,
+    _find_missing_step_path,
+)
 
 
 class TestOrchestrator:
@@ -475,3 +479,92 @@ class TestStepExecutorBestEffort:
 
         executed = [s.name for s in results.steps]
         assert executed == ["fail_step", "ok_step"]
+
+
+class TestMissingStepRefDetection:
+    """Tests for detecting undefined {{steps.X.Y}} references in step args."""
+
+    def test_find_missing_step_path_returns_none_when_resolved(self) -> None:
+        """Fully-resolved {{steps.X.Y}} refs return None (no missing path)."""
+        steps_data = {"create_network": {"network_id": "vpc-abc123"}}
+        arg = "{{steps.create_network.network_id}}"
+        assert _find_missing_step_path(arg, steps_data) is None
+
+    def test_find_missing_step_path_detects_missing_step(self) -> None:
+        """Return the full path when the top-level step name is absent."""
+        arg = "{{steps.create_network.network_id}}"
+        assert _find_missing_step_path(arg, {}) == "create_network.network_id"
+
+    def test_find_missing_step_path_detects_missing_field(self) -> None:
+        """Return the full path when a leaf field is missing from step output."""
+        steps_data = {"create_network": {"other_field": "x"}}
+        arg = "{{steps.create_network.network_id}}"
+        assert _find_missing_step_path(arg, steps_data) == "create_network.network_id"
+
+    def test_find_missing_step_path_detects_empty_leaf(self) -> None:
+        """Treat an empty-string leaf as missing (would render to '')."""
+        steps_data = {"create_network": {"network_id": ""}}
+        arg = "{{steps.create_network.network_id}}"
+        assert _find_missing_step_path(arg, steps_data) == "create_network.network_id"
+
+    def test_teardown_step_skipped_when_setup_step_missing(self) -> None:
+        """Teardown with empty {{steps.create_network.network_id}} is skipped,
+        not invoked with a stripped-out required arg."""
+        executor = StepExecutor()
+        context = Context(RunConfig())
+        # No "create_network" step output — simulates a failed setup step.
+        steps = [
+            StepConfig(
+                name="teardown_network",
+                command="echo",
+                args=["--vpc-id", "{{steps.create_network.network_id}}"],
+                phase="teardown",
+            ),
+            StepConfig(
+                name="cleanup",
+                command="echo",
+                args=["done"],
+                phase="teardown",
+            ),
+        ]
+
+        results = executor.execute_steps(steps, context, best_effort=True)
+
+        assert not results.steps[0].success
+        assert "missing step reference" in (results.steps[0].error or "").lower()
+        assert results.steps[0].exit_code == -1
+        # Remaining teardown steps still run under best_effort.
+        assert [s.name for s in results.steps] == ["teardown_network", "cleanup"]
+        assert results.steps[1].success
+
+    def test_default_filter_suppresses_missing_ref_error(self) -> None:
+        """Args with `| default(...)` are allowed to render empty silently."""
+        executor = StepExecutor()
+        context = Context(RunConfig())
+        steps = [
+            StepConfig(
+                name="optional_flag",
+                command="echo",
+                args=["--region", "{{steps.create_network.region | default('')}}"],
+                phase="teardown",
+            ),
+        ]
+
+        results = executor.execute_steps(steps, context, best_effort=True)
+
+        # The empty arg is filtered out; the step runs successfully with just
+        # "--region" stripped (matching previous behavior for explicit defaults).
+        assert results.steps[0].success
+
+    def test_missing_ref_raised_from_render_args_directly(self) -> None:
+        """_render_args raises MissingStepRefError for bare references."""
+        import pytest
+
+        executor = StepExecutor()
+        context = Context(RunConfig())
+        args = ["--vpc-id", "{{steps.create_network.network_id}}"]
+
+        with pytest.raises(MissingStepRefError) as exc_info:
+            executor._render_args(args, context)
+
+        assert exc_info.value.missing_path == "create_network.network_id"

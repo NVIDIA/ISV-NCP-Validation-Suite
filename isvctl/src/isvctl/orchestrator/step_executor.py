@@ -44,6 +44,7 @@ Example config:
 import json
 import logging
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -57,6 +58,47 @@ from isvctl.orchestrator.context import Context, _create_jinja_env
 from isvctl.redaction import mask_sensitive_args
 
 logger = logging.getLogger(__name__)
+
+
+_STEP_PATH_RE = re.compile(r"steps\.([\w.]+)")
+
+
+class MissingStepRefError(Exception):
+    """Raised when a step arg template references an undefined step output.
+
+    This happens when a {{steps.X.Y}} path cannot be resolved in the context
+    and the template has no `| default(...)` fallback — typically because an
+    upstream step failed or was skipped. The caller should treat this as a
+    signal to skip the step rather than passing a malformed empty argument
+    to the underlying command.
+    """
+
+    def __init__(self, arg: str, path: str) -> None:
+        self.arg = arg
+        self.missing_path = path
+        super().__init__(
+            f"template arg {arg!r} references undefined step output 'steps.{path}' with no `| default(...)` fallback"
+        )
+
+
+def _find_missing_step_path(arg: str, steps_data: dict[str, Any]) -> str | None:
+    """Return the first ``steps.X.Y`` path in ``arg`` that is unresolved.
+
+    A path is unresolved when any segment is missing from ``steps_data`` or
+    a non-leaf segment is not a dict. Returns None when every ``steps.*``
+    reference in the arg resolves to a value.
+    """
+    for match in _STEP_PATH_RE.finditer(arg):
+        path = match.group(1)
+        node: Any = steps_data
+        for part in path.split("."):
+            if isinstance(node, dict) and part in node:
+                node = node[part]
+            else:
+                return path
+        if node in (None, ""):
+            return path
+    return None
 
 
 @dataclass
@@ -285,7 +327,20 @@ class StepExecutor:
             StepResult with command outcome
         """
         # Render args with accumulated context
-        rendered_args = self._render_args(step.args, context)
+        try:
+            rendered_args = self._render_args(step.args, context)
+        except MissingStepRefError as e:
+            logger.warning(
+                f"Skipping step '{step.name}': {e}. This typically means an upstream step failed or was skipped."
+            )
+            return StepResult(
+                name=step.name,
+                success=False,
+                exit_code=-1,
+                stdout="",
+                stderr="",
+                error=f"Skipped: missing step reference steps.{e.missing_path}",
+            )
 
         # Normalize command - replace python/python3 with current interpreter
         # Also handle "uv run python3" pattern by stripping it
@@ -404,11 +459,20 @@ class StepExecutor:
             context: Context with step outputs for rendering
 
         Returns:
-            List of rendered argument strings (empty strings are filtered out)
+            List of rendered argument strings (empty strings are filtered out
+            only when the template used an explicit ``| default(...)`` fallback)
+
+        Raises:
+            MissingStepRefError: when an arg references ``{{steps.X.Y}}`` that
+                is unresolved in the current context and has no ``default()``
+                filter. This prevents silently producing malformed commands
+                (e.g., ``teardown.py --vpc-id`` with no value) when upstream
+                steps failed or were skipped.
         """
         env = _create_jinja_env()
         # Get full context including step outputs
         ctx_data = context.get_accumulated_context()
+        steps_data = ctx_data.get("steps", {})
         rendered = []
 
         for arg in args:
@@ -416,12 +480,24 @@ class StepExecutor:
                 try:
                     template = env.from_string(arg)
                     result = template.render(**ctx_data)
-                    # Filter out empty strings (from conditional templates)
-                    if result.strip():
-                        rendered.append(result)
                 except Exception as e:
                     logger.warning(f"Failed to render arg '{arg}': {e}")
                     rendered.append(arg)
+                    continue
+
+                if result.strip():
+                    rendered.append(result)
+                    continue
+
+                # Empty result: distinguish "explicit default(''/None)" from
+                # "silently-missing step output". The latter is an error —
+                # surface it so the caller can skip the step cleanly instead
+                # of invoking the command with a stripped-out required arg.
+                if "default(" in arg:
+                    continue
+                missing = _find_missing_step_path(arg, steps_data)
+                if missing:
+                    raise MissingStepRefError(arg, missing)
             else:
                 rendered.append(arg)
 

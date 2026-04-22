@@ -207,7 +207,7 @@ def main() -> int:
         else:
             # No pre-reboot sample means no proof. A fresh instance trivially
             # sits below any wall-clock threshold, so the old `< 600s`
-            # heuristic is a false-positive waiting to happen (oracle gap U1).
+            # heuristic is a false-positive waiting to happen.
             result["reboot_confirmed"] = False
             result["error"] = "Could not sample pre-reboot uptime via SSH (cannot affirm reboot)"
             print(

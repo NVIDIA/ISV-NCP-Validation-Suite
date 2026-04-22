@@ -8,7 +8,7 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-"""Tests for AWS common/ec2.py verified-reuse guards (oracle gap U2).
+"""Tests for AWS common/ec2.py verified-reuse guards.
 
 ``create_key_pair`` and ``create_security_group`` previously accepted any
 existing-by-name resource as a success without verifying the shape matched
@@ -229,7 +229,7 @@ class TestCreateSecurityGroupVerifiedReuse:
 
 
 class TestSanitizeKeyName:
-    """sanitize_key_name (oracle gap U5) — prevent path traversal when
+    """sanitize_key_name — prevent path traversal when
     ``key_name`` is composed into a filesystem path like /tmp/<name>.pem."""
 
     @pytest.mark.parametrize(
@@ -267,7 +267,7 @@ class TestSanitizeKeyName:
 
 
 class TestWaitForPublicIp:
-    """wait_for_public_ip (oracle gap U4) — always poll describe_instances,
+    """wait_for_public_ip — always poll describe_instances,
     never fall back to a pre-stop value."""
 
     def test_returns_fresh_ip_on_first_poll(self) -> None:

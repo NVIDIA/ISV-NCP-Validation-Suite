@@ -454,7 +454,7 @@ class StepExecutor:
     def _render_args(self, args: list[str], context: Context) -> list[str]:
         """Render Jinja2 templates in command arguments.
 
-        Handling of empty render results is deliberate (oracle gap U6):
+        Handling of empty render results is deliberate:
 
         * If the template references a ``{{steps.X.Y}}`` path that is
           unresolved AND no ``default(...)`` filter is used, raise

@@ -12,11 +12,11 @@
 
 Provides common EC2 operations used across VM and ISO launch scripts:
 - Key pair creation with idempotent handling
-- Key-name sanitization (oracle gap U5 — prevents path traversal)
+- Key-name sanitization (prevents path traversal)
 - Security group creation with SSH ingress
 - Availability zone support detection
 - Default VPC and subnet discovery
-- Post-transition public-IP polling (oracle gap U4 — no stale-IP fallback)
+- Post-transition public-IP polling (no stale-IP fallback)
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ from common.errors import TRANSIENT_AWS_CODES
 # Conservative key-name pattern — letters, digits, dash, underscore, dot.
 # Deliberately excludes '/' and '..' to prevent path traversal when the
 # name is composed into a filesystem path like /tmp/{key_name}.pem
-# (oracle gap U5). Length cap matches EC2's 255-char limit.
+# Length cap matches EC2's 255-char limit.
 _KEY_NAME_RE = re.compile(r"[A-Za-z0-9_.-]{1,255}")
 
 
@@ -84,8 +84,8 @@ def wait_for_public_ip(
     historically fell back to the pre-stop IP passed on the CLI. On NCPs
     that release the ephemeral IP on stop (GCP is the most common), that
     fallback silently masks a stale IP. The safer pattern — and the one
-    Orga recommended as the defensive default (oracle gap U4) — is to poll
-    the describe API and never trust a pre-stop value.
+    The defensive default is to poll the describe API and never trust a
+    pre-stop value.
 
     Args:
         ec2: Boto3 EC2 client.
@@ -229,7 +229,7 @@ def create_key_pair(
     Raises:
         RuntimeError: If key pair creation fails, or if an existing key by
             the same name lacks the suite's ownership tag (verified-reuse
-            check failed — oracle gap U2).
+            check failed).
     """
     key_name = sanitize_key_name(key_name)
 
@@ -248,7 +248,7 @@ def create_key_pair(
             raise RuntimeError(
                 f"key pair {key_name!r} already exists on AWS but is not tagged "
                 "CreatedBy=isvtest — refusing to adopt a resource this suite "
-                "did not create (oracle gap U2 verified-reuse guard). Either "
+                "did not create. Either "
                 "delete it manually or use a different --key-name."
             )
         # Tag matches — verified reuse. If we have the file locally, reuse it.
@@ -318,8 +318,7 @@ def create_security_group(
     already exists in the VPC, we describe it and verify the invariants the
     caller expects — CreatedBy=isvtest tag, description match, and the
     required SSH ingress rule. If any differs, raise rather than silently
-    adopt a resource whose shape may not match what the caller needs
-    (oracle gap U2).
+    adopt a resource whose shape may not match what the caller needs.
 
     Args:
         ec2: Boto3 EC2 client.
@@ -391,7 +390,7 @@ def create_security_group(
             raise RuntimeError(
                 f"security group {name!r} in VPC {vpc_id} already exists but is not tagged "
                 "CreatedBy=isvtest — refusing to adopt a resource this suite did not "
-                "create (oracle gap U2 verified-reuse guard)."
+                "create."
             )
         if existing.get("Description") != description:
             raise RuntimeError(

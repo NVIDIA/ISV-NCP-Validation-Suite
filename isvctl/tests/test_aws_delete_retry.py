@@ -8,7 +8,7 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-"""Tests for the AWS stubs' delete_with_retry helper (oracle gap U3).
+"""Tests for the AWS stubs' delete_with_retry helper.
 
 The AWS stub scripts live outside the Python package tree and are invoked as
 standalone subprocesses at runtime (sys.path manipulated in each script).
@@ -83,8 +83,7 @@ class TestDeleteWithRetry:
     @patch("common.errors.time.sleep")
     def test_retries_botocore_network_error(self, sleep: MagicMock) -> None:
         """RemoteDisconnected-class errors (BotoCoreError) retry just like
-        transient client errors. This is the GCP ~14% failure mode Orga
-        reported for the oracle pattern (2026-04-18)."""
+        transient client errors."""
         fn = MagicMock(
             side_effect=[
                 EndpointConnectionError(endpoint_url="https://ec2.us-west-2.amazonaws.com/"),

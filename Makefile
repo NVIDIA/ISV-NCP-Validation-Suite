@@ -1,7 +1,8 @@
-.PHONY: help pre-commit build test coverage clean lint format install bump-patch bump-fix bump-minor bump-feat bump-major bump bump-check \
-	security-trivy security-trivy-detail security-trufflehog ci-security demo-test
+MY_ISV_DOMAINS := bare_metal control-plane iam image-registry network security vm
+DEMO_TARGETS := $(addprefix demo-,$(MY_ISV_DOMAINS))
 
-MY_ISV_DOMAINS := iam control-plane vm bare_metal network image-registry security
+.PHONY: help pre-commit build test coverage clean lint format install bump-patch bump-fix bump-minor bump-feat bump-major bump bump-check \
+	security-trivy security-trivy-detail security-trufflehog ci-security demo-test demo-all $(DEMO_TARGETS)
 
 PACKAGES := isvctl isvreporter isvtest
 BUMP_SCRIPT := scripts/bump-version.py
@@ -73,20 +74,29 @@ test: ## Run tests for all packages
 	@echo ""
 	@echo "✅ All tests passed!"
 
-demo-test: ## Run all my-isv living examples with ISVCTL_DEMO_MODE=1
+define run_demo
+	@echo ""
+	@echo "=========================================="
+	@echo "Demo test: $(1)"
+	@echo "=========================================="
+	@echo "Running cmd: ISVCTL_DEMO_MODE=1 uv run isvctl test run -f isvctl/configs/providers/my-isv/config/$(1).yaml"
+	@ISVCTL_DEMO_MODE=1 uv run isvctl test run \
+		-f isvctl/configs/providers/my-isv/config/$(1).yaml
+endef
+
+demo-test: demo-all ## Alias for demo-all (backward compat)
+
+demo-all: ## Run all my-isv living examples (or demo-<domain> for one, e.g. demo-security)
 	@echo "Running my-isv living examples in demo mode..."
 	@for domain in $(MY_ISV_DOMAINS); do \
-		echo ""; \
-		echo "=========================================="; \
-		echo "Demo test: $$domain"; \
-		echo "=========================================="; \
-		echo "Running cmd: ISVCTL_DEMO_MODE=1 uv run isvctl test run -f isvctl/configs/providers/my-isv/config/$$domain.yaml"; \
-		ISVCTL_DEMO_MODE=1 uv run isvctl test run \
-			-f isvctl/configs/providers/my-isv/config/$$domain.yaml || exit 1; \
+		$(MAKE) --no-print-directory demo-$$domain || exit 1; \
 	done
 	@echo ""
 	@echo "✅ All my-isv living examples passed in demo mode!"
 	@echo "Domains: $(MY_ISV_DOMAINS)"
+
+$(DEMO_TARGETS): demo-%:
+	$(call run_demo,$*)
 
 coverage: ## Run tests with coverage and generate combined report
 	@echo "Running tests with coverage..."

@@ -31,6 +31,7 @@ Output JSON:
 
 import argparse
 import json
+import logging
 import os
 import sys
 import time
@@ -43,6 +44,8 @@ import boto3
 from botocore.exceptions import ClientError
 from common.ec2 import sanitize_key_name
 from common.errors import handle_aws_errors
+
+logger = logging.getLogger(__name__)
 
 
 def delete_with_retry(func, resource_type: str, max_retries: int = 5, **kwargs) -> bool:
@@ -73,7 +76,11 @@ def cleanup_key_pairs(ec2: Any, key_names: list[str]) -> list[str]:
     """Delete key pairs by exact name (AWS + local PEM files)."""
     deleted = []
     for raw_name in key_names:
-        key_name = sanitize_key_name(raw_name)  # U5: prevent path traversal
+        try:
+            key_name = sanitize_key_name(raw_name)  # U5: prevent path traversal
+        except ValueError as e:
+            logger.warning("Skipping invalid key name %r: %s", raw_name, e)
+            continue
         try:
             ec2.describe_key_pairs(KeyNames=[key_name])
             ec2.delete_key_pair(KeyName=key_name)

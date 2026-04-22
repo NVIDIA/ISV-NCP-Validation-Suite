@@ -24,7 +24,7 @@ this script performs the equivalent manually:
 
 Usage:
     python reinstall_instance.py --instance-id i-xxx --region us-west-2 \
-        --key-file /tmp/key.pem --public-ip 54.x.x.x
+        --key-file /tmp/key.pem
 
 Output JSON:
 {
@@ -91,7 +91,6 @@ def main() -> int:
     parser.add_argument("--instance-id", required=True, help="EC2 instance ID")
     parser.add_argument("--region", default=os.environ.get("AWS_REGION", "us-west-2"))
     parser.add_argument("--key-file", required=True, help="Path to SSH private key")
-    parser.add_argument("--public-ip", required=True, help="Instance public IP")
     parser.add_argument("--ssh-user", default="ubuntu", help="SSH username")
     parser.add_argument("--ami-id", help="AMI ID to reinstall from (default: instance's current AMI)")
     parser.add_argument(
@@ -241,8 +240,8 @@ def main() -> int:
         result["state"] = instance["State"]["Name"]
         result["private_ip"] = instance.get("PrivateIpAddress")
 
-        # U4: poll for the fresh public IP. Dropping `or args.public_ip`
-        # fallback — safe on AWS, stale on NCPs that release on stop.
+        # Poll for the fresh public IP; do not fall back to a caller-supplied
+        # value — IPs are released on stop on NCPs and would be stale.
         public_ip = instance.get("PublicIpAddress") or wait_for_public_ip(ec2, args.instance_id)
         if not public_ip:
             result["error"] = "Instance has no public IP after reinstall (timed out polling)"

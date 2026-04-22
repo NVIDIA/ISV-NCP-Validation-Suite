@@ -179,6 +179,11 @@ def delete_with_retry(
                 continue
             logger.exception("Failed to delete %s after %d attempts", resource_desc, attempts)
             return False
+        except Exception:
+            # Contract: this helper never raises (callers use it in finally
+            # blocks, where a propagating exception would skip sibling cleanup).
+            logger.exception("Unexpected error deleting %s", resource_desc)
+            return False
 
     if last_error is not None:
         logger.error("Exhausted retries deleting %s: %s", resource_desc, last_error)

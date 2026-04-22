@@ -151,6 +151,9 @@ def main() -> int:
         # fallback is safe on AWS, stale on NCPs that release on stop.
         fresh_ip = instance.get("PublicIpAddress") or wait_for_public_ip(ec2, args.instance_id)
         if not fresh_ip:
+            # Don't let the pre-stop CLI IP carried in `result` leak into
+            # failure output — that's exactly the stale-IP signal U4 removes.
+            result["public_ip"] = None
             result["error"] = "Instance has no public IP after power-cycle (timed out polling)"
             print(json.dumps(result, indent=2))
             return 1

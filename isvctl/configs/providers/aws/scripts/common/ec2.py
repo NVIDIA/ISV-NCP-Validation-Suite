@@ -27,7 +27,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
+
+from common.errors import TRANSIENT_AWS_CODES
 
 # Conservative key-name pattern — letters, digits, dash, underscore, dot.
 # Deliberately excludes '/' and '..' to prevent path traversal when the
@@ -104,8 +106,17 @@ def wait_for_public_ip(
             if public_ip:
                 return public_ip
         except ClientError as e:
-            # Describe is cheap; a transient error shouldn't blow up the caller.
-            print(f"Warning: describe_instances transient error: {e}", file=sys.stderr)
+            # Only swallow throttling / server-side transient codes. Terminal
+            # errors (InvalidInstanceID.NotFound, AuthFailure, AccessDenied)
+            # must surface — hiding them behind the timeout makes bad configs
+            # look like slow IP assignment.
+            code = e.response.get("Error", {}).get("Code", "")
+            if code not in TRANSIENT_AWS_CODES:
+                raise
+            print(f"Warning: describe_instances transient error ({code}): {e}", file=sys.stderr)
+        except BotoCoreError as e:
+            # Network-level failures (EndpointConnectionError, read timeouts, etc.).
+            print(f"Warning: describe_instances network error: {e}", file=sys.stderr)
         if time.monotonic() >= deadline:
             return None
         time.sleep(interval)

@@ -42,7 +42,7 @@ from typing import Any
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, WaiterError
 from common.ec2 import get_amazon_linux_ami
 from common.errors import delete_with_retry, handle_aws_errors
 from common.vpc import create_test_vpc, delete_vpc
@@ -264,7 +264,10 @@ def main() -> int:
             ):
                 try:
                     ec2.get_waiter("instance_terminated").wait(InstanceIds=[instance_id])
-                except ClientError:
+                except (ClientError, WaiterError):
+                    # WaiterError fires on timeout or terminal-failure state; if
+                    # we let it escape, the finally block exits early and leaks
+                    # the SG, subnet, and VPC that still need cleanup below.
                     pass
             time.sleep(5)
         if sg_id:

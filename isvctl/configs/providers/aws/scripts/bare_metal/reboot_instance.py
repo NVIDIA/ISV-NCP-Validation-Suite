@@ -205,9 +205,13 @@ def main() -> int:
                 file=sys.stderr,
             )
         else:
-            result["reboot_confirmed"] = post_uptime < 600
+            # No pre-reboot sample means no proof. A fresh instance trivially
+            # sits below any wall-clock threshold, so the old `< 600s`
+            # heuristic is a false-positive waiting to happen (oracle gap U1).
+            result["reboot_confirmed"] = False
+            result["error"] = "Could not sample pre-reboot uptime via SSH (cannot affirm reboot)"
             print(
-                f"  Reboot likely confirmed (uptime={post_uptime:.0f}s)",
+                "WARNING: pre-reboot uptime sample missing; reboot not affirmed",
                 file=sys.stderr,
             )
 

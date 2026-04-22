@@ -577,6 +577,16 @@ Below is a summary by category.
 | `TenantListedCheck` | Check tenant appears in list |
 | `TenantInfoCheck` | Check tenant info retrieved |
 
+### Kubernetes Conformance Modes
+
+`K8sCncfConformanceCheck` (in `validations/k8s_conformance.py`) runs the upstream CNCF e2e suite in-cluster. The `mode` parameter selects which subset of tests runs:
+
+| Mode | Description |
+| ---- | ----------- |
+| `certified-conformance` (default) | Full `[Conformance]` suite, serial. Required for CNCF certification; expect multi-hour runtime. |
+| `non-disruptive-conformance` | `[Conformance]` minus `[Disruptive]` and `[Serial]` tests. Safe to run against clusters carrying other workloads. |
+| `quick` | Single ConfigMap test. Smoke-tests the harness end-to-end without exercising real conformance coverage. |
+
 ## Excluding Tests
 
 Use the `tests.exclude` section to deselect tests before they run. Excluded tests are removed from collection entirely (they do not appear as skipped or failed).

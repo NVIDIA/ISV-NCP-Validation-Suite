@@ -1,0 +1,99 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: PLACEHOLDER_NAMESPACE
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: conformance
+  namespace: PLACEHOLDER_NAMESPACE
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: PLACEHOLDER_CRB_NAME
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: conformance
+    namespace: PLACEHOLDER_NAMESPACE
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: PLACEHOLDER_POD_NAME
+  namespace: PLACEHOLDER_NAMESPACE
+  labels:
+    app: cncf-conformance
+spec:
+  serviceAccountName: conformance
+  restartPolicy: Never
+  nodeSelector:
+    kubernetes.io/os: linux
+  # Tolerate control-plane taints (legacy `master` + post-1.24 `control-plane`),
+  # CriticalAddonsOnly, and the taint the k8s e2e suite itself applies during
+  # eviction tests — without the last one the conformance pod can be evicted
+  # by the suite it is running.
+  tolerations:
+    - key: node-role.kubernetes.io/master
+      operator: Exists
+      effect: NoSchedule
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+    - key: CriticalAddonsOnly
+      operator: Exists
+    - key: kubernetes.io/e2e-evict-taint-key
+      operator: Exists
+  containers:
+    - name: conformance
+      image: PLACEHOLDER_IMAGE
+      imagePullPolicy: IfNotPresent
+      # The image entrypoint exits when the suite finishes, which would let the
+      # Pod transition to Succeeded — after which kubectl exec can no longer
+      # enter the container to retrieve artifacts. Wrap run_e2e.sh so we record
+      # the exit code and keep the container Running for artifact retrieval.
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set +e
+          /run_e2e.sh
+          ec=$?
+          echo "$ec" > /tmp/results/done
+          echo "run_e2e.sh exited with $ec; sleeping to allow artifact retrieval"
+          exec sleep infinity
+      env: []
+      # Defaults chosen to keep the pod in Burstable QoS with real
+      # ephemeral-storage accounting — a BestEffort pod is the first kubelet
+      # evicts under node pressure, which kills long conformance runs. CPU
+      # limit is intentionally omitted: CFS throttling on e2e.test causes
+      # spurious test timeouts. Memory limit is generous because ginkgo +
+      # e2e.test can spike well above steady-state during heavy SIG suites.
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+          ephemeral-storage: "2Gi"
+        limits:
+          memory: "4Gi"
+          ephemeral-storage: "10Gi"
+      volumeMounts:
+        - name: results
+          mountPath: /tmp/results
+  volumes:
+    - name: results
+      emptyDir: {}

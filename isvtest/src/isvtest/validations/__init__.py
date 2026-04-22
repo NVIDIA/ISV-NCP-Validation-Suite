@@ -58,6 +58,9 @@ from isvtest.validations.instance import (
     InstanceTagCheck,
     StableIdentifierCheck,
 )
+from isvtest.validations.k8s_conformance import (
+    K8sCncfConformanceCheck,
+)
 from isvtest.validations.network import (
     ByoipCheck,
     DhcpIpManagementCheck,
@@ -105,6 +108,7 @@ __all__ = [
     "InstanceStateCheck",
     "InstanceStopCheck",
     "InstanceTagCheck",
+    "K8sCncfConformanceCheck",
     "LocalizedDnsCheck",
     "NetworkConnectivityCheck",
     "NetworkProvisionedCheck",

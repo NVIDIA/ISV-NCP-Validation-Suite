@@ -96,6 +96,17 @@ tests:
       checks:
         K8sOidcIssuerCheck: {}
 
+    k8s_conformance:
+      checks:
+        K8sCncfConformanceCheck:
+          # For valid `mode` values, see
+          # docs/guides/configuration.md#kubernetes-conformance-modes
+          mode: "quick"
+          timeout: 7200
+          startup_timeout: 600
+          cleanup_namespace: true
+          report_individual_tests: false
+
     k8s_workloads:
       checks:
         K8sNcclWorkload:

@@ -139,9 +139,14 @@ Config (YAML) -> Script (any language) -> JSON output -> Validations (assertions
   this tree as their starting point.
 - `providers/aws/scripts/` - fully implemented AWS reference using boto3/Terraform,
   organized by domain (`aws/scripts/network/`, `aws/scripts/vm/`, `aws/scripts/iam/`, ...).
-- `providers/common/` - shared utilities used across providers (SSH helpers,
-  NIM deploy/teardown). `providers/aws/scripts/common/` holds AWS-only helpers
-  (error handling, EC2/VPC).
+- `providers/common/` - cross-provider scripts invoked via YAML (`deploy_nim.py`,
+  `teardown_nim.py`). Python helpers imported via `from common.*` live under
+  each provider's scripts/common/, not here.
+- `providers/aws/scripts/common/` - AWS-only Python helpers imported by the
+  stubs: `ec2` (key/SG/public-IP utilities), `errors` (error classification +
+  `delete_with_retry`), `ssh_utils` (`wait_for_ssh`), `serial_console`, `vpc`.
+  Reachable via a single `sys.path.insert(0, Path(__file__).resolve().parents[1])`
+  in each script.
 - Each script is self-contained and can be run manually for debugging.
 
 ### isvtest - Validation Framework

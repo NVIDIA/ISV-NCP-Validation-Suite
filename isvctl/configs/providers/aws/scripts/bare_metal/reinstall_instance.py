@@ -47,7 +47,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # providers/aws/scripts/ (for common.*)
 import boto3
 from botocore.exceptions import ClientError, WaiterError
 from common.ec2 import wait_for_public_ip

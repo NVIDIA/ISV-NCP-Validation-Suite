@@ -43,7 +43,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # providers/aws/scripts/ (for common.*)
 import boto3
 from common.ec2 import wait_for_public_ip
 from common.ssh_utils import wait_for_ssh

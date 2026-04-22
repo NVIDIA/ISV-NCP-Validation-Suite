@@ -11,7 +11,9 @@
 """Kubernetes utility functions for validation tests."""
 
 import functools
+import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -21,6 +23,23 @@ from typing import Any
 from isvtest.core.logger import setup_logger
 
 logger = setup_logger(__name__)
+
+# Container waiting reasons that kubelet only reports after it has already
+# given up retrying — callers can fast-fail instead of waiting out a timeout.
+TERMINAL_WAITING_REASONS: frozenset[str] = frozenset(
+    {
+        "ImagePullBackOff",
+        "InvalidImageName",
+        "CreateContainerConfigError",
+        "CreateContainerError",
+        "CrashLoopBackOff",
+    }
+)
+
+# Container waiting reasons that can appear transiently on the first pull
+# attempt before kubelet transitions to ImagePullBackOff; callers should fail
+# only if they persist across consecutive polls.
+TRANSIENT_WAITING_REASONS: frozenset[str] = frozenset({"ErrImagePull"})
 
 
 @functools.lru_cache(maxsize=1)
@@ -161,14 +180,66 @@ def get_kubectl_command() -> list[str]:
     return ["kubectl"]
 
 
-def get_kubectl_base_shell() -> str:
-    """Return the kubectl invocation as a shell-quoted string.
+def get_kubectl_base_shell(*args: str) -> str:
+    """Return the kubectl invocation (plus optional args) as a shell-quoted string.
 
     Use this when interpolating kubectl into a shell command string (e.g.
     passing to ``run_command`` or composing pipes). For argv-style calls
     (``subprocess.run``), use :func:`get_kubectl_command` instead.
+
+    With no args, returns just the provider-aware kubectl prefix. With args,
+    returns the fully composed, shell-quoted command — useful for callers
+    that would otherwise re-implement the quoting inline.
     """
-    return " ".join(shlex.quote(part) for part in get_kubectl_command())
+    return " ".join(shlex.quote(part) for part in (*get_kubectl_command(), *args))
+
+
+def parse_pod_state(stdout: str, stderr: str) -> tuple[str, str, str]:
+    """Parse ``kubectl get pod -o json`` output into ``(phase, waiting_reason, waiting_message)``.
+
+    ``stdout`` is the JSON output when the command succeeds; ``stderr`` is
+    inspected only when ``stdout`` is empty/invalid so NotFound errors can be
+    distinguished from generic failures.
+
+    Phase values:
+
+    - Pod phase (``"Running"``, ``"Pending"``, ``"Succeeded"``, ``"Failed"``) on success.
+    - ``"NotFound"`` when kubectl reports the pod is gone (evicted, deleted).
+    - ``"Unknown"`` on any other query failure.
+
+    Waiting reason/message describe the first container's waiting state
+    (both empty when the container is not waiting).
+    """
+    if not stdout:
+        lowered = (stderr or "").lower()
+        if "notfound" in lowered.replace(" ", "") or "not found" in lowered:
+            return "NotFound", "", ""
+        return "Unknown", "", ""
+    try:
+        data = json.loads(stdout)
+    except json.JSONDecodeError:
+        return "Unknown", "", ""
+    status = data.get("status") or {}
+    phase = status.get("phase") or "Unknown"
+    statuses = status.get("containerStatuses") or []
+    waiting = ((statuses[0].get("state") if statuses else {}) or {}).get("waiting") or {}
+    return phase, waiting.get("reason") or "", waiting.get("message") or ""
+
+
+def parse_server_version(stdout: str) -> str | None:
+    """Extract the ``vX.Y.Z`` server version from ``kubectl version -o json`` output.
+
+    Returns ``None`` if the JSON is malformed, ``serverVersion`` is missing, or
+    ``gitVersion`` does not match the expected pattern. Build metadata after
+    the patch number (e.g. ``v1.30.2+abc``) is stripped.
+    """
+    try:
+        data = json.loads(stdout)
+    except json.JSONDecodeError:
+        return None
+    git_version = ((data.get("serverVersion") or {}).get("gitVersion")) or ""
+    match = re.match(r"^(v\d+\.\d+\.\d+)", git_version)
+    return match.group(1) if match else None
 
 
 def run_kubectl(

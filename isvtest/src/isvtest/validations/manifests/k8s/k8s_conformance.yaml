@@ -76,21 +76,6 @@ spec:
           echo "$ec" > /tmp/results/done
           echo "run_e2e.sh exited with $ec; sleeping to allow artifact retrieval"
           exec sleep infinity
-      env: []
-      # Defaults chosen to keep the pod in Burstable QoS with real
-      # ephemeral-storage accounting — a BestEffort pod is the first kubelet
-      # evicts under node pressure, which kills long conformance runs. CPU
-      # limit is intentionally omitted: CFS throttling on e2e.test causes
-      # spurious test timeouts. Memory limit is generous because ginkgo +
-      # e2e.test can spike well above steady-state during heavy SIG suites.
-      resources:
-        requests:
-          cpu: "500m"
-          memory: "1Gi"
-          ephemeral-storage: "2Gi"
-        limits:
-          memory: "4Gi"
-          ephemeral-storage: "10Gi"
       volumeMounts:
         - name: results
           mountPath: /tmp/results

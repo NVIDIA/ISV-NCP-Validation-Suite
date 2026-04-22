@@ -35,6 +35,23 @@ _DEFAULT_ENV_VARS = {
 
 VERSION_JSON = json.dumps({"serverVersion": {"gitVersion": "v1.31.3"}})
 
+
+def pod_state_json(phase: str, reason: str = "", message: str = "") -> str:
+    """Build the JSON payload returned by `kubectl get pod -o json` for tests."""
+    state: dict = {}
+    if reason or message:
+        waiting: dict = {}
+        if reason:
+            waiting["reason"] = reason
+        if message:
+            waiting["message"] = message
+        state["waiting"] = waiting
+    payload: dict = {"status": {"phase": phase}}
+    if state:
+        payload["status"]["containerStatuses"] = [{"state": state}]
+    return json.dumps(payload)
+
+
 PASSING_JUNIT = """<?xml version="1.0" encoding="UTF-8"?>
 <testsuite name="Kubernetes e2e suite" tests="3" failures="0" skipped="1" time="120.5">
   <testcase name="[sig-api-machinery] ConfigMap create" classname="k8s.io/e2e" time="1.2"/>
@@ -133,7 +150,7 @@ def _virtual_clock() -> Iterator[_VirtualClock]:
 @pytest.fixture(autouse=True)
 def _kubectl_stub() -> Iterator[None]:
     with patch(
-        "isvtest.validations.k8s_conformance.get_kubectl_command",
+        "isvtest.core.k8s.get_kubectl_command",
         return_value=["kubectl"],
     ):
         yield
@@ -160,10 +177,9 @@ def _happy_router(
         router.add(substring, result)
     router.add("version -o json", ok(VERSION_JSON))
     router.add("apply", ok("pod/e2e-conformance created"))
-    router.add("containerStatuses", ok("|"))
-    router.add("jsonpath={.status.phase}", ok("Running"))
-    router.add("test -f", ok())
-    router.add("cat /tmp/results", ok(PASSING_JUNIT))
+    router.add("get pod", ok(pod_state_json("Running")))
+    router.add("cat /tmp/results/done", ok("0"))
+    router.add("cat /tmp/results/junit", ok(PASSING_JUNIT))
     router.add("delete namespace", ok())
     router.add("delete clusterrolebinding", ok())
     router.add("logs", ok("log tail"))
@@ -281,7 +297,7 @@ class TestRun:
         assert not any("delete " in cmd for cmd in router.seen)
 
     def test_pod_stuck_pending_times_out(self) -> None:
-        router = _happy_router({"jsonpath={.status.phase}": ok("Pending")})
+        router = _happy_router({"get pod": ok(pod_state_json("Pending"))})
         check = _run_check(router, {"startup_timeout": 30})
 
         assert not check.passed
@@ -293,10 +309,13 @@ class TestRun:
         """ImagePullBackOff is terminal — fail without burning startup_timeout."""
         router = _happy_router(
             {
-                "containerStatuses": ok(
-                    "ImagePullBackOff|Back-off pulling image 'registry.k8s.io/conformance:v1.31.3'"
+                "get pod": ok(
+                    pod_state_json(
+                        "Pending",
+                        reason="ImagePullBackOff",
+                        message="Back-off pulling image 'registry.k8s.io/conformance:v1.31.3'",
+                    )
                 ),
-                "jsonpath={.status.phase}": ok("Pending"),
             }
         )
         check = _run_check(router, {"startup_timeout": 600})
@@ -305,14 +324,19 @@ class TestRun:
         assert "ImagePullBackOff" in check.message
         assert "Back-off pulling image" in check.message
         # Should not have waited for the full startup timeout.
-        phase_polls = [cmd for cmd in router.seen if "jsonpath={.status.phase}" in cmd]
+        phase_polls = [cmd for cmd in router.seen if "get pod" in cmd]
         assert len(phase_polls) <= 2, f"Expected fast-fail, but polled phase {len(phase_polls)} times"
 
     def test_invalid_image_name_fails_fast(self) -> None:
         router = _happy_router(
             {
-                "containerStatuses": ok("InvalidImageName|couldn't parse image reference"),
-                "jsonpath={.status.phase}": ok("Pending"),
+                "get pod": ok(
+                    pod_state_json(
+                        "Pending",
+                        reason="InvalidImageName",
+                        message="couldn't parse image reference",
+                    )
+                ),
             }
         )
         check = _run_check(router)
@@ -324,10 +348,11 @@ class TestRun:
         """A single ErrImagePull poll shouldn't fail — kubelet may succeed next attempt."""
         router = _happy_router(
             {
-                # First poll: transient ErrImagePull. Subsequent polls: cleared.
-                "containerStatuses": [ok("ErrImagePull|network blip"), ok("|")],
-                # Phase: Pending during the blip, Running after.
-                "jsonpath={.status.phase}": [ok("Pending"), ok("Running")],
+                # First poll: Pending with transient ErrImagePull. Second poll: Running.
+                "get pod": [
+                    ok(pod_state_json("Pending", reason="ErrImagePull", message="network blip")),
+                    ok(pod_state_json("Running")),
+                ],
             }
         )
         check = _run_check(router)
@@ -338,27 +363,26 @@ class TestRun:
         """ErrImagePull across two consecutive polls should fail without waiting for timeout."""
         router = _happy_router(
             {
-                "containerStatuses": ok("ErrImagePull|manifest unknown"),
-                "jsonpath={.status.phase}": ok("Pending"),
+                "get pod": ok(pod_state_json("Pending", reason="ErrImagePull", message="manifest unknown")),
             }
         )
         check = _run_check(router, {"startup_timeout": 600})
 
         assert not check.passed
         assert "ErrImagePull" in check.message
-        phase_polls = [cmd for cmd in router.seen if "jsonpath={.status.phase}" in cmd]
+        phase_polls = [cmd for cmd in router.seen if "get pod" in cmd]
         # Requires at least 2 polls to confirm persistence, but far fewer than timeout/poll_interval.
         assert 2 <= len(phase_polls) <= 3
 
     def test_pod_failed_during_startup(self) -> None:
-        router = _happy_router({"jsonpath={.status.phase}": ok("Failed")})
+        router = _happy_router({"get pod": ok(pod_state_json("Failed"))})
         check = _run_check(router)
 
         assert not check.passed
         assert "entered Failed phase during startup" in check.message
 
     def test_completion_timeout(self) -> None:
-        router = _happy_router({"test -f": fail()})  # done marker never appears
+        router = _happy_router({"cat /tmp/results/done": fail()})  # done marker never appears
         check = _run_check(router, {"timeout": 90})
 
         assert not check.passed
@@ -367,8 +391,8 @@ class TestRun:
     def test_pod_failed_during_completion(self) -> None:
         router = _happy_router(
             {
-                "jsonpath={.status.phase}": [ok("Running"), ok("Failed")],
-                "test -f": fail(),
+                "get pod": [ok(pod_state_json("Running")), ok(pod_state_json("Failed"))],
+                "cat /tmp/results/done": fail(),
             }
         )
         check = _run_check(router)
@@ -383,11 +407,11 @@ class TestRun:
         which was previously mapped to "Unknown" and silently retried."""
         router = _happy_router(
             {
-                "jsonpath={.status.phase}": [
-                    ok("Running"),
+                "get pod": [
+                    ok(pod_state_json("Running")),
                     fail(stderr='Error from server (NotFound): pods "e2e-conformance" not found'),
                 ],
-                "test -f": fail(),
+                "cat /tmp/results/done": fail(),
                 "logs": fail(stderr="pod not found"),
                 "get events": ok("10m  Warning  TaintManagerEviction  pod/e2e-conformance  Marking for deletion"),
             }
@@ -397,31 +421,31 @@ class TestRun:
         assert not check.passed
         assert "deleted before completion marker" in check.message
         # Must not have polled phase hundreds of times waiting out the timeout.
-        phase_polls = [cmd for cmd in router.seen if "jsonpath={.status.phase}" in cmd]
+        phase_polls = [cmd for cmd in router.seen if "get pod" in cmd]
         assert len(phase_polls) <= 3, f"Expected fast-fail, but polled phase {len(phase_polls)} times"
         # Events fallback populated the output so evictions are visible in the report.
         assert "TaintManagerEviction" in check._output
 
     def test_pod_deleted_during_startup_fails_fast(self) -> None:
         router = _happy_router(
-            {"jsonpath={.status.phase}": fail(stderr='Error from server (NotFound): pods "e2e-conformance" not found')}
+            {"get pod": fail(stderr='Error from server (NotFound): pods "e2e-conformance" not found')}
         )
         check = _run_check(router, {"startup_timeout": 600})
 
         assert not check.passed
         assert "deleted during startup" in check.message
-        phase_polls = [cmd for cmd in router.seen if "jsonpath={.status.phase}" in cmd]
+        phase_polls = [cmd for cmd in router.seen if "get pod" in cmd]
         assert len(phase_polls) <= 2
 
     def test_junit_retrieval_failure(self) -> None:
-        router = _happy_router({"cat /tmp/results": fail(stderr="no such file")})
+        router = _happy_router({"cat /tmp/results/junit": fail(stderr="no such file")})
         check = _run_check(router)
 
         assert not check.passed
         assert "Could not retrieve" in check.message
 
     def test_malformed_junit_sets_failed(self) -> None:
-        router = _happy_router({"cat /tmp/results": ok("<<<not xml")})
+        router = _happy_router({"cat /tmp/results/junit": ok("<<<not xml")})
         check = _run_check(router)
 
         assert not check.passed

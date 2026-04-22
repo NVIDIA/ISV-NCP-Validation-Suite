@@ -10,12 +10,21 @@
 
 """Tests for Kubernetes utility functions (KUBECTL override)."""
 
+import json
 import os
 from unittest.mock import patch
 
 import pytest
 
-from isvtest.core.k8s import get_k8s_provider, get_kubectl_base_shell, get_kubectl_command
+from isvtest.core.k8s import (
+    TERMINAL_WAITING_REASONS,
+    TRANSIENT_WAITING_REASONS,
+    get_k8s_provider,
+    get_kubectl_base_shell,
+    get_kubectl_command,
+    parse_pod_state,
+    parse_server_version,
+)
 
 
 class TestGetKubectlCommandOverride:
@@ -117,3 +126,90 @@ class TestGetKubectlCommandOverride:
         ):
             with pytest.raises(FileNotFoundError, match="not found on PATH"):
                 get_kubectl_command()
+
+
+class TestGetKubectlBaseShellArgs:
+    """Tests for get_kubectl_base_shell() args composition."""
+
+    def test_composes_args_with_quoting(self) -> None:
+        with (
+            patch.dict(os.environ, {"KUBECTL": "kubectl"}, clear=True),
+            patch("isvtest.core.k8s.shutil.which", return_value="/usr/bin/kubectl"),
+        ):
+            result = get_kubectl_base_shell("get", "pod", "my-pod", "-n", "default")
+        assert result == "kubectl get pod my-pod -n default"
+
+    def test_quotes_arg_with_spaces(self) -> None:
+        with (
+            patch.dict(os.environ, {"KUBECTL": "kubectl"}, clear=True),
+            patch("isvtest.core.k8s.shutil.which", return_value="/usr/bin/kubectl"),
+        ):
+            result = get_kubectl_base_shell("label", "node", "n1", "app=foo bar")
+        # The value with a space must be quoted so the shell sees it as one token.
+        assert "'app=foo bar'" in result
+
+
+class TestParsePodState:
+    def test_running_pod(self) -> None:
+        payload = json.dumps({"status": {"phase": "Running"}})
+        assert parse_pod_state(payload, "") == ("Running", "", "")
+
+    def test_pending_with_waiting_reason(self) -> None:
+        payload = json.dumps(
+            {
+                "status": {
+                    "phase": "Pending",
+                    "containerStatuses": [
+                        {"state": {"waiting": {"reason": "ImagePullBackOff", "message": "back-off"}}}
+                    ],
+                }
+            }
+        )
+        phase, reason, msg = parse_pod_state(payload, "")
+        assert phase == "Pending"
+        assert reason == "ImagePullBackOff"
+        assert msg == "back-off"
+
+    def test_notfound_from_stderr(self) -> None:
+        stderr = 'Error from server (NotFound): pods "my-pod" not found'
+        assert parse_pod_state("", stderr) == ("NotFound", "", "")
+
+    def test_unknown_on_generic_failure(self) -> None:
+        assert parse_pod_state("", "connection refused") == ("Unknown", "", "")
+
+    def test_unknown_on_malformed_json(self) -> None:
+        assert parse_pod_state("not json", "") == ("Unknown", "", "")
+
+    def test_missing_container_statuses(self) -> None:
+        payload = json.dumps({"status": {"phase": "Pending"}})
+        assert parse_pod_state(payload, "") == ("Pending", "", "")
+
+
+class TestParseServerVersion:
+    def test_strips_build_metadata(self) -> None:
+        assert parse_server_version(json.dumps({"serverVersion": {"gitVersion": "v1.30.2+abc"}})) == "v1.30.2"
+
+    def test_plain_git_version(self) -> None:
+        assert parse_server_version(json.dumps({"serverVersion": {"gitVersion": "v1.31.3"}})) == "v1.31.3"
+
+    def test_missing_server_version(self) -> None:
+        assert parse_server_version(json.dumps({})) is None
+
+    def test_malformed_json(self) -> None:
+        assert parse_server_version("not json") is None
+
+    def test_unexpected_format(self) -> None:
+        assert parse_server_version(json.dumps({"serverVersion": {"gitVersion": "1.x.y"}})) is None
+
+
+class TestWaitingReasonConstants:
+    def test_terminal_reasons_are_frozen(self) -> None:
+        assert "ImagePullBackOff" in TERMINAL_WAITING_REASONS
+        assert isinstance(TERMINAL_WAITING_REASONS, frozenset)
+
+    def test_transient_reasons_are_frozen(self) -> None:
+        assert "ErrImagePull" in TRANSIENT_WAITING_REASONS
+        assert isinstance(TRANSIENT_WAITING_REASONS, frozenset)
+
+    def test_terminal_and_transient_are_disjoint(self) -> None:
+        assert TERMINAL_WAITING_REASONS.isdisjoint(TRANSIENT_WAITING_REASONS)

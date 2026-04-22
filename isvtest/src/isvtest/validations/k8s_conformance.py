@@ -25,9 +25,6 @@ the container stays Running long enough for the harness to ``cat`` the JUnit.
 
 from __future__ import annotations
 
-import json
-import re
-import shlex
 import tempfile
 import time
 import uuid
@@ -38,7 +35,14 @@ from typing import ClassVar
 
 import yaml
 
-from isvtest.core.k8s import get_kubectl_command, is_k8s_available
+from isvtest.core.k8s import (
+    TERMINAL_WAITING_REASONS,
+    TRANSIENT_WAITING_REASONS,
+    get_kubectl_base_shell,
+    is_k8s_available,
+    parse_pod_state,
+    parse_server_version,
+)
 from isvtest.core.validation import BaseValidation
 
 
@@ -121,19 +125,6 @@ class K8sCncfConformanceCheck(BaseValidation):
     _POD_NAME = "e2e-conformance"
     _MANIFEST_TEMPLATE = Path(__file__).parent / "manifests" / "k8s" / "k8s_conformance.yaml"
 
-    # Waiting reasons that kubelet reports only after it has already given up
-    # retrying — no point burning startup_timeout on these.
-    _TERMINAL_WAITING_REASONS: ClassVar[set[str]] = {
-        "ImagePullBackOff",
-        "InvalidImageName",
-        "CreateContainerConfigError",
-        "CreateContainerError",
-        "CrashLoopBackOff",
-    }
-    # Reasons that can appear transiently on the first pull attempt before
-    # kubelet transitions to ImagePullBackOff; fail only if they persist.
-    _TRANSIENT_WAITING_REASONS: ClassVar[set[str]] = {"ErrImagePull"}
-
     def run(self) -> None:
         if not is_k8s_available():
             self.set_failed("Kubernetes cluster is not available")
@@ -202,8 +193,8 @@ class K8sCncfConformanceCheck(BaseValidation):
                 self.set_failed(completion_error, output=output[-4000:])
                 return
 
-            junit_xml = self._exec_cat(namespace, self._POD_NAME, self._JUNIT_PATH)
-            if not junit_xml:
+            ok, junit_xml = self._exec_cat(namespace, self._POD_NAME, self._JUNIT_PATH)
+            if not ok or not junit_xml:
                 logs = self._get_pod_logs(namespace, self._POD_NAME)
                 self.set_failed(
                     f"Could not retrieve {self._JUNIT_PATH} from conformance pod",
@@ -240,28 +231,16 @@ class K8sCncfConformanceCheck(BaseValidation):
             if applied and cleanup_namespace:
                 self._cleanup(namespace)
 
-    def _kubectl(self, *args: str) -> str:
-        parts = get_kubectl_command() + list(args)
-        return " ".join(shlex.quote(p) for p in parts)
-
     def _detect_cluster_version(self) -> str | None:
-        cmd = self._kubectl("version", "-o", "json")
+        cmd = get_kubectl_base_shell("version", "-o", "json")
         result = self.run_command(cmd, timeout=self._AUX_CMD_TIMEOUT)
         if result.exit_code != 0 or not result.stdout:
             self.log.warning(f"kubectl version failed: {result.stderr.strip()}")
             return None
-        try:
-            data = json.loads(result.stdout)
-        except json.JSONDecodeError as exc:
-            self.log.warning(f"Could not parse kubectl version output: {exc}")
-            return None
-        server = data.get("serverVersion") or {}
-        git_version = server.get("gitVersion") or ""
-        match = re.match(r"^(v\d+\.\d+\.\d+)", git_version)
-        if not match:
-            self.log.warning(f"Unexpected gitVersion format: {git_version!r}")
-            return None
-        return match.group(1)
+        version = parse_server_version(result.stdout)
+        if version is None:
+            self.log.warning(f"Could not parse server version from kubectl output: {result.stdout!r}")
+        return version
 
     def _render_manifest(
         self,
@@ -307,7 +286,7 @@ class K8sCncfConformanceCheck(BaseValidation):
             fh.write(manifest)
             path = fh.name
         try:
-            cmd = self._kubectl("apply", "-f", path)
+            cmd = get_kubectl_base_shell("apply", "-f", path)
             result = self.run_command(cmd, timeout=self._AUX_CMD_TIMEOUT)
             if result.exit_code != 0:
                 self.log.error(f"kubectl apply failed: {result.stderr.strip()}")
@@ -322,10 +301,10 @@ class K8sCncfConformanceCheck(BaseValidation):
         message explaining why startup is doomed (image pull errors, Failed
         phase, deletion, or timeout) — the caller surfaces it via set_failed."""
         deadline = time.time() + timeout
-        last_progress = 0.0
+        last_progress = time.time()
         prev_transient_reason = ""
         while time.time() < deadline:
-            phase = self._get_pod_phase(namespace, pod_name)
+            phase, reason, message = self._get_pod_state(namespace, pod_name)
             if phase == "Running":
                 return None
             if phase == "Succeeded":
@@ -338,12 +317,11 @@ class K8sCncfConformanceCheck(BaseValidation):
                 self.log.error(f"Pod {pod_name} disappeared during startup")
                 return f"Conformance pod {pod_name} was deleted during startup (likely evicted)"
 
-            reason, message = self._get_container_waiting(namespace, pod_name)
-            if reason in self._TERMINAL_WAITING_REASONS:
+            if reason in TERMINAL_WAITING_REASONS:
                 detail = f"{reason}: {message}" if message else reason
                 self.log.error(f"Pod {pod_name} container stuck in {detail}")
                 return f"Conformance pod {pod_name} cannot start ({detail})"
-            if reason in self._TRANSIENT_WAITING_REASONS:
+            if reason in TRANSIENT_WAITING_REASONS:
                 if prev_transient_reason == reason:
                     detail = f"{reason}: {message}" if message else reason
                     self.log.error(f"Pod {pod_name} container persistently {detail}")
@@ -366,7 +344,7 @@ class K8sCncfConformanceCheck(BaseValidation):
         deadline = start + timeout
         last_progress = start
         while time.time() < deadline:
-            phase = self._get_pod_phase(namespace, pod_name)
+            phase, _, _ = self._get_pod_state(namespace, pod_name)
             if phase == "Failed":
                 self.log.error(f"Pod {pod_name} entered Failed phase before completion marker")
                 return f"Conformance pod {pod_name} entered Failed phase before completion marker appeared"
@@ -374,7 +352,8 @@ class K8sCncfConformanceCheck(BaseValidation):
                 self.log.error(f"Pod {pod_name} disappeared before completion marker")
                 return f"Conformance pod {pod_name} was deleted before completion marker appeared (likely evicted)"
 
-            if self._done_marker_exists(namespace, pod_name):
+            done, _ = self._exec_cat(namespace, pod_name, self._DONE_MARKER, timeout=self._AUX_CMD_TIMEOUT, quiet=True)
+            if done:
                 self.log.info(f"Conformance completed (elapsed={int(time.time() - start)}s)")
                 return None
 
@@ -387,75 +366,63 @@ class K8sCncfConformanceCheck(BaseValidation):
             time.sleep(self._POLL_INTERVAL)
         return f"Conformance run did not finish within {timeout}s"
 
-    def _get_pod_phase(self, namespace: str, pod_name: str) -> str:
-        """Return the pod phase, or ``"NotFound"`` if kubectl reports the pod is
-        gone (evicted, deleted), or ``"Unknown"`` for any other query failure."""
-        cmd = self._kubectl("get", "pod", pod_name, "-n", namespace, "-o", "jsonpath={.status.phase}")
+    def _get_pod_state(self, namespace: str, pod_name: str) -> tuple[str, str, str]:
+        """Fetch ``(phase, waiting_reason, waiting_message)`` in one kubectl call."""
+        cmd = get_kubectl_base_shell("get", "pod", pod_name, "-n", namespace, "-o", "json")
         result = self.run_command(cmd, timeout=self._AUX_CMD_TIMEOUT)
         if result.exit_code != 0:
-            stderr = (result.stderr or "").lower()
-            if "notfound" in stderr.replace(" ", "") or "not found" in stderr:
-                return "NotFound"
-            return "Unknown"
-        return result.stdout.strip() or "Unknown"
+            return parse_pod_state("", result.stderr or "")
+        return parse_pod_state(result.stdout, "")
 
-    def _get_container_waiting(self, namespace: str, pod_name: str) -> tuple[str, str]:
-        """Return (reason, message) for the conformance container's waiting state.
+    def _exec_cat(
+        self,
+        namespace: str,
+        pod_name: str,
+        path: str,
+        timeout: int | None = None,
+        quiet: bool = False,
+    ) -> tuple[bool, str]:
+        """Cat ``path`` inside the pod. Returns ``(ok, content)``.
 
-        Returns ("", "") when the container is not waiting or the query fails.
-        Reason and message are split on ``|`` — a delimiter kubelet won't emit
-        inside either field, so a single kubectl call covers both.
+        ``quiet=True`` suppresses the warning log on failure — used for
+        existence-polling where failure is the expected steady state until the
+        file appears.
         """
-        cmd = self._kubectl(
-            "get",
-            "pod",
-            pod_name,
-            "-n",
-            namespace,
-            "-o",
-            "jsonpath={.status.containerStatuses[0].state.waiting.reason}|{.status.containerStatuses[0].state.waiting.message}",
-        )
-        result = self.run_command(cmd, timeout=self._AUX_CMD_TIMEOUT)
+        cmd = get_kubectl_base_shell("exec", "-n", namespace, pod_name, "--", "cat", path)
+        result = self.run_command(cmd, timeout=timeout if timeout is not None else self._EXEC_CAT_TIMEOUT)
         if result.exit_code != 0:
-            return "", ""
-        reason, _, message = result.stdout.strip().partition("|")
-        return reason, message
-
-    def _done_marker_exists(self, namespace: str, pod_name: str) -> bool:
-        cmd = self._kubectl("exec", "-n", namespace, pod_name, "--", "test", "-f", self._DONE_MARKER)
-        result = self.run_command(cmd, timeout=self._AUX_CMD_TIMEOUT)
-        return result.exit_code == 0
-
-    def _exec_cat(self, namespace: str, pod_name: str, path: str) -> str:
-        cmd = self._kubectl("exec", "-n", namespace, pod_name, "--", "cat", path)
-        result = self.run_command(cmd, timeout=self._EXEC_CAT_TIMEOUT)
-        if result.exit_code != 0:
-            self.log.warning(f"kubectl exec cat {path} failed: {result.stderr.strip()}")
-            return ""
-        return result.stdout
+            if not quiet:
+                self.log.warning(f"kubectl exec cat {path} failed: {result.stderr.strip()}")
+            return False, ""
+        return True, result.stdout
 
     def _get_pod_logs(self, namespace: str, pod_name: str) -> str:
-        cmd = self._kubectl("logs", "-n", namespace, pod_name, "--tail=200")
+        """Return the last 200 lines of pod logs, or ``""`` on failure."""
+        cmd = get_kubectl_base_shell("logs", "-n", namespace, pod_name, "--tail=200")
         result = self.run_command(cmd, timeout=self._AUX_CMD_TIMEOUT)
         if result.exit_code != 0:
             return ""
         return result.stdout
 
     def _get_recent_events(self, namespace: str) -> str:
-        cmd = self._kubectl("get", "events", "-n", namespace, "--sort-by=.lastTimestamp")
+        """Return namespace events sorted by ``lastTimestamp``, or ``""`` on failure."""
+        cmd = get_kubectl_base_shell("get", "events", "-n", namespace, "--sort-by=.lastTimestamp")
         result = self.run_command(cmd, timeout=self._AUX_CMD_TIMEOUT)
         if result.exit_code != 0:
             return ""
         return result.stdout
 
     def _cleanup(self, namespace: str) -> None:
-        ns_cmd = self._kubectl("delete", "namespace", namespace, "--ignore-not-found=true", "--wait=false")
+        """Delete the run's namespace and its cluster-scoped ClusterRoleBinding; failures are logged, not raised."""
+        ns_cmd = get_kubectl_base_shell("delete", "namespace", namespace, "--ignore-not-found=true", "--wait=false")
         ns_result = self.run_command(ns_cmd, timeout=self._AUX_CMD_TIMEOUT)
         if ns_result.exit_code != 0:
             self.log.warning(f"Failed to delete namespace {namespace}: {ns_result.stderr.strip()}")
 
         # ClusterRoleBinding is cluster-scoped and outlives the namespace deletion.
-        crb_cmd = self._kubectl("delete", "clusterrolebinding", f"conformance-{namespace}", "--ignore-not-found=true")
+        crb_cmd = get_kubectl_base_shell(
+            "delete", "clusterrolebinding", f"conformance-{namespace}", "--ignore-not-found=true"
+        )
         crb_result = self.run_command(crb_cmd, timeout=self._AUX_CMD_TIMEOUT)
         if crb_result.exit_code != 0:
             self.log.warning(f"Failed to delete clusterrolebinding: {crb_result.stderr.strip()}")

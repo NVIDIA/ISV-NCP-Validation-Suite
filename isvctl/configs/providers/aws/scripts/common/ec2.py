@@ -12,18 +12,103 @@
 
 Provides common EC2 operations used across VM and ISO launch scripts:
 - Key pair creation with idempotent handling
+- Key-name sanitization (oracle gap U5 — prevents path traversal)
 - Security group creation with SSH ingress
 - Availability zone support detection
 - Default VPC and subnet discovery
+- Post-transition public-IP polling (oracle gap U4 — no stale-IP fallback)
 """
 
 from __future__ import annotations
 
+import re
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
 from botocore.exceptions import ClientError
+
+# Conservative key-name pattern — letters, digits, dash, underscore, dot.
+# Deliberately excludes '/' and '..' to prevent path traversal when the
+# name is composed into a filesystem path like /tmp/{key_name}.pem
+# (oracle gap U5). Length cap matches EC2's 255-char limit.
+_KEY_NAME_RE = re.compile(r"[A-Za-z0-9_.-]{1,255}")
+
+
+def sanitize_key_name(key_name: str) -> str:
+    """Validate ``key_name`` is safe to compose into a filesystem path.
+
+    AWS key pair names are a CLI-supplied string that several stubs
+    concatenate into ``/tmp/{key_name}.pem`` (and similar). A name like
+    ``../etc/passwd`` or ``foo/bar`` would escape ``/tmp`` and read or
+    unlink files outside the intended scope. This is low-severity on a
+    dedicated test box but real on a dev machine or shared runner.
+
+    Reject anything outside ``[A-Za-z0-9_.-]`` with a clear error. Returns
+    ``key_name`` unchanged on success so callers can use it inline:
+
+        pem_path = Path(f"/tmp/{sanitize_key_name(args.key_name)}.pem")
+
+    Args:
+        key_name: The proposed key-pair name.
+
+    Returns:
+        The same ``key_name`` if valid.
+
+    Raises:
+        ValueError: If ``key_name`` contains characters outside the
+            allowed set or is empty / too long.
+    """
+    if not key_name or not _KEY_NAME_RE.fullmatch(key_name):
+        raise ValueError(
+            f"invalid key name {key_name!r}: must match [A-Za-z0-9_.-] "
+            "(1-255 chars). Rejected to prevent path traversal when composed "
+            "into /tmp/<name>.pem."
+        )
+    return key_name
+
+
+def wait_for_public_ip(
+    ec2: Any,
+    instance_id: str,
+    *,
+    timeout: int = 120,
+    interval: int = 5,
+) -> str | None:
+    """Poll ``describe_instances`` until the instance has a non-null public IP.
+
+    AWS preserves the public IP across stop/start, so post-transition stubs
+    historically fell back to the pre-stop IP passed on the CLI. On NCPs
+    that release the ephemeral IP on stop (GCP is the most common), that
+    fallback silently masks a stale IP. The safer pattern — and the one
+    Orga recommended as the defensive default (oracle gap U4) — is to poll
+    the describe API and never trust a pre-stop value.
+
+    Args:
+        ec2: Boto3 EC2 client.
+        instance_id: Instance to poll.
+        timeout: Total seconds to wait before giving up.
+        interval: Seconds between describe calls.
+
+    Returns:
+        The fresh public IP string, or None if the instance still has no
+        public IP after ``timeout`` seconds (caller decides how to surface).
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            resp = ec2.describe_instances(InstanceIds=[instance_id])
+            instances = resp.get("Reservations", [{}])[0].get("Instances", [{}])
+            public_ip = instances[0].get("PublicIpAddress") if instances else None
+            if public_ip:
+                return public_ip
+        except ClientError as e:
+            # Describe is cheap; a transient error shouldn't blow up the caller.
+            print(f"Warning: describe_instances transient error: {e}", file=sys.stderr)
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(interval)
 
 
 def get_supported_azs(ec2: Any, instance_type: str) -> set[str]:
@@ -135,6 +220,8 @@ def create_key_pair(
             the same name lacks the suite's ownership tag (verified-reuse
             check failed — oracle gap U2).
     """
+    key_name = sanitize_key_name(key_name)
+
     if key_dir is None:
         key_dir = Path("/tmp")
     else:

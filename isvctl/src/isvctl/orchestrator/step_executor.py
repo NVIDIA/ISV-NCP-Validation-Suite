@@ -454,13 +454,32 @@ class StepExecutor:
     def _render_args(self, args: list[str], context: Context) -> list[str]:
         """Render Jinja2 templates in command arguments.
 
+        Handling of empty render results is deliberate (oracle gap U6):
+
+        * If the template references a ``{{steps.X.Y}}`` path that is
+          unresolved AND no ``default(...)`` filter is used, raise
+          :class:`MissingStepRefError` — the caller didn't express intent
+          to skip, so a silent drop would mask a real bug.
+        * If the template uses ``default(...)`` or is a pure Jinja
+          conditional (no ``steps.*`` reference), the empty result is
+          dropped from the argv — this is the explicit contract that
+          supports "optional flag" YAML patterns like::
+
+              args:
+                - "{{teardown_flag}}"    # ternary → "" or "--skip-destroy"
+
+          Removing the empty-filter behavior would break every YAML that
+          relies on it; any change here needs to migrate those sites to
+          an alternative (e.g. an explicit ``skip_if_empty`` directive).
+
         Args:
             args: List of argument strings (may contain {{ }} templates)
             context: Context with step outputs for rendering
 
         Returns:
-            List of rendered argument strings (empty strings are filtered out
-            only when the template used an explicit ``| default(...)`` fallback)
+            List of rendered argument strings. Empty renders are dropped
+            when they originated from a ``default(...)`` fallback or a
+            pure Jinja conditional (no unresolved ``steps.*`` reference).
 
         Raises:
             MissingStepRefError: when an arg references ``{{steps.X.Y}}`` that

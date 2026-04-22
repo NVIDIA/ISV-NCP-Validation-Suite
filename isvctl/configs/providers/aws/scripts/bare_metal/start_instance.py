@@ -45,6 +45,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import boto3
+from common.ec2 import wait_for_public_ip
 from common.ssh_utils import wait_for_ssh
 
 
@@ -116,8 +117,17 @@ def main() -> int:
         instances = ec2.describe_instances(InstanceIds=[args.instance_id])
         instance = instances["Reservations"][0]["Instances"][0]
         result["state"] = instance["State"]["Name"]
-        result["public_ip"] = instance.get("PublicIpAddress") or args.public_ip
         result["private_ip"] = instance.get("PrivateIpAddress")
+
+        # U4: poll for the fresh public IP rather than fall back to the
+        # pre-stop value — safe on AWS but silently stale on NCPs that
+        # release the ephemeral IP on stop.
+        fresh_ip = instance.get("PublicIpAddress") or wait_for_public_ip(ec2, args.instance_id)
+        if not fresh_ip:
+            result["error"] = "Instance has no public IP after start (timed out polling)"
+            print(json.dumps(result, indent=2))
+            return 1
+        result["public_ip"] = fresh_ip
 
         # ============================================================
         # Step 5: Wait for SSH to be ready

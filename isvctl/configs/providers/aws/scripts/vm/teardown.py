@@ -31,9 +31,13 @@ import json
 import os
 import sys
 import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import boto3
 from botocore.exceptions import ClientError
+from common.ec2 import sanitize_key_name
 
 
 def main() -> int:
@@ -98,13 +102,14 @@ def main() -> int:
         # Delete key pair if requested
         if args.delete_key_pair and key_name:
             try:
+                key_name = sanitize_key_name(key_name)  # U5: reject path-traversal chars
                 ec2.delete_key_pair(KeyName=key_name)
                 result["deleted"]["key_pairs"].append(key_name)
                 # Also delete local key file
                 key_file = f"/tmp/{key_name}.pem"
                 if os.path.exists(key_file):
                     os.remove(key_file)
-            except ClientError as e:
+            except (ClientError, ValueError) as e:
                 result.setdefault("warnings", []).append(f"Could not delete key pair: {e}")
 
         result["success"] = True

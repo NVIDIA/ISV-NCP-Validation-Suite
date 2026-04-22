@@ -41,6 +41,7 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
 
 import boto3
 from botocore.exceptions import ClientError
+from common.ec2 import sanitize_key_name
 from common.errors import handle_aws_errors
 
 
@@ -71,7 +72,8 @@ def delete_with_retry(func, resource_type: str, max_retries: int = 5, **kwargs) 
 def cleanup_key_pairs(ec2: Any, key_names: list[str]) -> list[str]:
     """Delete key pairs by exact name (AWS + local PEM files)."""
     deleted = []
-    for key_name in key_names:
+    for raw_name in key_names:
+        key_name = sanitize_key_name(raw_name)  # U5: prevent path traversal
         try:
             ec2.describe_key_pairs(KeyNames=[key_name])
             ec2.delete_key_pair(KeyName=key_name)

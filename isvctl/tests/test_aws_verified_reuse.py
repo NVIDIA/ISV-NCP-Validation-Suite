@@ -30,7 +30,12 @@ _COMMON_DIR = Path(__file__).resolve().parents[1] / "configs" / "providers" / "a
 if str(_COMMON_DIR) not in sys.path:
     sys.path.insert(0, str(_COMMON_DIR))
 
-from common.ec2 import create_key_pair, create_security_group  # noqa: E402
+from common.ec2 import (  # noqa: E402
+    create_key_pair,
+    create_security_group,
+    sanitize_key_name,
+    wait_for_public_ip,
+)
 
 
 def _client_error(code: str, message: str = "error") -> ClientError:
@@ -221,6 +226,80 @@ class TestCreateSecurityGroupVerifiedReuse:
         ec2.create_security_group.side_effect = _client_error("AccessDenied")
         with pytest.raises(ClientError):
             create_security_group(ec2, "vpc-1", "sg1")
+
+
+class TestSanitizeKeyName:
+    """sanitize_key_name (oracle gap U5) — prevent path traversal when
+    ``key_name`` is composed into a filesystem path like /tmp/<name>.pem."""
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "isv-test",
+            "isv_test",
+            "isv-test-v1.2",
+            "a",
+            "A1B2C3",
+            "x" * 255,
+        ],
+    )
+    def test_accepts_safe_names(self, name: str) -> None:
+        """Letters, digits, dot, dash, underscore are all allowed."""
+        assert sanitize_key_name(name) == name
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "../etc/passwd",
+            "foo/bar",
+            "foo bar",
+            "name;rm -rf /",
+            "name$(whoami)",
+            "",
+            "x" * 256,  # over the length cap
+            "foo\nbar",
+        ],
+    )
+    def test_rejects_unsafe_names(self, name: str) -> None:
+        """Anything outside [A-Za-z0-9_.-] or over length is rejected."""
+        with pytest.raises(ValueError, match="invalid key name"):
+            sanitize_key_name(name)
+
+
+class TestWaitForPublicIp:
+    """wait_for_public_ip (oracle gap U4) — always poll describe_instances,
+    never fall back to a pre-stop value."""
+
+    def test_returns_fresh_ip_on_first_poll(self) -> None:
+        """Happy path: describe immediately returns a PublicIpAddress."""
+        ec2 = MagicMock()
+        ec2.describe_instances.return_value = {"Reservations": [{"Instances": [{"PublicIpAddress": "34.1.2.3"}]}]}
+        assert wait_for_public_ip(ec2, "i-1", timeout=1, interval=0) == "34.1.2.3"
+
+    def test_polls_until_non_null(self) -> None:
+        """First poll returns null, second returns the new IP."""
+        ec2 = MagicMock()
+        ec2.describe_instances.side_effect = [
+            {"Reservations": [{"Instances": [{"PublicIpAddress": None}]}]},
+            {"Reservations": [{"Instances": [{"PublicIpAddress": "34.9.9.9"}]}]},
+        ]
+        assert wait_for_public_ip(ec2, "i-1", timeout=10, interval=0) == "34.9.9.9"
+        assert ec2.describe_instances.call_count == 2
+
+    def test_returns_none_on_timeout(self) -> None:
+        """No IP after the deadline → return None (caller decides next move)."""
+        ec2 = MagicMock()
+        ec2.describe_instances.return_value = {"Reservations": [{"Instances": [{"PublicIpAddress": None}]}]}
+        assert wait_for_public_ip(ec2, "i-1", timeout=0, interval=0) is None
+
+    def test_tolerates_transient_describe_errors(self) -> None:
+        """A ClientError on one poll doesn't abort the loop."""
+        ec2 = MagicMock()
+        ec2.describe_instances.side_effect = [
+            _client_error("Throttling"),
+            {"Reservations": [{"Instances": [{"PublicIpAddress": "34.5.5.5"}]}]},
+        ]
+        assert wait_for_public_ip(ec2, "i-1", timeout=10, interval=0) == "34.5.5.5"
 
 
 if __name__ == "__main__":

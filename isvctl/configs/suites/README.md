@@ -17,7 +17,8 @@ Suites:
 [`k8s`](k8s.yaml),
 [`slurm`](slurm.yaml),
 [`control-plane`](control-plane.yaml),
-[`image-registry`](image-registry.yaml).
+[`image-registry`](image-registry.yaml),
+[`security`](security.yaml).
 For the domain / script-count / AWS-reference overview see the
 [my-isv scaffold README](../providers/my-isv/scripts/README.md#domains).
 
@@ -49,6 +50,9 @@ For the domain / script-count / AWS-reference overview see the
 | `stable_ip_test` | test | `providers/my-isv/scripts/network/stable_ip_test.py` | IP persistence across stop/start |
 | `floating_ip_test` | test | `providers/my-isv/scripts/network/floating_ip_test.py` | Atomic IP switch between instances |
 | `dns_test` | test | `providers/my-isv/scripts/network/dns_test.py` | Custom internal domain resolution |
+| `sg_workload_scoping` | test | `providers/my-isv/scripts/network/sg_scoping_test.py` | SG rules scoped at workload level |
+| `sg_node_scoping` | test | `providers/my-isv/scripts/network/sg_scoping_test.py` | SG rules scoped at node level |
+| `sg_subnet_scoping` | test | `providers/my-isv/scripts/network/sg_scoping_test.py` | SG rules scoped at subnet/tenant level |
 | `peering_test` | test | `providers/my-isv/scripts/network/peering_test.py` | Cross-VPC connectivity |
 | `teardown` | teardown | `providers/my-isv/scripts/network/teardown.py` | VPC cleanup |
 
@@ -132,6 +136,15 @@ Validations use `sinfo`/`srun` directly: partitions, GPU allocation, job schedul
 | `install_image_bm` | test | `providers/my-isv/scripts/image-registry/install_image_bm.py` | `instance_id`, `image_id`, `instance_state` |
 | `install_config_bm` | test | `providers/my-isv/scripts/image-registry/install_config_bm.py` | `instance_id`, `config_id`, `instance_state`, `state` |
 | `teardown` | teardown | `providers/my-isv/scripts/image-registry/teardown.py` | `resources_deleted`, `message` |
+
+### Security (`security.yaml`)
+
+| Step | Phase | Script | What It Tests |
+|------|-------|--------|---------------|
+| `bmc_tenant_isolation` | test | `providers/my-isv/scripts/security/bmc_isolation_test.py` | BMC/IPMI/Redfish unreachable from tenant network |
+| `api_endpoint_isolation` | test | `providers/my-isv/scripts/security/api_endpoint_test.py` | API endpoints not publicly accessible |
+| `sa_credential_test` | test | `providers/my-isv/scripts/security/sa_credential_test.py` | Service account long-lived credential auth |
+| `teardown` | teardown | `providers/my-isv/scripts/security/teardown.py` | Cleanup test resources |
 
 ## Related Documentation
 

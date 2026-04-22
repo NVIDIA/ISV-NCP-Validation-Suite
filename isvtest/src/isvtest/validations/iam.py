@@ -10,7 +10,8 @@
 
 """IAM and tenant validations for step outputs.
 
-Validations for access keys, users, authentication, and tenant/resource groups.
+Validations for access keys, users, authentication, service accounts,
+and tenant/resource groups.
 """
 
 from typing import ClassVar
@@ -133,6 +134,51 @@ class AccessKeyRejectedCheck(BaseValidation):
             self.set_passed(f"Disabled key correctly rejected ({error_code})")
         else:
             self.set_failed("Disabled key was NOT rejected - still active!")
+
+
+# =============================================================================
+# Service Account Validations
+# =============================================================================
+
+
+class ServiceAccountCredentialCheck(BaseValidation):
+    """Validate out-of-cluster service accounts can authenticate with long-lived credentials.
+
+    Verifies that service accounts intended for out-of-cluster use (CI/CD
+    pipelines, external tooling) can authenticate using long-lived credentials
+    and that the credentials grant the expected identity.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        authenticated: Boolean - True if SA authenticated successfully
+        credential_type: Type of credential (e.g. "api_key", "service_account_key")
+        identity: The authenticated identity / principal
+        expires_at: Optional expiry (null/absent for truly long-lived)
+    """
+
+    description: ClassVar[str] = "Check service account long-lived credential auth"
+    markers: ClassVar[list[str]] = ["iam", "security"]
+
+    def run(self) -> None:
+        step_output = self.config.get("step_output", {})
+
+        authenticated = step_output.get("authenticated")
+        if authenticated is None:
+            self.set_failed("No 'authenticated' in step output")
+            return
+
+        if not authenticated:
+            error = step_output.get("error", "unknown error")
+            self.set_failed(f"Service account authentication failed: {error}")
+            return
+
+        credential_type = step_output.get("credential_type", "unknown")
+        identity = step_output.get("identity", "unknown")
+        self.set_passed(
+            f"Service account authenticated via {credential_type} as {identity}"
+        )
 
 
 # =============================================================================

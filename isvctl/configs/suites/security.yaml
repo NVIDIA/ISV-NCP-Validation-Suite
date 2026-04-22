@@ -1,0 +1,63 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# Security Validation - Canonical Contract
+#
+# Validations-only contract for infrastructure security hardening (SEC*
+# requirements). Provider configs import this file and supply their own
+# commands (steps + scripts).
+#
+# This file defines WHAT to validate, not HOW to run it. Each validation
+# only inspects JSON output fields.
+#
+# Quick start:
+#   1. Copy providers/my-isv/config/security.yaml to providers/<your-platform>/config/security.yaml
+#   2. Replace stub paths with your platform scripts
+#   3. Run: uv run isvctl test run -f isvctl/configs/providers/<your-platform>/config/security.yaml
+#
+# See also:
+#   - my-isv living example: providers/my-isv/config/security.yaml
+#   - Per-step field breakdown: ../suites/README.md
+
+version: "1.0"
+
+tests:
+  cluster_name: "security-validation"
+  description: "Infrastructure security hardening validation"
+  platform: security
+
+  settings:
+    region: ""
+
+  # ─── Validations ─────────────────────────────────────────────────
+  # These are PROVIDER-AGNOSTIC. They only check JSON field names/values.
+  validations:
+    bmc_isolation:
+      checks:
+        BmcTenantIsolationCheck:
+          step: bmc_tenant_isolation
+
+    api_security:
+      checks:
+        ApiEndpointIsolationCheck:
+          step: api_endpoint_isolation
+
+    service_account_auth:
+      checks:
+        ServiceAccountCredentialCheck:
+          step: sa_credential_test
+
+    teardown_checks:
+      step: teardown
+      checks:
+        StepSuccessCheck: {}
+
+  exclude:
+    markers: []

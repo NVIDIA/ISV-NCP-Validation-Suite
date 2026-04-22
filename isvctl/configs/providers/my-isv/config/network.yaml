@@ -149,6 +149,24 @@ commands:
         timeout: 60
         output_schema: dhcp_ip
 
+      - name: sg_workload_scoping
+        phase: test
+        command: "python ../scripts/network/sg_scoping_test.py"
+        args: ["--region", "{{region}}", "--scope", "workload"]
+        timeout: 60
+
+      - name: sg_node_scoping
+        phase: test
+        command: "python ../scripts/network/sg_scoping_test.py"
+        args: ["--region", "{{region}}", "--scope", "node"]
+        timeout: 60
+
+      - name: sg_subnet_scoping
+        phase: test
+        command: "python ../scripts/network/sg_scoping_test.py"
+        args: ["--region", "{{region}}", "--scope", "subnet"]
+        timeout: 60
+
       - name: byoip_test
         phase: test
         command: "python ../scripts/network/byoip_test.py"

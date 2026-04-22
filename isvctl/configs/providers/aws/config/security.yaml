@@ -1,0 +1,75 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# AWS Security Validation Configuration
+#
+# Imports validations from the provider-agnostic security canonical config.
+# This file only provides AWS-specific commands (boto3 scripts) and settings.
+#
+# Security tests (SEC* requirements):
+#   1. BMC Tenant Isolation  - Verify BMC/IPMI/Redfish unreachable from VPC
+#   2. API Endpoint Isolation - Verify management APIs are not publicly exposed
+#   3. SA Credential Auth     - Verify IAM user + long-lived access key auth
+#
+# Usage:
+#   uv run isvctl test run -f isvctl/configs/providers/aws/config/security.yaml
+#
+# Estimated runtime: ~1-2 minutes
+
+import:
+  - ../../../suites/security.yaml
+
+version: "1.0"
+
+commands:
+  security:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      # Preflight: minimal setup step so the orchestrator runs teardown
+      - name: preflight
+        phase: setup
+        command: "echo"
+        args: ["{\"success\": true, \"platform\": \"security\", \"test_name\": \"preflight\"}"]
+        timeout: 10
+
+      # Test 1: BMC Tenant Isolation (~10s)
+      - name: bmc_tenant_isolation
+        phase: test
+        command: "python3 ../scripts/security/bmc_isolation_test.py"
+        args: ["--region", "{{region}}"]
+        timeout: 60
+
+      # Test 2: API Endpoint Isolation (~15s)
+      - name: api_endpoint_isolation
+        phase: test
+        command: "python3 ../scripts/security/api_endpoint_test.py"
+        args: ["--region", "{{region}}"]
+        timeout: 60
+
+      # Test 3: Service Account Credential Auth (~30s, includes IAM propagation wait)
+      - name: sa_credential_test
+        phase: test
+        command: "python3 ../scripts/security/sa_credential_test.py"
+        args: ["--region", "{{region}}"]
+        timeout: 120
+
+      # Teardown: Clean up leftover test IAM users
+      - name: teardown
+        phase: teardown
+        command: "python3 ../scripts/security/teardown.py"
+        args: ["--region", "{{region}}"]
+        timeout: 60
+
+tests:
+  cluster_name: "aws-security-validation"
+  description: "AWS infrastructure security hardening validation"
+
+  settings:
+    region: "us-west-2"

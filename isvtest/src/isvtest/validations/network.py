@@ -751,6 +751,148 @@ class VpcIpConfigCheck(BaseValidation):
             )
 
 
+class SgWorkloadScopingCheck(BaseValidation):
+    """Validate security group rules can be scoped at workload level.
+
+    Verifies the platform supports applying SG rules that target individual
+    workloads (pods, containers, tasks) rather than broad node/subnet ranges.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        tests: dict with create_sg, apply_workload_rule, workload_allowed,
+               other_workload_blocked, cleanup
+    """
+
+    description: ClassVar[str] = "Check SG rules scoped at workload level"
+    markers: ClassVar[list[str]] = ["network", "security"]
+
+    def run(self) -> None:
+        step_output = self.config.get("step_output", {})
+        tests = step_output.get("tests", {})
+
+        if not tests:
+            self.set_failed("No 'tests' in step output")
+            return
+
+        required = [
+            "create_sg",
+            "apply_workload_rule",
+            "workload_allowed",
+            "other_workload_blocked",
+            "cleanup",
+        ]
+        failed = []
+
+        for test_name in required:
+            test_result = tests.get(test_name, {})
+            if not test_result.get("passed"):
+                error = test_result.get("error", "test not found")
+                failed.append(f"{test_name}: {error}")
+
+        if failed:
+            self.set_failed(f"Workload scoping tests failed: {'; '.join(failed)}")
+        else:
+            scope = step_output.get("scope", "workload")
+            self.set_passed(f"SG rules correctly scoped at {scope} level")
+
+
+class SgNodeScopingCheck(BaseValidation):
+    """Validate security group rules can be scoped at node level.
+
+    Verifies the platform supports applying SG rules that target individual
+    nodes, ensuring traffic policy is enforced per-host.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        tests: dict with create_sg, apply_node_rule, target_node_allowed,
+               other_node_blocked, cleanup
+    """
+
+    description: ClassVar[str] = "Check SG rules scoped at node level"
+    markers: ClassVar[list[str]] = ["network", "security"]
+
+    def run(self) -> None:
+        step_output = self.config.get("step_output", {})
+        tests = step_output.get("tests", {})
+
+        if not tests:
+            self.set_failed("No 'tests' in step output")
+            return
+
+        required = [
+            "create_sg",
+            "apply_node_rule",
+            "target_node_allowed",
+            "other_node_blocked",
+            "cleanup",
+        ]
+        failed = []
+
+        for test_name in required:
+            test_result = tests.get(test_name, {})
+            if not test_result.get("passed"):
+                error = test_result.get("error", "test not found")
+                failed.append(f"{test_name}: {error}")
+
+        if failed:
+            self.set_failed(f"Node scoping tests failed: {'; '.join(failed)}")
+        else:
+            scope = step_output.get("scope", "node")
+            self.set_passed(f"SG rules correctly scoped at {scope} level")
+
+
+class SgSubnetScopingCheck(BaseValidation):
+    """Validate security group rules can be scoped at subnet/tenant level.
+
+    Verifies the platform supports applying SG rules at the subnet or
+    tenant boundary, ensuring cross-tenant or cross-subnet traffic is
+    controlled.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        tests: dict with create_sg, apply_subnet_rule, subnet_allowed,
+               other_subnet_blocked, cleanup
+    """
+
+    description: ClassVar[str] = "Check SG rules scoped at subnet/tenant level"
+    markers: ClassVar[list[str]] = ["network", "security"]
+
+    def run(self) -> None:
+        step_output = self.config.get("step_output", {})
+        tests = step_output.get("tests", {})
+
+        if not tests:
+            self.set_failed("No 'tests' in step output")
+            return
+
+        required = [
+            "create_sg",
+            "apply_subnet_rule",
+            "subnet_allowed",
+            "other_subnet_blocked",
+            "cleanup",
+        ]
+        failed = []
+
+        for test_name in required:
+            test_result = tests.get(test_name, {})
+            if not test_result.get("passed"):
+                error = test_result.get("error", "test not found")
+                failed.append(f"{test_name}: {error}")
+
+        if failed:
+            self.set_failed(f"Subnet scoping tests failed: {'; '.join(failed)}")
+        else:
+            scope = step_output.get("scope", "subnet")
+            self.set_passed(f"SG rules correctly scoped at {scope} level")
+
+
 class ByoipCheck(BaseValidation):
     """Validate Bring-Your-Own-IP (BYOIP) with non-conflicting custom CIDRs.
 

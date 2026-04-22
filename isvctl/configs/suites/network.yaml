@@ -71,6 +71,15 @@ tests:
         DhcpIpManagementCheck:
           step: dhcp_ip_test
 
+    sg_scoping:
+      checks:
+        SgWorkloadScopingCheck:
+          step: sg_workload_scoping
+        SgNodeScopingCheck:
+          step: sg_node_scoping
+        SgSubnetScopingCheck:
+          step: sg_subnet_scoping
+
     sdn:
       checks:
         ByoipCheck:

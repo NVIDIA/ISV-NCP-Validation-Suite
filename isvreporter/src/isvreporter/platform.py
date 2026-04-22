@@ -24,6 +24,7 @@ BARE_METAL = "BARE_METAL"
 CONTROL_PLANE = "CONTROL_PLANE"
 IAM = "IAM"
 NETWORK = "NETWORK"
+SECURITY = "SECURITY"
 VM = "VM"
 IMAGE_REGISTRY = "IMAGE_REGISTRY"
 
@@ -34,6 +35,7 @@ ALL_PLATFORMS = {
     CONTROL_PLANE,
     IAM,
     NETWORK,
+    SECURITY,
     VM,
     IMAGE_REGISTRY,
 }
@@ -48,6 +50,7 @@ PLATFORM_ALIASES: dict[str, str] = {
     "control_plane": CONTROL_PLANE,
     "iam": IAM,
     "network": NETWORK,
+    "security": SECURITY,
     "vm": VM,
     "image_registry": IMAGE_REGISTRY,
 }

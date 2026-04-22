@@ -126,6 +126,27 @@ commands:
         timeout: 120
         output_schema: security_blocking
 
+      # Test 4c: SG Scoping - Workload Level (~30s)
+      - name: sg_workload_scoping
+        phase: test
+        command: "python3 ../scripts/network/sg_scoping_test.py"
+        args: ["--region", "{{region}}", "--scope", "workload"]
+        timeout: 120
+
+      # Test 4d: SG Scoping - Node Level (~30s)
+      - name: sg_node_scoping
+        phase: test
+        command: "python3 ../scripts/network/sg_scoping_test.py"
+        args: ["--region", "{{region}}", "--scope", "node"]
+        timeout: 120
+
+      # Test 4e: SG Scoping - Subnet Level (~30s)
+      - name: sg_subnet_scoping
+        phase: test
+        command: "python3 ../scripts/network/sg_scoping_test.py"
+        args: ["--region", "{{region}}", "--scope", "subnet"]
+        timeout: 120
+
       # Test 5: Connectivity Test (~3 min)
       - name: connectivity_test
         phase: test

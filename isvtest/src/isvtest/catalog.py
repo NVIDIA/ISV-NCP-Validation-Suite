@@ -36,27 +36,29 @@ logger = logging.getLogger(__name__)
 # Configs that define the canonical test list per platform.
 # Relative to the isvctl/configs/ directory.
 PLATFORM_CONFIGS: dict[str, list[str]] = {
-    "KUBERNETES": ["suites/k8s.yaml"],
-    "SLURM": ["suites/slurm.yaml"],
     "BARE_METAL": ["suites/bare_metal.yaml"],
     "CONTROL_PLANE": ["suites/control-plane.yaml"],
     "IAM": ["suites/iam.yaml"],
-    "NETWORK": ["suites/network.yaml"],
-    "VM": ["suites/vm.yaml"],
     "IMAGE_REGISTRY": ["suites/image-registry.yaml"],
+    "KUBERNETES": ["suites/k8s.yaml"],
+    "NETWORK": ["suites/network.yaml"],
+    "SECURITY": ["suites/security.yaml"],
+    "SLURM": ["suites/slurm.yaml"],
+    "VM": ["suites/vm.yaml"],
 }
 
 # Maps class-level markers to platform strings so checks that aren't listed
 # in a YAML config still get the correct platform in the catalog.
 # Only platform-identifying markers are included; trait markers like "gpu",
-# "ssh", "workload", "slow", and "security" are intentionally omitted.
+# "ssh", "workload", and "slow" are intentionally omitted.
 MARKER_TO_PLATFORM: dict[str, str] = {
     "bare_metal": "BARE_METAL",
+    "iam": "IAM",
     "kubernetes": "KUBERNETES",
+    "network": "NETWORK",
+    "security": "SECURITY",
     "slurm": "SLURM",
     "vm": "VM",
-    "network": "NETWORK",
-    "iam": "IAM",
 }
 
 

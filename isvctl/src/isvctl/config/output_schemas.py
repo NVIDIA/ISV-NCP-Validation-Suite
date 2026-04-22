@@ -130,7 +130,7 @@ STEP_SCHEMA_MAPPING: dict[str, str | None] = {
 # Common fields present in all outputs
 COMMON_PROPERTIES = {
     "success": {"type": "boolean", "description": "Whether the operation succeeded"},
-    "platform": {"type": "string", "description": "Platform type (e.g., kubernetes, vm, iam)"},
+    "platform": {"type": "string", "description": "Platform type (e.g., kubernetes, vm, iam, security)"},
 }
 
 # Built-in schemas (generic, provider-agnostic)

@@ -1,7 +1,7 @@
 .PHONY: help pre-commit build test coverage clean lint format install bump-patch bump-fix bump-minor bump-feat bump-major bump bump-check \
 	security-trivy security-trivy-detail security-trufflehog ci-security demo-test
 
-MY_ISV_DOMAINS := iam control-plane vm bare_metal network image-registry
+MY_ISV_DOMAINS := iam control-plane vm bare_metal network image-registry security
 
 PACKAGES := isvctl isvreporter isvtest
 BUMP_SCRIPT := scripts/bump-version.py

@@ -173,8 +173,9 @@ Organized by category:
 - `generic.py` - `StepSuccessCheck`, `FieldExistsCheck`, `FieldValueCheck`, `SchemaValidation`
 - `cluster.py` - `ClusterHealthCheck`, `NodeCountCheck`, `GpuOperatorInstalledCheck`, `PerformanceCheck`
 - `instance.py` - `InstanceStateCheck`, `InstanceCreatedCheck`, `InstanceRebootCheck`, `InstancePowerCycleCheck`, `StableIdentifierCheck`, etc.
-- `network.py` - `NetworkProvisionedCheck`, `VpcCrudCheck`, `SubnetConfigCheck`, `SgCrudCheck`, `SecurityBlockingCheck`, etc.
-- `iam.py` - `AccessKeyCreatedCheck`, `TenantCreatedCheck`, etc.
+- `network.py` - `NetworkProvisionedCheck`, `VpcCrudCheck`, `SubnetConfigCheck`, `SgCrudCheck`, `SecurityBlockingCheck`, `SgWorkloadScopingCheck`, `SgNodeScopingCheck`, `SgSubnetScopingCheck`, etc.
+- `iam.py` - `AccessKeyCreatedCheck`, `TenantCreatedCheck`, `ServiceAccountCredentialCheck`, etc.
+- `security.py` - `BmcTenantIsolationCheck`, `ApiEndpointIsolationCheck` (infrastructure hardening)
 - `host.py` - Host-level validations (connectivity, OS, CPU, GPU, drivers, containers, cloud-init/metadata with optional `metadata_headers` for non-AWS providers)
 - `ssh_helpers.py` - SSH connection and utility helpers (used by `host.py`)
 - `k8s_*.py` - Kubernetes-specific validations (nodes, GPU operator, scheduling, MIG)

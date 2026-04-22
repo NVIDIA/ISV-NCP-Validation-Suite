@@ -15,7 +15,8 @@ Validations are organized by category:
 - cluster: Kubernetes cluster validations
 - instance: VM/EC2 instance validations
 - network: VPC, subnet, security group validations
-- iam: Access key and tenant validations
+- iam: Access key, tenant, and service account validations
+- security: BMC isolation, API endpoint isolation, infrastructure hardening
 
 All validations are also available via step_assertions for backward compatibility.
 """
@@ -43,6 +44,7 @@ from isvtest.validations.iam import (
     AccessKeyCreatedCheck,
     AccessKeyDisabledCheck,
     AccessKeyRejectedCheck,
+    ServiceAccountCredentialCheck,
     TenantCreatedCheck,
     TenantInfoCheck,
     TenantListedCheck,
@@ -70,6 +72,9 @@ from isvtest.validations.network import (
     NetworkProvisionedCheck,
     SecurityBlockingCheck,
     SgCrudCheck,
+    SgNodeScopingCheck,
+    SgSubnetScopingCheck,
+    SgWorkloadScopingCheck,
     StablePrivateIpCheck,
     SubnetConfigCheck,
     TrafficFlowCheck,
@@ -83,12 +88,18 @@ from isvtest.validations.nim import (
     NimInferenceCheck,
     NimModelCheck,
 )
+from isvtest.validations.security import (
+    ApiEndpointIsolationCheck,
+    BmcTenantIsolationCheck,
+)
 
 __all__ = [
     "AccessKeyAuthenticatedCheck",
     "AccessKeyCreatedCheck",
     "AccessKeyDisabledCheck",
     "AccessKeyRejectedCheck",
+    "ApiEndpointIsolationCheck",
+    "BmcTenantIsolationCheck",
     "ByoipCheck",
     "CloudInitCheck",
     "ClusterHealthCheck",
@@ -119,7 +130,11 @@ __all__ = [
     "PerformanceCheck",
     "SchemaValidation",
     "SecurityBlockingCheck",
+    "ServiceAccountCredentialCheck",
     "SgCrudCheck",
+    "SgNodeScopingCheck",
+    "SgSubnetScopingCheck",
+    "SgWorkloadScopingCheck",
     "StableIdentifierCheck",
     "StablePrivateIpCheck",
     "StepSuccessCheck",

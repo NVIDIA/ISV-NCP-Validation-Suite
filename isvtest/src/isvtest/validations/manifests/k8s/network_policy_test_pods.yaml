@@ -1,0 +1,139 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NetworkPolicy validation probe pods.
+#
+# Placeholders (replaced by K8sNetworkPolicyCheck at runtime):
+#   __NAMESPACE__ - ephemeral test namespace
+#   __IMAGE__     - agnhost image (supports `connect` and `netexec`)
+#   __PORT__      - TCP port exposed by agnhost netexec
+#
+# Each pod runs agnhost netexec so the server pods accept TCP probes and the
+# client pods can still issue `agnhost connect` via `kubectl exec`.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: server
+  namespace: __NAMESPACE__
+  labels:
+    app: isvtest-netpol
+    role: server
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: agnhost
+      image: __IMAGE__
+      imagePullPolicy: IfNotPresent
+      args:
+        - netexec
+        - --http-port=__PORT__
+      ports:
+        - containerPort: __PORT__
+          protocol: TCP
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: other-server
+  namespace: __NAMESPACE__
+  labels:
+    app: isvtest-netpol
+    role: other-server
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: agnhost
+      image: __IMAGE__
+      imagePullPolicy: IfNotPresent
+      args:
+        - netexec
+        - --http-port=__PORT__
+      ports:
+        - containerPort: __PORT__
+          protocol: TCP
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: allowed-client
+  namespace: __NAMESPACE__
+  labels:
+    app: isvtest-netpol
+    role: allowed-client
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: agnhost
+      image: __IMAGE__
+      imagePullPolicy: IfNotPresent
+      args:
+        - netexec
+        - --http-port=__PORT__
+      ports:
+        - containerPort: __PORT__
+          protocol: TCP
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: denied-client
+  namespace: __NAMESPACE__
+  labels:
+    app: isvtest-netpol
+    role: denied-client
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: agnhost
+      image: __IMAGE__
+      imagePullPolicy: IfNotPresent
+      args:
+        - netexec
+        - --http-port=__PORT__
+      ports:
+        - containerPort: __PORT__
+          protocol: TCP
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]

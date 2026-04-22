@@ -91,6 +91,15 @@ tests:
           expected_labels:
             "nvidia.com/mig.capable": "true"
             "nvidia.com/mig.strategy": "single"
+        K8sDualStackNodeCheck:
+          require_dual_stack: "auto" # true | false | "auto"
+        K8sNetworkPolicyCheck:
+          image: "registry.k8s.io/e2e-test-images/agnhost:2.47"
+          probe_port: 8080
+          probe_timeout_s: 10
+          settle_timeout_s: 30
+          namespace_prefix: "isvtest-netpol"
+          test_egress: true
 
     k8s_identity:
       checks:

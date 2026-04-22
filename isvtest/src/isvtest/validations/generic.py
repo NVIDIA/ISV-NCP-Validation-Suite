@@ -200,7 +200,8 @@ class StepSuccessCheck(BaseValidation):
         # Check success field first (most common)
         success = step_output.get("success")
         if success is True:
-            self.set_passed("Step completed successfully")
+            message = step_output.get("message", "Step completed successfully")
+            self.set_passed(message)
             return
         if success is False:
             error_type = step_output.get("error_type", "")
@@ -214,7 +215,8 @@ class StepSuccessCheck(BaseValidation):
         # Check status field as fallback
         status = step_output.get("status")
         if status == "passed":
-            self.set_passed("Step completed successfully")
+            message = step_output.get("message", "Step completed successfully")
+            self.set_passed(message)
         elif status == "skipped":
             self.set_passed("Step skipped")
         elif status:

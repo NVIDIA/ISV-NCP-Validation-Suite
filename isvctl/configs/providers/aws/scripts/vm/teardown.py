@@ -62,7 +62,8 @@ def main() -> int:
 
     if args.skip_destroy:
         result["success"] = True
-        result["message"] = "Destroy skipped (--skip-destroy flag)"
+        result["instance_id"] = args.instance_id
+        result["message"] = f"Instance {args.instance_id} preserved (--skip-destroy); terminate manually when done"
         print(json.dumps(result, indent=2))
         return 0
 

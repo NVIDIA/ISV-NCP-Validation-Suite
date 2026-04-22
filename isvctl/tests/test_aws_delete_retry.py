@@ -113,10 +113,9 @@ class TestDeleteWithRetry:
         assert fn.call_count == 1
 
     def test_never_raises_even_on_unknown_error(self) -> None:
-        """Contract: delete_with_retry MUST NOT propagate, so finally
-        blocks stay well-formed. Unknown non-ClientError/BotoCoreError
-        exceptions would still propagate — document this edge and ensure
-        our usage only passes boto3 bound methods that raise those two."""
+        """Contract: delete_with_retry MUST NOT propagate any exception,
+        so finally blocks stay well-formed. Covers ClientError, BotoCoreError,
+        and bare Exception (caught as final fallback)."""
         fn = MagicMock(side_effect=_client_error("UnknownWeirdCode"))
         # Non-transient, non-already-gone → logged and False, not raised.
         assert delete_with_retry(fn, resource_desc="VPC", attempts=1) is False

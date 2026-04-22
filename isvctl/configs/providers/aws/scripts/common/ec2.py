@@ -107,7 +107,8 @@ def wait_for_public_ip(
     while True:
         try:
             resp = ec2.describe_instances(InstanceIds=[instance_id])
-            instances = resp.get("Reservations", [{}])[0].get("Instances", [{}])
+            reservations = resp.get("Reservations", [])
+            instances = reservations[0].get("Instances", []) if reservations else []
             public_ip = instances[0].get("PublicIpAddress") if instances else None
             if public_ip:
                 return public_ip

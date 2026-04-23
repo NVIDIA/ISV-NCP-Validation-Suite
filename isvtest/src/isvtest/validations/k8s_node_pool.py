@@ -178,7 +178,7 @@ class K8sNodePoolCheck(BaseValidation):
 
 
 def _is_node_ready(node: dict[str, Any]) -> bool:
-    """Return True iff the node has a ``Ready=True`` condition."""
+    """Return True if the node has a ``Ready=True`` condition."""
     for cond in node.get("status", {}).get("conditions", []) or []:
         if cond.get("type") == "Ready":
             return cond.get("status") == "True"

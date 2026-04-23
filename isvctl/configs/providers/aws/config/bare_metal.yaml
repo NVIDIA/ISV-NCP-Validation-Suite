@@ -195,8 +195,6 @@ commands:
           - "{{region}}"
           - "--key-file"
           - "{{steps.launch_instance.key_file}}"
-          - "--public-ip"
-          - "{{steps.reboot_instance.public_ip}}"
         timeout: 3600
 
       # Describe instance state - SSH/GPU validation anchor

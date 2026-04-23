@@ -18,7 +18,7 @@ a cold OS boot - validating that the node recovers from complete power loss.
 
 Usage:
     python power_cycle_instance.py --instance-id i-xxx --region us-west-2 \\
-        --key-file /tmp/key.pem --public-ip 54.x.x.x
+        --key-file /tmp/key.pem
 
 Output JSON:
 {
@@ -60,7 +60,6 @@ def main() -> int:
     parser.add_argument("--instance-id", required=True, help="EC2 instance ID")
     parser.add_argument("--region", default=os.environ.get("AWS_REGION", "us-west-2"))
     parser.add_argument("--key-file", required=True, help="Path to SSH private key")
-    parser.add_argument("--public-ip", required=True, help="Instance public IP")
     parser.add_argument("--ssh-user", default="ubuntu", help="SSH username")
     args = parser.parse_args()
 
@@ -72,7 +71,6 @@ def main() -> int:
         "instance_id": args.instance_id,
         "state": "",
         "region": args.region,
-        "public_ip": args.public_ip,
         "key_file": args.key_file,
         "ssh_user": args.ssh_user,
         "power_cycle_initiated": False,

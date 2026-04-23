@@ -23,12 +23,15 @@ import yaml
 
 from isvtest.core.runners import CommandResult
 from isvtest.validations.k8s_storage import (
+    K8sCsiProvisioningModesCheck,
     K8sCsiStorageQuotaApiCheck,
     K8sCsiStorageTypesCheck,
     K8sCsiTenantScopedCredentialsCheck,
     _find_cluster_secret_grants,
     _find_shared_cluster_marker,
     _rule_grants_unrestricted_secrets,
+    _set_mount_pod_fields,
+    _set_pv_fields,
     _set_pvc_fields,
     _set_resourcequota_fields,
 )
@@ -1741,3 +1744,328 @@ class TestK8sCsiTenantScopedCredentialsCheck:
         assert check.passed, check._error
         outcomes = {r["name"]: r for r in check._subtest_results}
         assert "proj-secret" in outcomes["csi-secrets-discovered"]["message"]
+
+
+class TestSetPvFields:
+    """Tests for ``_set_pv_fields`` — the static PV mutator."""
+
+    def _base_doc(self) -> dict[str, Any]:
+        return {
+            "apiVersion": "v1",
+            "kind": "PersistentVolume",
+            "metadata": {"name": "placeholder"},
+            "spec": {
+                "capacity": {"storage": "1Gi"},
+                "accessModes": ["ReadWriteOnce"],
+                "persistentVolumeReclaimPolicy": "Retain",
+                "storageClassName": "",
+                "csi": {"driver": "placeholder", "volumeHandle": "placeholder", "fsType": "ext4"},
+            },
+        }
+
+    def test_overrides_all_fields(self) -> None:
+        doc = self._base_doc()
+        out = _set_pv_fields(
+            doc,
+            name="pv-x",
+            driver="ebs.csi.aws.com",
+            volume_handle="vol-abc",
+            fs_type="xfs",
+            capacity="5Gi",
+            access_mode="ReadWriteOnce",
+            claim_namespace="ns1",
+            claim_name="pvc-x",
+        )
+        assert out["metadata"]["name"] == "pv-x"
+        assert out["spec"]["capacity"] == {"storage": "5Gi"}
+        assert out["spec"]["accessModes"] == ["ReadWriteOnce"]
+        assert out["spec"]["persistentVolumeReclaimPolicy"] == "Retain"
+        assert out["spec"]["storageClassName"] == ""
+        assert out["spec"]["csi"] == {"driver": "ebs.csi.aws.com", "volumeHandle": "vol-abc", "fsType": "xfs"}
+        assert out["spec"]["claimRef"] == {"namespace": "ns1", "name": "pvc-x"}
+
+    def test_missing_sections_are_created(self) -> None:
+        out = _set_pv_fields(
+            {},
+            name="pv-y",
+            driver="d",
+            volume_handle="vh",
+            fs_type="ext4",
+            capacity="1Gi",
+            access_mode="ReadWriteOnce",
+            claim_namespace="ns",
+            claim_name="pvc",
+        )
+        assert out["metadata"]["name"] == "pv-y"
+        assert out["spec"]["csi"]["volumeHandle"] == "vh"
+        assert out["spec"]["claimRef"]["name"] == "pvc"
+
+
+class TestSetMountPodFields:
+    """Tests for ``_set_mount_pod_fields`` — the BusyBox mount-pod mutator."""
+
+    def _base_doc(self) -> dict[str, Any]:
+        return {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {"name": "placeholder", "namespace": "placeholder"},
+            "spec": {
+                "restartPolicy": "Never",
+                "containers": [
+                    {
+                        "name": "probe",
+                        "image": "busybox:1.36",
+                        "command": ["sh", "-c", "sleep 3600"],
+                        "volumeMounts": [{"name": "data", "mountPath": "/data"}],
+                    }
+                ],
+                "volumes": [{"name": "data", "persistentVolumeClaim": {"claimName": "placeholder"}}],
+            },
+        }
+
+    def test_sets_name_namespace_and_pvc(self) -> None:
+        out = _set_mount_pod_fields(self._base_doc(), namespace="ns1", name="probe-1", pvc_name="pvc-1")
+        assert out["metadata"]["name"] == "probe-1"
+        assert out["metadata"]["namespace"] == "ns1"
+        assert out["spec"]["volumes"][0]["persistentVolumeClaim"] == {"claimName": "pvc-1"}
+        # volumeMounts inside the container are template-defined; the mutator
+        # only touches volumes so the mount path stays /data as documented.
+        assert out["spec"]["containers"][0]["volumeMounts"][0]["mountPath"] == "/data"
+
+
+class TestK8sCsiProvisioningModesCheck:
+    """Tests for ``K8sCsiProvisioningModesCheck``."""
+
+    _CANARY_PATTERN = "csi-prov-"
+
+    def _make(self, config: dict[str, Any] | None = None) -> K8sCsiProvisioningModesCheck:
+        return K8sCsiProvisioningModesCheck(config=config or {})
+
+    def _stub_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        for var in ("K8S_CSI_BLOCK_SC", "K8S_CSI_SHARED_FS_SC", "K8S_CSI_NFS_SC"):
+            monkeypatch.delenv(var, raising=False)
+
+    def _pv_payload(self, driver: str = "ebs.csi.aws.com") -> str:
+        return json.dumps({"spec": {"csi": {"driver": driver}, "capacity": {"storage": "1Gi"}}})
+
+    def _make_router(
+        self,
+        *,
+        phase: str = "Bound",
+        volume_name: str = "pv-dyn-xyz",
+        pv_payload: str | None = None,
+        wait_exit: int = 0,
+        write_exit: int = 0,
+        read_exit: int = 0,
+        read_stdout_transform=None,
+    ):
+        """Build a ``run_command`` side-effect router covering every kubectl call.
+
+        The router keeps the last canary value it saw on a write, so the
+        read-side can echo it back (simulating the pod having persisted the
+        file); override by passing ``read_stdout_transform``.
+        """
+        state = {"canary": ""}
+        pv_json = pv_payload if pv_payload is not None else self._pv_payload()
+
+        def router(cmd: str, timeout: int | None = None) -> CommandResult:
+            if "create namespace" in cmd:
+                return _ok()
+            if "delete namespace" in cmd or "delete pv" in cmd:
+                return _ok()
+            if "get pvc" in cmd and ".status.phase" in cmd:
+                return _ok(stdout=phase)
+            if "get pvc" in cmd and ".spec.volumeName" in cmd:
+                return _ok(stdout=volume_name)
+            if "get pv" in cmd and "-o json" in cmd:
+                return _ok(stdout=pv_json)
+            if "wait --for=condition=Ready" in cmd:
+                return _ok() if wait_exit == 0 else _fail(exit_code=wait_exit, stderr="timeout")
+            if "exec" in cmd and "echo " in cmd:
+                # Parse out the canary value so the read-side can return it.
+                # Command form: ... -- sh -c 'echo csi-prov-<hex> > /data/canary.txt'
+                import re
+
+                m = re.search(r"echo (?:'|\")?(csi-prov-[0-9a-f]+)(?:'|\")? > /data/canary\.txt", cmd)
+                if m:
+                    state["canary"] = m.group(1)
+                return _ok() if write_exit == 0 else _fail(exit_code=write_exit, stderr="write failed")
+            if "exec" in cmd and "cat /data/canary.txt" in cmd:
+                if read_exit != 0:
+                    return _fail(exit_code=read_exit, stderr="read failed")
+                stdout = state["canary"] if read_stdout_transform is None else read_stdout_transform(state["canary"])
+                return _ok(stdout=stdout)
+            raise AssertionError(f"unexpected command: {cmd}")
+
+        return router
+
+    def test_no_dynamic_sc_configured_skips_without_work(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._stub_env(monkeypatch)
+        check = self._make({})
+        with patch.object(check, "run_command") as mock_run:
+            check.run()
+        mock_run.assert_not_called()
+        assert check.passed
+        assert "Skipped" in check._output
+        assert "dynamic_storage_class" in check._output
+
+    def test_dynamic_happy_path_static_skipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._stub_env(monkeypatch)
+        check = self._make(
+            {
+                "dynamic_storage_class": "gp3",
+                "bind_timeout_s": 5,
+                "namespace_prefix": "ut",
+            }
+        )
+        with (
+            patch.object(check, "run_command", side_effect=self._make_router()),
+            patch("isvtest.validations.k8s_storage.subprocess.run", return_value=_FakeProc(returncode=0)),
+            _patched_clock(),
+        ):
+            check.run()
+
+        assert check.passed, check._error
+        outcomes = {r["name"]: r for r in check._subtest_results}
+        assert outcomes["dynamic"]["passed"]
+        assert outcomes["static"].get("skipped")
+        assert "static_pv.volume_handle" in outcomes["static"]["message"]
+
+    def test_dynamic_pvc_never_binds(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._stub_env(monkeypatch)
+        check = self._make({"dynamic_storage_class": "gp3", "bind_timeout_s": 5, "namespace_prefix": "ut"})
+        with (
+            patch.object(check, "run_command", side_effect=self._make_router(phase="Pending")),
+            patch("isvtest.validations.k8s_storage.subprocess.run", return_value=_FakeProc(returncode=0)),
+            _patched_clock(),
+        ):
+            check.run()
+
+        assert not check.passed
+        outcomes = {r["name"]: r for r in check._subtest_results}
+        assert not outcomes["dynamic"]["passed"]
+        assert "did not reach Bound" in outcomes["dynamic"]["message"]
+
+    def test_dynamic_pv_missing_csi_driver(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._stub_env(monkeypatch)
+        check = self._make({"dynamic_storage_class": "gp3", "bind_timeout_s": 5, "namespace_prefix": "ut"})
+        empty_pv = json.dumps({"spec": {"csi": {}, "capacity": {"storage": "1Gi"}}})
+        with (
+            patch.object(check, "run_command", side_effect=self._make_router(pv_payload=empty_pv)),
+            patch("isvtest.validations.k8s_storage.subprocess.run", return_value=_FakeProc(returncode=0)),
+            _patched_clock(),
+        ):
+            check.run()
+
+        assert not check.passed
+        outcomes = {r["name"]: r for r in check._subtest_results}
+        assert not outcomes["dynamic"]["passed"]
+        assert "spec.csi.driver" in outcomes["dynamic"]["message"]
+
+    def test_dynamic_canary_mismatch(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._stub_env(monkeypatch)
+        check = self._make({"dynamic_storage_class": "gp3", "bind_timeout_s": 5, "namespace_prefix": "ut"})
+        router = self._make_router(read_stdout_transform=lambda _: "not-the-canary")
+        with (
+            patch.object(check, "run_command", side_effect=router),
+            patch("isvtest.validations.k8s_storage.subprocess.run", return_value=_FakeProc(returncode=0)),
+            _patched_clock(),
+        ):
+            check.run()
+
+        assert not check.passed
+        outcomes = {r["name"]: r for r in check._subtest_results}
+        assert not outcomes["dynamic"]["passed"]
+        assert "canary write/read failed" in outcomes["dynamic"]["message"]
+
+    def test_static_happy_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._stub_env(monkeypatch)
+        check = self._make(
+            {
+                "dynamic_storage_class": "gp3",
+                "static_pv": {
+                    "volume_handle": "vol-0abc",
+                    "csi_driver": "ebs.csi.aws.com",
+                    "capacity": "1Gi",
+                    "access_mode": "ReadWriteOnce",
+                },
+                "bind_timeout_s": 5,
+                "namespace_prefix": "ut",
+            }
+        )
+        delete_pv_cmds: list[str] = []
+        router = self._make_router()
+
+        def spy(cmd: str, timeout: int | None = None) -> CommandResult:
+            if "delete pv " in cmd:
+                delete_pv_cmds.append(cmd)
+            return router(cmd, timeout)
+
+        with (
+            patch.object(check, "run_command", side_effect=spy),
+            patch("isvtest.validations.k8s_storage.subprocess.run", return_value=_FakeProc(returncode=0)),
+            _patched_clock(),
+        ):
+            check.run()
+
+        assert check.passed, check._error
+        outcomes = {r["name"]: r for r in check._subtest_results}
+        assert outcomes["dynamic"]["passed"]
+        assert outcomes["static"]["passed"]
+        assert "vol-0abc" in outcomes["static"]["message"]
+        # Cleanup must delete the cluster-scoped PV even on success so the
+        # next run can re-apply its own PV against the same volume handle.
+        assert any("delete pv" in c for c in delete_pv_cmds), "static PV was not cleaned up"
+
+    def test_static_subprocess_failure_on_pv_apply(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A non-zero exit from ``kubectl apply`` for the static PV fails the static subtest only."""
+        self._stub_env(monkeypatch)
+        check = self._make(
+            {
+                "dynamic_storage_class": "gp3",
+                "static_pv": {
+                    "volume_handle": "vol-0abc",
+                    "csi_driver": "ebs.csi.aws.com",
+                },
+                "bind_timeout_s": 5,
+                "namespace_prefix": "ut",
+            }
+        )
+
+        def fake_subprocess(*args, **kwargs):
+            # Dispatch off the manifest YAML so the failure is specific to
+            # the static PV apply (which is the only document containing
+            # ``persistentVolumeReclaimPolicy: Retain``).
+            manifest = kwargs.get("input") or ""
+            if "persistentVolumeReclaimPolicy: Retain" in manifest:
+                return _FakeProc(returncode=1, stderr="forbidden: PersistentVolumes already exist")
+            return _FakeProc(returncode=0)
+
+        with (
+            patch.object(check, "run_command", side_effect=self._make_router()),
+            patch("isvtest.validations.k8s_storage.subprocess.run", side_effect=fake_subprocess),
+            _patched_clock(),
+        ):
+            check.run()
+
+        assert not check.passed
+        outcomes = {r["name"]: r for r in check._subtest_results}
+        assert outcomes["dynamic"]["passed"]
+        assert not outcomes["static"]["passed"]
+        assert "kubectl apply failed for PV" in outcomes["static"]["message"]
+
+    def test_namespace_create_failure_fails_check_without_subtests(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._stub_env(monkeypatch)
+        check = self._make({"dynamic_storage_class": "gp3", "namespace_prefix": "ut"})
+
+        def fake_run(cmd: str, timeout: int | None = None) -> CommandResult:
+            if "create namespace" in cmd:
+                return _fail(stderr="forbidden")
+            raise AssertionError(f"unexpected command: {cmd}")
+
+        with patch.object(check, "run_command", side_effect=fake_run):
+            check.run()
+
+        assert not check.passed
+        assert "Failed to create namespace" in check._error
+        assert check._subtest_results == []

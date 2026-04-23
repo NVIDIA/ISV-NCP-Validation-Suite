@@ -22,6 +22,9 @@ Implements:
   observable state (Secret namespaces, labels, ServiceAccount RBAC, and
   node-plugin volume topology). Does not prove cross-cluster isolation from
   the outside.
+* :class:`K8sCsiProvisioningModesCheck` (K8S23-05) — verify CSI supports
+  both dynamic and static provisioning, driving each through a real mount
+  + canary-file write/read inside a BusyBox pod.
 """
 
 from __future__ import annotations
@@ -49,6 +52,8 @@ from isvtest.core.validation import BaseValidation
 _MANIFEST_DIR = Path(__file__).parent / "manifests" / "k8s"
 _PVC_MANIFEST = _MANIFEST_DIR / "storage_pvc.yaml"
 _RESOURCEQUOTA_MANIFEST = _MANIFEST_DIR / "storage_resourcequota.yaml"
+_PV_MANIFEST = _MANIFEST_DIR / "storage_pv.yaml"
+_MOUNT_POD_MANIFEST = _MANIFEST_DIR / "storage_mount_pod.yaml"
 
 _STORAGE_TYPES: tuple[tuple[str, str], ...] = (
     ("block", "ReadWriteOnce"),
@@ -1019,8 +1024,7 @@ class K8sCsiTenantScopedCredentialsCheck(BaseValidation):
                     f"{len(discovered_secrets) - len(missing_secrets)} discovered Secret(s); "
                     f"{len(missing_secrets)} declared Secret ref(s) do not exist "
                     f"(likely IRSA / workload-identity): "
-                    f"{', '.join(missing_secrets[:5])}"
-                    + ("…" if len(missing_secrets) > 5 else "")
+                    f"{', '.join(missing_secrets[:5])}" + ("…" if len(missing_secrets) > 5 else "")
                 )
             else:
                 msg = f"No shared-cluster labels/annotations on {len(discovered_secrets)} discovered Secret(s)"
@@ -1410,3 +1414,483 @@ def _check_node_plugin_volumes(
     if not node_pod_seen:
         return "no-node-pods"
     return violations
+
+
+class K8sCsiProvisioningModesCheck(BaseValidation):
+    """Verify CSI supports both dynamic and static provisioning (K8S23-05).
+
+    Two subtests run against a single ephemeral namespace:
+
+    * ``dynamic`` — a PVC against ``dynamic_storage_class`` reaches ``Bound``,
+      the backing PV exposes ``spec.csi.driver``, and a BusyBox pod mounts
+      the PVC and round-trips a canary file (write then read back).
+    * ``static`` — a PersistentVolume with the configured ``volume_handle``
+      + ``csi_driver`` is pre-created, a PVC with ``storageClassName: ""``
+      and a matching ``volumeName`` pre-binds to that PV, and a BusyBox pod
+      round-trips a canary file. Skipped when ``static_pv.volume_handle`` or
+      ``static_pv.csi_driver`` is unset, so the check is safe to enable on
+      providers that do not supply an out-of-band volume.
+
+    Pass requires ``dynamic`` to pass; ``static`` is reported as skipped
+    (not failed) when its inputs are unset. When ``dynamic_storage_class``
+    itself is unset the whole check is skipped.
+
+    Config keys (with defaults):
+        dynamic_storage_class: StorageClass for the dynamic probe; defaults
+            to :func:`get_k8s_csi_block_storage_class`. When unset the whole
+            check is skipped.
+        static_pv.volume_handle: CSI ``volumeHandle`` of the pre-provisioned
+            backing volume. Unset disables the static subtest.
+        static_pv.csi_driver: CSI driver name matching the backing volume
+            (e.g. ``ebs.csi.aws.com``). Unset disables the static subtest.
+        static_pv.fs_type: Filesystem type written to ``spec.csi.fsType``
+            (default: ``ext4``).
+        static_pv.capacity: PV ``spec.capacity.storage`` and the matching
+            PVC request size (default: ``1Gi``).
+        static_pv.access_mode: PV / PVC access mode (default: ``ReadWriteOnce``).
+        bind_timeout_s: Max wait for PVC Bind and mount-pod Ready
+            (default: 180).
+        namespace_prefix: Prefix for the ephemeral namespace
+            (default: ``isvtest-csi-prov``).
+        timeout: Overall class-level timeout for each ``run_command``
+            (default: 600).
+    """
+
+    description: ClassVar[str] = "Verify CSI supports dynamic and static provisioning (K8S23-05)."
+    timeout: ClassVar[int] = 600
+    markers: ClassVar[list[str]] = ["kubernetes"]
+
+    def run(self) -> None:
+        """Drive the dynamic + static provisioning subtests against an ephemeral namespace."""
+        self._kubectl_parts = get_kubectl_command()
+        self._kubectl_base = get_kubectl_base_shell()
+
+        dynamic_sc = str(self.config.get("dynamic_storage_class") or get_k8s_csi_block_storage_class() or "")
+        static_pv_cfg = dict(self.config.get("static_pv") or {})
+        bind_timeout = int(self.config.get("bind_timeout_s", 180))
+        ns_prefix = self.config.get("namespace_prefix", "isvtest-csi-prov")
+
+        if not dynamic_sc:
+            self.set_passed("Skipped: no dynamic_storage_class configured")
+            return
+
+        self._namespace = f"{ns_prefix}-{uuid.uuid4().hex[:8]}"
+        ns_quoted = shlex.quote(self._namespace)
+        ns_created = False
+        static_pv_name = ""
+        try:
+            ns_result = self.run_command(f"{self._kubectl_base} create namespace {ns_quoted}")
+            if ns_result.exit_code != 0:
+                self.set_failed(f"Failed to create namespace {self._namespace}: {ns_result.stderr}")
+                return
+            ns_created = True
+
+            any_failed = False
+            dyn_summary = self._run_dynamic(dynamic_sc, bind_timeout)
+            if dyn_summary is None:
+                any_failed = True
+
+            static_volume_handle = str(static_pv_cfg.get("volume_handle") or "")
+            static_driver = str(static_pv_cfg.get("csi_driver") or "")
+            if not static_volume_handle or not static_driver:
+                self.report_subtest(
+                    "static",
+                    passed=True,
+                    message="static_pv.volume_handle or static_pv.csi_driver unset; static probe skipped",
+                    skipped=True,
+                )
+            else:
+                static_pv_name = f"csi-prov-static-{uuid.uuid4().hex[:6]}"
+                static_ok = self._run_static(
+                    pv_name=static_pv_name,
+                    driver=static_driver,
+                    volume_handle=static_volume_handle,
+                    fs_type=str(static_pv_cfg.get("fs_type") or "ext4"),
+                    capacity=str(static_pv_cfg.get("capacity") or "1Gi"),
+                    access_mode=str(static_pv_cfg.get("access_mode") or "ReadWriteOnce"),
+                    bind_timeout=bind_timeout,
+                )
+                if not static_ok:
+                    any_failed = True
+
+            if any_failed:
+                self.set_failed("One or more CSI provisioning-mode subtests failed; see subtest details")
+            else:
+                self.set_passed(
+                    f"CSI dynamic provisioning verified against StorageClass {dynamic_sc!r}"
+                    + (
+                        f"; static provisioning verified against driver {static_driver!r}"
+                        if static_pv_name
+                        else "; static provisioning skipped"
+                    )
+                )
+        finally:
+            # Cluster-scoped PV must be cleaned up separately from the
+            # namespace: the PVC is gone with the namespace, but the PV
+            # keeps a Released status (reclaimPolicy=Retain) because the
+            # underlying volume is managed out-of-band by the provider.
+            if static_pv_name:
+                pv_cleanup = self.run_command(
+                    f"{self._kubectl_base} delete pv {shlex.quote(static_pv_name)} --wait=false --ignore-not-found=true"
+                )
+                if pv_cleanup.exit_code != 0:
+                    self.log.warning("PV cleanup failed for %s: %s", static_pv_name, pv_cleanup.stderr)
+            if ns_created:
+                cleanup = self.run_command(
+                    f"{self._kubectl_base} delete namespace {ns_quoted} --wait=false --ignore-not-found=true"
+                )
+                if cleanup.exit_code != 0:
+                    self.log.warning("Namespace cleanup failed for %s: %s", self._namespace, cleanup.stderr)
+
+    def _run_dynamic(self, storage_class: str, bind_timeout: int) -> str | None:
+        """Run the ``dynamic`` subtest: PVC + consumer pod → Ready → Bound → PV has csi.driver → canary.
+
+        The mount pod is applied before waiting for ``Bound`` so this works
+        under ``volumeBindingMode: WaitForFirstConsumer``, where the PVC
+        stays ``Pending`` until a consumer is scheduled. Returns a short
+        summary string on pass, or ``None`` on failure; the subtest itself
+        is always reported before returning.
+        """
+        pvc_name = f"csi-prov-dyn-{uuid.uuid4().hex[:6]}"
+        pod_name = f"csi-prov-dyn-{uuid.uuid4().hex[:6]}"
+
+        returncode, stderr = self._apply_pvc(pvc_name, storage_class, "ReadWriteOnce", "1Gi")
+        if returncode != 0:
+            self.report_subtest(
+                "dynamic",
+                passed=False,
+                message=f"kubectl apply failed for dynamic PVC {pvc_name!r}: {stderr.strip()}",
+            )
+            return None
+
+        pod_rc, pod_err = _apply_mount_pod_manifest(
+            self._kubectl_parts, self._namespace, pod_name, pvc_name, self.timeout
+        )
+        if pod_rc != 0:
+            self.report_subtest(
+                "dynamic",
+                passed=False,
+                message=f"kubectl apply failed for mount pod {pod_name!r}: {pod_err.strip()[:200]}",
+            )
+            return None
+
+        pod_ready, wait_err = _wait_pod_ready(
+            self.run_command, self._kubectl_base, self._namespace, pod_name, bind_timeout
+        )
+        if not pod_ready:
+            self.report_subtest(
+                "dynamic",
+                passed=False,
+                message=(
+                    f"Mount pod {pod_name!r} for PVC {pvc_name!r} did not become Ready "
+                    f"within {bind_timeout}s: {wait_err[:200]}"
+                ),
+            )
+            return None
+
+        if not self._wait_pvc_bound(pvc_name, 5):
+            self.report_subtest(
+                "dynamic",
+                passed=False,
+                message=f"Dynamic PVC {pvc_name!r} did not reach Bound even after consumer pod became Ready",
+            )
+            return None
+
+        pv_name, csi_driver, err = self._resolve_bound_pv_driver(pvc_name)
+        if err:
+            self.report_subtest("dynamic", passed=False, message=err)
+            return None
+        if not csi_driver:
+            self.report_subtest(
+                "dynamic",
+                passed=False,
+                message=f"Dynamic PV {pv_name!r} missing spec.csi.driver",
+            )
+            return None
+
+        if not self._canary_write_read(pod_name):
+            self.report_subtest(
+                "dynamic",
+                passed=False,
+                message=(
+                    f"Dynamic PVC {pvc_name!r} bound to PV {pv_name!r} (driver={csi_driver!r}) "
+                    "but canary write/read failed"
+                ),
+            )
+            return None
+
+        summary = f"Dynamic PVC {pvc_name!r} bound to PV {pv_name!r} (driver={csi_driver!r}); canary roundtrip OK"
+        self.report_subtest("dynamic", passed=True, message=summary)
+        return summary
+
+    def _run_static(
+        self,
+        *,
+        pv_name: str,
+        driver: str,
+        volume_handle: str,
+        fs_type: str,
+        capacity: str,
+        access_mode: str,
+        bind_timeout: int,
+    ) -> bool:
+        """Run the ``static`` subtest: pre-create PV + PVC → Bound → mount + canary."""
+        pvc_name = f"csi-prov-static-{uuid.uuid4().hex[:6]}"
+        pod_name = f"csi-prov-static-{uuid.uuid4().hex[:6]}"
+
+        returncode, stderr = self._apply_pv(
+            pv_name=pv_name,
+            driver=driver,
+            volume_handle=volume_handle,
+            fs_type=fs_type,
+            capacity=capacity,
+            access_mode=access_mode,
+            claim_name=pvc_name,
+        )
+        if returncode != 0:
+            self.report_subtest(
+                "static",
+                passed=False,
+                message=f"kubectl apply failed for PV {pv_name!r}: {stderr.strip()}",
+            )
+            return False
+
+        returncode, stderr = self._apply_static_pvc(pvc_name, pv_name, access_mode, capacity)
+        if returncode != 0:
+            self.report_subtest(
+                "static",
+                passed=False,
+                message=f"kubectl apply failed for static PVC {pvc_name!r}: {stderr.strip()}",
+            )
+            return False
+
+        if not self._wait_pvc_bound(pvc_name, bind_timeout):
+            self.report_subtest(
+                "static",
+                passed=False,
+                message=(
+                    f"Static PVC {pvc_name!r} did not bind to PV {pv_name!r} (volume_handle={volume_handle!r}) "
+                    f"within {bind_timeout}s"
+                ),
+            )
+            return False
+
+        if not self._canary_roundtrip(pvc_name, pod_name, bind_timeout):
+            self.report_subtest(
+                "static",
+                passed=False,
+                message=(
+                    f"Static PV {pv_name!r} (volume_handle={volume_handle!r}, driver={driver!r}) "
+                    "bound but mount + canary roundtrip failed"
+                ),
+            )
+            return False
+
+        self.report_subtest(
+            "static",
+            passed=True,
+            message=(
+                f"Static PV {pv_name!r} (driver={driver!r}, volume_handle={volume_handle!r}) "
+                f"bound via PVC {pvc_name!r}; canary roundtrip OK"
+            ),
+        )
+        return True
+
+    def _apply_pvc(self, name: str, storage_class: str, access_mode: str, size: str) -> tuple[int, str]:
+        """Render the PVC manifest for dynamic provisioning and apply it."""
+
+        def _mutate(doc: dict[str, Any]) -> dict[str, Any]:
+            return _set_pvc_fields(
+                doc, namespace=self._namespace, name=name, sc=storage_class, mode=access_mode, size=size
+            )
+
+        return self._run_kubectl_apply(render_k8s_manifest(_PVC_MANIFEST, _mutate))
+
+    def _apply_static_pvc(self, name: str, pv_name: str, access_mode: str, size: str) -> tuple[int, str]:
+        """Render a PVC that pre-binds to the given PV via ``volumeName`` + empty StorageClass."""
+
+        def _mutate(doc: dict[str, Any]) -> dict[str, Any]:
+            _set_pvc_fields(doc, namespace=self._namespace, name=name, sc="", mode=access_mode, size=size)
+            doc.setdefault("spec", {})["volumeName"] = pv_name
+            return doc
+
+        return self._run_kubectl_apply(render_k8s_manifest(_PVC_MANIFEST, _mutate))
+
+    def _apply_pv(
+        self,
+        *,
+        pv_name: str,
+        driver: str,
+        volume_handle: str,
+        fs_type: str,
+        capacity: str,
+        access_mode: str,
+        claim_name: str,
+    ) -> tuple[int, str]:
+        """Render the static PV manifest and apply it."""
+
+        def _mutate(doc: dict[str, Any]) -> dict[str, Any]:
+            return _set_pv_fields(
+                doc,
+                name=pv_name,
+                driver=driver,
+                volume_handle=volume_handle,
+                fs_type=fs_type,
+                capacity=capacity,
+                access_mode=access_mode,
+                claim_namespace=self._namespace,
+                claim_name=claim_name,
+            )
+
+        return self._run_kubectl_apply(render_k8s_manifest(_PV_MANIFEST, _mutate))
+
+    def _apply_mount_pod(self, pod_name: str, pvc_name: str) -> tuple[int, str]:
+        """Render the BusyBox mount pod and apply it."""
+
+        def _mutate(doc: dict[str, Any]) -> dict[str, Any]:
+            return _set_mount_pod_fields(doc, namespace=self._namespace, name=pod_name, pvc_name=pvc_name)
+
+        return self._run_kubectl_apply(render_k8s_manifest(_MOUNT_POD_MANIFEST, _mutate))
+
+    def _run_kubectl_apply(self, manifest: str) -> tuple[int, str]:
+        return _apply_manifest(self._kubectl_parts, manifest, self.timeout)
+
+    def _wait_pvc_bound(self, pvc_name: str, timeout_s: int) -> bool:
+        return _poll_pvc_bound(self.run_command, self._kubectl_base, self._namespace, pvc_name, timeout_s)
+
+    def _resolve_bound_pv_driver(self, pvc_name: str) -> tuple[str, str, str]:
+        """Return ``(pv_name, csi_driver, error)`` — ``error`` is empty on success."""
+        vol_cmd = (
+            f"{self._kubectl_base} get pvc {shlex.quote(pvc_name)} "
+            f"-n {shlex.quote(self._namespace)} -o jsonpath='{{.spec.volumeName}}'"
+        )
+        vol_result = self.run_command(vol_cmd)
+        if vol_result.exit_code != 0:
+            return "", "", f"Failed to resolve volumeName for PVC {pvc_name!r}: {vol_result.stderr.strip()}"
+        pv_name = vol_result.stdout.strip().strip("'")
+        if not pv_name:
+            return "", "", f"PVC {pvc_name!r} bound but spec.volumeName is empty"
+
+        pv_json = self.run_command(f"{self._kubectl_base} get pv {shlex.quote(pv_name)} -o json")
+        if pv_json.exit_code != 0:
+            return pv_name, "", f"kubectl get pv {pv_name!r} failed: {pv_json.stderr.strip()}"
+        try:
+            payload = json.loads(pv_json.stdout)
+        except json.JSONDecodeError as exc:
+            return pv_name, "", f"Failed to parse PV {pv_name!r} JSON: {exc}"
+        spec = payload.get("spec") or {}
+        driver = (spec.get("csi") or {}).get("driver")
+        return pv_name, str(driver) if driver else "", ""
+
+    def _canary_roundtrip(self, pvc_name: str, pod_name: str, timeout_s: int) -> bool:
+        """Apply a BusyBox mount pod for ``pvc_name``, wait for Ready, and run the canary round-trip."""
+        returncode, stderr = self._apply_mount_pod(pod_name, pvc_name)
+        if returncode != 0:
+            self.log.error("kubectl apply failed for mount pod %s: %s", pod_name, stderr.strip())
+            return False
+
+        ready, err = _wait_pod_ready(self.run_command, self._kubectl_base, self._namespace, pod_name, timeout_s)
+        if not ready:
+            self.log.error("Mount pod %s did not become Ready: %s", pod_name, err)
+            return False
+
+        return self._canary_write_read(pod_name)
+
+    def _canary_write_read(self, pod_name: str) -> bool:
+        """Write a canary file to ``/data`` inside ``pod_name`` and read it back verbatim."""
+        canary = f"csi-prov-{uuid.uuid4().hex[:16]}"
+        write_inner = f"echo {shlex.quote(canary)} > /data/canary.txt"
+        write_cmd = (
+            f"{self._kubectl_base} exec -n {shlex.quote(self._namespace)} "
+            f"{shlex.quote(pod_name)} -- sh -c {shlex.quote(write_inner)}"
+        )
+        write_result = self.run_command(write_cmd)
+        if write_result.exit_code != 0:
+            self.log.error(
+                "Canary write failed in pod %s: %s",
+                pod_name,
+                write_result.stderr.strip() or write_result.stdout.strip(),
+            )
+            return False
+
+        read_cmd = (
+            f"{self._kubectl_base} exec -n {shlex.quote(self._namespace)} "
+            f"{shlex.quote(pod_name)} -- sh -c {shlex.quote('cat /data/canary.txt')}"
+        )
+        read_result = self.run_command(read_cmd)
+        if read_result.exit_code != 0:
+            self.log.error(
+                "Canary read failed in pod %s: %s",
+                pod_name,
+                read_result.stderr.strip() or read_result.stdout.strip(),
+            )
+            return False
+        if read_result.stdout.strip() != canary:
+            self.log.error(
+                "Canary mismatch in pod %s: expected %r, got %r",
+                pod_name,
+                canary,
+                read_result.stdout.strip(),
+            )
+            return False
+        return True
+
+
+def _set_pv_fields(
+    doc: dict[str, Any],
+    *,
+    name: str,
+    driver: str,
+    volume_handle: str,
+    fs_type: str,
+    capacity: str,
+    access_mode: str,
+    claim_namespace: str,
+    claim_name: str,
+) -> dict[str, Any]:
+    """Mutate a parsed PersistentVolume manifest in place with the requested fields.
+
+    ``claimRef`` pre-reserves the PV for the matching PVC so the binding is
+    deterministic and cannot race against another claim landing in the same
+    cluster while the static probe runs.
+    """
+    metadata = doc.setdefault("metadata", {})
+    metadata["name"] = name
+
+    spec = doc.setdefault("spec", {})
+    spec["capacity"] = {"storage": capacity}
+    spec["accessModes"] = [access_mode]
+    spec["persistentVolumeReclaimPolicy"] = "Retain"
+    spec["storageClassName"] = ""
+    spec["csi"] = {
+        "driver": driver,
+        "volumeHandle": volume_handle,
+        "fsType": fs_type,
+    }
+    spec["claimRef"] = {
+        "namespace": claim_namespace,
+        "name": claim_name,
+    }
+    return doc
+
+
+def _set_mount_pod_fields(
+    doc: dict[str, Any],
+    *,
+    namespace: str,
+    name: str,
+    pvc_name: str,
+) -> dict[str, Any]:
+    """Mutate a parsed mount-pod manifest in place, binding its single PVC volume."""
+    metadata = doc.setdefault("metadata", {})
+    metadata["name"] = name
+    metadata["namespace"] = namespace
+
+    spec = doc.setdefault("spec", {})
+    volumes = spec.setdefault("volumes", [])
+    if not volumes:
+        volumes.append({"name": "data"})
+    volumes[0]["name"] = "data"
+    volumes[0].pop("emptyDir", None)
+    volumes[0]["persistentVolumeClaim"] = {"claimName": pvc_name}
+    return doc

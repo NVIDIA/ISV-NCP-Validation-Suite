@@ -324,6 +324,62 @@ EFS_SC=$(kubectl get sc -o json 2>/dev/null \
     || echo "")
 
 # -----------------------------------------------------------------------------
+# Standalone EBS volume for static CSI provisioning (K8S23-05)
+# -----------------------------------------------------------------------------
+# K8sCsiProvisioningModesCheck needs a pre-provisioned backing volume that
+# the CSI driver does not own, so it can verify static provisioning via a
+# manually-created PV. We create a 1 GiB gp3 volume in a worker-node AZ and
+# tag it so teardown.sh can find and delete it before terraform destroy.
+# The volume is reused across runs: describe-volumes filters by our cluster
+# tag first and only creates a new one when none is found.
+
+STATIC_VOLUME_HANDLE=""
+STATIC_DRIVER_NAME=""
+if [ -n "$BLOCK_SC" ]; then
+    NODE_AZ=$(kubectl get nodes -l nvidia.com/gpu.present=true \
+        -o jsonpath='{.items[0].metadata.labels.topology\.kubernetes\.io/zone}' 2>/dev/null || echo "")
+    if [ -z "$NODE_AZ" ]; then
+        NODE_AZ=$(kubectl get nodes \
+            -o jsonpath='{.items[0].metadata.labels.topology\.kubernetes\.io/zone}' 2>/dev/null || echo "")
+    fi
+
+    if [ -n "$NODE_AZ" ]; then
+        STATIC_VOL_TAG="isv-ncp-static-csi-${EKS_CLUSTER_NAME}"
+        EXISTING_VOL=$(aws ec2 describe-volumes \
+            --filters "Name=tag:Name,Values=${STATIC_VOL_TAG}" "Name=status,Values=available,in-use,creating" \
+            --region "$AWS_REGION" --output json 2>/dev/null \
+            | jq -r '.Volumes[0].VolumeId // ""' 2>/dev/null || echo "")
+
+        if [ -n "$EXISTING_VOL" ] && [ "$EXISTING_VOL" != "null" ]; then
+            STATIC_VOLUME_HANDLE="$EXISTING_VOL"
+            echo "Reusing standalone EBS volume for static CSI validation: $STATIC_VOLUME_HANDLE" >&2
+        else
+            echo "Creating standalone EBS volume for static CSI validation in $NODE_AZ..." >&2
+            STATIC_VOLUME_HANDLE=$(aws ec2 create-volume \
+                --availability-zone "$NODE_AZ" \
+                --volume-type gp3 \
+                --size 1 \
+                --tag-specifications "ResourceType=volume,Tags=[{Key=Name,Value=${STATIC_VOL_TAG}},{Key=isv-ncp-validation-suite,Value=static-csi},{Key=cluster,Value=${EKS_CLUSTER_NAME}}]" \
+                --region "$AWS_REGION" \
+                --query 'VolumeId' --output text 2>/dev/null || echo "")
+            if [ -n "$STATIC_VOLUME_HANDLE" ] && [ "$STATIC_VOLUME_HANDLE" != "None" ]; then
+                echo "Created standalone EBS volume: $STATIC_VOLUME_HANDLE" >&2
+                aws ec2 wait volume-available --volume-ids "$STATIC_VOLUME_HANDLE" --region "$AWS_REGION" >&2 || true
+            else
+                STATIC_VOLUME_HANDLE=""
+                echo "Warning: failed to create standalone EBS volume; static CSI probe will skip" >&2
+            fi
+        fi
+
+        if [ -n "$STATIC_VOLUME_HANDLE" ]; then
+            STATIC_DRIVER_NAME="ebs.csi.aws.com"
+        fi
+    else
+        echo "Warning: could not determine worker-node AZ; skipping standalone EBS volume creation" >&2
+    fi
+fi
+
+# -----------------------------------------------------------------------------
 # Output JSON Inventory
 # -----------------------------------------------------------------------------
 
@@ -354,7 +410,9 @@ cat << EOF
   "csi": {
     "block_storage_class": "${BLOCK_SC}",
     "shared_fs_storage_class": "${EFS_SC}",
-    "nfs_storage_class": "${EFS_SC}"
+    "nfs_storage_class": "${EFS_SC}",
+    "static_volume_handle": "${STATIC_VOLUME_HANDLE}",
+    "static_driver_name": "${STATIC_DRIVER_NAME}"
   },
   "aws": {
     "region": "${AWS_REGION}",

@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# Parameterisable PersistentVolume template for static CSI provisioning.
+#
+# Loaded by isvtest.core.k8s.render_k8s_manifest and mutated in-memory at
+# runtime. The placeholder values below exist only to keep the file valid
+# YAML; name, capacity, accessModes, spec.csi.{driver,volumeHandle,fsType},
+# and claimRef are overridden by the caller before apply. storageClassName
+# is intentionally an empty string so the PV binds only to a PVC that also
+# sets storageClassName="" (the static-provisioning convention).
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: placeholder
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  csi:
+    driver: placeholder
+    volumeHandle: placeholder
+    fsType: ext4

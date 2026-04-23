@@ -306,7 +306,7 @@ GPU_PRODUCT=$(kubectl get nodes -l nvidia.com/gpu.present=true -o jsonpath='{.it
 KUBECONFIG_PATH="${KUBECONFIG:-$HOME/.kube/config}"
 
 # -----------------------------------------------------------------------------
-# CSI StorageClasses (K8S23)
+# CSI StorageClasses
 # -----------------------------------------------------------------------------
 # Detect via kubectl so this works for both freshly-provisioned and
 # pre-existing clusters (the Terraform apply is skipped when the cluster
@@ -324,7 +324,7 @@ EFS_SC=$(kubectl get sc -o json 2>/dev/null \
     || echo "")
 
 # -----------------------------------------------------------------------------
-# Standalone EBS volume for static CSI provisioning (K8S23-05)
+# Standalone EBS volume for static CSI provisioning
 # -----------------------------------------------------------------------------
 # K8sCsiProvisioningModesCheck needs a pre-provisioned backing volume that
 # the CSI driver does not own, so it can verify static provisioning via a

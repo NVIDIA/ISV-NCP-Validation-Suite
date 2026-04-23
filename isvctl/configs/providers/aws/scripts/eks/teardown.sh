@@ -75,7 +75,7 @@ if [ ! -d ".terraform" ]; then
 fi
 
 # -----------------------------------------------------------------------------
-# Delete standalone EBS volume(s) created for K8S23-05 static CSI validation
+# Delete standalone EBS volume(s) created for static CSI validation
 # -----------------------------------------------------------------------------
 # These volumes are provisioned by setup.sh out-of-band (not via Terraform),
 # so terraform destroy would leave them orphaned. We look them up by the

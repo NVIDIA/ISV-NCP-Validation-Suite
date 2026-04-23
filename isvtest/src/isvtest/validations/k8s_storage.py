@@ -8,21 +8,21 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-"""CSI storage validations (K8S23).
+"""CSI storage validations.
 
 Implements:
 
-* :class:`K8sCsiStorageTypesCheck` (K8S23-04) — verify the cluster exposes a
+* :class:`K8sCsiStorageTypesCheck` — verify the cluster exposes a
   StorageClass for each of block / shared filesystem / NFS storage and that
   a PVC binds against each configured class.
-* :class:`K8sCsiStorageQuotaApiCheck` (K8S23-07) — verify Kubernetes-native
+* :class:`K8sCsiStorageQuotaApiCheck` — verify Kubernetes-native
   APIs expose storage quota and per-PVC/PV usage.
-* :class:`K8sCsiTenantScopedCredentialsCheck` (K8S23-06) — verify CSI
+* :class:`K8sCsiTenantScopedCredentialsCheck` — verify CSI
   credentials are tenant-scoped "by construction" by inspecting in-cluster
   observable state (Secret namespaces, labels, ServiceAccount RBAC, and
   node-plugin volume topology). Does not prove cross-cluster isolation from
   the outside.
-* :class:`K8sCsiProvisioningModesCheck` (K8S23-05) — verify CSI supports
+* :class:`K8sCsiProvisioningModesCheck` — verify CSI supports
   both dynamic and static provisioning, driving each through a real mount
   + canary-file write/read inside a BusyBox pod.
 """
@@ -131,7 +131,7 @@ def _wait_pod_ready(run_command, kubectl_base: str, namespace: str, pod_name: st
 
 
 class K8sCsiStorageTypesCheck(BaseValidation):
-    """Verify CSI supports block, shared filesystem, and NFS storage (K8S23-04).
+    """Verify CSI supports block, shared filesystem, and NFS storage.
 
     For each configured storage type, two subtests run:
 
@@ -161,7 +161,7 @@ class K8sCsiStorageTypesCheck(BaseValidation):
             (default: 300).
     """
 
-    description: ClassVar[str] = "Verify CSI supports block, shared filesystem, and NFS storage classes (K8S23-04)."
+    description: ClassVar[str] = "Verify CSI supports block, shared filesystem, and NFS storage classes."
     timeout: ClassVar[int] = 300
     markers: ClassVar[list[str]] = ["kubernetes"]
 
@@ -366,7 +366,7 @@ def _env_fallback(type_name: str) -> str:
 
 
 class K8sCsiStorageQuotaApiCheck(BaseValidation):
-    """Verify Kubernetes-native APIs expose storage quota and per-PVC/PV usage (K8S23-07).
+    """Verify Kubernetes-native APIs expose storage quota and per-PVC/PV usage.
 
     Four subtests run against a single ephemeral namespace:
 
@@ -409,7 +409,7 @@ class K8sCsiStorageQuotaApiCheck(BaseValidation):
             (default: 300).
     """
 
-    description: ClassVar[str] = "Verify Kubernetes-native APIs expose storage quota and per-PVC/PV usage (K8S23-07)."
+    description: ClassVar[str] = "Verify Kubernetes-native APIs expose storage quota and per-PVC/PV usage."
     timeout: ClassVar[int] = 300
     markers: ClassVar[list[str]] = ["kubernetes"]
 
@@ -855,7 +855,7 @@ _SHARED_CLUSTER_ANNOTATIONS: tuple[str, ...] = (
 
 
 class K8sCsiTenantScopedCredentialsCheck(BaseValidation):
-    """Verify CSI credentials are tenant-scoped by construction (K8S23-06).
+    """Verify CSI credentials are tenant-scoped by construction.
 
     This check inspects in-cluster observable state only; it does **not**
     attempt any cross-cluster exfiltration, and so cannot prove isolation
@@ -894,7 +894,7 @@ class K8sCsiTenantScopedCredentialsCheck(BaseValidation):
             (default: 300).
     """
 
-    description: ClassVar[str] = "Verify CSI credentials are tenant-scoped by construction (K8S23-06)."
+    description: ClassVar[str] = "Verify CSI credentials are tenant-scoped by construction."
     timeout: ClassVar[int] = 300
     markers: ClassVar[list[str]] = ["kubernetes"]
 
@@ -1417,7 +1417,7 @@ def _check_node_plugin_volumes(
 
 
 class K8sCsiProvisioningModesCheck(BaseValidation):
-    """Verify CSI supports both dynamic and static provisioning (K8S23-05).
+    """Verify CSI supports both dynamic and static provisioning.
 
     Two subtests run against a single ephemeral namespace:
 
@@ -1456,7 +1456,7 @@ class K8sCsiProvisioningModesCheck(BaseValidation):
             (default: 600).
     """
 
-    description: ClassVar[str] = "Verify CSI supports dynamic and static provisioning (K8S23-05)."
+    description: ClassVar[str] = "Verify CSI supports dynamic and static provisioning."
     timeout: ClassVar[int] = 600
     markers: ClassVar[list[str]] = ["kubernetes"]
 

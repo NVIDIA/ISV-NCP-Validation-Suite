@@ -47,6 +47,9 @@ SUBNET_B_CIDR = "10.85.2.0/24"
 def _get_az(ec2: Any, region: str) -> str:
     """Return the first available AZ in the region."""
     azs = ec2.describe_availability_zones(Filters=[{"Name": "state", "Values": ["available"]}])["AvailabilityZones"]
+    if not azs:
+        msg = f"No available AZ found in region {region}"
+        raise ValueError(msg)
     return azs[0]["ZoneName"]
 
 

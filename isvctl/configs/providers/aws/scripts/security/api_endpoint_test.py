@@ -81,7 +81,13 @@ def _check_vpc_endpoints_private(ec2: Any) -> dict[str, Any]:
 
 
 def _check_eks_private(region: str) -> dict[str, Any]:
-    """Verify any EKS clusters have private endpoint access enabled."""
+    """Verify EKS clusters are not public-only (no private endpoint fallback).
+
+    Dual-stack clusters (endpointPublicAccess + endpointPrivateAccess both
+    true) are accepted — these use CIDR allowlists to restrict public access
+    while keeping private access as fallback.  Only clusters with public
+    access enabled and NO private access are flagged.
+    """
     try:
         eks = boto3.client("eks", region_name=region)
         clusters = eks.list_clusters()["clusters"]
@@ -94,14 +100,17 @@ def _check_eks_private(region: str) -> dict[str, Any]:
     if not clusters:
         return {"passed": True, "message": "No EKS clusters in region"}
 
-    public_clusters: list[str] = []
+    public_only: list[str] = []
     describe_errors: list[str] = []
     for name in clusters:
         try:
             cluster = eks.describe_cluster(name=name)["cluster"]
             endpoint_cfg = cluster.get("resourcesVpcConfig", {})
-            if endpoint_cfg.get("endpointPublicAccess", True):
-                public_clusters.append(name)
+            # Flag clusters that are public-only (no private fallback).
+            # Dual-stack (public + private) with CIDR allowlists is a
+            # legitimate production pattern and should not be flagged.
+            if endpoint_cfg.get("endpointPublicAccess", True) and not endpoint_cfg.get("endpointPrivateAccess", False):
+                public_only.append(name)
         except ClientError as e:
             describe_errors.append(f"{name}: {e}")
 
@@ -111,10 +120,10 @@ def _check_eks_private(region: str) -> dict[str, Any]:
             "error": f"Failed to describe clusters: {describe_errors}",
         }
 
-    if public_clusters:
+    if public_only:
         return {
             "passed": False,
-            "error": f"EKS clusters with public endpoint enabled: {public_clusters}",
+            "error": f"EKS clusters with public-only endpoint (no private access): {public_only}",
         }
 
     return {

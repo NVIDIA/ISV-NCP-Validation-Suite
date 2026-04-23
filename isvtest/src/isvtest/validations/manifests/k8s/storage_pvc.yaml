@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# Parameterisable PVC template for CSI storage validations.
+#
+# Loaded by isvtest.core.k8s.render_k8s_manifest and mutated in-memory at
+# runtime. The placeholder defaults below exist only to keep the file valid
+# YAML; every field shown is overridden by the caller before apply.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: placeholder
+  namespace: placeholder
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: placeholder

@@ -18,7 +18,11 @@ import shlex
 import shutil
 import subprocess
 import time
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any
+
+import yaml
 
 from isvtest.core.logger import setup_logger
 
@@ -192,6 +196,33 @@ def get_kubectl_base_shell(*args: str) -> str:
     that would otherwise re-implement the quoting inline.
     """
     return " ".join(shlex.quote(part) for part in (*get_kubectl_command(), *args))
+
+
+def render_k8s_manifest(
+    path: Path,
+    mutate: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+) -> str:
+    """Load a multi-doc YAML manifest, apply ``mutate`` to each doc, and serialize it back.
+
+    The manifest file must contain valid, parseable YAML with sensible default
+    values — callers mutate the parsed objects rather than templating strings.
+    This keeps manifests readable in isolation and avoids quoting / escaping
+    pitfalls of ``str.replace``-style substitution.
+
+    Args:
+        path: Path to a ``.yaml`` file with one or more documents.
+        mutate: Callable invoked once per non-empty document with the parsed
+            dict; must return the (possibly mutated) dict. ``None`` leaves each
+            document untouched.
+
+    Returns:
+        A YAML string suitable for ``kubectl apply -f -``.
+    """
+    raw = path.read_text()
+    docs = [doc for doc in yaml.safe_load_all(raw) if doc is not None]
+    if mutate is not None:
+        docs = [mutate(doc) for doc in docs]
+    return yaml.safe_dump_all(docs, sort_keys=False)
 
 
 def parse_pod_state(stdout: str, stderr: str) -> tuple[str, str, str]:

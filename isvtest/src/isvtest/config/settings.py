@@ -324,6 +324,33 @@ def get_k8s_require_dual_stack() -> str:
     return os.getenv("K8S_REQUIRE_DUAL_STACK", "auto")
 
 
+def get_k8s_csi_block_storage_class() -> str:
+    """Get StorageClass name for CSI block storage validation.
+
+    Returns:
+        StorageClass name (default: empty string — subtest will skip).
+    """
+    return os.getenv("K8S_CSI_BLOCK_SC", "")
+
+
+def get_k8s_csi_shared_fs_storage_class() -> str:
+    """Get StorageClass name for CSI shared filesystem (RWX) validation.
+
+    Returns:
+        StorageClass name (default: empty string — subtest will skip).
+    """
+    return os.getenv("K8S_CSI_SHARED_FS_SC", "")
+
+
+def get_k8s_csi_nfs_storage_class() -> str:
+    """Get StorageClass name for CSI NFS validation.
+
+    Returns:
+        StorageClass name (default: empty string — subtest will skip).
+    """
+    return os.getenv("K8S_CSI_NFS_SC", "")
+
+
 def get_k8s_network_policy_image() -> str:
     """Get container image for NetworkPolicy probe pods.
 

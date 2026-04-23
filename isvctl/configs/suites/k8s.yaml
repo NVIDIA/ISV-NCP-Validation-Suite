@@ -101,6 +101,18 @@ tests:
           namespace_prefix: "isvtest-netpol"
           test_egress: true
 
+    k8s_storage:
+      checks:
+        K8sCsiStorageTypesCheck:
+          # StorageClass names by type; omit (or leave empty) to skip that type.
+          # Env overrides: K8S_CSI_BLOCK_SC, K8S_CSI_SHARED_FS_SC, K8S_CSI_NFS_SC.
+          block_storage_class: "{{ steps.setup.csi.block_storage_class | default('', true) }}"
+          shared_fs_storage_class: "{{ steps.setup.csi.shared_fs_storage_class | default('', true) }}"
+          nfs_storage_class: "{{ steps.setup.csi.nfs_storage_class | default('', true) }}"
+          pvc_size: "1Gi"
+          bind_timeout_s: 120
+          namespace_prefix: "isvtest-csi-types"
+
     k8s_identity:
       checks:
         K8sOidcIssuerCheck: {}

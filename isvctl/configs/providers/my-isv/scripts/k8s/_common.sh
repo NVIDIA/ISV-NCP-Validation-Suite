@@ -101,6 +101,48 @@ if $KUBECTL get runtimeclass nvidia &> /dev/null; then
     RUNTIME_CLASS="nvidia"
 fi
 
+# --- CSI StorageClasses ---
+# Env overrides take precedence; otherwise auto-detect from installed
+# CSIDrivers and the provisioners referenced by existing StorageClasses.
+# Shared-fs / NFS classification is a best-effort name match against common
+# provisioners; anything else is treated as block-capable.
+CSI_BLOCK_SC="${K8S_CSI_BLOCK_SC:-}"
+CSI_SHARED_FS_SC="${K8S_CSI_SHARED_FS_SC:-}"
+CSI_NFS_SC="${K8S_CSI_NFS_SC:-}"
+
+if [ -z "$CSI_BLOCK_SC" ] || [ -z "$CSI_SHARED_FS_SC" ] || [ -z "$CSI_NFS_SC" ]; then
+    CSI_DRIVERS=$($KUBECTL get csidrivers -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+    if [ -n "$CSI_DRIVERS" ]; then
+        SC_LINES=$($KUBECTL get sc -o jsonpath='{range .items[*]}{.metadata.name}{"="}{.provisioner}{"\n"}{end}' 2>/dev/null || echo "")
+        FIRST_CSI_SC=""
+        BLOCK_LIKE_SC=""
+        SHARED_LIKE_SC=""
+        NFS_LIKE_SC=""
+        while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            sc_name="${line%%=*}"
+            sc_prov="${line#*=}"
+            case " $CSI_DRIVERS " in
+                *" $sc_prov "*) ;;
+                *) continue ;;
+            esac
+            [ -z "$FIRST_CSI_SC" ] && FIRST_CSI_SC="$sc_name"
+            case "$sc_prov" in
+                *nfs*) [ -z "$NFS_LIKE_SC" ] && NFS_LIKE_SC="$sc_name" ;;
+            esac
+            case "$sc_prov" in
+                *nfs*|*efs*|*cephfs*|*filestore*|*azurefile*)
+                    [ -z "$SHARED_LIKE_SC" ] && SHARED_LIKE_SC="$sc_name" ;;
+                *)
+                    [ -z "$BLOCK_LIKE_SC" ] && BLOCK_LIKE_SC="$sc_name" ;;
+            esac
+        done <<< "$SC_LINES"
+        [ -z "$CSI_BLOCK_SC" ] && CSI_BLOCK_SC="${BLOCK_LIKE_SC:-$FIRST_CSI_SC}"
+        [ -z "$CSI_SHARED_FS_SC" ] && CSI_SHARED_FS_SC="$SHARED_LIKE_SC"
+        [ -z "$CSI_NFS_SC" ] && CSI_NFS_SC="$NFS_LIKE_SC"
+    fi
+fi
+
 # --- Output JSON ---
 cat << EOF
 {
@@ -118,6 +160,11 @@ cat << EOF
     "control_plane_namespace": "${CONTROL_PLANE_NS}",
     "runtime_class": "${RUNTIME_CLASS}",
     "gpu_resource_name": "nvidia.com/gpu"
+  },
+  "csi": {
+    "block_storage_class": "${CSI_BLOCK_SC}",
+    "shared_fs_storage_class": "${CSI_SHARED_FS_SC}",
+    "nfs_storage_class": "${CSI_NFS_SC}"
   }
 }
 EOF

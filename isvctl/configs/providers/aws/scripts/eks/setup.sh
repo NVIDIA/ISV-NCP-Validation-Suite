@@ -306,6 +306,24 @@ GPU_PRODUCT=$(kubectl get nodes -l nvidia.com/gpu.present=true -o jsonpath='{.it
 KUBECONFIG_PATH="${KUBECONFIG:-$HOME/.kube/config}"
 
 # -----------------------------------------------------------------------------
+# CSI StorageClasses (K8S23)
+# -----------------------------------------------------------------------------
+# Detect via kubectl so this works for both freshly-provisioned and
+# pre-existing clusters (the Terraform apply is skipped when the cluster
+# already exists, so we can't rely on Terraform outputs here).
+#
+# EFS satisfies both shared-filesystem (RWX) and NFS semantics — the AWS EFS
+# CSI driver mounts via NFSv4.1 — so when efs.csi.aws.com is installed we
+# surface the same StorageClass under both keys.
+
+BLOCK_SC=$(kubectl get sc -o json 2>/dev/null \
+    | jq -r '[.items[] | select(.provisioner == "ebs.csi.aws.com") | .metadata.name] | .[0] // ""' \
+    || echo "")
+EFS_SC=$(kubectl get sc -o json 2>/dev/null \
+    | jq -r '[.items[] | select(.provisioner == "efs.csi.aws.com") | .metadata.name] | .[0] // ""' \
+    || echo "")
+
+# -----------------------------------------------------------------------------
 # Output JSON Inventory
 # -----------------------------------------------------------------------------
 
@@ -332,6 +350,11 @@ cat << EOF
     "gpu_operator_namespace": "${GPU_OPERATOR_NS}",
     "runtime_class": "${RUNTIME_CLASS}",
     "gpu_resource_name": "nvidia.com/gpu"
+  },
+  "csi": {
+    "block_storage_class": "${BLOCK_SC}",
+    "shared_fs_storage_class": "${EFS_SC}",
+    "nfs_storage_class": "${EFS_SC}"
   },
   "aws": {
     "region": "${AWS_REGION}",

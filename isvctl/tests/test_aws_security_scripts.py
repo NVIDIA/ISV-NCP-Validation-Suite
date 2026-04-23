@@ -133,6 +133,119 @@ def test_eks_private_check_fails_public_only_cluster_even_with_restricted_cidr(
     assert "public-only" in result["error"]
 
 
+class FakeEc2Paginator:
+    """Fake EC2 paginator returning configured pages."""
+
+    def __init__(self, pages: list[dict[str, Any]]) -> None:
+        """Store pages to return from paginate."""
+        self.pages = pages
+        self.calls: list[dict[str, Any]] = []
+
+    def paginate(self, **kwargs: Any) -> list[dict[str, Any]]:
+        """Return all configured pages and record the pagination filters."""
+        self.calls.append(kwargs)
+        return self.pages
+
+
+class FakeBmcEc2:
+    """Fake EC2 client for BMC isolation checks."""
+
+    def __init__(self) -> None:
+        """Initialize paginated EC2 responses."""
+        self.paginators = {
+            "describe_route_tables": FakeEc2Paginator(
+                [
+                    {"RouteTables": [{"RouteTableId": "rtb-first", "Routes": []}]},
+                    {
+                        "RouteTables": [
+                            {
+                                "RouteTableId": "rtb-second",
+                                "Routes": [{"DestinationCidrBlock": "169.254.0.0/16"}],
+                            }
+                        ]
+                    },
+                ]
+            ),
+            "describe_security_groups": FakeEc2Paginator(
+                [
+                    {"SecurityGroups": [{"GroupId": "sg-first", "IpPermissionsEgress": []}]},
+                    {
+                        "SecurityGroups": [
+                            {
+                                "GroupId": "sg-second",
+                                "IpPermissionsEgress": [{"IpRanges": [{"CidrIp": "198.18.0.0/15"}]}],
+                            }
+                        ]
+                    },
+                ]
+            ),
+            "describe_vpcs": FakeEc2Paginator([{"Vpcs": [{"VpcId": "vpc-nondefault"}]}]),
+        }
+
+    def get_paginator(self, operation_name: str) -> FakeEc2Paginator:
+        """Return a fake paginator for the requested EC2 operation."""
+        return self.paginators[operation_name]
+
+    def describe_route_tables(self, **kwargs: Any) -> dict[str, list[dict[str, Any]]]:
+        """Return only the first route table page to expose missing pagination."""
+        return self.paginators["describe_route_tables"].pages[0]
+
+    def describe_security_groups(self, **kwargs: Any) -> dict[str, list[dict[str, Any]]]:
+        """Return only the first security group page to expose missing pagination."""
+        return self.paginators["describe_security_groups"].pages[0]
+
+    def describe_vpcs(self, **kwargs: Any) -> dict[str, list[dict[str, str]]]:
+        """Return no default VPC for the legacy lookup path."""
+        assert kwargs == {"Filters": [{"Name": "is-default", "Values": ["true"]}]}
+        return {"Vpcs": []}
+
+
+def test_bmc_checks_scan_paginated_route_tables_and_security_groups() -> None:
+    """BMC route and SG checks inspect every EC2 paginator page."""
+    module = _load_security_script("bmc_isolation_test.py")
+    ec2 = FakeBmcEc2()
+
+    route_result = module._check_route_tables(ec2, "vpc-nondefault")
+    sg_result = module._check_sg_no_bmc_egress(ec2, "vpc-nondefault")
+
+    assert route_result["passed"] is False
+    assert "rtb-second" in route_result["error"]
+    assert sg_result["passed"] is False
+    assert "sg-second" in sg_result["error"]
+    assert ec2.paginators["describe_route_tables"].calls == [
+        {"Filters": [{"Name": "vpc-id", "Values": ["vpc-nondefault"]}]}
+    ]
+    assert ec2.paginators["describe_security_groups"].calls == [
+        {"Filters": [{"Name": "vpc-id", "Values": ["vpc-nondefault"]}]}
+    ]
+
+
+def test_bmc_main_scans_non_default_vpcs_when_no_vpc_id(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """BMC validation checks non-default VPCs instead of auto-passing without a default VPC."""
+    module = _load_security_script("bmc_isolation_test.py")
+    ec2 = FakeBmcEc2()
+
+    def fake_client(service_name: str, **kwargs: Any) -> FakeBmcEc2:
+        """Return the fake EC2 client."""
+        assert service_name == "ec2"
+        return ec2
+
+    monkeypatch.setattr(module.boto3, "client", fake_client)
+    monkeypatch.setattr(module.sys, "argv", ["bmc_isolation_test.py", "--region", "us-west-2"])
+
+    exit_code = module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["success"] is False
+    assert payload["tests"]["probe_bmc_from_tenant"]["passed"] is False
+    assert "vpc-nondefault" in payload["tests"]["probe_bmc_from_tenant"]["error"]
+    assert ec2.paginators["describe_vpcs"].calls == [{}]
+
+
 class FakeIamTags:
     """Small fake for IAM list_user_tags responses."""
 

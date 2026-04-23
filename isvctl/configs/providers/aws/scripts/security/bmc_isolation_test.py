@@ -66,9 +66,32 @@ BMC_PORTS = {
 }
 
 
+def _collect_paginated(ec2: Any, operation_name: str, result_key: str, **kwargs: Any) -> list[dict[str, Any]]:
+    """Collect all items for a paginated EC2 describe operation."""
+    paginator = ec2.get_paginator(operation_name)
+    items: list[dict[str, Any]] = []
+    for page in paginator.paginate(**kwargs):
+        items.extend(page.get(result_key, []))
+    return items
+
+
+def _list_vpc_ids(ec2: Any, vpc_id: str | None) -> list[str]:
+    """Return the explicit VPC ID or every VPC ID in the region."""
+    if vpc_id:
+        return [vpc_id]
+
+    vpcs = _collect_paginated(ec2, "describe_vpcs", "Vpcs")
+    return [vpc["VpcId"] for vpc in vpcs if vpc.get("VpcId")]
+
+
 def _check_route_tables(ec2: Any, vpc_id: str) -> dict[str, Any]:
     """Verify VPC route tables have no routes toward BMC CIDRs."""
-    rts = ec2.describe_route_tables(Filters=[{"Name": "vpc-id", "Values": [vpc_id]}])["RouteTables"]
+    rts = _collect_paginated(
+        ec2,
+        "describe_route_tables",
+        "RouteTables",
+        Filters=[{"Name": "vpc-id", "Values": [vpc_id]}],
+    )
 
     for rt in rts:
         for route in rt.get("Routes", []):
@@ -77,15 +100,27 @@ def _check_route_tables(ec2: Any, vpc_id: str) -> dict[str, Any]:
                 if dest == bmc_cidr:
                     return {
                         "passed": False,
-                        "error": f"Route to {bmc_cidr} found in {rt['RouteTableId']}",
+                        "vpc_id": vpc_id,
+                        "route_tables_checked": len(rts),
+                        "error": f"Route to {bmc_cidr} found in {rt['RouteTableId']} for {vpc_id}",
                     }
 
-    return {"passed": True, "message": f"No routes to BMC CIDRs in {len(rts)} route tables"}
+    return {
+        "passed": True,
+        "vpc_id": vpc_id,
+        "route_tables_checked": len(rts),
+        "message": f"No routes to BMC CIDRs in {len(rts)} route tables for {vpc_id}",
+    }
 
 
 def _check_sg_no_bmc_egress(ec2: Any, vpc_id: str) -> dict[str, Any]:
     """Verify no SGs have explicit egress rules targeting BMC ranges."""
-    sgs = ec2.describe_security_groups(Filters=[{"Name": "vpc-id", "Values": [vpc_id]}])["SecurityGroups"]
+    sgs = _collect_paginated(
+        ec2,
+        "describe_security_groups",
+        "SecurityGroups",
+        Filters=[{"Name": "vpc-id", "Values": [vpc_id]}],
+    )
 
     for sg in sgs:
         for rule in sg.get("IpPermissionsEgress", []):
@@ -95,10 +130,54 @@ def _check_sg_no_bmc_egress(ec2: Any, vpc_id: str) -> dict[str, Any]:
                     if cidr == bmc_cidr:
                         return {
                             "passed": False,
-                            "error": f"SG {sg['GroupId']} has egress rule to {bmc_cidr}",
+                            "vpc_id": vpc_id,
+                            "security_groups_checked": len(sgs),
+                            "error": f"SG {sg['GroupId']} in {vpc_id} has egress rule to {bmc_cidr}",
                         }
 
-    return {"passed": True, "message": "No SG egress rules targeting BMC CIDRs"}
+    return {
+        "passed": True,
+        "vpc_id": vpc_id,
+        "security_groups_checked": len(sgs),
+        "message": f"No SG egress rules targeting BMC CIDRs in {len(sgs)} security groups for {vpc_id}",
+    }
+
+
+def _check_route_tables_for_vpcs(ec2: Any, vpc_ids: list[str]) -> dict[str, Any]:
+    """Verify every selected VPC has no route toward BMC CIDRs."""
+    route_tables_checked = 0
+    for vpc_id in vpc_ids:
+        result = _check_route_tables(ec2, vpc_id)
+        route_tables_checked += result.get("route_tables_checked", 0)
+        if not result.get("passed"):
+            return result
+
+    return {
+        "passed": True,
+        "vpcs_tested": len(vpc_ids),
+        "route_tables_checked": route_tables_checked,
+        "message": f"No routes to BMC CIDRs across {route_tables_checked} route tables in {len(vpc_ids)} VPCs",
+    }
+
+
+def _check_sg_no_bmc_egress_for_vpcs(ec2: Any, vpc_ids: list[str]) -> dict[str, Any]:
+    """Verify every selected VPC has no SG egress rule targeting BMC ranges."""
+    security_groups_checked = 0
+    for vpc_id in vpc_ids:
+        result = _check_sg_no_bmc_egress(ec2, vpc_id)
+        security_groups_checked += result.get("security_groups_checked", 0)
+        if not result.get("passed"):
+            return result
+
+    return {
+        "passed": True,
+        "vpcs_tested": len(vpc_ids),
+        "security_groups_checked": security_groups_checked,
+        "message": (
+            "No SG egress rules targeting BMC CIDRs across "
+            f"{security_groups_checked} security groups in {len(vpc_ids)} VPCs"
+        ),
+    }
 
 
 @handle_aws_errors
@@ -119,42 +198,37 @@ def main() -> int:
         "tests": {},
     }
 
-    # If no VPC provided, use the default VPC for a lightweight check
-    vpc_id = args.vpc_id
-    if not vpc_id:
-        vpcs = ec2.describe_vpcs(Filters=[{"Name": "is-default", "Values": ["true"]}])["Vpcs"]
-        if vpcs:
-            vpc_id = vpcs[0]["VpcId"]
+    vpc_ids = _list_vpc_ids(ec2, args.vpc_id)
+    result["vpcs_tested"] = len(vpc_ids)
+    result["vpc_ids_tested"] = vpc_ids
 
-    if not vpc_id:
-        # No VPC available — verify at the region level that no VPC
-        # endpoint services route to BMC ranges
+    if not vpc_ids:
         result["tests"]["probe_bmc_from_tenant"] = {
-            "passed": True,
-            "message": "No default VPC; AWS hypervisor BMC inherently unreachable",
+            "passed": False,
+            "error": "No VPCs found to validate; provide --vpc-id",
         }
         result["tests"]["probe_ipmi_port"] = {
-            "passed": True,
-            "message": "IPMI UDP 623 has no route from any tenant network in AWS",
+            "passed": False,
+            "error": "Validation not executed",
         }
         result["tests"]["probe_redfish_port"] = {
-            "passed": True,
-            "message": "Redfish TCP 443 on BMC CIDR has no route from tenant",
+            "passed": False,
+            "error": "Validation not executed",
         }
         result["tests"]["reverse_path_check"] = {
-            "passed": True,
-            "message": "AWS hypervisor management plane is fully isolated",
+            "passed": False,
+            "error": "Validation not executed",
         }
     else:
-        result["tests"]["probe_bmc_from_tenant"] = _check_route_tables(ec2, vpc_id)
+        result["tests"]["probe_bmc_from_tenant"] = _check_route_tables_for_vpcs(ec2, vpc_ids)
         result["tests"]["probe_ipmi_port"] = {
             "passed": True,
-            "message": "IPMI UDP 623 unreachable — no route from VPC to link-local/mgmt CIDR",
+            "message": f"IPMI UDP 623 unreachable — no route from {len(vpc_ids)} VPCs to link-local/mgmt CIDR",
         }
-        result["tests"]["probe_redfish_port"] = _check_sg_no_bmc_egress(ec2, vpc_id)
+        result["tests"]["probe_redfish_port"] = _check_sg_no_bmc_egress_for_vpcs(ec2, vpc_ids)
         result["tests"]["reverse_path_check"] = {
             "passed": True,
-            "message": "AWS VPC isolation prevents reverse path from hypervisor to tenant",
+            "message": f"AWS VPC isolation prevents reverse path from hypervisor to {len(vpc_ids)} tenant VPCs",
         }
 
     result["success"] = all(t.get("passed") for t in result["tests"].values())

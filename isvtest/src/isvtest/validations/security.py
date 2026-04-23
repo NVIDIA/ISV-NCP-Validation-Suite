@@ -38,6 +38,7 @@ class BmcTenantIsolationCheck(BaseValidation):
     markers: ClassVar[list[str]] = ["security", "network"]
 
     def run(self) -> None:
+        """Validate required BMC isolation probe results from step output."""
         required = [
             "probe_bmc_from_tenant",
             "probe_ipmi_port",
@@ -69,6 +70,7 @@ class ApiEndpointIsolationCheck(BaseValidation):
     markers: ClassVar[list[str]] = ["security", "network"]
 
     def run(self) -> None:
+        """Validate required API endpoint isolation probe results from step output."""
         required = [
             "probe_api_from_public",
             "probe_mgmt_from_public",

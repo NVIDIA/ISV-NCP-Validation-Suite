@@ -13,11 +13,13 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 import pytest
+from botocore.exceptions import ClientError
 
 ISVCTL_ROOT = Path(__file__).resolve().parents[1]
 AWS_SECURITY_SCRIPTS = ISVCTL_ROOT / "configs" / "providers" / "aws" / "scripts" / "security"
@@ -31,6 +33,11 @@ def _load_security_script(script_name: str) -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _client_error(operation_name: str, code: str = "AccessDenied", message: str = "denied") -> ClientError:
+    """Create a botocore ClientError for fake AWS client failures."""
+    return ClientError({"Error": {"Code": code, "Message": message}}, operation_name)
 
 
 class FakeEksClient:
@@ -166,3 +173,141 @@ def test_teardown_checks_paginated_user_tags() -> None:
     )
 
     assert module._user_has_isvtest_tag(iam, "isv-sa-test-1234") is True
+
+
+class FakeSaCredentialIam:
+    """Fake IAM client for service account credential cleanup tests."""
+
+    def __init__(self, delete_access_key_error: ClientError | None = None) -> None:
+        """Configure optional delete_access_key failure."""
+        self.delete_access_key_error = delete_access_key_error
+
+    def create_user(self, UserName: str, Tags: list[dict[str, str]]) -> None:
+        """Record user creation."""
+        assert UserName.startswith("isv-sa-test-")
+        assert {"Key": "CreatedBy", "Value": "isvtest"} in Tags
+
+    def create_access_key(self, UserName: str) -> dict[str, dict[str, str]]:
+        """Return a fake long-lived access key."""
+        assert UserName.startswith("isv-sa-test-")
+        return {"AccessKey": {"AccessKeyId": "AKIA_TEST", "SecretAccessKey": "secret"}}
+
+    def delete_access_key(self, UserName: str, AccessKeyId: str) -> None:
+        """Optionally fail access key deletion."""
+        assert UserName.startswith("isv-sa-test-")
+        assert AccessKeyId == "AKIA_TEST"
+        if self.delete_access_key_error:
+            raise self.delete_access_key_error
+
+    def delete_user(self, UserName: str) -> None:
+        """Delete the fake IAM user."""
+        assert UserName.startswith("isv-sa-test-")
+
+
+class FakeSts:
+    """Fake STS client for service account credential tests."""
+
+    def get_caller_identity(self) -> dict[str, str]:
+        """Return a fake caller identity."""
+        return {"Arn": "arn:aws:iam::123456789012:user/isv-sa-test-unit"}
+
+
+def test_sa_credential_main_fails_when_cleanup_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Successful authentication is reported failed when IAM cleanup fails."""
+    module = _load_security_script("sa_credential_test.py")
+    iam = FakeSaCredentialIam(delete_access_key_error=_client_error("DeleteAccessKey"))
+    sts = FakeSts()
+
+    def fake_client(service_name: str, **kwargs: Any) -> FakeSaCredentialIam | FakeSts:
+        """Return fake clients for IAM and STS."""
+        if service_name == "iam":
+            return iam
+        if service_name == "sts":
+            return sts
+        msg = f"unexpected service: {service_name}"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(module.boto3, "client", fake_client)
+    monkeypatch.setattr(module.sys, "argv", ["sa_credential_test.py", "--region", "us-west-2"])
+
+    exit_code = module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["success"] is False
+    assert payload["authenticated"] is True
+    assert "cleanup_errors" in payload
+    assert "delete access key AKIA_TEST" in payload["cleanup_errors"][0]
+
+
+class FakePaginator:
+    """Fake paginator for list_users."""
+
+    def paginate(self) -> list[dict[str, list[dict[str, str]]]]:
+        """Return one owned test user."""
+        return [{"Users": [{"UserName": "isv-sa-test-leftover"}]}]
+
+
+class FakeTeardownIam:
+    """Fake IAM client for teardown cleanup tests."""
+
+    def __init__(self) -> None:
+        """Initialize call tracking."""
+        self.delete_user_called = False
+
+    def get_paginator(self, operation_name: str) -> FakePaginator:
+        """Return a fake list_users paginator."""
+        assert operation_name == "list_users"
+        return FakePaginator()
+
+    def list_user_tags(self, UserName: str) -> dict[str, Any]:
+        """Return ownership tag for the fake user."""
+        assert UserName == "isv-sa-test-leftover"
+        return {"Tags": [{"Key": "CreatedBy", "Value": "isvtest"}], "IsTruncated": False}
+
+    def list_access_keys(self, UserName: str) -> dict[str, list[dict[str, str]]]:
+        """Return one fake access key."""
+        assert UserName == "isv-sa-test-leftover"
+        return {"AccessKeyMetadata": [{"AccessKeyId": "AKIA_LEFTOVER"}]}
+
+    def delete_access_key(self, UserName: str, AccessKeyId: str) -> None:
+        """Fail access key deletion."""
+        assert UserName == "isv-sa-test-leftover"
+        assert AccessKeyId == "AKIA_LEFTOVER"
+        raise _client_error("DeleteAccessKey")
+
+    def delete_user(self, UserName: str) -> None:
+        """Fail user deletion after access key deletion failed."""
+        assert UserName == "isv-sa-test-leftover"
+        self.delete_user_called = True
+        raise _client_error("DeleteUser", code="DeleteConflict")
+
+
+def test_teardown_main_fails_when_owned_user_cleanup_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Teardown reports failure when owned IAM resources cannot be removed."""
+    module = _load_security_script("teardown.py")
+    iam = FakeTeardownIam()
+
+    def fake_client(service_name: str, **kwargs: Any) -> FakeTeardownIam:
+        """Return the fake IAM client."""
+        assert service_name == "iam"
+        return iam
+
+    monkeypatch.setattr(module.boto3, "client", fake_client)
+    monkeypatch.setattr(module.sys, "argv", ["teardown.py", "--region", "us-west-2"])
+
+    exit_code = module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["success"] is False
+    assert payload["resources_cleaned"] == 0
+    assert payload["resources_failed"][0]["username"] == "isv-sa-test-leftover"
+    assert len(payload["resources_failed"][0]["errors"]) == 2
+    assert iam.delete_user_called is True

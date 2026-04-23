@@ -49,6 +49,31 @@ def _user_has_isvtest_tag(iam: Any, username: str) -> bool:
         return False
 
 
+def _cleanup_owned_user(iam: Any, username: str) -> list[str]:
+    """Delete one owned IAM user and its access keys, returning cleanup errors."""
+    cleanup_errors: list[str] = []
+    keys: list[dict[str, Any]] = []
+
+    try:
+        keys = iam.list_access_keys(UserName=username)["AccessKeyMetadata"]
+    except ClientError as e:
+        cleanup_errors.append(f"list access keys for {username}: {e}")
+
+    for key in keys:
+        access_key_id = key["AccessKeyId"]
+        try:
+            iam.delete_access_key(UserName=username, AccessKeyId=access_key_id)
+        except ClientError as e:
+            cleanup_errors.append(f"delete access key {access_key_id} for {username}: {e}")
+
+    try:
+        iam.delete_user(UserName=username)
+    except ClientError as e:
+        cleanup_errors.append(f"delete user {username}: {e}")
+
+    return cleanup_errors
+
+
 @handle_aws_errors
 def main() -> int:
     """Clean up leftover security test resources created by isvtest."""
@@ -72,6 +97,7 @@ def main() -> int:
     iam = boto3.client("iam", region_name=args.region)
     cleaned = 0
     skipped_unowned = 0
+    failed_resources: list[dict[str, Any]] = []
 
     try:
         paginator = iam.get_paginator("list_users")
@@ -83,22 +109,22 @@ def main() -> int:
                 if not _user_has_isvtest_tag(iam, name):
                     skipped_unowned += 1
                     continue
-                # Delete access keys first
-                try:
-                    keys = iam.list_access_keys(UserName=name)["AccessKeyMetadata"]
-                    for key in keys:
-                        iam.delete_access_key(UserName=name, AccessKeyId=key["AccessKeyId"])
-                except ClientError:
-                    pass
-                try:
-                    iam.delete_user(UserName=name)
+                cleanup_errors = _cleanup_owned_user(iam, name)
+                if cleanup_errors:
+                    failed_resources.append({"username": name, "errors": cleanup_errors})
+                else:
                     cleaned += 1
-                except ClientError:
-                    pass
 
-        result["success"] = True
         result["resources_cleaned"] = cleaned
         result["resources_skipped_unowned"] = skipped_unowned
+        if failed_resources:
+            result["success"] = False
+            result["resources_failed"] = failed_resources
+            result["error"] = f"Failed to clean up {len(failed_resources)} owned IAM user(s): " + "; ".join(
+                f"{item['username']}: {', '.join(item['errors'])}" for item in failed_resources
+            )
+        else:
+            result["success"] = True
     except ClientError as e:
         result["error"] = str(e)
 

@@ -45,6 +45,30 @@ from botocore.exceptions import ClientError
 from common.errors import handle_aws_errors
 
 
+def _cleanup_test_user(
+    iam: Any,
+    username: str,
+    access_key_id: str | None,
+    user_created: bool,
+) -> list[str]:
+    """Delete test credentials and user, returning cleanup errors."""
+    cleanup_errors: list[str] = []
+
+    if access_key_id:
+        try:
+            iam.delete_access_key(UserName=username, AccessKeyId=access_key_id)
+        except ClientError as e:
+            cleanup_errors.append(f"delete access key {access_key_id} for {username}: {e}")
+
+    if user_created:
+        try:
+            iam.delete_user(UserName=username)
+        except ClientError as e:
+            cleanup_errors.append(f"delete user {username}: {e}")
+
+    return cleanup_errors
+
+
 @handle_aws_errors
 def main() -> int:
     """Run service account credential authentication test and emit JSON result."""
@@ -66,12 +90,14 @@ def main() -> int:
 
     username = f"isv-sa-test-{uuid.uuid4().hex[:8]}"
     access_key_id = None
+    user_created = False
 
     try:
         iam.create_user(
             UserName=username,
             Tags=[{"Key": "CreatedBy", "Value": "isvtest"}],
         )
+        user_created = True
 
         key_response = iam.create_access_key(UserName=username)
         access_key_id = key_response["AccessKey"]["AccessKeyId"]
@@ -107,15 +133,12 @@ def main() -> int:
     except ClientError as e:
         result["error"] = str(e)
     finally:
-        if access_key_id:
-            try:
-                iam.delete_access_key(UserName=username, AccessKeyId=access_key_id)
-            except ClientError:
-                pass
-        try:
-            iam.delete_user(UserName=username)
-        except ClientError:
-            pass
+        cleanup_errors = _cleanup_test_user(iam, username, access_key_id, user_created)
+        if cleanup_errors:
+            result["cleanup_errors"] = cleanup_errors
+            cleanup_error = f"Cleanup failed: {'; '.join(cleanup_errors)}"
+            result["error"] = f"{result['error']}; {cleanup_error}" if result.get("error") else cleanup_error
+            result["success"] = False
 
     print(json.dumps(result, indent=2))
     return 0 if result["success"] else 1

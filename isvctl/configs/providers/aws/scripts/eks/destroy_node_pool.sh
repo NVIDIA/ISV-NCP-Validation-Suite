@@ -9,7 +9,7 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-# K8S06 — Destroy the test node pool created by create_node_pool.sh.
+# Destroy the test node pool created by create_node_pool.sh.
 #
 # Runs `terraform destroy` on the isolated terraform-node-pool state. This
 # runs before the cluster teardown so the node group's ENIs and instances
@@ -48,7 +48,7 @@ cd "${TF_DIR}"
 
 echo "" >&2
 echo "========================================" >&2
-echo "  K8S06 — Destroying test node pool" >&2
+echo "  Destroying test node pool" >&2
 echo "========================================" >&2
 
 if [ ! -d ".terraform" ]; then

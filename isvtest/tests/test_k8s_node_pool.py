@@ -67,8 +67,8 @@ def _nodes_payload(nodes: list[dict[str, Any]]) -> str:
 BASE_CONFIG: dict[str, Any] = {
     "label_selector": "eks.amazonaws.com/nodegroup=isv-test-pool",
     "expected_replicas": 1,
-    "expected_labels": {"isv.test/pool": "k8s06"},
-    "expected_taints": [{"key": "isv.test/dedicated", "value": "k8s06", "effect": "NoSchedule"}],
+    "expected_labels": {"isv.test/pool": "test"},
+    "expected_taints": [{"key": "isv.test/dedicated", "value": "test", "effect": "NoSchedule"}],
     "expected_instance_types": ["m6i.large"],
     "node_type": "cpu",
     "wait_timeout": 1,
@@ -200,8 +200,8 @@ class TestNodePoolCreateHappyPath:
         check = self._make()
         node = _node(
             "ip-10-0-0-1",
-            labels={"isv.test/pool": "k8s06"},
-            taints=[{"key": "isv.test/dedicated", "value": "k8s06", "effect": "NoSchedule"}],
+            labels={"isv.test/pool": "test"},
+            taints=[{"key": "isv.test/dedicated", "value": "test", "effect": "NoSchedule"}],
             instance_type="m6i.large",
         )
         with (
@@ -218,8 +218,8 @@ class TestNodePoolCreateHappyPath:
         nodes = [
             _node(
                 f"node-{i}",
-                labels={"isv.test/pool": "k8s06"},
-                taints=[{"key": "isv.test/dedicated", "value": "k8s06", "effect": "NoSchedule"}],
+                labels={"isv.test/pool": "test"},
+                taints=[{"key": "isv.test/dedicated", "value": "test", "effect": "NoSchedule"}],
             )
             for i in range(3)
         ]
@@ -235,8 +235,8 @@ class TestNodePoolCreateHappyPath:
         check = self._make()
         node = _node(
             "n",
-            labels={"isv.test/pool": "k8s06", "extra": "whatever"},
-            taints=[{"key": "isv.test/dedicated", "value": "k8s06", "effect": "NoSchedule"}],
+            labels={"isv.test/pool": "test", "extra": "whatever"},
+            taints=[{"key": "isv.test/dedicated", "value": "test", "effect": "NoSchedule"}],
         )
         with (
             patch.object(check, "run_command", return_value=_ok(stdout=_nodes_payload([node]))),
@@ -250,7 +250,7 @@ class TestNodePoolCreateHappyPath:
         # Node has taints not in the expected list; should still pass since check is skipped.
         node = _node(
             "n",
-            labels={"isv.test/pool": "k8s06"},
+            labels={"isv.test/pool": "test"},
             taints=[{"key": "unrelated", "value": "v", "effect": "NoSchedule"}],
         )
         with (
@@ -264,8 +264,8 @@ class TestNodePoolCreateHappyPath:
         check = self._make(expected_instance_types=[])
         node = _node(
             "n",
-            labels={"isv.test/pool": "k8s06"},
-            taints=[{"key": "isv.test/dedicated", "value": "k8s06", "effect": "NoSchedule"}],
+            labels={"isv.test/pool": "test"},
+            taints=[{"key": "isv.test/dedicated", "value": "test", "effect": "NoSchedule"}],
             instance_type="whatever.xlarge",
         )
         with (
@@ -279,15 +279,15 @@ class TestNodePoolCreateHappyPath:
         # Step-output path: templated JSON strings instead of native lists/dicts.
         cfg: dict[str, Any] = {
             **BASE_CONFIG,
-            "expected_labels": '{"isv.test/pool":"k8s06"}',
-            "expected_taints": '[{"key":"isv.test/dedicated","value":"k8s06","effect":"NoSchedule"}]',
+            "expected_labels": '{"isv.test/pool":"test"}',
+            "expected_taints": '[{"key":"isv.test/dedicated","value":"test","effect":"NoSchedule"}]',
             "expected_instance_types": '["m6i.large"]',
         }
         check = K8sNodePoolCheck(config=cfg)
         node = _node(
             "n",
-            labels={"isv.test/pool": "k8s06"},
-            taints=[{"key": "isv.test/dedicated", "value": "k8s06", "effect": "NoSchedule"}],
+            labels={"isv.test/pool": "test"},
+            taints=[{"key": "isv.test/dedicated", "value": "test", "effect": "NoSchedule"}],
         )
         with (
             patch.object(check, "run_command", return_value=_ok(stdout=_nodes_payload([node]))),
@@ -318,14 +318,14 @@ class TestNodePoolCreateConvergence:
         pending = _node(
             "n",
             ready=False,
-            labels={"isv.test/pool": "k8s06"},
-            taints=[{"key": "isv.test/dedicated", "value": "k8s06", "effect": "NoSchedule"}],
+            labels={"isv.test/pool": "test"},
+            taints=[{"key": "isv.test/dedicated", "value": "test", "effect": "NoSchedule"}],
         )
         ready = _node(
             "n",
             ready=True,
-            labels={"isv.test/pool": "k8s06"},
-            taints=[{"key": "isv.test/dedicated", "value": "k8s06", "effect": "NoSchedule"}],
+            labels={"isv.test/pool": "test"},
+            taints=[{"key": "isv.test/dedicated", "value": "test", "effect": "NoSchedule"}],
         )
         responses = iter(
             [
@@ -343,7 +343,7 @@ class TestNodePoolCreateConvergence:
 
     def test_timeout_when_never_ready(self) -> None:
         check = self._make(wait_timeout=2, poll_interval=1)
-        pending = _node("n", ready=False, labels={"isv.test/pool": "k8s06"})
+        pending = _node("n", ready=False, labels={"isv.test/pool": "test"})
         # Clock: 0.0 (start/deadline=2.0), 0.5 (first iter deadline check), 3.0 (second iter, past deadline).
         clock = iter([0.0, 0.5, 3.0, 3.0, 3.0])
         with (
@@ -391,7 +391,7 @@ class TestNodePoolCreateAssertionFailures:
         node = _node(
             "bad-node",
             labels={},  # missing isv.test/pool
-            taints=[{"key": "isv.test/dedicated", "value": "k8s06", "effect": "NoSchedule"}],
+            taints=[{"key": "isv.test/dedicated", "value": "test", "effect": "NoSchedule"}],
         )
         with (
             patch.object(check, "run_command", return_value=_ok(stdout=_nodes_payload([node]))),
@@ -407,7 +407,7 @@ class TestNodePoolCreateAssertionFailures:
         node = _node(
             "n",
             labels={"isv.test/pool": "wrong-value"},
-            taints=[{"key": "isv.test/dedicated", "value": "k8s06", "effect": "NoSchedule"}],
+            taints=[{"key": "isv.test/dedicated", "value": "test", "effect": "NoSchedule"}],
         )
         with (
             patch.object(check, "run_command", return_value=_ok(stdout=_nodes_payload([node]))),
@@ -421,7 +421,7 @@ class TestNodePoolCreateAssertionFailures:
         check = self._make()
         node = _node(
             "n",
-            labels={"isv.test/pool": "k8s06"},
+            labels={"isv.test/pool": "test"},
             taints=[],
         )
         with (
@@ -436,8 +436,8 @@ class TestNodePoolCreateAssertionFailures:
         check = self._make()
         node = _node(
             "n",
-            labels={"isv.test/pool": "k8s06"},
-            taints=[{"key": "isv.test/dedicated", "value": "k8s06", "effect": "PreferNoSchedule"}],
+            labels={"isv.test/pool": "test"},
+            taints=[{"key": "isv.test/dedicated", "value": "test", "effect": "PreferNoSchedule"}],
         )
         with (
             patch.object(check, "run_command", return_value=_ok(stdout=_nodes_payload([node]))),
@@ -451,8 +451,8 @@ class TestNodePoolCreateAssertionFailures:
         check = self._make()
         node = _node(
             "n",
-            labels={"isv.test/pool": "k8s06"},
-            taints=[{"key": "isv.test/dedicated", "value": "k8s06", "effect": "NoSchedule"}],
+            labels={"isv.test/pool": "test"},
+            taints=[{"key": "isv.test/dedicated", "value": "test", "effect": "NoSchedule"}],
             instance_type="c7g.large",  # not in expected list
         )
         with (
@@ -468,13 +468,13 @@ class TestNodePoolCreateAssertionFailures:
         check = self._make(expected_replicas=2)
         good = _node(
             "good",
-            labels={"isv.test/pool": "k8s06"},
-            taints=[{"key": "isv.test/dedicated", "value": "k8s06", "effect": "NoSchedule"}],
+            labels={"isv.test/pool": "test"},
+            taints=[{"key": "isv.test/dedicated", "value": "test", "effect": "NoSchedule"}],
         )
         bad = _node(
             "bad",
             labels={"isv.test/pool": "wrong"},
-            taints=[{"key": "isv.test/dedicated", "value": "k8s06", "effect": "NoSchedule"}],
+            taints=[{"key": "isv.test/dedicated", "value": "test", "effect": "NoSchedule"}],
         )
         with (
             patch.object(check, "run_command", return_value=_ok(stdout=_nodes_payload([good, bad]))),

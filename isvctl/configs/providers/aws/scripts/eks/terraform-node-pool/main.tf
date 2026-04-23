@@ -8,12 +8,13 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-# K8S06-01 — Node Pool Create via Terraform (AWS EKS)
+# Node Pool Create via Terraform (AWS EKS)
 #
 # This module attaches a new EKS-managed node group to the cluster already
 # provisioned by ../terraform, exercising the "create node pool via Terraform
-# provider" leg of the K8S06 CRUD requirement. It is run by create_node_pool.sh
-# as part of the EKS validation setup phase; destroy_node_pool.sh tears it down.
+# provider" leg of the node-pool CRUD requirement. It is run by
+# create_node_pool.sh as part of the EKS validation setup phase;
+# destroy_node_pool.sh tears it down.
 #
 # The module has its own local state (backend "local" -> terraform.tfstate in
 # this directory) so the round-trip is isolated from the main cluster state.
@@ -43,7 +44,7 @@ provider "aws" {
       Environment = var.environment
       Project     = "isv-lab-tools"
       ManagedBy   = "terraform"
-      Component   = "k8s06-test-node-pool"
+      Component   = "test-node-pool"
     }
   }
 }
@@ -70,7 +71,7 @@ locals {
   # identify them even if the caller omits labels entirely.
   effective_labels = merge(
     {
-      "isv.ncp.validation/pool"      = "k8s06"
+      "isv.ncp.validation/pool"      = "test"
       "isv.ncp.validation/pool-name" = var.node_pool_name
     },
     var.labels,

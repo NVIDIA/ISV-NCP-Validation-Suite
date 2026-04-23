@@ -8,7 +8,7 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-"""Node pool state check (K8S06).
+"""Node pool state check.
 
 This validation is **outcome-only**: it does not create, scale, or delete any
 node pool. Provisioning (create/update/scale) is delegated to provider-supplied

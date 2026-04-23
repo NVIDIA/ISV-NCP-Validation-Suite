@@ -9,7 +9,7 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-# K8S06 — Apply the test node pool via Terraform on AWS EKS.
+# Apply the test node pool via Terraform on AWS EKS.
 #
 # Applies ./terraform-node-pool/ against the existing cluster state and emits
 # a JSON payload matching the `node_pool` output schema. Because terraform
@@ -80,7 +80,7 @@ echo "${TAINTS_JSON}" | jq -e 'type == "array"' > /dev/null \
 
 echo "" >&2
 echo "========================================" >&2
-echo "  K8S06 — ${ACTION} test node pool" >&2
+echo "  ${ACTION} test node pool" >&2
 echo "========================================" >&2
 echo "  pool name: ${NODE_POOL_NAME}" >&2
 echo "  instance types: ${INSTANCE_TYPES_JSON}" >&2

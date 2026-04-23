@@ -1,8 +1,8 @@
-# K8S06 — Node Pool Terraform module
+# Node Pool Terraform module
 
 This module attaches a managed node group to the cluster provisioned by
 `../terraform/`, exercising the create, update (scale), and delete legs of
-the K8S06 CRUD contract. It is driven by `../create_node_pool.sh` (setup —
+the node-pool CRUD contract. It is driven by `../create_node_pool.sh` (setup —
 used for both initial create and subsequent updates, since `terraform apply`
 is idempotent) and `../destroy_node_pool.sh` (teardown); end users should
 not `terraform apply` it by hand.

@@ -125,7 +125,7 @@ STEP_SCHEMA_MAPPING: dict[str, str | None] = {
     "peering_validation": "vpc_peering",
     "sg_crud_test": "sg_crud",
     "sg_crud": "sg_crud",
-    # Node pool operations (K8S06)
+    # Node pool operations
     "create_test_node_pool": "node_pool",
     "create_node_pool": "node_pool",
     "update_test_node_pool": "node_pool",
@@ -818,7 +818,7 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
         "description": "Generic schema for unrecognized step names",
     },
     # =========================================================================
-    # Node pool schemas (K8S06 — Terraform or Cluster API provisioned)
+    # Node pool schemas (Terraform or Cluster API provisioned)
     # =========================================================================
     # Labels / taints / instance_types are carried as JSON-encoded strings so
     # the downstream Jinja ``render_string`` can substitute them into check

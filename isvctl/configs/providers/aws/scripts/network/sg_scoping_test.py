@@ -284,6 +284,7 @@ def _get_default_nacl(ec2: Any, vpc_id: str) -> str | None:
 
 @handle_aws_errors
 def main() -> int:
+    """Run SG rule scoping test for the given scope and emit JSON result."""
     parser = argparse.ArgumentParser(description="Test SG rule scoping levels")
     parser.add_argument("--region", default=os.environ.get("AWS_REGION", "us-west-2"))
     parser.add_argument("--scope", required=True, choices=["workload", "node", "subnet"])

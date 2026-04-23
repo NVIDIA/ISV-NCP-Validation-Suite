@@ -35,6 +35,7 @@ from common.errors import handle_aws_errors
 
 @handle_aws_errors
 def main() -> int:
+    """Clean up leftover security test resources (isv-sa-test-* IAM users)."""
     parser = argparse.ArgumentParser(description="Security test teardown")
     parser.add_argument("--region", default=os.environ.get("AWS_REGION", "us-west-2"))
     parser.add_argument("--skip-destroy", action="store_true")

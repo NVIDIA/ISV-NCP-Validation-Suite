@@ -94,20 +94,27 @@ def _check_eks_private(region: str) -> dict[str, Any]:
     if not clusters:
         return {"passed": True, "message": "No EKS clusters in region"}
 
-    public_clusters = []
+    public_clusters: list[str] = []
+    describe_errors: list[str] = []
     for name in clusters:
         try:
             cluster = eks.describe_cluster(name=name)["cluster"]
             endpoint_cfg = cluster.get("resourcesVpcConfig", {})
-            if endpoint_cfg.get("endpointPublicAccess", True) and not endpoint_cfg.get("endpointPrivateAccess", False):
+            if endpoint_cfg.get("endpointPublicAccess", True):
                 public_clusters.append(name)
-        except ClientError:
-            continue
+        except ClientError as e:
+            describe_errors.append(f"{name}: {e}")
+
+    if describe_errors:
+        return {
+            "passed": False,
+            "error": f"Failed to describe clusters: {describe_errors}",
+        }
 
     if public_clusters:
         return {
             "passed": False,
-            "error": f"EKS clusters with public-only endpoint: {public_clusters}",
+            "error": f"EKS clusters with public endpoint enabled: {public_clusters}",
         }
 
     return {
@@ -147,6 +154,7 @@ def _check_api_not_public_dns(ec2: Any) -> dict[str, Any]:
 
 @handle_aws_errors
 def main() -> int:
+    """Run API endpoint isolation checks and emit JSON result."""
     parser = argparse.ArgumentParser(description="API endpoint isolation test")
     parser.add_argument("--region", default=os.environ.get("AWS_REGION", "us-west-2"))
     args = parser.parse_args()

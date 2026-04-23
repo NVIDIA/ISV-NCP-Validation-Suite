@@ -103,6 +103,7 @@ def _check_sg_no_bmc_egress(ec2: Any, vpc_id: str) -> dict[str, Any]:
 
 @handle_aws_errors
 def main() -> int:
+    """Run BMC tenant-isolation checks and emit JSON result."""
     parser = argparse.ArgumentParser(description="BMC tenant isolation test")
     parser.add_argument("--region", default=os.environ.get("AWS_REGION", "us-west-2"))
     parser.add_argument("--vpc-id", help="Existing VPC to test (optional; skips if not provided)")

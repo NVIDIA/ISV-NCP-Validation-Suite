@@ -162,6 +162,7 @@ class ServiceAccountCredentialCheck(BaseValidation):
     markers: ClassVar[list[str]] = ["iam", "security"]
 
     def run(self) -> None:
+        """Validate SA credential authentication from step output."""
         step_output = self.config.get("step_output", {})
 
         authenticated = step_output.get("authenticated")
@@ -174,8 +175,14 @@ class ServiceAccountCredentialCheck(BaseValidation):
             self.set_failed(f"Service account authentication failed: {error}")
             return
 
-        credential_type = step_output.get("credential_type", "unknown")
-        identity = step_output.get("identity", "unknown")
+        credential_type = step_output.get("credential_type")
+        identity = step_output.get("identity")
+        if not credential_type:
+            self.set_failed("No 'credential_type' in step output")
+            return
+        if not identity:
+            self.set_failed("No 'identity' in step output")
+            return
         self.set_passed(f"Service account authenticated via {credential_type} as {identity}")
 
 

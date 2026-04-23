@@ -47,6 +47,7 @@ from common.errors import handle_aws_errors
 
 @handle_aws_errors
 def main() -> int:
+    """Run service account credential authentication test and emit JSON result."""
     parser = argparse.ArgumentParser(description="Service account credential test")
     parser.add_argument("--region", default=os.environ.get("AWS_REGION", "us-west-2"))
     args = parser.parse_args()
@@ -89,8 +90,8 @@ def main() -> int:
         )
 
         # IAM is eventually consistent — new keys can take 15-30s to
-        # propagate to STS.  Retry with exponential backoff (2, 4, 8, 8, 8s
-        # = 30s total worst case).
+        # propagate to STS.  Retry with exponential backoff capped at 8s
+        # (2, 4, 8, 8, 8, 8, 8 = 46s total worst case before final attempt).
         max_attempts = 8
         for attempt in range(max_attempts):
             try:

@@ -143,7 +143,7 @@ class K8sCsiStorageTypesCheck(BaseValidation):
       most cloud block CSIs).
 
     Types with no configured StorageClass are reported as skipped, so the
-    check is safe to enable on every provider; pass iff every configured type
+    check is safe to enable on every provider; pass if every configured type
     passes both subtests.
 
     Config keys (with defaults):
@@ -630,7 +630,7 @@ class K8sCsiStorageQuotaApiCheck(BaseValidation):
         return True
 
     def _run_quota_enforcement(self, pvc_name: str, storage_class: str, request_size: str) -> bool:
-        """Attempt to apply an over-quota PVC; pass iff admission rejects with a quota message."""
+        """Attempt to apply an over-quota PVC; pass if admission rejects with a quota message."""
         returncode, stderr = self._apply_pvc(pvc_name, storage_class, "ReadWriteOnce", request_size)
         if returncode == 0:
             self.report_subtest(

@@ -37,3 +37,10 @@ def command_exists(command: str) -> bool:
         True if the command is available, False otherwise.
     """
     return shutil.which(command) is not None
+
+
+def truncate(text: str, *, limit: int = 80) -> str:
+    """Return ``text`` shortened to at most ``limit`` characters with an ellipsis marker."""
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3] + "..."

@@ -179,5 +179,28 @@ tests:
           namespace: "{{ steps.setup.kubernetes.control_plane_namespace | default('kube-system') }}"
           tail: 20
 
+    k8s_network:
+      checks:
+        K8sApiNetworkAclCheck:
+          # Probe-based, provider-agnostic: verifies the API endpoint
+          # refuses connections from a source that should be blocked. The
+          # operator supplies two shell commands:
+          #   - authorized_probe_cmd: a command expected to SUCCEED (e.g.
+          #     a kubectl call from an allow-listed admin host). Serves as
+          #     a baseline — without it, a failing unauthorized probe is
+          #     ambiguous (ACL works vs. API is down).
+          #   - unauthorized_probe_cmd: a command expected to FAIL or time
+          #     out (e.g. curling the endpoint via SSH on an external host
+          #     that is not in the allow-list).
+          # The check reads `Cluster.spec.controlPlaneEndpoint` from the
+          # management cluster to surface endpoint metadata in the result;
+          # set `require_endpoint_info: false` to skip that read.
+          cluster_name: "{{ steps.setup.kubernetes.capi_cluster_name }}"
+          namespace: "{{ steps.setup.kubernetes.capi_cluster_namespace | default('default') }}"
+          authorized_probe_cmd: "{{ steps.setup.kubernetes.authorized_probe_cmd }}"
+          unauthorized_probe_cmd: "{{ steps.setup.kubernetes.unauthorized_probe_cmd }}"
+          probe_timeout: 10
+          require_endpoint_info: true
+
   exclude:
     markers: []

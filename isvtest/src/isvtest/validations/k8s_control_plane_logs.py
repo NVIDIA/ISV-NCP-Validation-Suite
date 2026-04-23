@@ -15,6 +15,7 @@ from typing import Any, ClassVar
 
 from isvtest.core.k8s import get_kubectl_base_shell
 from isvtest.core.validation import BaseValidation
+from isvtest.utils.checks import truncate
 
 _VALID_MODES = ("auto", "kubectl", "command")
 _DEFAULT_COMPONENTS = (
@@ -22,7 +23,6 @@ _DEFAULT_COMPONENTS = (
     "kube-scheduler",
     "kube-controller-manager",
 )
-_CMD_SNIPPET_LEN = 80
 
 
 class K8sControlPlaneLogsCheck(BaseValidation):
@@ -141,26 +141,6 @@ class K8sControlPlaneLogsCheck(BaseValidation):
             "since": since,
             "commands": commands,
         }
-
-    def _parse_positive_int(self, key: str, *, default: int) -> int | None:
-        """Read ``self.config[key]`` as an ``int >= 1`` (rejecting ``bool``).
-
-        Returns the parsed integer, or ``None`` after ``set_failed`` when
-        the value is a bool, non-numeric, or less than 1.
-        """
-        raw = self.config.get(key, default)
-        if isinstance(raw, bool):
-            self.set_failed(f"`{key}` must be an integer, got bool: {raw!r}")
-            return None
-        try:
-            value = int(raw)
-        except (TypeError, ValueError):
-            self.set_failed(f"`{key}` must be an integer, got {type(raw).__name__}: {raw!r}")
-            return None
-        if value < 1:
-            self.set_failed(f"{key} must be >= 1 (got {value})")
-            return None
-        return value
 
     def _build_plan(
         self,
@@ -320,7 +300,7 @@ class K8sControlPlaneLogsCheck(BaseValidation):
                 if path == "kubectl":
                     failures.append(f"{label}: kubectl logs failed: {detail}")
                 else:
-                    snippet = cmd if len(cmd) <= _CMD_SNIPPET_LEN else cmd[: _CMD_SNIPPET_LEN - 3] + "..."
+                    snippet = truncate(cmd)
                     failures.append(f"{label}: command exited {result.exit_code}: {detail} (cmd: {snippet})")
                 continue
 

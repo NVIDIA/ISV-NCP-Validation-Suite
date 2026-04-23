@@ -112,6 +112,21 @@ class BaseValidation(ABC):
         if output:
             self._output = output
 
+    def _parse_positive_int(self, key: str, *, default: int) -> int | None:
+        raw = self.config.get(key, default)
+        if isinstance(raw, bool):
+            self.set_failed(f"`{key}` must be an integer, got bool: {raw!r}")
+            return None
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            self.set_failed(f"`{key}` must be an integer, got {type(raw).__name__}: {raw!r}")
+            return None
+        if value < 1:
+            self.set_failed(f"{key} must be >= 1 (got {value})")
+            return None
+        return value
+
     def report_subtest(
         self,
         name: str,

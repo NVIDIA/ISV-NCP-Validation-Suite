@@ -751,6 +751,34 @@ class VpcIpConfigCheck(BaseValidation):
             )
 
 
+def _run_sg_scoping_check(
+    validation: BaseValidation,
+    required_keys: list[str],
+    default_scope: str,
+    label: str,
+) -> None:
+    """Shared logic for SG scoping validations (workload/node/subnet)."""
+    step_output = validation.config.get("step_output", {})
+    tests = step_output.get("tests", {})
+
+    if not tests:
+        validation.set_failed("No 'tests' in step output")
+        return
+
+    failed = []
+    for test_name in required_keys:
+        test_result = tests.get(test_name, {})
+        if not test_result.get("passed"):
+            error = test_result.get("error", "test not found")
+            failed.append(f"{test_name}: {error}")
+
+    if failed:
+        validation.set_failed(f"{label} scoping tests failed: {'; '.join(failed)}")
+    else:
+        scope = step_output.get("scope", default_scope)
+        validation.set_passed(f"SG rules correctly scoped at {scope} level")
+
+
 class SgWorkloadScopingCheck(BaseValidation):
     """Validate security group rules can be scoped at workload level.
 
@@ -769,33 +797,13 @@ class SgWorkloadScopingCheck(BaseValidation):
     markers: ClassVar[list[str]] = ["network", "security"]
 
     def run(self) -> None:
-        step_output = self.config.get("step_output", {})
-        tests = step_output.get("tests", {})
-
-        if not tests:
-            self.set_failed("No 'tests' in step output")
-            return
-
-        required = [
-            "create_sg",
-            "apply_workload_rule",
-            "workload_allowed",
-            "other_workload_blocked",
-            "cleanup",
-        ]
-        failed = []
-
-        for test_name in required:
-            test_result = tests.get(test_name, {})
-            if not test_result.get("passed"):
-                error = test_result.get("error", "test not found")
-                failed.append(f"{test_name}: {error}")
-
-        if failed:
-            self.set_failed(f"Workload scoping tests failed: {'; '.join(failed)}")
-        else:
-            scope = step_output.get("scope", "workload")
-            self.set_passed(f"SG rules correctly scoped at {scope} level")
+        """Check workload-level SG scoping from step output."""
+        _run_sg_scoping_check(
+            self,
+            ["create_sg", "apply_workload_rule", "workload_allowed", "other_workload_blocked", "cleanup"],
+            "workload",
+            "Workload",
+        )
 
 
 class SgNodeScopingCheck(BaseValidation):
@@ -816,33 +824,13 @@ class SgNodeScopingCheck(BaseValidation):
     markers: ClassVar[list[str]] = ["network", "security"]
 
     def run(self) -> None:
-        step_output = self.config.get("step_output", {})
-        tests = step_output.get("tests", {})
-
-        if not tests:
-            self.set_failed("No 'tests' in step output")
-            return
-
-        required = [
-            "create_sg",
-            "apply_node_rule",
-            "target_node_allowed",
-            "other_node_blocked",
-            "cleanup",
-        ]
-        failed = []
-
-        for test_name in required:
-            test_result = tests.get(test_name, {})
-            if not test_result.get("passed"):
-                error = test_result.get("error", "test not found")
-                failed.append(f"{test_name}: {error}")
-
-        if failed:
-            self.set_failed(f"Node scoping tests failed: {'; '.join(failed)}")
-        else:
-            scope = step_output.get("scope", "node")
-            self.set_passed(f"SG rules correctly scoped at {scope} level")
+        """Check node-level SG scoping from step output."""
+        _run_sg_scoping_check(
+            self,
+            ["create_sg", "apply_node_rule", "target_node_allowed", "other_node_blocked", "cleanup"],
+            "node",
+            "Node",
+        )
 
 
 class SgSubnetScopingCheck(BaseValidation):
@@ -864,33 +852,13 @@ class SgSubnetScopingCheck(BaseValidation):
     markers: ClassVar[list[str]] = ["network", "security"]
 
     def run(self) -> None:
-        step_output = self.config.get("step_output", {})
-        tests = step_output.get("tests", {})
-
-        if not tests:
-            self.set_failed("No 'tests' in step output")
-            return
-
-        required = [
-            "create_sg",
-            "apply_subnet_rule",
-            "subnet_allowed",
-            "other_subnet_blocked",
-            "cleanup",
-        ]
-        failed = []
-
-        for test_name in required:
-            test_result = tests.get(test_name, {})
-            if not test_result.get("passed"):
-                error = test_result.get("error", "test not found")
-                failed.append(f"{test_name}: {error}")
-
-        if failed:
-            self.set_failed(f"Subnet scoping tests failed: {'; '.join(failed)}")
-        else:
-            scope = step_output.get("scope", "subnet")
-            self.set_passed(f"SG rules correctly scoped at {scope} level")
+        """Check subnet-level SG scoping from step output."""
+        _run_sg_scoping_check(
+            self,
+            ["create_sg", "apply_subnet_rule", "subnet_allowed", "other_subnet_blocked", "cleanup"],
+            "subnet",
+            "Subnet",
+        )
 
 
 class ByoipCheck(BaseValidation):

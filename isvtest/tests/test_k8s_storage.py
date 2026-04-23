@@ -25,6 +25,10 @@ from isvtest.core.runners import CommandResult
 from isvtest.validations.k8s_storage import (
     K8sCsiStorageQuotaApiCheck,
     K8sCsiStorageTypesCheck,
+    K8sCsiTenantScopedCredentialsCheck,
+    _find_cluster_secret_grants,
+    _find_shared_cluster_marker,
+    _rule_grants_unrestricted_secrets,
     _set_pvc_fields,
     _set_resourcequota_fields,
 )
@@ -1084,3 +1088,656 @@ class TestK8sCsiStorageQuotaApiCheck:
         assert rq["kind"] == "ResourceQuota"
         assert rq["metadata"]["namespace"].startswith("ut-")
         assert rq["spec"]["hard"] == {"requests.storage": "10Gi", sc_key: "5Gi"}
+
+
+def _items_json(items: list[dict[str, Any]]) -> str:
+    """Wrap a list of objects in a ``kubectl get -o json`` ``items`` envelope."""
+    return json.dumps({"items": items})
+
+
+def _pod(
+    *,
+    name: str,
+    namespace: str = "kube-system",
+    images: list[str] | None = None,
+    service_account: str = "default",
+    volumes: list[dict[str, Any]] | None = None,
+    env_from_secrets: list[str] | None = None,
+    env_secret_keys: list[str] | None = None,
+    projected_secrets: list[str] | None = None,
+) -> dict[str, Any]:
+    """Build a minimal Pod object with just the fields the check inspects."""
+    containers: list[dict[str, Any]] = []
+    for idx, image in enumerate(images or ["unrelated:latest"]):
+        container: dict[str, Any] = {"name": f"c{idx}", "image": image}
+        if env_from_secrets and idx == 0:
+            container["envFrom"] = [{"secretRef": {"name": s}} for s in env_from_secrets]
+        if env_secret_keys and idx == 0:
+            container["env"] = [
+                {"name": f"K{i}", "valueFrom": {"secretKeyRef": {"name": s, "key": "k"}}}
+                for i, s in enumerate(env_secret_keys)
+            ]
+        containers.append(container)
+    spec: dict[str, Any] = {
+        "containers": containers,
+        "serviceAccountName": service_account,
+    }
+    rendered_volumes = list(volumes or [])
+    if projected_secrets:
+        rendered_volumes.append(
+            {
+                "name": "projected",
+                "projected": {"sources": [{"secret": {"name": s}} for s in projected_secrets]},
+            }
+        )
+    if rendered_volumes:
+        spec["volumes"] = rendered_volumes
+    return {
+        "kind": "Pod",
+        "metadata": {"name": name, "namespace": namespace},
+        "spec": spec,
+    }
+
+
+def _pv_with_csi_secrets(
+    *,
+    name: str = "pv-1",
+    driver: str = "ebs.csi.aws.com",
+    secret_namespace: str | None = None,
+    secret_name: str | None = None,
+) -> dict[str, Any]:
+    """Build a PV carrying a ``spec.csi.nodePublishSecretRef`` if name/namespace given."""
+    csi: dict[str, Any] = {"driver": driver, "volumeHandle": "vol-1"}
+    if secret_name and secret_namespace:
+        csi["nodePublishSecretRef"] = {"name": secret_name, "namespace": secret_namespace}
+    return {
+        "kind": "PersistentVolume",
+        "metadata": {"name": name},
+        "spec": {"csi": csi, "capacity": {"storage": "1Gi"}},
+    }
+
+
+def _secret(
+    *,
+    name: str,
+    namespace: str,
+    labels: dict[str, str] | None = None,
+    annotations: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    metadata: dict[str, Any] = {"name": name, "namespace": namespace}
+    if labels:
+        metadata["labels"] = labels
+    if annotations:
+        metadata["annotations"] = annotations
+    return {"kind": "Secret", "metadata": metadata, "type": "Opaque"}
+
+
+def _crb(
+    *,
+    name: str,
+    cluster_role: str,
+    subject_namespace: str,
+    subject_name: str,
+) -> dict[str, Any]:
+    return {
+        "kind": "ClusterRoleBinding",
+        "metadata": {"name": name},
+        "roleRef": {"kind": "ClusterRole", "name": cluster_role, "apiGroup": "rbac.authorization.k8s.io"},
+        "subjects": [{"kind": "ServiceAccount", "namespace": subject_namespace, "name": subject_name}],
+    }
+
+
+def _cluster_role_secrets(
+    *,
+    name: str,
+    verbs: list[str] | None = None,
+    resource_names: list[str] | None = None,
+    resources: list[str] | None = None,
+    api_groups: list[str] | None = None,
+) -> dict[str, Any]:
+    rule: dict[str, Any] = {
+        "apiGroups": api_groups if api_groups is not None else [""],
+        "resources": resources if resources is not None else ["secrets"],
+        "verbs": verbs if verbs is not None else ["get", "list"],
+    }
+    if resource_names is not None:
+        rule["resourceNames"] = resource_names
+    return {
+        "kind": "ClusterRole",
+        "metadata": {"name": name},
+        "rules": [rule],
+    }
+
+
+class TestRuleGrantsUnrestrictedSecrets:
+    """Direct tests for ``_rule_grants_unrestricted_secrets``."""
+
+    def test_unrestricted_secrets_grant_flagged(self) -> None:
+        rule = {"apiGroups": [""], "resources": ["secrets"], "verbs": ["get", "list"]}
+        assert _rule_grants_unrestricted_secrets(rule) is True
+
+    def test_wildcard_resource_and_verb_flagged(self) -> None:
+        rule = {"apiGroups": ["*"], "resources": ["*"], "verbs": ["*"]}
+        assert _rule_grants_unrestricted_secrets(rule) is True
+
+    def test_resourcenames_restriction_not_flagged(self) -> None:
+        rule = {
+            "apiGroups": [""],
+            "resources": ["secrets"],
+            "verbs": ["get"],
+            "resourceNames": ["csi-creds"],
+        }
+        assert _rule_grants_unrestricted_secrets(rule) is False
+
+    def test_non_core_api_group_not_flagged(self) -> None:
+        rule = {"apiGroups": ["custom.example.com"], "resources": ["secrets"], "verbs": ["get"]}
+        assert _rule_grants_unrestricted_secrets(rule) is False
+
+    def test_unrelated_resource_not_flagged(self) -> None:
+        rule = {"apiGroups": [""], "resources": ["configmaps"], "verbs": ["get"]}
+        assert _rule_grants_unrestricted_secrets(rule) is False
+
+    def test_non_secret_verbs_not_flagged(self) -> None:
+        rule = {"apiGroups": [""], "resources": ["secrets"], "verbs": ["impersonate"]}
+        assert _rule_grants_unrestricted_secrets(rule) is False
+
+
+class TestFindSharedClusterMarker:
+    """Direct tests for ``_find_shared_cluster_marker``."""
+
+    def test_matching_label_flagged(self) -> None:
+        secret = _secret(name="s", namespace="kube-system", labels={"shared-across-clusters": "true"})
+        marker = _find_shared_cluster_marker(secret, [("shared-across-clusters", "true")])
+        assert "shared-across-clusters=true" in marker
+
+    def test_label_with_empty_value_matches_any_value(self) -> None:
+        secret = _secret(name="s", namespace="kube-system", labels={"tenant": "shared-cluster-a"})
+        marker = _find_shared_cluster_marker(secret, [("tenant", "")])
+        assert "tenant" in marker
+
+    def test_shared_annotation_flagged(self) -> None:
+        secret = _secret(
+            name="s",
+            namespace="kube-system",
+            annotations={"csi.nvidia.com/shared": "true"},
+        )
+        assert "csi.nvidia.com/shared" in _find_shared_cluster_marker(secret, [])
+
+    def test_clean_secret_returns_empty(self) -> None:
+        secret = _secret(name="s", namespace="kube-system", labels={"app": "ebs-csi"})
+        assert _find_shared_cluster_marker(secret, [("shared-across-clusters", "true")]) == ""
+
+
+class TestFindClusterSecretGrants:
+    """Direct tests for ``_find_cluster_secret_grants``."""
+
+    def test_matching_cluster_role_flagged(self) -> None:
+        bindings = [_crb(name="crb-1", cluster_role="cr-1", subject_namespace="kube-system", subject_name="sa-1")]
+        roles = {"cr-1": _cluster_role_secrets(name="cr-1")}
+        viols = _find_cluster_secret_grants(bindings, roles, {("kube-system", "sa-1")})
+        assert len(viols) == 1
+        assert "crb-1" in viols[0]
+
+    def test_other_sa_not_flagged(self) -> None:
+        bindings = [_crb(name="crb-1", cluster_role="cr-1", subject_namespace="default", subject_name="other")]
+        roles = {"cr-1": _cluster_role_secrets(name="cr-1")}
+        assert _find_cluster_secret_grants(bindings, roles, {("kube-system", "sa-1")}) == []
+
+    def test_resourcenames_restriction_not_flagged(self) -> None:
+        bindings = [_crb(name="crb-1", cluster_role="cr-1", subject_namespace="kube-system", subject_name="sa-1")]
+        roles = {"cr-1": _cluster_role_secrets(name="cr-1", resource_names=["csi-creds"])}
+        assert _find_cluster_secret_grants(bindings, roles, {("kube-system", "sa-1")}) == []
+
+    def test_missing_role_is_ignored(self) -> None:
+        bindings = [_crb(name="crb-1", cluster_role="cr-missing", subject_namespace="kube-system", subject_name="sa-1")]
+        assert _find_cluster_secret_grants(bindings, {}, {("kube-system", "sa-1")}) == []
+
+
+class TestK8sCsiTenantScopedCredentialsCheck:
+    """Tests for ``K8sCsiTenantScopedCredentialsCheck``."""
+
+    def _make(self, config: dict[str, Any] | None = None) -> K8sCsiTenantScopedCredentialsCheck:
+        return K8sCsiTenantScopedCredentialsCheck(config=config or {})
+
+    def _router(
+        self,
+        *,
+        csi_drivers: list[dict[str, Any]],
+        pods_by_ns: dict[str, list[dict[str, Any]]],
+        pvs: list[dict[str, Any]],
+        secrets_by_ref: dict[tuple[str, str], dict[str, Any] | None] | None = None,
+        missing_secret_refs: set[tuple[str, str]] | None = None,
+        cluster_role_bindings: list[dict[str, Any]] | None = None,
+        cluster_roles: list[dict[str, Any]] | None = None,
+        fail_on: str | None = None,
+    ) -> Any:
+        """Build a ``run_command`` side_effect that answers every kubectl query the check issues.
+
+        ``fail_on`` forces a non-zero exit on the named command substring so
+        we can exercise top-level error paths (e.g. ``"get csidriver"``,
+        ``"get pv -o"``). ``secrets_by_ref`` maps (namespace, name) to a
+        Secret object; a value of ``None`` simulates a Forbidden fetch.
+        ``missing_secret_refs`` simulates a Secret that does not exist —
+        with ``--ignore-not-found=true`` kubectl returns rc=0 and empty
+        stdout, which maps to the check's ``"missing"`` status.
+        """
+        secrets_by_ref = secrets_by_ref or {}
+        missing_secret_refs = missing_secret_refs or set()
+        cluster_role_bindings = cluster_role_bindings or []
+        cluster_roles = cluster_roles or []
+
+        def _route(cmd: str, timeout: int | None = None) -> CommandResult:
+            if fail_on and fail_on in cmd:
+                return _fail(stderr="boom")
+            if "get csidriver -o json" in cmd:
+                return _ok(stdout=_items_json(csi_drivers))
+            if "get pods -n " in cmd and "-o json" in cmd:
+                # Extract the namespace from the quoted `-n '<ns>'` fragment.
+                # shlex.quote renders most identifiers without quoting, so
+                # fall back to a simple split on whitespace.
+                parts = cmd.split()
+                ns = ""
+                for i, part in enumerate(parts):
+                    if part == "-n" and i + 1 < len(parts):
+                        ns = parts[i + 1].strip("'\"")
+                        break
+                return _ok(stdout=_items_json(pods_by_ns.get(ns, [])))
+            if cmd.rstrip().endswith("get pv -o json"):
+                return _ok(stdout=_items_json(pvs))
+            if "get secret " in cmd and "-o json" in cmd:
+                # Parse out `secret <name> -n <ns>`.
+                parts = cmd.split()
+                name = ""
+                ns = ""
+                for i, part in enumerate(parts):
+                    if part == "secret" and i + 1 < len(parts):
+                        name = parts[i + 1].strip("'\"")
+                    if part == "-n" and i + 1 < len(parts):
+                        ns = parts[i + 1].strip("'\"")
+                if (ns, name) in missing_secret_refs:
+                    # `--ignore-not-found=true` returns rc=0 + empty stdout.
+                    return _ok(stdout="")
+                secret = secrets_by_ref.get((ns, name))
+                if secret is None and (ns, name) in secrets_by_ref:
+                    return _fail(stderr="forbidden")
+                if secret is None:
+                    # Unknown Secret: return a minimal clean object.
+                    return _ok(stdout=json.dumps(_secret(name=name, namespace=ns)))
+                return _ok(stdout=json.dumps(secret))
+            if "get clusterrolebinding -o json" in cmd:
+                return _ok(stdout=_items_json(cluster_role_bindings))
+            if "get clusterrole -o json" in cmd:
+                return _ok(stdout=_items_json(cluster_roles))
+            raise AssertionError(f"unexpected command: {cmd}")
+
+        return _route
+
+    # ----- tests -----
+
+    def test_no_csi_drivers_skips_all_subtests(self) -> None:
+        check = self._make({})
+        with patch.object(check, "run_command", side_effect=self._router(csi_drivers=[], pods_by_ns={}, pvs=[])):
+            check.run()
+
+        assert check.passed
+        outcomes = {r["name"]: r for r in check._subtest_results}
+        for name in (
+            "csi-secrets-discovered",
+            "secrets-not-cross-namespace",
+            "no-shared-cluster-markers",
+            "serviceaccount-rbac-scoped",
+            "node-plugin-uses-hostpath-not-shared-mount",
+        ):
+            assert outcomes[name]["skipped"], name
+
+    def test_happy_path_no_secret_refs(self) -> None:
+        """Clean cluster: one CSI driver, node-plugin + controller pods with no Secret refs."""
+        check = self._make({})
+        csi_drivers = [{"kind": "CSIDriver", "metadata": {"name": "ebs.csi.aws.com"}}]
+        pods = [
+            _pod(
+                name="ebs-csi-controller-abc",
+                namespace="kube-system",
+                images=["public.ecr.aws/ebs-csi-driver/aws-ebs-csi-driver:v1", "csi-provisioner:v4"],
+                service_account="ebs-csi-controller-sa",
+            ),
+            _pod(
+                name="ebs-csi-node-xyz",
+                namespace="kube-system",
+                images=["public.ecr.aws/ebs-csi-driver/aws-ebs-csi-driver:v1", "csi-node-driver-registrar:v2"],
+                service_account="ebs-csi-node-sa",
+                volumes=[
+                    {"name": "plugin-dir", "hostPath": {"path": "/var/lib/kubelet/plugins"}},
+                    {"name": "scratch", "emptyDir": {}},
+                ],
+            ),
+        ]
+        pvs = [_pv_with_csi_secrets()]  # No SecretRefs.
+        crbs = [
+            _crb(
+                name="ebs-csi-provisioner",
+                cluster_role="external-provisioner",
+                subject_namespace="kube-system",
+                subject_name="ebs-csi-controller-sa",
+            )
+        ]
+        # Provisioner role grants events, not unrestricted secrets.
+        croles = [
+            {
+                "kind": "ClusterRole",
+                "metadata": {"name": "external-provisioner"},
+                "rules": [
+                    {"apiGroups": [""], "resources": ["events"], "verbs": ["create", "patch"]},
+                    {
+                        "apiGroups": [""],
+                        "resources": ["secrets"],
+                        "verbs": ["get"],
+                        "resourceNames": ["ebs-csi-creds"],
+                    },
+                ],
+            }
+        ]
+
+        with patch.object(
+            check,
+            "run_command",
+            side_effect=self._router(
+                csi_drivers=csi_drivers,
+                pods_by_ns={"kube-system": pods},
+                pvs=pvs,
+                cluster_role_bindings=crbs,
+                cluster_roles=croles,
+            ),
+        ):
+            check.run()
+
+        assert check.passed, check._error
+        outcomes = {r["name"]: r for r in check._subtest_results}
+        for name in (
+            "csi-secrets-discovered",
+            "secrets-not-cross-namespace",
+            "no-shared-cluster-markers",
+            "serviceaccount-rbac-scoped",
+            "node-plugin-uses-hostpath-not-shared-mount",
+        ):
+            assert outcomes[name]["passed"], f"{name}: {outcomes[name]['message']}"
+
+    def test_cross_namespace_secret_reference_fails(self) -> None:
+        check = self._make({})
+        csi_drivers = [{"kind": "CSIDriver", "metadata": {"name": "custom.csi.example.com"}}]
+        pods = [
+            _pod(
+                name="csi-node",
+                images=["csi-node-driver-registrar:v2"],
+                volumes=[{"name": "plugin-dir", "hostPath": {"path": "/var/lib/kubelet/plugins"}}],
+            )
+        ]
+        # PV references a Secret in the "default" namespace — a workload ns.
+        pvs = [_pv_with_csi_secrets(secret_namespace="default", secret_name="exposed-creds")]
+        with patch.object(
+            check,
+            "run_command",
+            side_effect=self._router(csi_drivers=csi_drivers, pods_by_ns={"kube-system": pods}, pvs=pvs),
+        ):
+            check.run()
+
+        assert not check.passed
+        outcomes = {r["name"]: r for r in check._subtest_results}
+        assert not outcomes["secrets-not-cross-namespace"]["passed"]
+        assert "default/exposed-creds" in outcomes["secrets-not-cross-namespace"]["message"]
+
+    def test_allowed_workload_namespace_accepts_secret(self) -> None:
+        check = self._make({"allowed_workload_namespaces": ["csi-tenant-a"]})
+        csi_drivers = [{"kind": "CSIDriver", "metadata": {"name": "x"}}]
+        pods = [_pod(name="csi-node", images=["csi-node-driver-registrar:v2"])]
+        pvs = [_pv_with_csi_secrets(secret_namespace="csi-tenant-a", secret_name="tenant-creds")]
+        with patch.object(
+            check,
+            "run_command",
+            side_effect=self._router(csi_drivers=csi_drivers, pods_by_ns={"kube-system": pods}, pvs=pvs),
+        ):
+            check.run()
+
+        assert check.passed, check._error
+        outcomes = {r["name"]: r for r in check._subtest_results}
+        assert outcomes["secrets-not-cross-namespace"]["passed"]
+
+    def test_shared_cluster_label_on_secret_fails(self) -> None:
+        check = self._make({})
+        csi_drivers = [{"kind": "CSIDriver", "metadata": {"name": "x"}}]
+        pods = [
+            _pod(
+                name="csi-controller",
+                images=["csi-provisioner:v4"],
+                service_account="csi-controller-sa",
+                env_from_secrets=["csi-creds"],
+            ),
+            _pod(name="csi-node", images=["csi-node-driver-registrar:v2"]),
+        ]
+        pvs: list[dict[str, Any]] = []
+        secrets = {
+            ("kube-system", "csi-creds"): _secret(
+                name="csi-creds",
+                namespace="kube-system",
+                labels={"shared-across-clusters": "true"},
+            )
+        }
+        with patch.object(
+            check,
+            "run_command",
+            side_effect=self._router(
+                csi_drivers=csi_drivers,
+                pods_by_ns={"kube-system": pods},
+                pvs=pvs,
+                secrets_by_ref=secrets,
+            ),
+        ):
+            check.run()
+
+        assert not check.passed
+        outcomes = {r["name"]: r for r in check._subtest_results}
+        assert not outcomes["no-shared-cluster-markers"]["passed"]
+        assert "shared-across-clusters" in outcomes["no-shared-cluster-markers"]["message"]
+
+    def test_unrestricted_cluster_secret_grant_fails(self) -> None:
+        check = self._make({})
+        csi_drivers = [{"kind": "CSIDriver", "metadata": {"name": "x"}}]
+        pods = [
+            _pod(
+                name="csi-controller",
+                images=["csi-provisioner:v4"],
+                service_account="csi-controller-sa",
+            ),
+            _pod(name="csi-node", images=["csi-node-driver-registrar:v2"]),
+        ]
+        pvs: list[dict[str, Any]] = []
+        crbs = [
+            _crb(
+                name="csi-secret-reader",
+                cluster_role="cluster-wide-secrets",
+                subject_namespace="kube-system",
+                subject_name="csi-controller-sa",
+            )
+        ]
+        croles = [_cluster_role_secrets(name="cluster-wide-secrets", verbs=["get", "list", "watch"])]
+        with patch.object(
+            check,
+            "run_command",
+            side_effect=self._router(
+                csi_drivers=csi_drivers,
+                pods_by_ns={"kube-system": pods},
+                pvs=pvs,
+                cluster_role_bindings=crbs,
+                cluster_roles=croles,
+            ),
+        ):
+            check.run()
+
+        assert not check.passed
+        outcomes = {r["name"]: r for r in check._subtest_results}
+        assert not outcomes["serviceaccount-rbac-scoped"]["passed"]
+        assert "csi-secret-reader" in outcomes["serviceaccount-rbac-scoped"]["message"]
+
+    def test_node_plugin_with_persistent_volume_claim_fails(self) -> None:
+        check = self._make({})
+        csi_drivers = [{"kind": "CSIDriver", "metadata": {"name": "x"}}]
+        pods = [
+            _pod(
+                name="csi-node",
+                images=["csi-node-driver-registrar:v2"],
+                volumes=[
+                    {"name": "plugin-dir", "hostPath": {"path": "/var/lib/kubelet/plugins"}},
+                    {
+                        "name": "shared-state",
+                        "persistentVolumeClaim": {"claimName": "shared-pvc"},
+                    },
+                ],
+            )
+        ]
+        with patch.object(
+            check,
+            "run_command",
+            side_effect=self._router(csi_drivers=csi_drivers, pods_by_ns={"kube-system": pods}, pvs=[]),
+        ):
+            check.run()
+
+        assert not check.passed
+        outcomes = {r["name"]: r for r in check._subtest_results}
+        assert not outcomes["node-plugin-uses-hostpath-not-shared-mount"]["passed"]
+        assert "persistentVolumeClaim" in outcomes["node-plugin-uses-hostpath-not-shared-mount"]["message"]
+
+    def test_no_node_plugin_skips_mount_check(self) -> None:
+        check = self._make({})
+        csi_drivers = [{"kind": "CSIDriver", "metadata": {"name": "x"}}]
+        # Only a controller pod — no node-plugin.
+        pods = [
+            _pod(
+                name="csi-controller",
+                images=["csi-provisioner:v4"],
+                service_account="csi-controller-sa",
+            )
+        ]
+        with patch.object(
+            check,
+            "run_command",
+            side_effect=self._router(csi_drivers=csi_drivers, pods_by_ns={"kube-system": pods}, pvs=[]),
+        ):
+            check.run()
+
+        assert check.passed, check._error
+        outcomes = {r["name"]: r for r in check._subtest_results}
+        assert outcomes["node-plugin-uses-hostpath-not-shared-mount"]["skipped"]
+
+    def test_csidriver_list_failure_sets_failed(self) -> None:
+        check = self._make({})
+        with patch.object(
+            check,
+            "run_command",
+            side_effect=self._router(csi_drivers=[], pods_by_ns={}, pvs=[], fail_on="get csidriver"),
+        ):
+            check.run()
+
+        assert not check.passed
+        assert "Failed to list CSIDriver" in check._error
+
+    def test_secret_fetch_forbidden_is_surfaced(self) -> None:
+        check = self._make({})
+        csi_drivers = [{"kind": "CSIDriver", "metadata": {"name": "x"}}]
+        pods = [
+            _pod(
+                name="csi-controller",
+                images=["csi-provisioner:v4"],
+                env_from_secrets=["csi-creds"],
+            ),
+            _pod(name="csi-node", images=["csi-node-driver-registrar:v2"]),
+        ]
+        # Record the ref as known but mark the fetch itself as forbidden.
+        secrets: dict[tuple[str, str], dict[str, Any] | None] = {("kube-system", "csi-creds"): None}
+        with patch.object(
+            check,
+            "run_command",
+            side_effect=self._router(
+                csi_drivers=csi_drivers,
+                pods_by_ns={"kube-system": pods},
+                pvs=[],
+                secrets_by_ref=secrets,
+            ),
+        ):
+            check.run()
+
+        assert not check.passed
+        outcomes = {r["name"]: r for r in check._subtest_results}
+        assert not outcomes["no-shared-cluster-markers"]["passed"]
+        assert "unreadable" in outcomes["no-shared-cluster-markers"]["message"]
+
+    def test_dangling_envfrom_secret_ref_does_not_fail(self) -> None:
+        """An envFrom Secret ref that does not exist (EKS with IRSA) must not fail the check.
+
+        The AWS EFS/EBS CSI drivers ship with an optional ``envFrom.secretRef: aws-secret``
+        on the controller pod; when the cluster uses IRSA / workload identity
+        the Secret is never created. ``kubectl get secret --ignore-not-found``
+        returns rc=0 and empty stdout, which maps to the ``"missing"`` status
+        and must be treated as non-failure.
+        """
+        check = self._make({})
+        csi_drivers = [{"kind": "CSIDriver", "metadata": {"name": "efs.csi.aws.com"}}]
+        # Realistic EKS EFS controller: the driver container sits alongside
+        # the csi-provisioner sidecar that makes this pod recognisable as a
+        # CSI controller. The aws-secret envFrom on the controller is
+        # optional — omitted on clusters using IRSA.
+        pods = [
+            _pod(
+                name="efs-csi-controller",
+                images=["aws-efs-csi-driver:v2", "csi-provisioner:v4"],
+                env_from_secrets=["aws-secret"],
+            ),
+            _pod(
+                name="efs-csi-node",
+                images=["csi-node-driver-registrar:v2"],
+                volumes=[{"name": "plugin", "hostPath": {"path": "/var/lib/kubelet/plugins"}}],
+            ),
+        ]
+        with patch.object(
+            check,
+            "run_command",
+            side_effect=self._router(
+                csi_drivers=csi_drivers,
+                pods_by_ns={"kube-system": pods},
+                pvs=[],
+                missing_secret_refs={("kube-system", "aws-secret")},
+            ),
+        ):
+            check.run()
+
+        assert check.passed, check._error
+        outcomes = {r["name"]: r for r in check._subtest_results}
+        assert outcomes["no-shared-cluster-markers"]["passed"]
+        assert "kube-system/aws-secret" in outcomes["no-shared-cluster-markers"]["message"]
+        assert "do not exist" in outcomes["no-shared-cluster-markers"]["message"]
+
+    def test_projected_secret_volume_is_discovered(self) -> None:
+        check = self._make({})
+        csi_drivers = [{"kind": "CSIDriver", "metadata": {"name": "x"}}]
+        pods = [
+            _pod(
+                name="csi-controller",
+                images=["csi-provisioner:v4"],
+                service_account="csi-controller-sa",
+                projected_secrets=["proj-secret"],
+            ),
+            _pod(
+                name="csi-node",
+                images=["csi-node-driver-registrar:v2"],
+                volumes=[{"name": "plugin", "hostPath": {"path": "/var/lib/kubelet/plugins"}}],
+            ),
+        ]
+        with patch.object(
+            check,
+            "run_command",
+            side_effect=self._router(csi_drivers=csi_drivers, pods_by_ns={"kube-system": pods}, pvs=[]),
+        ):
+            check.run()
+
+        assert check.passed, check._error
+        outcomes = {r["name"]: r for r in check._subtest_results}
+        assert "proj-secret" in outcomes["csi-secrets-discovered"]["message"]

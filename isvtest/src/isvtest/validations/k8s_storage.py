@@ -17,6 +17,11 @@ Implements:
   a PVC binds against each configured class.
 * :class:`K8sCsiStorageQuotaApiCheck` (K8S23-07) — verify Kubernetes-native
   APIs expose storage quota and per-PVC/PV usage.
+* :class:`K8sCsiTenantScopedCredentialsCheck` (K8S23-06) — verify CSI
+  credentials are tenant-scoped "by construction" by inspecting in-cluster
+  observable state (Secret namespaces, labels, ServiceAccount RBAC, and
+  node-plugin volume topology). Does not prove cross-cluster isolation from
+  the outside.
 """
 
 from __future__ import annotations
@@ -801,3 +806,607 @@ def _set_resourcequota_fields(
         sc_quota_key: per_sc_quota,
     }
     return doc
+
+
+_CSI_CONTROLLER_IMAGE_TOKENS: tuple[str, ...] = (
+    "csi-provisioner",
+    "csi-attacher",
+    "csi-resizer",
+    "csi-snapshotter",
+    "external-provisioner",
+    "external-attacher",
+    "external-resizer",
+    "external-snapshotter",
+)
+
+_CSI_NODE_IMAGE_TOKENS: tuple[str, ...] = (
+    "csi-node-driver-registrar",
+    "node-driver-registrar",
+)
+
+_CSI_IMAGE_TOKENS: tuple[str, ...] = _CSI_CONTROLLER_IMAGE_TOKENS + _CSI_NODE_IMAGE_TOKENS
+
+_SECRET_VERBS: frozenset[str] = frozenset(
+    {"*", "get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"}
+)
+
+_NODE_PLUGIN_ALLOWED_VOLUME_KEYS: frozenset[str] = frozenset(
+    {
+        "hostPath",
+        "emptyDir",
+        "secret",
+        "configMap",
+        "projected",
+        "downwardAPI",
+        "serviceAccountToken",
+        "csi",
+    }
+)
+
+_SHARED_CLUSTER_ANNOTATIONS: tuple[str, ...] = (
+    "csi.nvidia.com/shared",
+    "csi.nvidia.com/shared-across-clusters",
+)
+
+
+class K8sCsiTenantScopedCredentialsCheck(BaseValidation):
+    """Verify CSI credentials are tenant-scoped by construction (K8S23-06).
+
+    This check inspects in-cluster observable state only; it does **not**
+    attempt any cross-cluster exfiltration, and so cannot prove isolation
+    between tenants from the outside — that is tracked separately.
+
+    Five subtests run (all must pass):
+
+    * ``csi-secrets-discovered`` — enumerate CSI drivers and discover the
+      Secrets they reference via ``PersistentVolume.spec.csi.*SecretRef``
+      and via CSI controller/node pod specs (``envFrom``, ``env.valueFrom``,
+      Secret volume mounts). Skipped when no ``CSIDriver`` objects exist.
+    * ``secrets-not-cross-namespace`` — every discovered Secret lives in
+      ``csi_driver_namespaces`` (or ``allowed_workload_namespaces``), never
+      in ``default`` or an unlisted workload namespace.
+    * ``no-shared-cluster-markers`` — no discovered Secret carries any of
+      ``forbidden_labels`` or an annotation like
+      ``csi.nvidia.com/shared=true``.
+    * ``serviceaccount-rbac-scoped`` — CSI controller ServiceAccounts hold
+      no ``ClusterRoleBinding`` that grants ``secrets`` verbs cluster-wide
+      without a ``resourceNames`` restriction. Namespace-scoped
+      ``RoleBinding`` grants are permitted.
+    * ``node-plugin-uses-hostpath-not-shared-mount`` — node-plugin pods
+      mount only local/pod-scoped volume types (hostPath, emptyDir, secret,
+      configMap, projected, downwardAPI, serviceAccountToken, csi). Any
+      ``nfs``/``iscsi``/``persistentVolumeClaim`` volume fails this subtest.
+
+    Config keys (with defaults):
+        csi_driver_namespaces: Namespaces where CSI controller/node pods
+            live (default: ``["kube-system"]``).
+        allowed_workload_namespaces: Extra namespaces where CSI Secrets are
+            permitted (default: ``[]``).
+        forbidden_labels: ``key=value`` label pairs whose presence on a CSI
+            Secret marks it as shared across clusters
+            (default: ``["shared-across-clusters=true"]``).
+        timeout: Overall class-level timeout for each ``run_command``
+            (default: 300).
+    """
+
+    description: ClassVar[str] = "Verify CSI credentials are tenant-scoped by construction (K8S23-06)."
+    timeout: ClassVar[int] = 300
+    markers: ClassVar[list[str]] = ["kubernetes"]
+
+    def run(self) -> None:
+        """Drive the five read-only subtests over CSI drivers, Secrets, RBAC, and pods."""
+        self._kubectl_base = get_kubectl_base_shell()
+
+        driver_namespaces = [str(ns) for ns in (self.config.get("csi_driver_namespaces") or ["kube-system"])]
+        allowed_workload_namespaces = [str(ns) for ns in (self.config.get("allowed_workload_namespaces") or [])]
+        forbidden_labels_raw = self.config.get("forbidden_labels") or ["shared-across-clusters=true"]
+        forbidden_labels = _parse_label_pairs(forbidden_labels_raw)
+
+        permitted_namespaces = set(driver_namespaces) | set(allowed_workload_namespaces)
+
+        # Discover CSIDriver objects up front. If none exist we have nothing
+        # to validate; the check is skipped so it is safe to enable on
+        # clusters without any CSI driver installed.
+        csi_drivers = self._list_csi_drivers()
+        if csi_drivers is None:
+            self.set_failed("Failed to list CSIDriver objects")
+            return
+        if not csi_drivers:
+            for name in (
+                "csi-secrets-discovered",
+                "secrets-not-cross-namespace",
+                "no-shared-cluster-markers",
+                "serviceaccount-rbac-scoped",
+                "node-plugin-uses-hostpath-not-shared-mount",
+            ):
+                self.report_subtest(name, passed=True, message="No CSIDriver objects present", skipped=True)
+            self.set_passed("Skipped: no CSIDriver objects found")
+            return
+
+        pods_by_ns: dict[str, list[dict[str, Any]]] = {}
+        for ns in driver_namespaces:
+            pods = self._list_pods(ns)
+            if pods is None:
+                self.set_failed(f"Failed to list pods in namespace {ns!r}")
+                return
+            pods_by_ns[ns] = pods
+
+        pvs = self._list_pvs()
+        if pvs is None:
+            self.set_failed("Failed to list PersistentVolumes")
+            return
+
+        pv_secret_refs = _collect_pv_secret_refs(pvs)
+        pod_secret_refs = _collect_pod_secret_refs(pods_by_ns)
+        discovered_secrets = sorted({(ns, name) for (ns, name) in (pv_secret_refs | pod_secret_refs)})
+
+        if not discovered_secrets:
+            self.report_subtest(
+                "csi-secrets-discovered",
+                passed=True,
+                message=(
+                    f"No CSI Secret references found across {len(csi_drivers)} driver(s); "
+                    "CSI likely uses IRSA / workload-identity or node-level IAM"
+                ),
+            )
+        else:
+            self.report_subtest(
+                "csi-secrets-discovered",
+                passed=True,
+                message=(
+                    f"Discovered {len(discovered_secrets)} CSI Secret reference(s): "
+                    f"{', '.join(f'{ns}/{name}' for ns, name in discovered_secrets[:10])}"
+                    + ("…" if len(discovered_secrets) > 10 else "")
+                ),
+            )
+
+        any_failed = False
+
+        cross_ns = [(ns, name) for (ns, name) in discovered_secrets if ns not in permitted_namespaces]
+        if cross_ns:
+            any_failed = True
+            self.report_subtest(
+                "secrets-not-cross-namespace",
+                passed=False,
+                message=(
+                    f"Discovered Secret(s) outside {sorted(permitted_namespaces)}: "
+                    f"{', '.join(f'{ns}/{name}' for ns, name in cross_ns)}"
+                ),
+            )
+        else:
+            self.report_subtest(
+                "secrets-not-cross-namespace",
+                passed=True,
+                message=(
+                    f"All {len(discovered_secrets)} discovered Secret(s) live in permitted namespaces "
+                    f"{sorted(permitted_namespaces)}"
+                ),
+            )
+
+        marker_failures: list[str] = []
+        missing_secrets: list[str] = []
+        for ns, name in discovered_secrets:
+            secret, status = self._get_secret(ns, name)
+            if status == "missing":
+                # Dangling Secret reference — the CSI pod declares it
+                # (e.g. `envFrom.secretRef`) but the Secret was never
+                # created, which is the EKS / IRSA default for EFS and
+                # EBS CSI drivers. Nothing to carry a marker, so this
+                # does not fail the check.
+                missing_secrets.append(f"{ns}/{name}")
+                continue
+            if secret is None:
+                # Reading the Secret failed for some other reason
+                # (typically Forbidden). We can't prove the marker is
+                # absent, so surface this as a failure for investigation.
+                marker_failures.append(f"{ns}/{name} (unreadable)")
+                continue
+            marker = _find_shared_cluster_marker(secret, forbidden_labels)
+            if marker:
+                marker_failures.append(f"{ns}/{name} ({marker})")
+
+        if marker_failures:
+            any_failed = True
+            self.report_subtest(
+                "no-shared-cluster-markers",
+                passed=False,
+                message=f"Secret(s) carry shared-cluster markers: {', '.join(marker_failures)}",
+            )
+        else:
+            if missing_secrets:
+                msg = (
+                    f"No shared-cluster labels/annotations on "
+                    f"{len(discovered_secrets) - len(missing_secrets)} discovered Secret(s); "
+                    f"{len(missing_secrets)} declared Secret ref(s) do not exist "
+                    f"(likely IRSA / workload-identity): "
+                    f"{', '.join(missing_secrets[:5])}"
+                    + ("…" if len(missing_secrets) > 5 else "")
+                )
+            else:
+                msg = f"No shared-cluster labels/annotations on {len(discovered_secrets)} discovered Secret(s)"
+            self.report_subtest("no-shared-cluster-markers", passed=True, message=msg)
+
+        controller_sa_refs = _collect_controller_service_accounts(pods_by_ns)
+        if not controller_sa_refs:
+            self.report_subtest(
+                "serviceaccount-rbac-scoped",
+                passed=True,
+                message="No CSI controller pods identified; RBAC check not applicable",
+                skipped=True,
+            )
+        else:
+            rbac_failures = self._check_controller_rbac(controller_sa_refs)
+            if rbac_failures is None:
+                any_failed = True
+                self.report_subtest(
+                    "serviceaccount-rbac-scoped",
+                    passed=False,
+                    message="Failed to enumerate ClusterRoleBindings / ClusterRoles",
+                )
+            elif rbac_failures:
+                any_failed = True
+                self.report_subtest(
+                    "serviceaccount-rbac-scoped",
+                    passed=False,
+                    message=(
+                        "CSI controller ServiceAccount(s) hold cluster-scoped Secret privileges: "
+                        + "; ".join(rbac_failures)
+                    ),
+                )
+            else:
+                self.report_subtest(
+                    "serviceaccount-rbac-scoped",
+                    passed=True,
+                    message=(
+                        f"No ClusterRoleBinding grants cluster-scoped Secret verbs to "
+                        f"{len(controller_sa_refs)} CSI controller ServiceAccount(s)"
+                    ),
+                )
+
+        node_volume_failures = _check_node_plugin_volumes(pods_by_ns)
+        if node_volume_failures == "no-node-pods":
+            self.report_subtest(
+                "node-plugin-uses-hostpath-not-shared-mount",
+                passed=True,
+                message="No CSI node-plugin pods identified; mount-topology check not applicable",
+                skipped=True,
+            )
+        elif node_volume_failures:
+            any_failed = True
+            self.report_subtest(
+                "node-plugin-uses-hostpath-not-shared-mount",
+                passed=False,
+                message=(
+                    "CSI node-plugin pod(s) mount cross-namespace / non-local volume types: "
+                    + "; ".join(node_volume_failures)
+                ),
+            )
+        else:
+            self.report_subtest(
+                "node-plugin-uses-hostpath-not-shared-mount",
+                passed=True,
+                message="CSI node-plugin pods mount only local/pod-scoped volume types",
+            )
+
+        if any_failed:
+            self.set_failed("One or more CSI tenant-scoping subtests failed; see subtest details")
+        else:
+            self.set_passed(
+                f"CSI credentials tenant-scoped by construction "
+                f"({len(csi_drivers)} driver(s), {len(discovered_secrets)} Secret ref(s))"
+            )
+
+    def _list_csi_drivers(self) -> list[dict[str, Any]] | None:
+        result = self.run_command(f"{self._kubectl_base} get csidriver -o json")
+        if result.exit_code != 0:
+            self.log.error("kubectl get csidriver failed: %s", result.stderr.strip())
+            return None
+        return _load_items(result.stdout)
+
+    def _list_pods(self, namespace: str) -> list[dict[str, Any]] | None:
+        result = self.run_command(f"{self._kubectl_base} get pods -n {shlex.quote(namespace)} -o json")
+        if result.exit_code != 0:
+            self.log.error("kubectl get pods -n %s failed: %s", namespace, result.stderr.strip())
+            return None
+        return _load_items(result.stdout)
+
+    def _list_pvs(self) -> list[dict[str, Any]] | None:
+        result = self.run_command(f"{self._kubectl_base} get pv -o json")
+        if result.exit_code != 0:
+            self.log.error("kubectl get pv failed: %s", result.stderr.strip())
+            return None
+        return _load_items(result.stdout)
+
+    def _get_secret(self, namespace: str, name: str) -> tuple[dict[str, Any] | None, str]:
+        """Fetch Secret ``namespace/name``; return ``(secret, status)``.
+
+        ``status`` is one of:
+          * ``"found"`` — Secret exists and parsed (``secret`` is the dict).
+          * ``"missing"`` — Secret does not exist (``--ignore-not-found``
+            returned empty stdout). Common when a CSI pod declares an
+            ``envFrom.secretRef`` but the Secret is never created — e.g.
+            EKS CSI drivers running under IRSA.
+          * ``"error"`` — kubectl failed (Forbidden, RBAC, transient, …)
+            or JSON parsing failed.
+        """
+        result = self.run_command(
+            f"{self._kubectl_base} get secret {shlex.quote(name)} -n {shlex.quote(namespace)} "
+            f"--ignore-not-found=true -o json"
+        )
+        if result.exit_code != 0:
+            self.log.warning("kubectl get secret %s/%s failed: %s", namespace, name, result.stderr.strip())
+            return None, "error"
+        stdout = result.stdout.strip()
+        if not stdout:
+            self.log.info(
+                "Secret %s/%s referenced by CSI pod but not present in cluster "
+                "(likely optional envFrom with driver using IRSA / workload identity)",
+                namespace,
+                name,
+            )
+            return None, "missing"
+        try:
+            return json.loads(stdout), "found"
+        except json.JSONDecodeError as exc:
+            self.log.warning("Failed to parse Secret %s/%s JSON: %s", namespace, name, exc)
+            return None, "error"
+
+    def _check_controller_rbac(self, service_accounts: set[tuple[str, str]]) -> list[str] | None:
+        """Return a list of violation descriptions (empty if none) or None on listing error."""
+        crb_result = self.run_command(f"{self._kubectl_base} get clusterrolebinding -o json")
+        if crb_result.exit_code != 0:
+            self.log.error("kubectl get clusterrolebinding failed: %s", crb_result.stderr.strip())
+            return None
+        cr_result = self.run_command(f"{self._kubectl_base} get clusterrole -o json")
+        if cr_result.exit_code != 0:
+            self.log.error("kubectl get clusterrole failed: %s", cr_result.stderr.strip())
+            return None
+
+        bindings = _load_items(crb_result.stdout)
+        roles = {(item.get("metadata") or {}).get("name", ""): item for item in _load_items(cr_result.stdout)}
+
+        return _find_cluster_secret_grants(bindings, roles, service_accounts)
+
+
+def _parse_label_pairs(raw: list[Any]) -> list[tuple[str, str]]:
+    """Parse ``['k=v', 'k2=v2']`` config entries into ``[(k, v), ...]``.
+
+    Entries without ``=`` are treated as ``(key, "")`` so callers can match
+    a key regardless of value when that is the intent.
+    """
+    pairs: list[tuple[str, str]] = []
+    for entry in raw:
+        text = str(entry)
+        if "=" in text:
+            key, _, value = text.partition("=")
+            pairs.append((key.strip(), value.strip()))
+        else:
+            pairs.append((text.strip(), ""))
+    return pairs
+
+
+def _load_items(stdout: str) -> list[dict[str, Any]]:
+    """Parse a ``kubectl get ... -o json`` list payload into its ``items`` list."""
+    if not stdout:
+        return []
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError:
+        return []
+    items = payload.get("items")
+    if isinstance(items, list):
+        return [item for item in items if isinstance(item, dict)]
+    return []
+
+
+def _collect_pv_secret_refs(pvs: list[dict[str, Any]]) -> set[tuple[str, str]]:
+    """Return ``{(namespace, name), ...}`` for Secret refs under every PV's ``spec.csi``."""
+    refs: set[tuple[str, str]] = set()
+    secret_ref_keys = (
+        "controllerPublishSecretRef",
+        "nodePublishSecretRef",
+        "nodeStageSecretRef",
+        "controllerExpandSecretRef",
+        "nodeExpandSecretRef",
+    )
+    for pv in pvs:
+        csi = ((pv.get("spec") or {}).get("csi")) or {}
+        for key in secret_ref_keys:
+            ref = csi.get(key) or {}
+            name = ref.get("name")
+            namespace = ref.get("namespace")
+            if name and namespace:
+                refs.add((str(namespace), str(name)))
+    return refs
+
+
+def _collect_pod_secret_refs(pods_by_ns: dict[str, list[dict[str, Any]]]) -> set[tuple[str, str]]:
+    """Return Secret refs mounted / projected by CSI pods in each driver namespace.
+
+    Pods whose containers do not carry a CSI-related image token are
+    ignored — this keeps noisy side-car / operator Secret references from
+    leaking into the check's scope.
+    """
+    refs: set[tuple[str, str]] = set()
+    for namespace, pods in pods_by_ns.items():
+        for pod in pods:
+            if not _pod_has_csi_image(pod):
+                continue
+            spec = pod.get("spec") or {}
+            for container in (spec.get("containers") or []) + (spec.get("initContainers") or []):
+                for env_from in container.get("envFrom") or []:
+                    secret_ref = (env_from.get("secretRef") or {}).get("name")
+                    if secret_ref:
+                        refs.add((namespace, str(secret_ref)))
+                for env in container.get("env") or []:
+                    secret_key_ref = ((env.get("valueFrom") or {}).get("secretKeyRef") or {}).get("name")
+                    if secret_key_ref:
+                        refs.add((namespace, str(secret_key_ref)))
+            for volume in spec.get("volumes") or []:
+                secret_volume = volume.get("secret") or {}
+                name = secret_volume.get("secretName")
+                if name:
+                    refs.add((namespace, str(name)))
+                for source in (volume.get("projected") or {}).get("sources") or []:
+                    name = (source.get("secret") or {}).get("name")
+                    if name:
+                        refs.add((namespace, str(name)))
+    return refs
+
+
+def _pod_has_csi_image(pod: dict[str, Any]) -> bool:
+    """Return True when any container in the pod uses a CSI sidecar/node-registrar image."""
+    spec = pod.get("spec") or {}
+    for container in (spec.get("containers") or []) + (spec.get("initContainers") or []):
+        image = str(container.get("image") or "")
+        if any(token in image for token in _CSI_IMAGE_TOKENS):
+            return True
+    return False
+
+
+def _pod_is_controller(pod: dict[str, Any]) -> bool:
+    """Return True when the pod looks like a CSI controller (has a provisioner/attacher sidecar)."""
+    spec = pod.get("spec") or {}
+    for container in (spec.get("containers") or []) + (spec.get("initContainers") or []):
+        image = str(container.get("image") or "")
+        if any(token in image for token in _CSI_CONTROLLER_IMAGE_TOKENS):
+            return True
+    return False
+
+
+def _pod_is_node_plugin(pod: dict[str, Any]) -> bool:
+    """Return True when the pod looks like a CSI node plugin (has node-driver-registrar)."""
+    spec = pod.get("spec") or {}
+    for container in (spec.get("containers") or []) + (spec.get("initContainers") or []):
+        image = str(container.get("image") or "")
+        if any(token in image for token in _CSI_NODE_IMAGE_TOKENS):
+            return True
+    return False
+
+
+def _find_shared_cluster_marker(
+    secret: dict[str, Any],
+    forbidden_labels: list[tuple[str, str]],
+) -> str:
+    """Return a short human description of the first shared-cluster marker found, or ``""``.
+
+    An empty string means no marker was found.
+    """
+    metadata = secret.get("metadata") or {}
+    labels = metadata.get("labels") or {}
+    annotations = metadata.get("annotations") or {}
+
+    for key, value in forbidden_labels:
+        actual = labels.get(key)
+        if actual is None:
+            continue
+        if not value or str(actual) == value:
+            return f"label {key}={actual}"
+
+    for annotation_key in _SHARED_CLUSTER_ANNOTATIONS:
+        annotation_value = annotations.get(annotation_key)
+        if annotation_value and str(annotation_value).lower() == "true":
+            return f"annotation {annotation_key}={annotation_value}"
+
+    return ""
+
+
+def _collect_controller_service_accounts(
+    pods_by_ns: dict[str, list[dict[str, Any]]],
+) -> set[tuple[str, str]]:
+    """Return ``{(namespace, serviceAccountName), ...}`` for CSI controller pods."""
+    refs: set[tuple[str, str]] = set()
+    for namespace, pods in pods_by_ns.items():
+        for pod in pods:
+            if not _pod_is_controller(pod):
+                continue
+            spec = pod.get("spec") or {}
+            sa = spec.get("serviceAccountName") or spec.get("serviceAccount") or "default"
+            refs.add((namespace, str(sa)))
+    return refs
+
+
+def _find_cluster_secret_grants(
+    bindings: list[dict[str, Any]],
+    roles: dict[str, dict[str, Any]],
+    service_accounts: set[tuple[str, str]],
+) -> list[str]:
+    """Return a list of violation descriptions for cluster-scoped Secret grants to CSI SAs.
+
+    A violation is any ``ClusterRoleBinding`` whose ``subjects`` include one
+    of ``service_accounts`` and whose referenced ``ClusterRole`` contains a
+    rule covering ``secrets`` without a ``resourceNames`` restriction.
+    """
+    violations: list[str] = []
+    for binding in bindings:
+        subjects = binding.get("subjects") or []
+        matched = [
+            (subj.get("namespace", ""), subj.get("name", ""))
+            for subj in subjects
+            if subj.get("kind") == "ServiceAccount"
+            and (subj.get("namespace", ""), subj.get("name", "")) in service_accounts
+        ]
+        if not matched:
+            continue
+        role_ref = binding.get("roleRef") or {}
+        if role_ref.get("kind") != "ClusterRole":
+            continue
+        role_name = role_ref.get("name", "")
+        role = roles.get(role_name)
+        if role is None:
+            continue
+        for rule in role.get("rules") or []:
+            if _rule_grants_unrestricted_secrets(rule):
+                subject_str = ", ".join(f"{ns}/{name}" for ns, name in sorted(matched))
+                binding_name = (binding.get("metadata") or {}).get("name", "")
+                violations.append(
+                    f"ClusterRoleBinding {binding_name!r} → ClusterRole {role_name!r} (subjects: {subject_str})"
+                )
+                break
+    return violations
+
+
+def _rule_grants_unrestricted_secrets(rule: dict[str, Any]) -> bool:
+    """Return True when an RBAC rule covers the ``secrets`` resource without resourceNames."""
+    resources = {str(r) for r in (rule.get("resources") or [])}
+    if "secrets" not in resources and "*" not in resources:
+        return False
+    api_groups = {str(g) for g in (rule.get("apiGroups") or [])}
+    if api_groups and not (api_groups & {"", "*"}):
+        return False
+    verbs = {str(v) for v in (rule.get("verbs") or [])}
+    if not (verbs & _SECRET_VERBS):
+        return False
+    resource_names = rule.get("resourceNames") or []
+    if resource_names:
+        return False
+    return True
+
+
+def _check_node_plugin_volumes(
+    pods_by_ns: dict[str, list[dict[str, Any]]],
+) -> list[str] | str:
+    """Return a list of node-plugin volume-topology violations.
+
+    Returns the sentinel ``"no-node-pods"`` when no node plugin pods are
+    found at all (so the caller can surface a skipped subtest rather than
+    a false pass).
+    """
+    violations: list[str] = []
+    node_pod_seen = False
+    for namespace, pods in pods_by_ns.items():
+        for pod in pods:
+            if not _pod_is_node_plugin(pod):
+                continue
+            node_pod_seen = True
+            spec = pod.get("spec") or {}
+            pod_name = (pod.get("metadata") or {}).get("name", "")
+            for volume in spec.get("volumes") or []:
+                volume_name = volume.get("name", "")
+                keys = {k for k in volume.keys() if k != "name"}
+                bad_keys = keys - _NODE_PLUGIN_ALLOWED_VOLUME_KEYS
+                if bad_keys:
+                    violations.append(f"{namespace}/{pod_name} volume {volume_name!r} uses {sorted(bad_keys)}")
+    if not node_pod_seen:
+        return "no-node-pods"
+    return violations

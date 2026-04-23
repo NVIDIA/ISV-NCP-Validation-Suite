@@ -124,6 +124,16 @@ tests:
           bind_timeout_s: 120
           quota_settle_s: 30
           namespace_prefix: "isvtest-csi-quota"
+        K8sCsiTenantScopedCredentialsCheck:
+          # Pure read-only check: verifies CSI credentials are tenant-scoped
+          # by construction (Secret namespaces, labels/annotations, RBAC,
+          # and node-plugin volume topology). Skipped entirely when no
+          # CSIDriver objects exist.
+          csi_driver_namespaces:
+            - "kube-system"
+          allowed_workload_namespaces: []
+          forbidden_labels:
+            - "shared-across-clusters=true"
 
     k8s_identity:
       checks:

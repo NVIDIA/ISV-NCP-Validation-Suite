@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# Parameterisable ResourceQuota template for CSI storage-quota validations.
+#
+# Loaded by isvtest.core.k8s.render_k8s_manifest and mutated in-memory at
+# runtime. The placeholder values below exist only to keep the file valid
+# YAML; name, namespace, and the full `spec.hard` map are overridden by the
+# caller before apply. The per-StorageClass key (which has the form
+# `<sc>.storageclass.storage.k8s.io/requests.storage`) is injected by the
+# mutator because the StorageClass name is only known at runtime.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: placeholder
+  namespace: placeholder
+spec:
+  hard:
+    requests.storage: 10Gi

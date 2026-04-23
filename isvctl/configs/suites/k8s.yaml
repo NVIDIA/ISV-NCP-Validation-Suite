@@ -112,6 +112,18 @@ tests:
           pvc_size: "1Gi"
           bind_timeout_s: 120
           namespace_prefix: "isvtest-csi-types"
+        K8sCsiStorageQuotaApiCheck:
+          # Uses the block StorageClass by default; skips entirely when unset.
+          # per_sc_quota must exceed pvc_request so the usage PVC fits, and
+          # over_quota_request must exceed per_sc_quota so admission rejects it.
+          storage_class: "{{ steps.setup.csi.block_storage_class | default('', true) }}"
+          total_quota: "10Gi"
+          per_sc_quota: "5Gi"
+          pvc_request: "1Gi"
+          over_quota_request: "100Gi"
+          bind_timeout_s: 120
+          quota_settle_s: 30
+          namespace_prefix: "isvtest-csi-quota"
 
     k8s_identity:
       checks:

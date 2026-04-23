@@ -169,17 +169,27 @@ tests:
         StableIdentifierCheck:
           reference_id: "{{steps.launch_instance.instance_id}}"
 
+    # SSH/GPU checks bound to start_instance / reboot_instance use the IP
+    # captured by describe_instance (which runs last, post-power-cycle) — the
+    # IPs in start/reboot step outputs are stale on platforms that reassign
+    # public IPs across power-cycle.
     start_ssh:
       step: start_instance
       checks:
-        ConnectivityCheck: {}
+        ConnectivityCheck:
+          host: "{{steps.describe_instance.public_ip}}"
+          key_file: "{{steps.describe_instance.key_file}}"
         OsCheck:
+          host: "{{steps.describe_instance.public_ip}}"
+          key_file: "{{steps.describe_instance.key_file}}"
           expected_os: "ubuntu"
 
     start_gpu:
       step: start_instance
       checks:
-        GpuCheck: {}
+        GpuCheck:
+          host: "{{steps.describe_instance.public_ip}}"
+          key_file: "{{steps.describe_instance.key_file}}"
 
     reboot_checks:
       step: reboot_instance
@@ -198,14 +208,20 @@ tests:
     reboot_ssh:
       step: reboot_instance
       checks:
-        ConnectivityCheck: {}
+        ConnectivityCheck:
+          host: "{{steps.describe_instance.public_ip}}"
+          key_file: "{{steps.describe_instance.key_file}}"
         OsCheck:
+          host: "{{steps.describe_instance.public_ip}}"
+          key_file: "{{steps.describe_instance.key_file}}"
           expected_os: "ubuntu"
 
     reboot_gpu:
       step: reboot_instance
       checks:
         GpuCheck:
+          host: "{{steps.describe_instance.public_ip}}"
+          key_file: "{{steps.describe_instance.key_file}}"
           expected_gpus: 8
 
     power_cycle_checks:

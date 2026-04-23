@@ -125,6 +125,13 @@ STEP_SCHEMA_MAPPING: dict[str, str | None] = {
     "peering_validation": "vpc_peering",
     "sg_crud_test": "sg_crud",
     "sg_crud": "sg_crud",
+    # Node pool operations (K8S06)
+    "create_test_node_pool": "node_pool",
+    "create_node_pool": "node_pool",
+    "update_test_node_pool": "node_pool",
+    "update_node_pool": "node_pool",
+    "destroy_test_node_pool": "teardown",
+    "destroy_node_pool": "teardown",
 }
 
 # Common fields present in all outputs
@@ -809,6 +816,55 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
         "properties": COMMON_PROPERTIES,
         "additionalProperties": True,
         "description": "Generic schema for unrecognized step names",
+    },
+    # =========================================================================
+    # Node pool schemas (K8S06 — Terraform or Cluster API provisioned)
+    # =========================================================================
+    # Labels / taints / instance_types are carried as JSON-encoded strings so
+    # the downstream Jinja ``render_string`` can substitute them into check
+    # config without lossy str() conversion of a dict/list.
+    "node_pool": {
+        "type": "object",
+        "required": [
+            "success",
+            "platform",
+            "node_pool_name",
+            "label_selector",
+            "expected_replicas",
+        ],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "node_pool_name": {"type": "string", "description": "Name of the created node pool"},
+            "label_selector": {
+                "type": "string",
+                "description": (
+                    "kubectl label selector that identifies the new nodes (e.g. eks.amazonaws.com/nodegroup=<name>)"
+                ),
+            },
+            "expected_replicas": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Node count that must reach Ready",
+            },
+            "expected_labels_json": {
+                "type": "string",
+                "description": "JSON-encoded mapping of labels each node must carry",
+            },
+            "expected_taints_json": {
+                "type": "string",
+                "description": "JSON-encoded list of {key,value,effect} each node must carry",
+            },
+            "expected_instance_types_json": {
+                "type": "string",
+                "description": "JSON-encoded list of allowed instance-type strings",
+            },
+            "node_type": {
+                "type": "string",
+                "enum": ["cpu", "gpu"],
+                "description": "Informational node pool flavor",
+            },
+        },
+        "additionalProperties": True,
     },
 }
 

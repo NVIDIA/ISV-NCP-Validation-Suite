@@ -102,6 +102,7 @@ class K8sNodePoolCheck(BaseValidation):
             return  # set_failed already called
 
         failures: list[str] = []
+        failing_names: set[str] = set()
         for node in nodes:
             name = node.get("metadata", {}).get("name", "<unknown>")
             node_labels: dict[str, str] = node.get("metadata", {}).get("labels", {}) or {}
@@ -110,10 +111,12 @@ class K8sNodePoolCheck(BaseValidation):
             missing_labels = {k: v for k, v in expected_labels.items() if node_labels.get(k) != v}
             if missing_labels:
                 failures.append(f"{name}: missing/incorrect labels {sorted(missing_labels)}")
+                failing_names.add(name)
 
             missing_taints = _missing_taints(expected_taints, node_taints)
             if missing_taints:
                 failures.append(f"{name}: missing taints {missing_taints}")
+                failing_names.add(name)
 
             if expected_instance_types:
                 actual_type = node_labels.get("node.kubernetes.io/instance-type", "")
@@ -121,11 +124,12 @@ class K8sNodePoolCheck(BaseValidation):
                     failures.append(
                         f"{name}: instance-type {actual_type!r} not in allowlist {sorted(expected_instance_types)}"
                     )
+                    failing_names.add(name)
 
         if failures:
             self.set_failed(
                 "Node pool shape mismatched on {} of {} node(s):\n  - {}".format(
-                    len(failures), len(nodes), "\n  - ".join(failures)
+                    len(failing_names), len(nodes), "\n  - ".join(failures)
                 )
             )
             return

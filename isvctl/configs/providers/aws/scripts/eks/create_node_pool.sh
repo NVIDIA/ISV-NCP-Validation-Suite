@@ -78,6 +78,15 @@ echo "${LABELS_JSON}" | jq -e 'type == "object"' > /dev/null \
 echo "${TAINTS_JSON}" | jq -e 'type == "array"' > /dev/null \
     || { echo "Error: TF_VAR_test_pool_taints_json must be a JSON array" >&2; exit 1; }
 
+NODE_TYPE="$(echo "${NODE_TYPE}" | tr '[:upper:]' '[:lower:]')"
+case "${NODE_TYPE}" in
+    cpu|gpu) ;;
+    *)
+        echo "Error: TF_VAR_test_pool_node_type must be one of: cpu, gpu" >&2
+        exit 1
+        ;;
+esac
+
 echo "" >&2
 echo "========================================" >&2
 echo "  ${ACTION} test node pool" >&2

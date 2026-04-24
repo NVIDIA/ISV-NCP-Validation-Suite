@@ -71,8 +71,8 @@ variable "desired_size" {
   type        = number
   default     = 1
   validation {
-    condition     = var.desired_size >= 0 && var.desired_size <= 50
-    error_message = "desired_size must be in [0, 50]."
+    condition     = var.desired_size >= 0 && var.desired_size <= 50 && floor(var.desired_size) == var.desired_size
+    error_message = "desired_size must be an integer in [0, 50]."
   }
 }
 

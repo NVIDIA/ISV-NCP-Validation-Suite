@@ -23,7 +23,7 @@ class BmcTenantIsolationCheck(BaseValidation):
     """Validate BMC interfaces are not reachable from tenant networks.
 
     Verifies that management interfaces (BMC/IPMI/Redfish) are isolated
-    from tenant-accessible networks — probes from the tenant network to
+    from tenant-accessible networks - probes from the tenant network to
     known BMC endpoints must be refused or time out.
 
     Config:
@@ -55,7 +55,7 @@ class ApiEndpointIsolationCheck(BaseValidation):
     """Validate no public internet access to API endpoints by default.
 
     Verifies that platform API endpoints (control plane, management APIs)
-    are not directly accessible from the public internet — connections
+    are not directly accessible from the public internet - connections
     from outside the private network must be refused.
 
     Config:

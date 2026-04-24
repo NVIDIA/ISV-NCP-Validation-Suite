@@ -512,7 +512,7 @@ class TestMissingStepRefDetection:
         not invoked with a stripped-out required arg."""
         executor = StepExecutor()
         context = Context(RunConfig())
-        # No "create_network" step output — simulates a failed setup step.
+        # No "create_network" step output - simulates a failed setup step.
         steps = [
             StepConfig(
                 name="teardown_network",

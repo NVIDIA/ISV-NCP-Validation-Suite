@@ -77,7 +77,7 @@ tests:
 
     # MicroK8s has no real network ACL on its API; this exercises the
     # check's probe logic end-to-end. The unauthorized probe targets a
-    # non-routable RFC 5737 address and will time out — proving the
+    # non-routable RFC 5737 address and will time out - proving the
     # check correctly interprets a failing probe as "ACL enforced".
     # Not a substitute for a real provider harness.
     k8s_network:

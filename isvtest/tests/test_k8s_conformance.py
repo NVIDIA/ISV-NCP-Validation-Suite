@@ -98,7 +98,7 @@ class CommandRouter:
 
     Results can be a single CommandResult or a list. Lists are consumed in
     order; the last element is repeated once exhausted. First matching
-    substring wins — put more specific patterns before general ones.
+    substring wins - put more specific patterns before general ones.
     """
 
     def __init__(self) -> None:
@@ -306,7 +306,7 @@ class TestRun:
         assert any("delete namespace" in cmd for cmd in router.seen)
 
     def test_image_pull_backoff_fails_fast(self) -> None:
-        """ImagePullBackOff is terminal — fail without burning startup_timeout."""
+        """ImagePullBackOff is terminal - fail without burning startup_timeout."""
         router = _happy_router(
             {
                 "get pod": ok(
@@ -345,7 +345,7 @@ class TestRun:
         assert "InvalidImageName" in check.message
 
     def test_err_image_pull_transient_then_recovers(self) -> None:
-        """A single ErrImagePull poll shouldn't fail — kubelet may succeed next attempt."""
+        """A single ErrImagePull poll shouldn't fail - kubelet may succeed next attempt."""
         router = _happy_router(
             {
                 # First poll: Pending with transient ErrImagePull. Second poll: Running.
@@ -509,7 +509,7 @@ class TestRenderManifest:
 
         A previous rendering used 4-space indentation for env entries, which made
         the YAML parser treat them as additional entries in the outer `containers`
-        list — causing kubectl to reject the Pod with
+        list - causing kubectl to reject the Pod with
         `unknown field "spec.containers[1].value"`.
         """
         docs = list(yaml.safe_load_all(_render()))
@@ -548,12 +548,12 @@ class TestRenderManifest:
         assert resources["requests"]["ephemeral-storage"] == "2Gi"
         assert resources["limits"]["memory"] == "4Gi"
         assert resources["limits"]["ephemeral-storage"] == "10Gi"
-        # CPU limit intentionally absent — CFS throttling causes e2e test timeouts.
+        # CPU limit intentionally absent - CFS throttling causes e2e test timeouts.
         assert "cpu" not in resources["limits"]
 
     def test_pod_tolerates_e2e_evict_taint(self) -> None:
         """The k8s e2e suite applies ``kubernetes.io/e2e-evict-taint-key`` during
-        eviction/NodeLifecycle tests — without this toleration the conformance
+        eviction/NodeLifecycle tests - without this toleration the conformance
         pod itself can be evicted by the suite it's running. Matches sonobuoy.
         """
         docs = list(yaml.safe_load_all(_render()))
@@ -561,7 +561,7 @@ class TestRenderManifest:
         toleration_keys = {t["key"] for t in pod["spec"]["tolerations"]}
         assert "kubernetes.io/e2e-evict-taint-key" in toleration_keys
         assert "CriticalAddonsOnly" in toleration_keys
-        # Both the legacy `master` key and the post-1.24 `control-plane` key —
+        # Both the legacy `master` key and the post-1.24 `control-plane` key -
         # running this against clusters spanning that rename must not pin the
         # pod onto a control-plane node either way.
         assert "node-role.kubernetes.io/control-plane" in toleration_keys
@@ -587,7 +587,7 @@ class TestRenderManifest:
         assert resources["limits"]["ephemeral-storage"] == "20Gi"
 
     def test_yaml_special_chars_in_env_values_round_trip(self) -> None:
-        # Focus/skip regexes contain backslashes, brackets, pipes, and quotes —
+        # Focus/skip regexes contain backslashes, brackets, pipes, and quotes -
         # all YAML-special. Verify the serializer quotes them such that parsing
         # yields the original string verbatim.
         tricky = {

@@ -56,7 +56,7 @@ commands:
         phase: setup
         command: "../scripts/eks/create_node_pool.sh"
         output_schema: node_pool
-        timeout: 900 # 15 min — EKS node group join can take 5-8 min
+        timeout: 900 # 15 min - EKS node group join can take 5-8 min
         env:
           TF_AUTO_APPROVE: "true"
           TF_VAR_test_pool_name: "isv-test-pool"

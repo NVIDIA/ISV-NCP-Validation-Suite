@@ -85,7 +85,7 @@ class TestCreateKeyPairVerifiedReuse:
             create_key_pair(ec2, "k1", key_dir=tmp_path)
 
     def test_recreates_when_tagged_but_local_file_missing(self, tmp_path: Path) -> None:
-        """Tag matches but PEM missing — delete and recreate (ours, unrecoverable)."""
+        """Tag matches but PEM missing - delete and recreate (ours, unrecoverable)."""
         ec2 = MagicMock()
         ec2.describe_key_pairs.return_value = {"KeyPairs": [{"KeyName": "k1", "Tags": _ISV_TAGS}]}
         ec2.create_key_pair.return_value = {
@@ -150,7 +150,7 @@ class TestCreateSecurityGroupVerifiedReuse:
         }
 
         assert create_security_group(ec2, "vpc-1", "sg1") == "sg-existing"
-        # Did NOT authorize ingress on reuse — the rule already exists.
+        # Did NOT authorize ingress on reuse - the rule already exists.
         ec2.authorize_security_group_ingress.assert_not_called()
 
     def test_raises_on_duplicate_missing_isv_tag(self) -> None:
@@ -212,7 +212,7 @@ class TestCreateSecurityGroupVerifiedReuse:
             create_security_group(ec2, "vpc-1", "sg1")
 
     def test_raises_on_duplicate_but_describe_empty(self) -> None:
-        """API race: duplicate error but describe returns nothing — raise the
+        """API race: duplicate error but describe returns nothing - raise the
         original ClientError rather than swallow silently."""
         ec2 = MagicMock()
         ec2.create_security_group.side_effect = _client_error("InvalidGroup.Duplicate")
@@ -229,7 +229,7 @@ class TestCreateSecurityGroupVerifiedReuse:
 
 
 class TestSanitizeKeyName:
-    """sanitize_key_name — prevent path traversal when
+    """sanitize_key_name - prevent path traversal when
     ``key_name`` is composed into a filesystem path like /tmp/<name>.pem."""
 
     @pytest.mark.parametrize(
@@ -267,7 +267,7 @@ class TestSanitizeKeyName:
 
 
 class TestWaitForPublicIp:
-    """wait_for_public_ip — always poll describe_instances,
+    """wait_for_public_ip - always poll describe_instances,
     never fall back to a pre-stop value."""
 
     def test_returns_fresh_ip_on_first_poll(self) -> None:

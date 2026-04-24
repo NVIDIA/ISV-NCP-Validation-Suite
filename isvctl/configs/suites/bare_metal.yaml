@@ -170,7 +170,7 @@ tests:
           reference_id: "{{steps.launch_instance.instance_id}}"
 
     # SSH/GPU checks bound to start_instance / reboot_instance use the IP
-    # captured by describe_instance (which runs last, post-power-cycle) — the
+    # captured by describe_instance (which runs last, post-power-cycle) - the
     # IPs in start/reboot step outputs are stale on platforms that reassign
     # public IPs across power-cycle.
     start_ssh:

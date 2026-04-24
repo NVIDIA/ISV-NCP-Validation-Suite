@@ -16,7 +16,7 @@ image pins ``ginkgo`` + ``e2e.test`` to a Kubernetes release, invokes them
 through ``run_e2e.sh``, and writes a JUnit report to the results directory.
 
 The image's default entrypoint exits when the suite finishes, which would let
-the Pod transition to ``Succeeded`` — after which ``kubectl exec`` can no
+the Pod transition to ``Succeeded`` - after which ``kubectl exec`` can no
 longer enter the container to retrieve artifacts. To avoid that, we override
 the container command with a small shell wrapper that runs ``run_e2e.sh``,
 writes the exit code to ``/tmp/results/done``, and then ``sleep infinity`` so
@@ -82,7 +82,7 @@ class K8sCncfConformanceCheck(BaseValidation):
     _PROGRESS_INTERVAL = 60.0
 
     # Resource defaults chosen to keep the pod in Burstable QoS with real
-    # ephemeral-storage accounting — a BestEffort pod is the first kubelet
+    # ephemeral-storage accounting - a BestEffort pod is the first kubelet
     # evicts under node pressure, which kills long conformance runs. CPU limit
     # is intentionally omitted: CFS throttling on e2e.test causes spurious
     # test timeouts. Memory limit is generous because ginkgo + e2e.test can
@@ -185,7 +185,7 @@ class K8sCncfConformanceCheck(BaseValidation):
 
             completion_error = self._wait_for_completion(namespace, self._POD_NAME, conformance_timeout)
             if completion_error is not None:
-                # Logs may be empty if the pod is gone — fall back to events so
+                # Logs may be empty if the pod is gone - fall back to events so
                 # the report surfaces evictions / taints.
                 output = self._get_pod_logs(namespace, self._POD_NAME)
                 if not output:
@@ -220,7 +220,7 @@ class K8sCncfConformanceCheck(BaseValidation):
                 f"{summary.failed} failed, {summary.skipped} skipped"
             )
             if summary.total == 0:
-                self.set_failed(f"{msg} — no testcases parsed from JUnit output")
+                self.set_failed(f"{msg} - no testcases parsed from JUnit output")
             elif summary.failed > 0:
                 failed_names = [c.name for c in summary.cases if not c.passed and not c.skipped][:10]
                 self.set_failed(msg, output="First failures:\n" + "\n".join(failed_names))
@@ -299,7 +299,7 @@ class K8sCncfConformanceCheck(BaseValidation):
     def _wait_for_pod_running(self, namespace: str, pod_name: str, timeout: int) -> str | None:
         """Poll until the pod is Running. Return None on success, or a failure
         message explaining why startup is doomed (image pull errors, Failed
-        phase, deletion, or timeout) — the caller surfaces it via set_failed."""
+        phase, deletion, or timeout) - the caller surfaces it via set_failed."""
         deadline = time.time() + timeout
         last_progress = time.time()
         prev_transient_reason = ""
@@ -384,7 +384,7 @@ class K8sCncfConformanceCheck(BaseValidation):
     ) -> tuple[bool, str]:
         """Cat ``path`` inside the pod. Returns ``(ok, content)``.
 
-        ``quiet=True`` suppresses the warning log on failure — used for
+        ``quiet=True`` suppresses the warning log on failure - used for
         existence-polling where failure is the expected steady state until the
         file appears.
         """

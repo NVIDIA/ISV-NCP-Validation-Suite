@@ -47,7 +47,7 @@ class TestDeleteWithRetry:
         assert fn.call_count == 1
 
     def test_already_gone_is_success(self) -> None:
-        """InvalidVpcID.NotFound means end state reached — return True."""
+        """InvalidVpcID.NotFound means end state reached - return True."""
         fn = MagicMock(side_effect=_client_error("InvalidVpcID.NotFound"))
         assert delete_with_retry(fn, VpcId="vpc-gone", resource_desc="VPC") is True
         assert fn.call_count == 1
@@ -66,7 +66,7 @@ class TestDeleteWithRetry:
 
     @patch("common.errors.time.sleep")
     def test_retries_transient_client_error_then_succeeds(self, sleep: MagicMock) -> None:
-        """Throttling retries and succeeds on attempt 2 — orphan avoided."""
+        """Throttling retries and succeeds on attempt 2 - orphan avoided."""
         fn = MagicMock(side_effect=[_client_error("Throttling"), None])
         assert delete_with_retry(fn, resource_desc="VPC", backoff_seconds=0.0) is True
         assert fn.call_count == 2
@@ -108,7 +108,7 @@ class TestDeleteWithRetry:
 
     def test_non_transient_client_error_no_retry(self) -> None:
         """Non-transient codes (e.g. DependencyViolation) return False
-        immediately — no point spinning, and the caller's finally block
+        immediately - no point spinning, and the caller's finally block
         already accepts best-effort semantics."""
         fn = MagicMock(side_effect=_client_error("DependencyViolation"))
         assert delete_with_retry(fn, resource_desc="VPC", attempts=3, backoff_seconds=0.0) is False

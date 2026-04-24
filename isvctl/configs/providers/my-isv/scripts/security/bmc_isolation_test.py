@@ -13,7 +13,7 @@
 
 Verifies that BMC/IPMI/Redfish management interfaces are NOT reachable
 from tenant networks.  The test probes known BMC endpoints from a tenant
-network vantage point — all probes must fail (connection refused / timeout)
+network vantage point - all probes must fail (connection refused / timeout)
 for the test to pass.
 
 Required JSON output fields:

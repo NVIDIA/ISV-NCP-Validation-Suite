@@ -11,7 +11,7 @@
 
 """Verify BMC interfaces are not reachable from tenant networks (AWS reference).
 
-In AWS, BMC/IPMI/Redfish are inherently inaccessible from EC2 instances —
+In AWS, BMC/IPMI/Redfish are inherently inaccessible from EC2 instances -
 there is no route from tenant VPCs to the hypervisor management plane.
 This test verifies the isolation by:
 
@@ -223,7 +223,7 @@ def main() -> int:
         result["tests"]["probe_bmc_from_tenant"] = _check_route_tables_for_vpcs(ec2, vpc_ids)
         result["tests"]["probe_ipmi_port"] = {
             "passed": True,
-            "message": f"IPMI UDP 623 unreachable — no route from {len(vpc_ids)} VPCs to link-local/mgmt CIDR",
+            "message": f"IPMI UDP 623 unreachable - no route from {len(vpc_ids)} VPCs to link-local/mgmt CIDR",
         }
         result["tests"]["probe_redfish_port"] = _check_sg_no_bmc_egress_for_vpcs(ec2, vpc_ids)
         result["tests"]["reverse_path_check"] = {

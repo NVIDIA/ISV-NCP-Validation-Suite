@@ -37,7 +37,7 @@ if [ ! -f "${TF_DIR}/terraform.tfstate" ]; then
 {
   "success": true,
   "platform": "kubernetes",
-  "message": "Node pool state absent — nothing to destroy",
+  "message": "Node pool state absent - nothing to destroy",
   "resources_deleted": []
 }
 EOF

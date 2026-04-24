@@ -29,7 +29,7 @@ from isvtest.core.logger import setup_logger
 logger = setup_logger(__name__)
 
 # Container waiting reasons that kubelet only reports after it has already
-# given up retrying — callers can fast-fail instead of waiting out a timeout.
+# given up retrying - callers can fast-fail instead of waiting out a timeout.
 TERMINAL_WAITING_REASONS: frozenset[str] = frozenset(
     {
         "ImagePullBackOff",
@@ -192,7 +192,7 @@ def get_kubectl_base_shell(*args: str) -> str:
     (``subprocess.run``), use ``get_kubectl_command`` instead.
 
     With no args, returns just the provider-aware kubectl prefix. With args,
-    returns the fully composed, shell-quoted command — useful for callers
+    returns the fully composed, shell-quoted command - useful for callers
     that would otherwise re-implement the quoting inline.
     """
     return " ".join(shlex.quote(part) for part in (*get_kubectl_command(), *args))

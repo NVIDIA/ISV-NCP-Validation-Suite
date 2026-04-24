@@ -67,7 +67,7 @@ class MissingStepRefError(Exception):
     """Raised when a step arg template references an undefined step output.
 
     This happens when a {{steps.X.Y}} path cannot be resolved in the context
-    and the template has no `| default(...)` fallback — typically because an
+    and the template has no `| default(...)` fallback - typically because an
     upstream step failed or was skipped. The caller should treat this as a
     signal to skip the step rather than passing a malformed empty argument
     to the underlying command.
@@ -462,7 +462,7 @@ class StepExecutor:
           to skip, so a silent drop would mask a real bug.
         * If the template uses ``default(...)`` or is a pure Jinja
           conditional (no ``steps.*`` reference), the empty result is
-          dropped from the argv — this is the explicit contract that
+          dropped from the argv - this is the explicit contract that
           supports "optional flag" YAML patterns like::
 
               args:
@@ -509,7 +509,7 @@ class StepExecutor:
                     continue
 
                 # Empty result: distinguish "explicit default(''/None)" from
-                # "silently-missing step output". The latter is an error —
+                # "silently-missing step output". The latter is an error -
                 # surface it so the caller can skip the step cleanly instead
                 # of invoking the command with a stripped-out required arg.
                 if "default(" in arg:

@@ -57,7 +57,7 @@ def _check_vpc_endpoints_private(endpoints: list[dict[str, Any]]) -> dict[str, A
 
     public_endpoints = []
     for ep in endpoints:
-        # Gateway endpoints (S3, DynamoDB) are fine — they route via
+        # Gateway endpoints (S3, DynamoDB) are fine - they route via
         # the VPC route table, not a public IP.  Interface endpoints
         # are private by design.  Flag only if a custom endpoint uses
         # a public DNS name without private DNS enabled.
@@ -179,7 +179,7 @@ def main() -> int:
     }
 
     # AWS service APIs (EC2, S3, etc.) reach regional HTTPS SDK endpoints, not
-    # routable "public management IPs" — the real risk is EKS/API endpoints with
+    # routable "public management IPs" - the real risk is EKS/API endpoints with
     # public access enabled.
     result["tests"]["probe_api_from_public"] = {
         "passed": True,

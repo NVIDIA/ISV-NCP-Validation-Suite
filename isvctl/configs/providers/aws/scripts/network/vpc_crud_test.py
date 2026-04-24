@@ -242,7 +242,7 @@ def main() -> int:
     except Exception as e:
         result["error"] = str(e)
     finally:
-        # Cleanup if VPC still exists — retry on transient errors so a
+        # Cleanup if VPC still exists - retry on transient errors so a
         # connection reset or throttle doesn't leak the test VPC.
         if vpc_id:
             delete_with_retry(

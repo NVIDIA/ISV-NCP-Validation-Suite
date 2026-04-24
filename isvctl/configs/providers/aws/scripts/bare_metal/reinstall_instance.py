@@ -241,7 +241,7 @@ def main() -> int:
         result["private_ip"] = instance.get("PrivateIpAddress")
 
         # Poll for the fresh public IP; do not fall back to a caller-supplied
-        # value — IPs are released on stop on NCPs and would be stale.
+        # value - IPs are released on stop on NCPs and would be stale.
         public_ip = instance.get("PublicIpAddress") or wait_for_public_ip(ec2, args.instance_id)
         if not public_ip:
             result["error"] = "Instance has no public IP after reinstall (timed out polling)"

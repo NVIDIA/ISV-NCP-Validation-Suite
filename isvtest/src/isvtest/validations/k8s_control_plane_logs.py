@@ -82,7 +82,7 @@ class K8sControlPlaneLogsCheck(BaseValidation):
         if raw_components is None:
             components = list(_DEFAULT_COMPONENTS)
         elif not isinstance(raw_components, (list, tuple)):
-            # str falls through here too — `isinstance("foo", (list, tuple))` is False —
+            # str falls through here too - `isinstance("foo", (list, tuple))` is False -
             # which stops YAML scalars from being iterated character-by-character.
             self.set_failed(
                 f"`components` must be a YAML list, got {type(raw_components).__name__}: "
@@ -152,7 +152,7 @@ class K8sControlPlaneLogsCheck(BaseValidation):
         """Resolve each component to a ``(component, path, target)`` triple.
 
         In ``auto`` mode we try kubectl first per-component and fall through
-        to ``commands[component]`` when the pod isn't present — this covers
+        to ``commands[component]`` when the pod isn't present - this covers
         hybrid clusters where some components are static pods and others are
         managed externally.
         """
@@ -185,13 +185,13 @@ class K8sControlPlaneLogsCheck(BaseValidation):
 
         # Auto mode: a probe_error means kubectl itself failed (kubeconfig,
         # RBAC, or context), not "no matching pods". Don't mask that by
-        # falling through to commands for every component — the operator
+        # falling through to commands for every component - the operator
         # needs to see the access failure and explicitly choose `mode: command`.
         if mode == "auto" and probe_error is not None:
             self.set_failed(
                 f"Unable to list pods in namespace {namespace!r} (kubectl error: "
                 f"{probe_error}). Auto mode cannot verify which components should "
-                f"use kubectl vs. commands — fix cluster access or set "
+                f"use kubectl vs. commands - fix cluster access or set "
                 f"`mode: command` to use the `commands` mapping explicitly."
             )
             return None
@@ -235,7 +235,7 @@ class K8sControlPlaneLogsCheck(BaseValidation):
             self.set_failed(
                 f"Unable to list pods in namespace {namespace!r} (kubectl "
                 f"error: {probe_error}). Cannot decide between kubectl and "
-                f"command paths — fix cluster access or set `mode: command` "
+                f"command paths - fix cluster access or set `mode: command` "
                 f"with a `commands` mapping."
             )
             return
@@ -322,7 +322,7 @@ class K8sControlPlaneLogsCheck(BaseValidation):
         """Return ``({component: pod_name}, probe_error)`` for the namespace.
 
         Resolution runs from a single ``kubectl get pods`` call that emits
-        ``<pod_name>\\t<component_label>`` per line — label matching and
+        ``<pod_name>\\t<component_label>`` per line - label matching and
         the name-prefix fallback are both resolved client-side from that
         one response, so the cost is one round-trip regardless of how
         many components are requested.
@@ -353,7 +353,7 @@ class K8sControlPlaneLogsCheck(BaseValidation):
 
         # Pass 1: exact ``component`` label match. On HA control planes a
         # component may have multiple replicas (e.g. 3 kube-apiservers);
-        # we intentionally pick the first pod kubectl returns — one log
+        # we intentionally pick the first pod kubectl returns - one log
         # sample is enough for this check, and probing every replica
         # would multiply round-trips without changing pass/fail.
         for component in components:

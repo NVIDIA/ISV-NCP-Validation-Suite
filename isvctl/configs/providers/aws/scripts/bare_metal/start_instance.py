@@ -119,7 +119,7 @@ def main() -> int:
         result["private_ip"] = instance.get("PrivateIpAddress")
 
         # Poll for the fresh public IP rather than fall back to the
-        # pre-stop value — safe on AWS but silently stale on NCPs that
+        # pre-stop value - safe on AWS but silently stale on NCPs that
         # release the ephemeral IP on stop.
         fresh_ip = instance.get("PublicIpAddress") or wait_for_public_ip(ec2, args.instance_id)
         if not fresh_ip:

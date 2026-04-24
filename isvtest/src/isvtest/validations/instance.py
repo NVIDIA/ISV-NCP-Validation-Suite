@@ -80,7 +80,7 @@ class InstanceRebootCheck(BaseValidation):
         state: Instance state after reboot
         ssh_ready: Whether SSH is accessible after reboot
         uptime_seconds: System uptime after reboot
-        reboot_confirmed: Whether uptime comparison confirms reboot — REQUIRED True
+        reboot_confirmed: Whether uptime comparison confirms reboot - REQUIRED True
     """
 
     description: ClassVar[str] = "Check instance rebooted successfully"

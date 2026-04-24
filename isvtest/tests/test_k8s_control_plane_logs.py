@@ -166,7 +166,7 @@ class TestAutoDispatch:
 
     def test_auto_surfaces_kubectl_error_even_when_commands_cover_all_components(self) -> None:
         """A probe failure (kubeconfig/RBAC/context broken) must not be
-        masked by falling through to commands for every component — the
+        masked by falling through to commands for every component - the
         operator needs to know cluster access is broken."""
         check = K8sControlPlaneLogsCheck(
             config={
@@ -338,7 +338,7 @@ class TestKubectlPath:
 
         def fake(cmd: str, *a: Any, **kw: Any) -> CommandResult:
             if "get pods" in cmd:
-                # No component labels set — fallback must kick in.
+                # No component labels set - fallback must kick in.
                 return _ok(stdout=_pod_list(("kube-apiserver-node1", ""), ("coredns-abc", "")))
             if "logs kube-apiserver-node1" in cmd:
                 return _ok(stdout="logged\n")
@@ -398,7 +398,7 @@ class TestKubectlPath:
 
         def fake(cmd: str, *a: Any, **kw: Any) -> CommandResult:
             if "get pods" in cmd:
-                # No component labels — forces pure name-prefix fallback.
+                # No component labels - forces pure name-prefix fallback.
                 return _ok(
                     stdout=_pod_list(
                         ("kube-scheduler-extender-abc", ""),

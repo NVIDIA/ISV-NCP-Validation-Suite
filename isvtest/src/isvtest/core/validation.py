@@ -35,7 +35,7 @@ def check_required_tests(
     """Check that step_output.tests contains every required key with passed=True.
 
     Sets failed on the validation if tests are missing or any required key did
-    not pass. On success, returns True without setting passed — the caller is
+    not pass. On success, returns True without setting passed - the caller is
     expected to call ``set_passed`` with a context-appropriate message.
     """
     step_output = validation.config.get("step_output", {})

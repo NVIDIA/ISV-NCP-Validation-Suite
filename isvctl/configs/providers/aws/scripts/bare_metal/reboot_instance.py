@@ -164,7 +164,7 @@ def main() -> int:
         result["private_ip"] = instance.get("PrivateIpAddress")
 
         # Poll for the fresh public IP. Dropping `or args.public_ip`
-        # fallback — safe on AWS, stale on NCPs that release on stop.
+        # fallback - safe on AWS, stale on NCPs that release on stop.
         public_ip = instance.get("PublicIpAddress") or wait_for_public_ip(ec2, args.instance_id)
         if not public_ip:
             result["error"] = "Instance has no public IP after reboot (timed out polling)"
@@ -199,7 +199,7 @@ def main() -> int:
 
         # Compare the host's current boot time against when we issued the
         # reboot API call. If the boot timestamp is later, the kernel booted
-        # after our request — affirmative reboot proof that doesn't depend
+        # after our request - affirmative reboot proof that doesn't depend
         # on having a pre-reboot uptime sample.
         boot_started_at = time.time() - post_uptime
         if boot_started_at >= reboot_requested_at:

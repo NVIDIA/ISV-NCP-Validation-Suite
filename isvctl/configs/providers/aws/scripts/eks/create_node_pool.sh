@@ -69,7 +69,7 @@ TAINTS_JSON="${TF_VAR_test_pool_taints_json:-[]}"
 NODE_TYPE="${TF_VAR_test_pool_node_type:-cpu}"
 ACTION="${NODE_POOL_ACTION:-Creating}"
 
-# Validate JSON inputs up front with clear error messages — TF's own errors
+# Validate JSON inputs up front with clear error messages - TF's own errors
 # for malformed HCL vars are hard to read.
 echo "${INSTANCE_TYPES_JSON}" | jq -e 'type == "array"' > /dev/null \
     || { echo "Error: TF_VAR_test_pool_instance_types must be a JSON array" >&2; exit 1; }
@@ -122,7 +122,7 @@ else
 fi
 
 # Read what Terraform actually created. expected_taints comes back with
-# Kubernetes effect spelling — the validation compares directly against
+# Kubernetes effect spelling - the validation compares directly against
 # kubectl, so no further translation is needed.
 TF_OUT_NODE_POOL_NAME=$(terraform output -raw node_pool_name)
 TF_OUT_LABEL_SELECTOR=$(terraform output -raw label_selector)

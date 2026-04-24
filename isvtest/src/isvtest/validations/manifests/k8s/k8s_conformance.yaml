@@ -46,7 +46,7 @@ spec:
     kubernetes.io/os: linux
   # Tolerate control-plane taints (legacy `master` + post-1.24 `control-plane`),
   # CriticalAddonsOnly, and the taint the k8s e2e suite itself applies during
-  # eviction tests — without the last one the conformance pod can be evicted
+  # eviction tests - without the last one the conformance pod can be evicted
   # by the suite it is running.
   tolerations:
     - key: node-role.kubernetes.io/master
@@ -64,7 +64,7 @@ spec:
       image: PLACEHOLDER_IMAGE
       imagePullPolicy: IfNotPresent
       # The image entrypoint exits when the suite finishes, which would let the
-      # Pod transition to Succeeded — after which kubectl exec can no longer
+      # Pod transition to Succeeded - after which kubectl exec can no longer
       # enter the container to retrieve artifacts. Wrap run_e2e.sh so we record
       # the exit code and keep the container Running for artifact retrieval.
       command: ["/bin/sh", "-c"]

@@ -125,12 +125,12 @@ class K8sApiNetworkAclCheck(BaseValidation):
             )
             return None
         raw = result.stdout.strip()
-        # jsonpath with two missing components renders as ":" — treat that as
+        # jsonpath with two missing components renders as ":" - treat that as
         # "endpoint not populated yet" rather than a valid host:port.
         if not raw or raw == ":":
             self.set_failed(
                 f"Cluster {cluster_name!r} in namespace {namespace!r} has no "
-                f"`spec.controlPlaneEndpoint` populated — the control plane "
+                f"`spec.controlPlaneEndpoint` populated - the control plane "
                 f"has not yet been provisioned, or this infra provider does "
                 f"not surface the endpoint here. Set "
                 f"`require_endpoint_info: false` if this is expected."
@@ -142,7 +142,7 @@ class K8sApiNetworkAclCheck(BaseValidation):
         """Run the authorized baseline probe and report failure on non-zero exit.
 
         Returns ``True`` if the probe succeeded, or ``False`` after calling
-        ``set_failed`` — a failing baseline makes the unauthorized-probe result
+        ``set_failed`` - a failing baseline makes the unauthorized-probe result
         ambiguous, so the check must stop before interpreting it.
         """
         result = self.run_command(authorized_probe_cmd, timeout=probe_timeout)
@@ -199,6 +199,6 @@ class K8sApiNetworkAclCheck(BaseValidation):
 
         self.set_passed(
             f"API endpoint{endpoint_clause} blocked the unauthorized probe "
-            f"(exit={result.exit_code}) and served the authorized probe — network "
+            f"(exit={result.exit_code}) and served the authorized probe - network "
             f"ACL verified."
         )

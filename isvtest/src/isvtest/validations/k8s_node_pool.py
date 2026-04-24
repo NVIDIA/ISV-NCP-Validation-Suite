@@ -46,18 +46,18 @@ class K8sNodePoolCheck(BaseValidation):
 
     Config keys (populated from the provisioning step's JSON output):
 
-    * ``label_selector`` — kubectl label selector identifying the new nodes
+    * ``label_selector`` - kubectl label selector identifying the new nodes
       (e.g. ``eks.amazonaws.com/nodegroup=isv-test-pool``). Required.
-    * ``expected_replicas`` — node count that must reach Ready. Required.
-    * ``expected_labels`` — mapping or JSON string; subset check per node.
-    * ``expected_taints`` — list of ``{key, value, effect}`` or JSON string;
+    * ``expected_replicas`` - node count that must reach Ready. Required.
+    * ``expected_labels`` - mapping or JSON string; subset check per node.
+    * ``expected_taints`` - list of ``{key, value, effect}`` or JSON string;
       subset check per node.
-    * ``expected_instance_types`` — list of instance type strings or JSON
+    * ``expected_instance_types`` - list of instance type strings or JSON
       string; each node's type must be in this set.
-    * ``node_type`` — informational ``"cpu"`` or ``"gpu"`` tag surfaced in
+    * ``node_type`` - informational ``"cpu"`` or ``"gpu"`` tag surfaced in
       the result message.
-    * ``wait_timeout`` — seconds to wait for nodes to reach Ready (default 600).
-    * ``poll_interval`` — seconds between polls (default 5).
+    * ``wait_timeout`` - seconds to wait for nodes to reach Ready (default 600).
+    * ``poll_interval`` - seconds between polls (default 5).
 
     The label-check, taint-check, and instance-type-check are each skipped
     when their corresponding ``expected_*`` config is empty, so callers can

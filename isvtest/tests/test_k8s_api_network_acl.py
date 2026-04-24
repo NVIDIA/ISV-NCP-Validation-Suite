@@ -117,7 +117,7 @@ class TestEndpointRead:
 
     def test_empty_endpoint_rejected(self) -> None:
         """A resource with no ``controlPlaneEndpoint`` renders as ``:`` under
-        the jsonpath format string — the check must refuse rather than
+        the jsonpath format string - the check must refuse rather than
         treating it as a valid host:port."""
         check = K8sApiNetworkAclCheck(config=_minimal_config())
 
@@ -133,7 +133,7 @@ class TestEndpointRead:
 
     def test_cluster_read_skipped_when_require_endpoint_info_false(self) -> None:
         """When the operator opts out, the cluster-read is skipped entirely
-        so probes are the only source of truth — needed for non-CAPI
+        so probes are the only source of truth - needed for non-CAPI
         providers where the Cluster CRD doesn't exist."""
         check = K8sApiNetworkAclCheck(config=_minimal_config(require_endpoint_info=False))
         observed: list[str] = []
@@ -174,7 +174,7 @@ class TestEndpointRead:
 class TestAuthorizedProbe:
     def test_authorized_failure_aborts_with_baseline_message(self) -> None:
         """A failing authorized probe means the API is unreachable even from
-        an allow-listed source. We can't then assert anything about ACLs —
+        an allow-listed source. We can't then assert anything about ACLs -
         a failing unauthorized probe could equally mean 'ACL works' or
         'API dead'. The check must refuse to guess."""
         check = K8sApiNetworkAclCheck(config=_minimal_config())
@@ -243,7 +243,7 @@ class TestUnauthorizedProbe:
         assert "exit=7" in check.message
 
     def test_passes_when_unauthorized_probe_times_out(self) -> None:
-        """A timeout surfaces as a non-zero exit from the runner — that must
+        """A timeout surfaces as a non-zero exit from the runner - that must
         count as a valid 'blocked' outcome identical to connection refused."""
         check = K8sApiNetworkAclCheck(config=_minimal_config())
 
@@ -286,7 +286,7 @@ class TestUnauthorizedProbe:
         assert "no network ACL is in place" in check.message
 
     def test_fails_when_unauthorized_probe_command_not_found(self) -> None:
-        """Exit 127 (command not found) must not be mistaken for an enforced ACL —
+        """Exit 127 (command not found) must not be mistaken for an enforced ACL -
         a broken probe would otherwise produce a false pass."""
         check = K8sApiNetworkAclCheck(config=_minimal_config())
 

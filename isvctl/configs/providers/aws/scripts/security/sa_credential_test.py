@@ -112,7 +112,7 @@ def main() -> int:
             aws_secret_access_key=secret_key,
         )
 
-        # IAM is eventually consistent — new keys can take 15-30s to
+        # IAM is eventually consistent - new keys can take 15-30s to
         # propagate to STS.  Retry with exponential backoff capped at 8s
         # (2, 4, 8, 8, 8, 8, 8 = 46s total worst case before final attempt).
         max_attempts = 8

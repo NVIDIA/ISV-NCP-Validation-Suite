@@ -37,7 +37,7 @@ from botocore.exceptions import (
 
 from common.errors import TRANSIENT_AWS_CODES
 
-# Conservative key-name pattern — letters, digits, dash, underscore, dot.
+# Conservative key-name pattern - letters, digits, dash, underscore, dot.
 # Deliberately excludes '/' and '..' to prevent path traversal when the
 # name is composed into a filesystem path like /tmp/{key_name}.pem
 # Length cap matches EC2's 255-char limit.
@@ -114,14 +114,14 @@ def wait_for_public_ip(
         except ClientError as e:
             # Only swallow throttling / server-side transient codes. Terminal
             # errors (InvalidInstanceID.NotFound, AuthFailure, AccessDenied)
-            # must surface — hiding them behind the timeout makes bad configs
+            # must surface - hiding them behind the timeout makes bad configs
             # look like slow IP assignment.
             code = e.response.get("Error", {}).get("Code", "")
             if code not in TRANSIENT_AWS_CODES:
                 raise
             print(f"Warning: describe_instances transient error ({code}): {e}", file=sys.stderr)
         except (EndpointConnectionError, ConnectTimeoutError, ReadTimeoutError, ConnectionClosedError) as e:
-            # Transport-level failures only — non-network BotoCoreErrors (e.g.
+            # Transport-level failures only - non-network BotoCoreErrors (e.g.
             # ParamValidationError, NoCredentialsError) should not be swallowed.
             print(f"Warning: describe_instances network error: {e}", file=sys.stderr)
         if time.monotonic() >= deadline:
@@ -247,21 +247,21 @@ def create_key_pair(
 
     key_path = key_dir / f"{key_name}.pem"
 
-    # Check if key already exists — verify shape before reusing.
+    # Check if key already exists - verify shape before reusing.
     try:
         describe = ec2.describe_key_pairs(KeyNames=[key_name])
         existing = describe.get("KeyPairs", [{}])[0]
         if not _has_isv_tag(existing.get("Tags")):
             raise RuntimeError(
                 f"key pair {key_name!r} already exists on AWS but is not tagged "
-                "CreatedBy=isvtest — refusing to adopt a resource this suite "
+                "CreatedBy=isvtest - refusing to adopt a resource this suite "
                 "did not create. Either "
                 "delete it manually or use a different --key-name."
             )
-        # Tag matches — verified reuse. If we have the file locally, reuse it.
+        # Tag matches - verified reuse. If we have the file locally, reuse it.
         if key_path.exists() and key_path.stat().st_size > 0:
             return str(key_path)
-        # Tag matches but local PEM is missing/empty — ours but unrecoverable;
+        # Tag matches but local PEM is missing/empty - ours but unrecoverable;
         # safe to delete and recreate.
         ec2.delete_key_pair(KeyName=key_name)
     except ClientError as e:
@@ -323,7 +323,7 @@ def create_security_group(
 
     Reuse is explicit and verified: if a security group with the same name
     already exists in the VPC, we describe it and verify the invariants the
-    caller expects — CreatedBy=isvtest tag, description match, and the
+    caller expects - CreatedBy=isvtest tag, description match, and the
     required SSH ingress rule. If any differs, raise rather than silently
     adopt a resource whose shape may not match what the caller needs.
 
@@ -384,19 +384,19 @@ def create_security_group(
             ]
         )
         if not sgs["SecurityGroups"]:
-            # Duplicate error claims it exists but describe can't find it —
+            # Duplicate error claims it exists but describe can't find it -
             # propagate the original error rather than silently swallow.
             raise
 
         existing = sgs["SecurityGroups"][0]
         sg_id = existing["GroupId"]
 
-        # Verified-reuse checks — any mismatch raises rather than silently
+        # Verified-reuse checks - any mismatch raises rather than silently
         # adopting a resource whose shape we didn't enforce.
         if not _has_isv_tag(existing.get("Tags")):
             raise RuntimeError(
                 f"security group {name!r} in VPC {vpc_id} already exists but is not tagged "
-                "CreatedBy=isvtest — refusing to adopt a resource this suite did not "
+                "CreatedBy=isvtest - refusing to adopt a resource this suite did not "
                 "create."
             )
         if existing.get("Description") != description:
@@ -407,7 +407,7 @@ def create_security_group(
         if not _sg_has_ssh_rule(existing.get("IpPermissions")):
             raise RuntimeError(
                 f"security group {name!r} ({sg_id}) exists but is missing the required "
-                "SSH ingress rule (tcp/22 from 0.0.0.0/0) — refusing to reuse."
+                "SSH ingress rule (tcp/22 from 0.0.0.0/0) - refusing to reuse."
             )
         print(f"Reusing verified security group: {sg_id}", file=sys.stderr)
         return sg_id

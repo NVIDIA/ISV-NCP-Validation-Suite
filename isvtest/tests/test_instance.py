@@ -32,7 +32,7 @@ def _reboot_output(**overrides: Any) -> dict[str, Any]:
 
 
 class TestInstanceRebootCheck:
-    """Tests for InstanceRebootCheck — the check must require an affirmative
+    """Tests for InstanceRebootCheck - the check must require an affirmative
     ``reboot_confirmed: True`` rather than treating absence as success."""
 
     def test_passes_with_affirmative_confirmation(self) -> None:
@@ -51,7 +51,7 @@ class TestInstanceRebootCheck:
         assert "not affirmatively confirmed" in result["error"]
 
     def test_fails_when_reboot_confirmed_none(self) -> None:
-        """Explicit None must FAIL — same semantic as absent."""
+        """Explicit None must FAIL - same semantic as absent."""
         v = InstanceRebootCheck(config={"step_output": _reboot_output(reboot_confirmed=None)})
         result = v.execute()
         assert result["passed"] is False

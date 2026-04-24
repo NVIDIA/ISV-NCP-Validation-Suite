@@ -30,7 +30,7 @@ from botocore.exceptions import (
 
 logger = logging.getLogger(__name__)
 
-# AWS error codes that indicate the resource is already gone — treat as success
+# AWS error codes that indicate the resource is already gone - treat as success
 # in cleanup paths since the desired end state (resource absent) is reached.
 ALREADY_GONE_CODES: frozenset[str] = frozenset(
     {
@@ -51,7 +51,7 @@ ALREADY_GONE_CODES: frozenset[str] = frozenset(
     }
 )
 
-# Transient AWS error codes — safe to retry after backoff.
+# Transient AWS error codes - safe to retry after backoff.
 TRANSIENT_AWS_CODES: frozenset[str] = frozenset(
     {
         "RequestLimitExceeded",
@@ -118,7 +118,7 @@ def delete_with_retry(
     attempt delete leaks resources whenever a transient error fires
     (e.g. throttling, endpoint connection resets, service unavailable).
 
-    Already-gone errors (``Invalid*.NotFound`` etc.) count as success — the
+    Already-gone errors (``Invalid*.NotFound`` etc.) count as success - the
     desired end state is reached. Non-transient errors are logged and
     return ``False`` without retry.
 
@@ -134,7 +134,7 @@ def delete_with_retry(
     Returns:
         True if the call succeeded or the resource was already gone;
         False if all attempts exhausted or a non-transient error was raised.
-        Never raises — failures are logged by the caller, which is expected to
+        Never raises - failures are logged by the caller, which is expected to
         reason about the returned ``False`` (e.g., record as orphan for later cleanup).
     """
     last_error: Exception | None = None

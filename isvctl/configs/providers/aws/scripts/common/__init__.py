@@ -10,8 +10,8 @@
 
 """Shared Python utilities for AWS stub scripts.
 
-Every AWS script reaches this package via a single ``sys.path`` entry —
-``providers/aws/scripts/`` — so ``from common.X import Y`` resolves
+Every AWS script reaches this package via a single ``sys.path`` entry -
+``providers/aws/scripts/`` - so ``from common.X import Y`` resolves
 without any namespace-package juggling. Modules:
 
 - ``ec2``: key pair / security group / public IP helpers

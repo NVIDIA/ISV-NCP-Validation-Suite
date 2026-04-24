@@ -312,8 +312,8 @@ KUBECONFIG_PATH="${KUBECONFIG:-$HOME/.kube/config}"
 # pre-existing clusters (the Terraform apply is skipped when the cluster
 # already exists, so we can't rely on Terraform outputs here).
 #
-# EFS satisfies both shared-filesystem (RWX) and NFS semantics — the AWS EFS
-# CSI driver mounts via NFSv4.1 — so when efs.csi.aws.com is installed we
+# EFS satisfies both shared-filesystem (RWX) and NFS semantics - the AWS EFS
+# CSI driver mounts via NFSv4.1 - so when efs.csi.aws.com is installed we
 # surface the same StorageClass under both keys.
 
 BLOCK_SC=$(kubectl get sc -o json 2>/dev/null \

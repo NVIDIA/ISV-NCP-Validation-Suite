@@ -205,7 +205,7 @@ def render_k8s_manifest(
     """Load a multi-doc YAML manifest, apply ``mutate`` to each doc, and serialize it back.
 
     The manifest file must contain valid, parseable YAML with sensible default
-    values — callers mutate the parsed objects rather than templating strings.
+    values - callers mutate the parsed objects rather than templating strings.
     This keeps manifests readable in isolation and avoids quoting / escaping
     pitfalls of ``str.replace``-style substitution.
 

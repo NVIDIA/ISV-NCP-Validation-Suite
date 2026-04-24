@@ -57,7 +57,7 @@ class _FakeProc:
 
 
 class _FakeClock:
-    """Tiny fake clock — advances on each ``sleep`` call.
+    """Tiny fake clock - advances on each ``sleep`` call.
 
     Used to keep poll loops from burning real wall-clock time under mocked
     ``run_command`` / ``subprocess.run``: without it, patching only ``time.sleep``
@@ -93,7 +93,7 @@ def _patched_clock() -> Any:
 
 
 class TestSetPvcFields:
-    """Tests for ``_set_pvc_fields`` — the in-memory manifest mutator."""
+    """Tests for ``_set_pvc_fields`` - the in-memory manifest mutator."""
 
     def _base_doc(self) -> dict[str, Any]:
         return {
@@ -434,7 +434,7 @@ class TestK8sCsiStorageTypesCheck:
 
 
 class TestSetResourceQuotaFields:
-    """Tests for ``_set_resourcequota_fields`` — the in-memory manifest mutator."""
+    """Tests for ``_set_resourcequota_fields`` - the in-memory manifest mutator."""
 
     def _base_doc(self) -> dict[str, Any]:
         return {
@@ -1320,7 +1320,7 @@ class TestK8sCsiTenantScopedCredentialsCheck:
         we can exercise top-level error paths (e.g. ``"get csidriver"``,
         ``"get pv -o"``). ``secrets_by_ref`` maps (namespace, name) to a
         Secret object; a value of ``None`` simulates a Forbidden fetch.
-        ``missing_secret_refs`` simulates a Secret that does not exist —
+        ``missing_secret_refs`` simulates a Secret that does not exist -
         with ``--ignore-not-found=true`` kubectl returns rc=0 and empty
         stdout, which maps to the check's ``"missing"`` status.
         """
@@ -1475,7 +1475,7 @@ class TestK8sCsiTenantScopedCredentialsCheck:
                 volumes=[{"name": "plugin-dir", "hostPath": {"path": "/var/lib/kubelet/plugins"}}],
             )
         ]
-        # PV references a Secret in the "default" namespace — a workload ns.
+        # PV references a Secret in the "default" namespace - a workload ns.
         pvs = [_pv_with_csi_secrets(secret_namespace="default", secret_name="exposed-creds")]
         with patch.object(
             check,
@@ -1612,7 +1612,7 @@ class TestK8sCsiTenantScopedCredentialsCheck:
     def test_no_node_plugin_skips_mount_check(self) -> None:
         check = self._make({})
         csi_drivers = [{"kind": "CSIDriver", "metadata": {"name": "x"}}]
-        # Only a controller pod — no node-plugin.
+        # Only a controller pod - no node-plugin.
         pods = [
             _pod(
                 name="csi-controller",
@@ -1687,7 +1687,7 @@ class TestK8sCsiTenantScopedCredentialsCheck:
         # Realistic EKS EFS controller: the driver container sits alongside
         # the csi-provisioner sidecar that makes this pod recognisable as a
         # CSI controller. The aws-secret envFrom on the controller is
-        # optional — omitted on clusters using IRSA.
+        # optional - omitted on clusters using IRSA.
         pods = [
             _pod(
                 name="efs-csi-controller",
@@ -1747,7 +1747,7 @@ class TestK8sCsiTenantScopedCredentialsCheck:
 
 
 class TestSetPvFields:
-    """Tests for ``_set_pv_fields`` — the static PV mutator."""
+    """Tests for ``_set_pv_fields`` - the static PV mutator."""
 
     def _base_doc(self) -> dict[str, Any]:
         return {
@@ -1802,7 +1802,7 @@ class TestSetPvFields:
 
 
 class TestSetMountPodFields:
-    """Tests for ``_set_mount_pod_fields`` — the BusyBox mount-pod mutator."""
+    """Tests for ``_set_mount_pod_fields`` - the BusyBox mount-pod mutator."""
 
     def _base_doc(self) -> dict[str, Any]:
         return {

@@ -203,7 +203,7 @@ tests:
     # `node_pool` JSON payload that seeds the expected shape below; labels,
     # taints, and instance types come across as JSON strings so Jinja
     # string rendering doesn't mangle the structure, and K8sNodePoolCheck
-    # json-parses them. The check is listed twice — once per operation —
+    # json-parses them. The check is listed twice - once per operation -
     # so list form is required (dict form would collide on the class name).
     k8s_node_pools:
       - K8sNodePoolCheck:
@@ -266,7 +266,7 @@ tests:
           # operator supplies two shell commands:
           #   - authorized_probe_cmd: a command expected to SUCCEED (e.g.
           #     a kubectl call from an allow-listed admin host). Serves as
-          #     a baseline — without it, a failing unauthorized probe is
+          #     a baseline - without it, a failing unauthorized probe is
           #     ambiguous (ACL works vs. API is down).
           #   - unauthorized_probe_cmd: a command expected to FAIL or time
           #     out (e.g. curling the endpoint via SSH on an external host

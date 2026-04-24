@@ -12,17 +12,17 @@
 
 Implements:
 
-* :class:`K8sCsiStorageTypesCheck` — verify the cluster exposes a
+* :class:`K8sCsiStorageTypesCheck` - verify the cluster exposes a
   StorageClass for each of block / shared filesystem / NFS storage and that
   a PVC binds against each configured class.
-* :class:`K8sCsiStorageQuotaApiCheck` — verify Kubernetes-native
+* :class:`K8sCsiStorageQuotaApiCheck` - verify Kubernetes-native
   APIs expose storage quota and per-PVC/PV usage.
-* :class:`K8sCsiTenantScopedCredentialsCheck` — verify CSI
+* :class:`K8sCsiTenantScopedCredentialsCheck` - verify CSI
   credentials are tenant-scoped "by construction" by inspecting in-cluster
   observable state (Secret namespaces, labels, ServiceAccount RBAC, and
   node-plugin volume topology). Does not prove cross-cluster isolation from
   the outside.
-* :class:`K8sCsiProvisioningModesCheck` — verify CSI supports
+* :class:`K8sCsiProvisioningModesCheck` - verify CSI supports
   both dynamic and static provisioning, driving each through a real mount
   + canary-file write/read inside a BusyBox pod.
 """
@@ -135,8 +135,8 @@ class K8sCsiStorageTypesCheck(BaseValidation):
 
     For each configured storage type, two subtests run:
 
-    * ``sc-exists[<type>]`` — the named StorageClass is visible to kubectl.
-    * ``pvc-binds[<type>]`` — a fresh PVC against that StorageClass reaches
+    * ``sc-exists[<type>]`` - the named StorageClass is visible to kubectl.
+    * ``pvc-binds[<type>]`` - a fresh PVC against that StorageClass reaches
       ``Bound`` within ``bind_timeout_s``. A BusyBox consumer pod is
       scheduled alongside the PVC so this also works for StorageClasses
       with ``volumeBindingMode: WaitForFirstConsumer`` (the default for
@@ -370,17 +370,17 @@ class K8sCsiStorageQuotaApiCheck(BaseValidation):
 
     Four subtests run against a single ephemeral namespace:
 
-    * ``resourcequota-storage-api`` — a ResourceQuota carrying both
+    * ``resourcequota-storage-api`` - a ResourceQuota carrying both
       ``requests.storage`` and
       ``<sc>.storageclass.storage.k8s.io/requests.storage`` lands and its
       ``.status.hard`` publishes both keys.
-    * ``per-pvc-usage`` — a PVC against the configured StorageClass binds
+    * ``per-pvc-usage`` - a PVC against the configured StorageClass binds
       (via a BusyBox consumer pod so this works under
       ``WaitForFirstConsumer``), exposes ``.status.capacity.storage``, and
       its usage is reflected in the ResourceQuota's ``.status.used``.
-    * ``quota-enforcement`` — an over-quota PVC is rejected at admission
+    * ``quota-enforcement`` - an over-quota PVC is rejected at admission
       with an ``exceeded quota`` / ``forbidden`` message.
-    * ``pv-usage-api`` — the bound PV exposes ``.spec.capacity.storage``,
+    * ``pv-usage-api`` - the bound PV exposes ``.spec.capacity.storage``,
       ``.spec.claimRef.name`` matching the usage PVC, and
       ``.spec.csi.driver``.
 
@@ -766,7 +766,7 @@ class K8sCsiStorageQuotaApiCheck(BaseValidation):
         """Poll ``ResourceQuota.status.<section>`` until every ``required_keys`` entry appears.
 
         Returns the section dict once fully populated, or ``None`` on timeout
-        / parse failure. Keys are compared verbatim — the caller is
+        / parse failure. Keys are compared verbatim - the caller is
         responsible for passing the concrete per-StorageClass key name.
         """
         deadline = time.time() + timeout_s
@@ -859,25 +859,25 @@ class K8sCsiTenantScopedCredentialsCheck(BaseValidation):
 
     This check inspects in-cluster observable state only; it does **not**
     attempt any cross-cluster exfiltration, and so cannot prove isolation
-    between tenants from the outside — that is tracked separately.
+    between tenants from the outside - that is tracked separately.
 
     Five subtests run (all must pass):
 
-    * ``csi-secrets-discovered`` — enumerate CSI drivers and discover the
+    * ``csi-secrets-discovered`` - enumerate CSI drivers and discover the
       Secrets they reference via ``PersistentVolume.spec.csi.*SecretRef``
       and via CSI controller/node pod specs (``envFrom``, ``env.valueFrom``,
       Secret volume mounts). Skipped when no ``CSIDriver`` objects exist.
-    * ``secrets-not-cross-namespace`` — every discovered Secret lives in
+    * ``secrets-not-cross-namespace`` - every discovered Secret lives in
       ``csi_driver_namespaces`` (or ``allowed_workload_namespaces``), never
       in ``default`` or an unlisted workload namespace.
-    * ``no-shared-cluster-markers`` — no discovered Secret carries any of
+    * ``no-shared-cluster-markers`` - no discovered Secret carries any of
       ``forbidden_labels`` or an annotation like
       ``csi.nvidia.com/shared=true``.
-    * ``serviceaccount-rbac-scoped`` — CSI controller ServiceAccounts hold
+    * ``serviceaccount-rbac-scoped`` - CSI controller ServiceAccounts hold
       no ``ClusterRoleBinding`` that grants ``secrets`` verbs cluster-wide
       without a ``resourceNames`` restriction. Namespace-scoped
       ``RoleBinding`` grants are permitted.
-    * ``node-plugin-uses-hostpath-not-shared-mount`` — node-plugin pods
+    * ``node-plugin-uses-hostpath-not-shared-mount`` - node-plugin pods
       mount only local/pod-scoped volume types (hostPath, emptyDir, secret,
       configMap, projected, downwardAPI, serviceAccountToken, csi). Any
       ``nfs``/``iscsi``/``persistentVolumeClaim`` volume fails this subtest.
@@ -961,7 +961,7 @@ class K8sCsiTenantScopedCredentialsCheck(BaseValidation):
                 message=(
                     f"Discovered {len(discovered_secrets)} CSI Secret reference(s): "
                     f"{', '.join(f'{ns}/{name}' for ns, name in discovered_secrets[:10])}"
-                    + ("…" if len(discovered_secrets) > 10 else "")
+                    + ("..." if len(discovered_secrets) > 10 else "")
                 ),
             )
 
@@ -993,7 +993,7 @@ class K8sCsiTenantScopedCredentialsCheck(BaseValidation):
         for ns, name in discovered_secrets:
             secret, status = self._get_secret(ns, name)
             if status == "missing":
-                # Dangling Secret reference — the CSI pod declares it
+                # Dangling Secret reference - the CSI pod declares it
                 # (e.g. `envFrom.secretRef`) but the Secret was never
                 # created, which is the EKS / IRSA default for EFS and
                 # EBS CSI drivers. Nothing to carry a marker, so this
@@ -1024,7 +1024,7 @@ class K8sCsiTenantScopedCredentialsCheck(BaseValidation):
                     f"{len(discovered_secrets) - len(missing_secrets)} discovered Secret(s); "
                     f"{len(missing_secrets)} declared Secret ref(s) do not exist "
                     f"(likely IRSA / workload-identity): "
-                    f"{', '.join(missing_secrets[:5])}" + ("…" if len(missing_secrets) > 5 else "")
+                    f"{', '.join(missing_secrets[:5])}" + ("..." if len(missing_secrets) > 5 else "")
                 )
             else:
                 msg = f"No shared-cluster labels/annotations on {len(discovered_secrets)} discovered Secret(s)"
@@ -1125,12 +1125,12 @@ class K8sCsiTenantScopedCredentialsCheck(BaseValidation):
         """Fetch Secret ``namespace/name``; return ``(secret, status)``.
 
         ``status`` is one of:
-          * ``"found"`` — Secret exists and parsed (``secret`` is the dict).
-          * ``"missing"`` — Secret does not exist (``--ignore-not-found``
+          * ``"found"`` - Secret exists and parsed (``secret`` is the dict).
+          * ``"missing"`` - Secret does not exist (``--ignore-not-found``
             returned empty stdout). Common when a CSI pod declares an
-            ``envFrom.secretRef`` but the Secret is never created — e.g.
+            ``envFrom.secretRef`` but the Secret is never created - e.g.
             EKS CSI drivers running under IRSA.
-          * ``"error"`` — kubectl failed (Forbidden, RBAC, transient, …)
+          * ``"error"`` - kubectl failed (Forbidden, RBAC, transient, ...)
             or JSON parsing failed.
         """
         result = self.run_command(
@@ -1228,7 +1228,7 @@ def _collect_pod_secret_refs(pods_by_ns: dict[str, list[dict[str, Any]]]) -> set
     """Return Secret refs mounted / projected by CSI pods in each driver namespace.
 
     Pods whose containers do not carry a CSI-related image token are
-    ignored — this keeps noisy side-car / operator Secret references from
+    ignored - this keeps noisy side-car / operator Secret references from
     leaking into the check's scope.
     """
     refs: set[tuple[str, str]] = set()
@@ -1421,10 +1421,10 @@ class K8sCsiProvisioningModesCheck(BaseValidation):
 
     Two subtests run against a single ephemeral namespace:
 
-    * ``dynamic`` — a PVC against ``dynamic_storage_class`` reaches ``Bound``,
+    * ``dynamic`` - a PVC against ``dynamic_storage_class`` reaches ``Bound``,
       the backing PV exposes ``spec.csi.driver``, and a BusyBox pod mounts
       the PVC and round-trips a canary file (write then read back).
-    * ``static`` — a PersistentVolume with the configured ``volume_handle``
+    * ``static`` - a PersistentVolume with the configured ``volume_handle``
       + ``csi_driver`` is pre-created, a PVC with ``storageClassName: ""``
       and a matching ``volumeName`` pre-binds to that PV, and a BusyBox pod
       round-trips a canary file. Skipped when ``static_pv.volume_handle`` or
@@ -1759,7 +1759,7 @@ class K8sCsiProvisioningModesCheck(BaseValidation):
         return _poll_pvc_bound(self.run_command, self._kubectl_base, self._namespace, pvc_name, timeout_s)
 
     def _resolve_bound_pv_driver(self, pvc_name: str) -> tuple[str, str, str]:
-        """Return ``(pv_name, csi_driver, error)`` — ``error`` is empty on success."""
+        """Return ``(pv_name, csi_driver, error)`` - ``error`` is empty on success."""
         vol_cmd = (
             f"{self._kubectl_base} get pvc {shlex.quote(pvc_name)} "
             f"-n {shlex.quote(self._namespace)} -o jsonpath='{{.spec.volumeName}}'"

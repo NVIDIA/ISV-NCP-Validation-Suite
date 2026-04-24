@@ -14,16 +14,17 @@
 #
 # Usage:
 #   # Provision cluster and run tests
-#   TF_AUTO_APPROVE=true uv run isvctl test run -f isvctl/configs/providers/aws/config/eks.yaml
+#   uv run isvctl test run -f isvctl/configs/providers/aws/config/eks.yaml
 #
 #   # Run tests only (skip setup/teardown)
 #   uv run isvctl test run -f isvctl/configs/providers/aws/config/eks.yaml --phase test
 #
 #   # Skip teardown (preserve resources)
-#   AWS_SKIP_TEARDOWN=true TF_AUTO_APPROVE=true uv run isvctl test run -f isvctl/configs/providers/aws/config/eks.yaml
+#   AWS_SKIP_TEARDOWN=true uv run isvctl test run -f isvctl/configs/providers/aws/config/eks.yaml
 #
 # Environment Variables:
-#   - TF_AUTO_APPROVE: Set to "true" to skip Terraform approval prompts (default: false)
+#   - TF_AUTO_APPROVE: Hard-coded to "true" in this config's step env so Terraform never prompts.
+#     Shell setting is ignored; edit this file to re-enable prompts.
 #   - TF_VAR_*: Terraform variables (e.g., TF_VAR_region, TF_VAR_gpu_node_instance_types)
 #   - AWS_SKIP_TEARDOWN: Set to "true" to skip teardown and preserve resources (default: false)
 #   - NGC_API_KEY: NGC API key for NIM workloads

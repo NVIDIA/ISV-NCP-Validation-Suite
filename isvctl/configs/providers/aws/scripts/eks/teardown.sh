@@ -84,21 +84,18 @@ fi
 # Terraform destroy pulls the cluster out from under them.
 
 if command -v aws &> /dev/null && command -v jq &> /dev/null; then
-    TF_CLUSTER_OUTPUT=$(terraform output -raw cluster_name 2>/dev/null || echo "")
-    if [ -n "$TF_CLUSTER_OUTPUT" ]; then
-        CLUSTER_NAME="$TF_CLUSTER_OUTPUT"
+    CLUSTER_NAME=$(terraform output -raw cluster_name 2>/dev/null || echo "")
+    if [ -z "$CLUSTER_NAME" ]; then
+        echo "Warning: could not resolve terraform output 'cluster_name'; skipping static CSI EBS cleanup." >&2
+        STATIC_VOLS=""
     else
-        TF_CLUSTER_PREFIX="${TF_VAR_cluster_name_prefix:-isv-gpu}"
-        TF_ENVIRONMENT="${TF_VAR_environment:-dev}"
-        CLUSTER_NAME="${TF_CLUSTER_PREFIX}-${TF_ENVIRONMENT}"
+        STATIC_VOLS=$(aws ec2 describe-volumes \
+            --filters \
+                "Name=tag:isv-ncp-validation-suite,Values=static-csi" \
+                "Name=tag:cluster,Values=${CLUSTER_NAME}" \
+            --region "$AWS_REGION" --output json 2>/dev/null \
+            | jq -r '.Volumes[].VolumeId' 2>/dev/null || echo "")
     fi
-
-    STATIC_VOLS=$(aws ec2 describe-volumes \
-        --filters \
-            "Name=tag:isv-ncp-validation-suite,Values=static-csi" \
-            "Name=tag:cluster,Values=${CLUSTER_NAME}" \
-        --region "$AWS_REGION" --output json 2>/dev/null \
-        | jq -r '.Volumes[].VolumeId' 2>/dev/null || echo "")
 
     if [ -n "$STATIC_VOLS" ]; then
         for vol in $STATIC_VOLS; do

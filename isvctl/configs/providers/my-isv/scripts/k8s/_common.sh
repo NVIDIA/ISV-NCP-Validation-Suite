@@ -114,7 +114,6 @@ if [ -z "$CSI_BLOCK_SC" ] || [ -z "$CSI_SHARED_FS_SC" ] || [ -z "$CSI_NFS_SC" ];
     CSI_DRIVERS=$($KUBECTL get csidrivers -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
     if [ -n "$CSI_DRIVERS" ]; then
         SC_LINES=$($KUBECTL get sc -o jsonpath='{range .items[*]}{.metadata.name}{"="}{.provisioner}{"\n"}{end}' 2>/dev/null || echo "")
-        FIRST_CSI_SC=""
         BLOCK_LIKE_SC=""
         SHARED_LIKE_SC=""
         NFS_LIKE_SC=""
@@ -126,7 +125,6 @@ if [ -z "$CSI_BLOCK_SC" ] || [ -z "$CSI_SHARED_FS_SC" ] || [ -z "$CSI_NFS_SC" ];
                 *" $sc_prov "*) ;;
                 *) continue ;;
             esac
-            [ -z "$FIRST_CSI_SC" ] && FIRST_CSI_SC="$sc_name"
             case "$sc_prov" in
                 *nfs*) [ -z "$NFS_LIKE_SC" ] && NFS_LIKE_SC="$sc_name" ;;
             esac
@@ -137,7 +135,7 @@ if [ -z "$CSI_BLOCK_SC" ] || [ -z "$CSI_SHARED_FS_SC" ] || [ -z "$CSI_NFS_SC" ];
                     [ -z "$BLOCK_LIKE_SC" ] && BLOCK_LIKE_SC="$sc_name" ;;
             esac
         done <<< "$SC_LINES"
-        [ -z "$CSI_BLOCK_SC" ] && CSI_BLOCK_SC="${BLOCK_LIKE_SC:-$FIRST_CSI_SC}"
+        [ -z "$CSI_BLOCK_SC" ] && CSI_BLOCK_SC="$BLOCK_LIKE_SC"
         [ -z "$CSI_SHARED_FS_SC" ] && CSI_SHARED_FS_SC="$SHARED_LIKE_SC"
         [ -z "$CSI_NFS_SC" ] && CSI_NFS_SC="$NFS_LIKE_SC"
     fi

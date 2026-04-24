@@ -31,6 +31,7 @@ class K8sApiNetworkAclCheck(BaseValidation):
     markers: ClassVar[list[str]] = ["kubernetes"]
 
     def run(self) -> None:
+        """Execute the endpoint read, authorized baseline probe, and unauthorized probe flow."""
         cfg = self._parse_config()
         if cfg is None:
             return
@@ -51,6 +52,7 @@ class K8sApiNetworkAclCheck(BaseValidation):
         )
 
     def _parse_config(self) -> dict[str, Any] | None:
+        """Validate and normalize check configuration, or ``None`` after calling ``set_failed``."""
         cluster_name = self.config.get("cluster_name")
         if not cluster_name or not isinstance(cluster_name, str):
             self.set_failed("`cluster_name` is required and must be a string (the CAPI Cluster resource name).")
@@ -171,6 +173,18 @@ class K8sApiNetworkAclCheck(BaseValidation):
         result = self.run_command(unauthorized_probe_cmd, timeout=probe_timeout)
         snippet = truncate(unauthorized_probe_cmd)
         endpoint_clause = f" (endpoint: {endpoint_info})" if endpoint_info else ""
+
+        # 126/127 are shell conventions for "not executable" / "command not
+        # found". Treating them as an ACL-enforced pass would hide a broken
+        # probe and yield false assurance.
+        if result.exit_code in (126, 127):
+            detail = result.stderr.strip() or result.stdout.strip() or f"exit code {result.exit_code}"
+            self.set_failed(
+                f"Unauthorized probe could not execute{endpoint_clause} "
+                f"(cmd: {snippet}): {detail}. Fix the probe tooling/command "
+                f"and re-run."
+            )
+            return
 
         if result.exit_code == 0:
             preview = result.stdout.strip() or result.stderr.strip() or "(no output)"

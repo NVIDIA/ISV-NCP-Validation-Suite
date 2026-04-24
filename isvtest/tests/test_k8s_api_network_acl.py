@@ -285,6 +285,46 @@ class TestUnauthorizedProbe:
         assert "api.example.com:6443" in check.message
         assert "no network ACL is in place" in check.message
 
+    def test_fails_when_unauthorized_probe_command_not_found(self) -> None:
+        """Exit 127 (command not found) must not be mistaken for an enforced ACL —
+        a broken probe would otherwise produce a false pass."""
+        check = K8sApiNetworkAclCheck(config=_minimal_config())
+
+        def fake(cmd: str, *a: Any, **kw: Any) -> CommandResult:
+            kind = _classify(cmd)
+            if kind == "cluster_read":
+                return _ok(stdout="api.example.com:6443")
+            if kind == "authorized":
+                return _ok(stdout="ok")
+            if kind == "unauthorized":
+                return _fail(stderr="ssh: command not found", exit_code=127)
+            raise AssertionError(f"unexpected {cmd}")
+
+        check.run_command = fake  # type: ignore[assignment]
+        check.run()
+        assert not check.passed
+        assert "could not execute" in check.message
+        assert "ssh: command not found" in check.message
+
+    def test_fails_when_unauthorized_probe_not_executable(self) -> None:
+        """Exit 126 (found but not executable) must fail loudly too."""
+        check = K8sApiNetworkAclCheck(config=_minimal_config())
+
+        def fake(cmd: str, *a: Any, **kw: Any) -> CommandResult:
+            kind = _classify(cmd)
+            if kind == "cluster_read":
+                return _ok(stdout="api.example.com:6443")
+            if kind == "authorized":
+                return _ok(stdout="ok")
+            if kind == "unauthorized":
+                return _fail(stderr="permission denied", exit_code=126)
+            raise AssertionError(f"unexpected {cmd}")
+
+        check.run_command = fake  # type: ignore[assignment]
+        check.run()
+        assert not check.passed
+        assert "could not execute" in check.message
+
     def test_probe_timeout_forwarded_to_run_command(self) -> None:
         """The configured ``probe_timeout`` must reach the runner so a
         hung unauthorized probe cannot freeze the check indefinitely."""

@@ -362,7 +362,7 @@ class TestNodePoolCreateConvergence:
         with (
             patch.object(check, "run_command", return_value=_ok(stdout=_nodes_payload([pending]))),
             patch("isvtest.validations.k8s_node_pool.time.sleep"),
-            patch("isvtest.validations.k8s_node_pool.time.time", side_effect=lambda: next(clock, 999.0)),
+            patch("isvtest.validations.k8s_node_pool.time.monotonic", side_effect=lambda: next(clock, 999.0)),
         ):
             check.run()
         assert not check.passed
@@ -375,7 +375,7 @@ class TestNodePoolCreateConvergence:
         with (
             patch.object(check, "run_command", return_value=_fail(stderr="Unauthorized")),
             patch("isvtest.validations.k8s_node_pool.time.sleep"),
-            patch("isvtest.validations.k8s_node_pool.time.time", side_effect=lambda: next(clock, 999.0)),
+            patch("isvtest.validations.k8s_node_pool.time.monotonic", side_effect=lambda: next(clock, 999.0)),
         ):
             check.run()
         assert not check.passed

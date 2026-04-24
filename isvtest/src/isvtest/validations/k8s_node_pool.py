@@ -93,8 +93,15 @@ class K8sNodePoolCheck(BaseValidation):
             self.set_failed(f"Invalid config: {exc}")
             return
 
-        wait_timeout = int(self.config.get("wait_timeout", 600))
-        poll_interval = max(1, int(self.config.get("poll_interval", 5)))
+        try:
+            wait_timeout = int(self.config.get("wait_timeout", 600))
+            poll_interval = max(1, int(self.config.get("poll_interval", 5)))
+        except (TypeError, ValueError) as exc:
+            self.set_failed(f"Invalid config: {exc}")
+            return
+        if wait_timeout < 0:
+            self.set_failed(f"Invalid config: wait_timeout must be >= 0, got {wait_timeout}")
+            return
         node_type = str(self.config.get("node_type") or "").strip().lower() or None
 
         nodes = self._wait_for_ready_nodes(label_selector, expected_replicas, wait_timeout, poll_interval)
@@ -153,11 +160,19 @@ class K8sNodePoolCheck(BaseValidation):
         calls :meth:`set_failed` and returns ``None``.
         """
         cmd = f"{get_kubectl_base_shell()} get nodes -l {shlex.quote(label_selector)} -o json"
-        deadline = time.time() + wait_timeout
+        deadline = time.monotonic() + wait_timeout
         last_summary = "no nodes seen yet"
 
         while True:
-            result = self.run_command(cmd, timeout=max(30, poll_interval * 4))
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self.set_failed(f"Node pool did not converge within {wait_timeout}s ({last_summary})")
+                return None
+
+            result = self.run_command(
+                cmd,
+                timeout=max(1, min(max(30, poll_interval * 4), int(remaining))),
+            )
             if result.exit_code != 0:
                 last_summary = f"kubectl failed: {result.stderr.strip() or result.stdout.strip()}"
             else:
@@ -174,11 +189,12 @@ class K8sNodePoolCheck(BaseValidation):
                     return ready_nodes
                 last_summary = f"{len(ready_nodes)} Ready / {len(nodes)} total, want {expected_replicas}"
 
-            if time.time() >= deadline:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 self.set_failed(f"Node pool did not converge within {wait_timeout}s ({last_summary})")
                 return None
             self.log.info("Waiting for node pool (%s)", last_summary)
-            time.sleep(poll_interval)
+            time.sleep(min(poll_interval, remaining))
 
 
 def _is_node_ready(node: dict[str, Any]) -> bool:

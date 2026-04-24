@@ -30,10 +30,12 @@ from isvtest.validations.k8s_node_pool import (
 
 
 def _ok(stdout: str = "", stderr: str = "") -> CommandResult:
+    """Build a successful ``CommandResult`` (exit_code=0) for mocked commands."""
     return CommandResult(exit_code=0, stdout=stdout, stderr=stderr, duration=0.0)
 
 
 def _fail(stdout: str = "", stderr: str = "", exit_code: int = 1) -> CommandResult:
+    """Build a failing ``CommandResult`` (non-zero exit) for mocked commands."""
     return CommandResult(exit_code=exit_code, stdout=stdout, stderr=stderr, duration=0.0)
 
 
@@ -61,6 +63,7 @@ def _node(
 
 
 def _nodes_payload(nodes: list[dict[str, Any]]) -> str:
+    """Serialize ``nodes`` into a ``kubectl get nodes -o json`` payload string."""
     return json.dumps({"items": nodes})
 
 
@@ -77,6 +80,8 @@ BASE_CONFIG: dict[str, Any] = {
 
 
 class TestCoerceMapping:
+    """Tests for ``_coerce_mapping`` (string/dict -> str->str dict)."""
+
     def test_none_is_empty(self) -> None:
         assert _coerce_mapping(None, "labels") == {}
 
@@ -103,6 +108,8 @@ class TestCoerceMapping:
 
 
 class TestCoerceStrList:
+    """Tests for ``_coerce_str_list`` (string/list -> list[str])."""
+
     def test_none_and_empty(self) -> None:
         assert _coerce_str_list(None, "x") == []
         assert _coerce_str_list("", "x") == []
@@ -123,6 +130,8 @@ class TestCoerceStrList:
 
 
 class TestCoerceTaints:
+    """Tests for ``_coerce_taints`` (string/list -> normalized taint dicts)."""
+
     def test_none(self) -> None:
         assert _coerce_taints(None) == []
 
@@ -156,6 +165,8 @@ class TestCoerceTaints:
 
 
 class TestMissingTaints:
+    """Tests for ``_missing_taints`` (expected vs. actual node taint diff)."""
+
     def test_empty_expected_skips(self) -> None:
         assert _missing_taints([], [{"key": "k", "value": "v", "effect": "NoSchedule"}]) == []
 
@@ -176,6 +187,8 @@ class TestMissingTaints:
 
 
 class TestIsNodeReady:
+    """Tests for ``_is_node_ready`` (Ready=True condition detection)."""
+
     def test_ready(self) -> None:
         assert _is_node_ready({"status": {"conditions": [{"type": "Ready", "status": "True"}]}})
 

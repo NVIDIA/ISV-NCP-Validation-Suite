@@ -52,3 +52,9 @@ ignore = ["E501", "RUF005"]
 pythonpath = ["src"]
 testpaths = ["tests", "src/isvtest/tests"]
 addopts = "-v --junitxml=junit.xml"
+markers = [
+    "hardware: hardware ingestion and lifecycle checks",
+    "ingestion: hardware ingestion verification",
+    "dpu: DPU health and network checks",
+    "nico: NICo platform validations",
+]

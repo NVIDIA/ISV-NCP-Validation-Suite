@@ -113,6 +113,11 @@ class BaseValidation(ABC):
             self._output = output
 
     def _parse_positive_int(self, key: str, *, default: int) -> int | None:
+        """Read ``key`` from config and coerce to an integer >= 1.
+
+        Returns the value on success, or ``None`` after calling ``set_failed``
+        if the value is missing, not integer-coercible, or less than 1.
+        """
         raw = self.config.get(key, default)
         if isinstance(raw, bool):
             self.set_failed(f"`{key}` must be an integer, got bool: {raw!r}")

@@ -101,6 +101,11 @@ class K8sApiNetworkAclCheck(BaseValidation):
         }
 
     def _read_endpoint(self, cluster_name: str, namespace: str) -> str | None:
+        """Read ``spec.controlPlaneEndpoint`` from the CAPI Cluster resource.
+
+        Returns ``"host:port"`` on success, or ``None`` after calling
+        ``set_failed`` if the Cluster is unreachable or the endpoint is empty.
+        """
         kubectl_base = get_kubectl_base_shell()
         jsonpath = "{.spec.controlPlaneEndpoint.host}:{.spec.controlPlaneEndpoint.port}"
         cmd = (
@@ -132,6 +137,12 @@ class K8sApiNetworkAclCheck(BaseValidation):
         return raw
 
     def _run_authorized_probe(self, authorized_probe_cmd: str, probe_timeout: int) -> bool:
+        """Run the authorized baseline probe and report failure on non-zero exit.
+
+        Returns ``True`` if the probe succeeded, or ``False`` after calling
+        ``set_failed`` — a failing baseline makes the unauthorized-probe result
+        ambiguous, so the check must stop before interpreting it.
+        """
         result = self.run_command(authorized_probe_cmd, timeout=probe_timeout)
         if result.exit_code != 0:
             detail = result.stderr.strip() or result.stdout.strip() or f"exit code {result.exit_code}"
@@ -151,6 +162,12 @@ class K8sApiNetworkAclCheck(BaseValidation):
         probe_timeout: int,
         endpoint_info: str | None,
     ) -> None:
+        """Run the unauthorized probe and set the final pass/fail verdict.
+
+        A non-zero exit (connection blocked or timeout) means the ACL is
+        enforced; a zero exit means the endpoint is reachable from a source
+        that should be blocked and the check fails.
+        """
         result = self.run_command(unauthorized_probe_cmd, timeout=probe_timeout)
         snippet = truncate(unauthorized_probe_cmd)
         endpoint_clause = f" (endpoint: {endpoint_info})" if endpoint_info else ""

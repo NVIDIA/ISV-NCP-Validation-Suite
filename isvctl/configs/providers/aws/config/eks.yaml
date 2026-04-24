@@ -49,6 +49,52 @@ commands:
           # Override with your IP for security
           TF_VAR_cluster_endpoint_public_access_cidrs: '["0.0.0.0/0"]'
 
+      # Test the Terraform node-pool create path. Runs after the
+      # cluster is up; reads cluster state via terraform_remote_state in the
+      # node-pool module. See ../scripts/eks/terraform-node-pool/README.md.
+      - name: create_test_node_pool
+        phase: setup
+        command: "../scripts/eks/create_node_pool.sh"
+        output_schema: node_pool
+        timeout: 900 # 15 min — EKS node group join can take 5-8 min
+        env:
+          TF_AUTO_APPROVE: "true"
+          TF_VAR_test_pool_name: "isv-test-pool"
+          TF_VAR_test_pool_instance_types: '["m6i.large"]'
+          TF_VAR_test_pool_desired_size: "1"
+          TF_VAR_test_pool_labels_json: '{"isv.ncp.validation/workload":"data-ingest"}'
+          TF_VAR_test_pool_taints_json: '[{"key":"isv.ncp.validation/dedicated","value":"test","effect":"NoSchedule"}]'
+          TF_VAR_test_pool_node_type: "cpu"
+
+      # Scale the same pool to a new target count. Re-applies the
+      # terraform-node-pool module with a bumped desired_size; create_node_pool.sh
+      # is reused because `terraform apply` is idempotent. The emitted
+      # node_pool payload carries the new replica count, which the second
+      # K8sNodePoolCheck invocation in the suite asserts on.
+      - name: update_test_node_pool
+        phase: setup
+        command: "../scripts/eks/create_node_pool.sh"
+        output_schema: node_pool
+        timeout: 900
+        env:
+          NODE_POOL_ACTION: "Updating"
+          TF_AUTO_APPROVE: "true"
+          TF_VAR_test_pool_name: "isv-test-pool"
+          TF_VAR_test_pool_instance_types: '["m6i.large"]'
+          TF_VAR_test_pool_desired_size: "2"
+          TF_VAR_test_pool_labels_json: '{"isv.ncp.validation/workload":"data-ingest"}'
+          TF_VAR_test_pool_taints_json: '[{"key":"isv.ncp.validation/dedicated","value":"test","effect":"NoSchedule"}]'
+          TF_VAR_test_pool_node_type: "cpu"
+
+      # Teardown order: destroy the test node pool before tearing down the
+      # cluster so its ENIs/instances are freed before the VPC comes down.
+      - name: destroy_test_node_pool
+        phase: teardown
+        command: "../scripts/eks/destroy_node_pool.sh"
+        timeout: 900
+        env:
+          TF_AUTO_APPROVE: "true"
+
       - name: teardown
         phase: teardown
         command: "../scripts/eks/teardown.sh"

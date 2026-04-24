@@ -101,6 +101,35 @@ def _find_missing_step_path(arg: str, steps_data: dict[str, Any]) -> str | None:
     return None
 
 
+def _deselected_validation_class_names(
+    exclude_markers: list[str] | None,
+    exclude_tests: list[str] | None,
+) -> set[str]:
+    """Return validation class names pytest would deselect for the given exclusions.
+
+    A class is deselected when its name is in ``exclude_tests`` or any of its
+    ``markers`` is in ``exclude_markers``. This mirrors conftest.py's
+    collection-time filtering so we can silence template-warning emission for
+    templates inside checks that will never run.
+
+    Returns an empty set if isvtest isn't importable (falls back to current
+    noisy behavior rather than crashing the orchestrator).
+    """
+    excluded: set[str] = set(exclude_tests or ())
+    if not exclude_markers:
+        return excluded
+    try:
+        from isvtest.core.discovery import discover_all_tests
+    except ImportError:
+        return excluded
+    ex_markers = set(exclude_markers)
+    for cls in discover_all_tests():
+        cls_markers = getattr(cls, "markers", None) or []
+        if any(m in ex_markers for m in cls_markers):
+            excluded.add(cls.__name__)
+    return excluded
+
+
 @dataclass
 class StepResult:
     """Result of executing a single step.
@@ -290,6 +319,15 @@ class StepExecutor:
 
             step_outputs = context.get_accumulated_context().get("steps", {})
             step_phases = context.get_all_step_phases()
+
+            # Tell the context which validation classes pytest will deselect
+            # (marker or test-name exclusion) so render_dict can suppress
+            # "missing step" warnings for templates inside those checks.
+            # Without this, a check like K8sNodePoolCheck (markers=["slow"])
+            # spams warnings about its create_test_node_pool / update_test_node_pool
+            # template refs on providers that don't run node-pool CRUD at all.
+            silenced = _deselected_validation_class_names(exclude_markers, exclude_tests)
+            context.set_silenced_validation_names(silenced)
 
             # Render Jinja2 templates in validation parameters using context
             # This handles templates like {{ steps.setup.slurm.partitions.cpu.nodes | length }}

@@ -112,6 +112,14 @@ class Context:
         self._current_phase: str | None = None
         self._phase_order: list[str] = []
 
+        # Validation class names whose templates should not emit "missing step"
+        # warnings. Populated with classes that pytest will deselect anyway
+        # (e.g. because their marker is in exclude.markers). render_dict enters
+        # a suppression zone when it recurses into a key matching one of these
+        # (exact or variant form "ClassName-*"). See set_silenced_validation_names.
+        self._silenced_validation_names: set[str] = set()
+        self._warning_suppression_depth: int = 0
+
         # Layer 6: Environment variables (for {{env.VAR}} access)
         # Must be loaded before settings so settings can reference env vars.
         # Sensitive variables (API keys, secrets) are excluded to prevent
@@ -174,6 +182,31 @@ class Context:
             phases: Set of phase names that were requested
         """
         self._requested_phases = phases
+
+    def set_silenced_validation_names(self, names: set[str]) -> None:
+        """Declare validation classes whose template refs must not warn.
+
+        Used by the orchestrator to point Context at classes that pytest
+        will deselect (marker or test-name exclusion). When ``render_dict``
+        recurses into a dict key that matches one of these names exactly
+        or as a variant prefix (``"ClassName-..."``), warnings about missing
+        step data are suppressed inside that subtree.
+
+        Args:
+            names: Class names to silence (e.g. ``{"K8sNodePoolCheck"}``).
+        """
+        self._silenced_validation_names = set(names or ())
+
+    def _is_silenced_validation_name(self, name: str) -> bool:
+        """Return True if ``name`` matches a silenced class exactly or as a variant."""
+        if not isinstance(name, str) or not self._silenced_validation_names:
+            return False
+        if name in self._silenced_validation_names:
+            return True
+        for base in self._silenced_validation_names:
+            if name.startswith(f"{base}-"):
+                return True
+        return False
 
     def set_current_phase(self, phase: str, phase_order: list[str] | None = None) -> None:
         """Record the phase currently being rendered.
@@ -309,6 +342,12 @@ class Context:
         Args:
             template_str: Jinja2 template string to scan for step references
         """
+        # Suppress everything while rendering a subtree that belongs to a
+        # validation class pytest will deselect anyway (see
+        # set_silenced_validation_names). Dead templates inside a never-running
+        # check should not warn.
+        if self._warning_suppression_depth > 0:
+            return
         steps_data = self.data.get("steps", {})
         for match in self._STEP_PATH_RE.finditer(template_str):
             full_path = match.group(1)
@@ -369,6 +408,12 @@ class Context:
     def render_dict(self, data: dict[str, Any]) -> dict[str, Any]:
         """Recursively render all string values in a dictionary.
 
+        When a key matches a silenced validation name (see
+        ``set_silenced_validation_names``), the entire subtree under that key
+        is rendered with missing-step warnings suppressed. That subtree's
+        templates point at a check pytest will deselect, so the refs are
+        effectively dead code and warnings would be noise.
+
         Args:
             data: Dictionary with potential template strings
 
@@ -377,14 +422,21 @@ class Context:
         """
         result = {}
         for key, value in data.items():
-            if isinstance(value, str):
-                result[key] = self.render_string(value)
-            elif isinstance(value, dict):
-                result[key] = self.render_dict(value)
-            elif isinstance(value, list):
-                result[key] = self._render_list(value)
-            else:
-                result[key] = value
+            silence = self._is_silenced_validation_name(key)
+            if silence:
+                self._warning_suppression_depth += 1
+            try:
+                if isinstance(value, str):
+                    result[key] = self.render_string(value)
+                elif isinstance(value, dict):
+                    result[key] = self.render_dict(value)
+                elif isinstance(value, list):
+                    result[key] = self._render_list(value)
+                else:
+                    result[key] = value
+            finally:
+                if silence:
+                    self._warning_suppression_depth -= 1
         return result
 
     def _render_list(self, items: list[Any]) -> list[Any]:

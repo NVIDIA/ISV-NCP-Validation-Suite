@@ -17,12 +17,11 @@ Tests that the AWS account enforces Multi-Factor Authentication:
      (AccountMFAEnabled from GetAccountSummary).
   2. console_users_mfa:   Every IAM user with a console login password has
      at least one MFA device registered.
-  3. api_mfa_policy:      At least one IAM policy in the account contains
-     an ``aws:MultiFactorAuthPresent`` condition, indicating MFA is
-     required for sensitive API actions.
+  3. api_mfa_policy:      At least one attached customer-managed IAM policy
+     contains an explicit Deny-without-MFA enforcement pattern
+     (``Effect: Deny`` + ``BoolIfExists aws:MultiFactorAuthPresent = false``).
   4. cli_mfa_policy:      Same condition covers CLI-initiated calls (the
-     condition is transport-agnostic on AWS, so this mirrors api_mfa_policy
-     but checks that deny-without-MFA statements exist).
+     condition is transport-agnostic on AWS, so this mirrors api_mfa_policy).
 
 Usage:
     python mfa_enforcement_test.py --region us-west-2
@@ -100,20 +99,36 @@ def _check_console_users_mfa(iam: Any) -> dict[str, Any]:
         return {"passed": False, "error": str(e)}
 
 
-def _has_mfa_condition(policy_document: dict[str, Any]) -> bool:
-    """Return True if the policy document references MFA conditions."""
-    MFA_KEYS = {"aws:MultiFactorAuthPresent", "aws:MultiFactorAuthAge"}
+def _has_mfa_deny_enforcement(policy_document: dict[str, Any]) -> bool:
+    """Return True if the policy contains a Deny-without-MFA enforcement pattern.
+
+    Per AWS best practices, MFA enforcement requires explicit Deny statements
+    that block access when MFA is absent — e.g.:
+        Effect: Deny + Condition: BoolIfExists aws:MultiFactorAuthPresent = false
+
+    An Allow with an MFA condition is NOT sufficient because other policies
+    can grant unconditional access that bypasses the MFA gate.
+    """
+    DENY_OPERATORS = {"BoolIfExists"}
+    DENY_VALUES = {"false", False}
 
     statements = policy_document.get("Statement", [])
     if isinstance(statements, dict):
         statements = [statements]
 
     for stmt in statements:
+        if str(stmt.get("Effect", "")).lower() != "deny":
+            continue
         condition = stmt.get("Condition", {})
-        for _operator, condition_block in condition.items():
-            if isinstance(condition_block, dict):
-                if MFA_KEYS & set(condition_block.keys()):
-                    return True
+        for operator, condition_block in condition.items():
+            if operator not in DENY_OPERATORS or not isinstance(condition_block, dict):
+                continue
+            mfa_val = condition_block.get("aws:MultiFactorAuthPresent")
+            if mfa_val in DENY_VALUES:
+                return True
+            age_val = condition_block.get("aws:MultiFactorAuthAge")
+            if age_val is not None:
+                return True
     return False
 
 
@@ -138,7 +153,7 @@ def _check_mfa_policy(iam: Any, label: str) -> dict[str, Any]:
                     doc = doc_response["PolicyVersion"]["Document"]
                     if isinstance(doc, str):
                         doc = json.loads(urllib.parse.unquote(doc))
-                    if _has_mfa_condition(doc):
+                    if _has_mfa_deny_enforcement(doc):
                         mfa_policies.append(policy["PolicyName"])
                 except ClientError:
                     continue

@@ -6,6 +6,8 @@ DEMO_TARGETS := $(addprefix demo-,$(MY_ISV_DOMAINS))
 
 PACKAGES := isvctl isvreporter isvtest
 BUMP_SCRIPT := scripts/bump-version.py
+RUFF_VERSION := 0.15.12
+RUFF := uvx --from ruff==$(RUFF_VERSION) ruff
 
 # DISABLED (2026-03-24): Trivy supply chain compromise - see GHSA-69fq-xp46-6x23.
 # Do NOT pull aquasec/trivy images from Docker Hub until Aqua Security regains control.
@@ -38,13 +40,13 @@ pre-commit: ## Run pre-commit on all packages
 lint: ## Run ruff linting on all packages
 	@for pkg in $(PACKAGES); do \
 		echo "Linting $$pkg..."; \
-		(cd $$pkg && uvx ruff check src/) || exit 1; \
+		(cd $$pkg && $(RUFF) check src/) || exit 1; \
 	done
 
 format: ## Format code with ruff on all packages
 	@for pkg in $(PACKAGES); do \
 		echo "Formatting $$pkg..."; \
-		(cd $$pkg && uvx ruff format src/) || exit 1; \
+		(cd $$pkg && $(RUFF) format src/) || exit 1; \
 	done
 
 # DISABLED (2026-03-24): Trivy supply chain compromise - see GHSA-69fq-xp46-6x23.

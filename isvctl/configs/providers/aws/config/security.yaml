@@ -24,6 +24,7 @@
 #   3. API Endpoint Isolation - Verify management APIs are not publicly exposed
 #   4. MFA Enforcement        - Verify admin interfaces (UI, CLI, API) require MFA
 #   5. SA Credential Auth     - Verify IAM user + long-lived access key auth
+#   6. OIDC User Auth         - Probe configured OIDC-protected platform endpoint (SEC01-01)
 
 import:
   - ../../../suites/security.yaml
@@ -76,6 +77,28 @@ commands:
         args: ["--region", "{{region}}"]
         timeout: 120
 
+      # Test 6: OIDC User Authentication
+      # Requires a real issuer, audience, protected target endpoint, and token
+      # fixtures. Non-sensitive endpoint settings can come from tests.settings
+      # below; token fixtures are read by the script from OIDC_*_TOKEN env vars
+      # or passed through token-file arguments in a custom overlay.
+      - name: oidc_user_auth_test
+        phase: test
+        command: "python3 ../scripts/security/oidc_user_auth_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--issuer-url={{oidc_issuer_url}}"
+          - "--audience={{oidc_audience}}"
+          - "--target-url={{oidc_target_url}}"
+        sensitive_args:
+          - "--valid-token"
+          - "--wrong-issuer-token"
+          - "--wrong-audience-token"
+          - "--expired-token"
+          - "--missing-required-claim-token"
+        timeout: 60
+
       # Teardown: Clean up leftover test IAM users
       - name: teardown
         phase: teardown
@@ -89,3 +112,6 @@ tests:
 
   settings:
     region: "us-west-2"
+    oidc_issuer_url: "{{env.OIDC_ISSUER_URL | default('', true)}}"
+    oidc_audience: "{{env.OIDC_AUDIENCE | default('', true)}}"
+    oidc_target_url: "{{env.OIDC_TARGET_URL | default('', true)}}"

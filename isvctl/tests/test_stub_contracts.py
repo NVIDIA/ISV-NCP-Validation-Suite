@@ -126,15 +126,24 @@ def _yaml_flag_tokens(args: list[str]) -> list[str]:
     """Return the ``--flag`` tokens from a step's ``args:`` list.
 
     Jinja placeholders (``{{teardown_flag}}``) and plain values are ignored --
-    only literal ``--flag`` strings are returned.
+    only literal ``--flag`` strings are returned. Inline ``--flag=value``
+    arguments are normalized to ``--flag`` before comparing with argparse.
     """
     flags: list[str] = []
     for arg in args or []:
         if not isinstance(arg, str):
             continue
         if arg.startswith("--"):
-            flags.append(arg)
+            flags.append(arg.split("=", 1)[0])
     return flags
+
+
+def test_yaml_flag_tokens_normalizes_inline_values() -> None:
+    """Inline-value YAML args still match argparse's ``--flag`` declaration."""
+    assert _yaml_flag_tokens(["--issuer-url={{oidc_issuer_url}}", "--region", "{{region}}"]) == [
+        "--issuer-url",
+        "--region",
+    ]
 
 
 def _collect_yaml_checks() -> list[StepArgCheck]:

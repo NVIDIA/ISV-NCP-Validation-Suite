@@ -14,7 +14,21 @@ from __future__ import annotations
 
 from typing import Any
 
-from isvtest.validations.security import BmcManagementNetworkCheck, MfaEnforcedCheck
+from isvtest.validations.security import (
+    BmcManagementNetworkCheck,
+    MfaEnforcedCheck,
+    OidcUserAuthCheck,
+)
+
+OIDC_REQUIRED_TESTS = {
+    "valid_token_accepted": {"passed": True},
+    "bad_signature_rejected": {"passed": True},
+    "wrong_issuer_rejected": {"passed": True},
+    "wrong_audience_rejected": {"passed": True},
+    "expired_token_rejected": {"passed": True},
+    "missing_required_claim_rejected": {"passed": True},
+    "discovery_and_jwks_reachable": {"passed": True},
+}
 
 
 def _bmc_management_config(tests: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -170,3 +184,47 @@ class TestMfaEnforcedCheck:
         result = v.execute()
         assert result["passed"] is True
         assert "7 interfaces checked" in result["output"]
+
+
+def _oidc_step_output(**overrides: Any) -> dict[str, Any]:
+    """Return a valid OIDC step output with optional overrides."""
+    output: dict[str, Any] = {
+        "success": True,
+        "issuer_url": "https://oidc.example/realms/isv",
+        "audience": "isv-validation",
+        "target_url": "https://api.example/protected",
+        "endpoints_tested": 1,
+        "tests": OIDC_REQUIRED_TESTS,
+    }
+    output.update(overrides)
+    return output
+
+
+def test_oidc_user_auth_check_passes_with_real_endpoint_metadata() -> None:
+    """OidcUserAuthCheck passes when all probes and endpoint metadata are present."""
+    check = OidcUserAuthCheck(config={"step_output": _oidc_step_output()})
+
+    result = check.execute()
+
+    assert result["passed"] is True
+    assert "https://api.example/protected" in result["output"]
+
+
+def test_oidc_user_auth_check_rejects_missing_target_url() -> None:
+    """OidcUserAuthCheck fails old self-contained outputs without a target URL."""
+    check = OidcUserAuthCheck(config={"step_output": _oidc_step_output(target_url="")})
+
+    result = check.execute()
+
+    assert result["passed"] is False
+    assert "target_url" in result["error"]
+
+
+def test_oidc_user_auth_check_requires_endpoint_probe_count() -> None:
+    """OidcUserAuthCheck fails when no platform endpoint was probed."""
+    check = OidcUserAuthCheck(config={"step_output": _oidc_step_output(endpoints_tested=0)})
+
+    result = check.execute()
+
+    assert result["passed"] is False
+    assert "did not probe any platform endpoint" in result["error"]

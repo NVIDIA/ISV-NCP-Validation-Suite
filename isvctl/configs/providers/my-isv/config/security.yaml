@@ -21,6 +21,7 @@
 #   SEC14-01: API endpoint isolation (ApiEndpointIsolationCheck)
 #   SEC07-01: MFA enforcement (MfaEnforcedCheck)
 #   SEC03-01: Service account credentials (ServiceAccountCredentialCheck)
+#   SEC01-01: OIDC user authentication (OidcUserAuthCheck)
 #
 # Usage:
 #   uv run isvctl test run -f isvctl/configs/providers/my-isv/config/security.yaml
@@ -67,6 +68,12 @@ commands:
       - name: sa_credential_test
         phase: test
         command: "python ../scripts/security/sa_credential_test.py"
+        args: ["--region", "{{region}}"]
+        timeout: 60
+
+      - name: oidc_user_auth_test
+        phase: test
+        command: "python ../scripts/security/oidc_user_auth_test.py"
         args: ["--region", "{{region}}"]
         timeout: 60
 

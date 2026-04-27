@@ -80,6 +80,7 @@ class TestBuildCatalog:
         assert by_name["BmcTenantIsolationCheck"]["platforms"] == ["SECURITY"]
         assert by_name["ServiceAccountCredentialCheck"]["platforms"] == ["SECURITY"]
         assert by_name["ConsoleRbacCheck"]["platforms"] == ["VM"]
+        assert by_name["OidcUserAuthCheck"]["platforms"] == ["SECURITY"]
 
 
 class TestGetCatalogVersion:

@@ -53,6 +53,7 @@ For the domain / script-count / AWS-reference overview see the
 | `sg_workload_scoping` | test | `providers/my-isv/scripts/network/sg_scoping_test.py` | SG rules scoped at workload level |
 | `sg_node_scoping` | test | `providers/my-isv/scripts/network/sg_scoping_test.py` | SG rules scoped at node level |
 | `sg_subnet_scoping` | test | `providers/my-isv/scripts/network/sg_scoping_test.py` | SG rules scoped at subnet/tenant level |
+| `sg_service_scoping` | test | `providers/my-isv/scripts/network/sg_scoping_test.py` | SG rules scoped at service level (e.g. K8s API) |
 | `peering_test` | test | `providers/my-isv/scripts/network/peering_test.py` | Cross-VPC connectivity |
 | `teardown` | teardown | `providers/my-isv/scripts/network/teardown.py` | VPC cleanup |
 

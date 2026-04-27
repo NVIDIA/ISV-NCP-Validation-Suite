@@ -9,7 +9,7 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-"""Test security group rule scoping at workload, node, or subnet level.
+"""Test security group rule scoping at workload, node, subnet, or service level.
 
 AWS mapping:
   - workload/node: SGs attach per-ENI, so rules scope to individual
@@ -18,17 +18,23 @@ AWS mapping:
   - subnet: NACLs scope to subnets.  We create two subnets, apply a
     custom NACL with a deny rule to one, and verify the other subnet
     still uses the default (allow-all) NACL.
+  - service: SGs attach to the ENIs of a VPC interface endpoint
+    (PrivateLink), scoping an HTTPS rule to that one service endpoint.
+    We create an EC2 interface endpoint plus an unrelated ENI in the same
+    subnet, and verify the SG is attached only to the endpoint's ENIs.
 
 Usage:
     python sg_scoping_test.py --region us-west-2 --scope workload
     python sg_scoping_test.py --region us-west-2 --scope node
     python sg_scoping_test.py --region us-west-2 --scope subnet
+    python sg_scoping_test.py --region us-west-2 --scope service
 """
 
 import argparse
 import json
 import os
 import sys
+import time
 import uuid
 from typing import Any
 
@@ -36,12 +42,13 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
 
 import boto3
 from botocore.exceptions import ClientError
-from common.errors import handle_aws_errors
+from common.errors import ALREADY_GONE_CODES, handle_aws_errors
 from common.vpc import cleanup_vpc_resources, create_test_vpc
 
 CIDR = "10.85.0.0/16"
 SUBNET_A_CIDR = "10.85.1.0/24"
 SUBNET_B_CIDR = "10.85.2.0/24"
+ALREADY_GONE_CLEANUP_CODES = ALREADY_GONE_CODES | frozenset({"InvalidNetworkInterfaceID.NotFound"})
 
 
 def _get_az(ec2: Any, region: str) -> str:
@@ -245,6 +252,231 @@ def test_subnet_scoping(ec2: Any, vpc_id: str, az: str) -> dict[str, Any]:
     return results
 
 
+def test_service_scoping(ec2: Any, vpc_id: str, az: str, region: str) -> dict[str, Any]:
+    """Verify SG rules scope to a single VPC interface endpoint (service level)."""
+    results: dict[str, Any] = {}
+    sg_id = None
+    subnet_id = None
+    endpoint_id = None
+    eni_other = None
+    cleanup_errors: list[str] = []
+    expected_keys = [
+        "create_sg",
+        "apply_service_rule",
+        "service_endpoint_allowed",
+        "other_endpoint_blocked",
+    ]
+    tag = f"isv-sg-scope-service-{uuid.uuid4().hex[:6]}"
+
+    try:
+        subnet = ec2.create_subnet(VpcId=vpc_id, CidrBlock=SUBNET_A_CIDR, AvailabilityZone=az)
+        subnet_id = subnet["Subnet"]["SubnetId"]
+
+        sg = ec2.create_security_group(
+            GroupName=tag,
+            Description="SG scoping test (service)",
+            VpcId=vpc_id,
+            TagSpecifications=[
+                {
+                    "ResourceType": "security-group",
+                    "Tags": [{"Key": "CreatedBy", "Value": "isvtest"}],
+                }
+            ],
+        )
+        sg_id = sg["GroupId"]
+        ec2.authorize_security_group_ingress(
+            GroupId=sg_id,
+            IpPermissions=[
+                {
+                    "IpProtocol": "tcp",
+                    "FromPort": 443,
+                    "ToPort": 443,
+                    "IpRanges": [{"CidrIp": "10.0.0.0/8"}],
+                }
+            ],
+        )
+        results["create_sg"] = {"passed": True}
+
+        endpoint = ec2.create_vpc_endpoint(
+            VpcId=vpc_id,
+            ServiceName=f"com.amazonaws.{region}.ec2",
+            VpcEndpointType="Interface",
+            SubnetIds=[subnet_id],
+            SecurityGroupIds=[sg_id],
+            PrivateDnsEnabled=False,
+            TagSpecifications=[
+                {
+                    "ResourceType": "vpc-endpoint",
+                    "Tags": [{"Key": "CreatedBy", "Value": "isvtest"}],
+                }
+            ],
+        )
+        endpoint_id = endpoint["VpcEndpoint"]["VpcEndpointId"]
+        results["apply_service_rule"] = {"passed": True}
+
+        eni_o = ec2.create_network_interface(SubnetId=subnet_id)
+        eni_other = eni_o["NetworkInterface"]["NetworkInterfaceId"]
+
+        endpoint_eni_ids = _wait_for_endpoint_enis(ec2, endpoint_id)
+        if not endpoint_eni_ids:
+            results["service_endpoint_allowed"] = {
+                "passed": False,
+                "error": "VPC endpoint did not expose any ENIs",
+            }
+            results["other_endpoint_blocked"] = {
+                "passed": False,
+                "error": "Cannot verify SG scoping: VPC endpoint has no ENIs",
+            }
+        else:
+            enis_info = ec2.describe_network_interfaces(NetworkInterfaceIds=[*endpoint_eni_ids, eni_other])
+            by_id = {e["NetworkInterfaceId"]: e for e in enis_info["NetworkInterfaces"]}
+            endpoint_attached = all(
+                sg_id in [g["GroupId"] for g in by_id[eni_id]["Groups"]] for eni_id in endpoint_eni_ids
+            )
+            other_sgs = [g["GroupId"] for g in by_id[eni_other]["Groups"]]
+
+            if endpoint_attached:
+                results["service_endpoint_allowed"] = {
+                    "passed": True,
+                    "message": f"SG {sg_id} attached to all {len(endpoint_eni_ids)} endpoint ENI(s)",
+                }
+            else:
+                results["service_endpoint_allowed"] = {
+                    "passed": False,
+                    "error": f"SG {sg_id} not on every endpoint ENI",
+                }
+
+            if sg_id not in other_sgs:
+                results["other_endpoint_blocked"] = {
+                    "passed": True,
+                    "message": "SG not on unrelated ENI (scoped to service)",
+                }
+            else:
+                results["other_endpoint_blocked"] = {
+                    "passed": False,
+                    "error": "SG leaked to unrelated ENI",
+                }
+
+    except ClientError as e:
+        for key in expected_keys:
+            results.setdefault(key, {"passed": False, "error": str(e)})
+    finally:
+        endpoint_delete_started = False
+        endpoint_deleted = endpoint_id is None
+        if endpoint_id:
+            try:
+                delete_result = ec2.delete_vpc_endpoints(VpcEndpointIds=[endpoint_id])
+                unsuccessful = delete_result.get("Unsuccessful", [])
+                if unsuccessful:
+                    msg = f"delete_vpc_endpoints reported unsuccessful entries: {unsuccessful}"
+                    raise RuntimeError(msg)
+                endpoint_delete_started = True
+            except Exception as e:
+                cleanup_errors.append(f"delete VPC endpoint {endpoint_id}: {e}")
+        if eni_other:
+            eni_delete_error = _delete_with_dependency_retry(
+                ec2.delete_network_interface,
+                resource_desc=f"ENI {eni_other}",
+                NetworkInterfaceId=eni_other,
+            )
+            if eni_delete_error:
+                cleanup_errors.append(f"delete ENI {eni_other}: {eni_delete_error}")
+        if endpoint_id and endpoint_delete_started:
+            try:
+                _wait_for_endpoint_deletion(ec2, endpoint_id)
+                endpoint_deleted = True
+            except Exception as e:
+                cleanup_errors.append(f"delete VPC endpoint {endpoint_id}: {e}")
+        dependency_attempts = 12 if endpoint_deleted else 1
+        if subnet_id:
+            subnet_delete_error = _delete_with_dependency_retry(
+                ec2.delete_subnet,
+                resource_desc=f"subnet {subnet_id}",
+                attempts=dependency_attempts,
+                SubnetId=subnet_id,
+            )
+            if subnet_delete_error:
+                cleanup_errors.append(f"delete subnet {subnet_id}: {subnet_delete_error}")
+        if sg_id:
+            sg_delete_error = _delete_with_dependency_retry(
+                ec2.delete_security_group,
+                resource_desc=f"SG {sg_id}",
+                attempts=dependency_attempts,
+                GroupId=sg_id,
+            )
+            if sg_delete_error:
+                cleanup_errors.append(f"delete SG {sg_id}: {sg_delete_error}")
+
+    results["cleanup"] = {"passed": not cleanup_errors}
+    if cleanup_errors:
+        results["cleanup"]["error"] = "; ".join(cleanup_errors)
+    return results
+
+
+def _wait_for_endpoint_enis(
+    ec2: Any,
+    endpoint_id: str,
+    attempts: int = 30,
+    delay: float = 2.0,
+) -> list[str]:
+    """Poll the VPC endpoint until it reports its ENIs (or attempts run out)."""
+    for _ in range(attempts):
+        resp = ec2.describe_vpc_endpoints(VpcEndpointIds=[endpoint_id])
+        endpoints = resp.get("VpcEndpoints", [])
+        if endpoints and endpoints[0].get("NetworkInterfaceIds"):
+            return list(endpoints[0]["NetworkInterfaceIds"])
+        time.sleep(delay)
+    return []
+
+
+def _wait_for_endpoint_deletion(
+    ec2: Any,
+    endpoint_id: str,
+    attempts: int = 90,
+    delay: float = 2.0,
+) -> None:
+    """Poll until the VPC endpoint is gone so dependent resources can be deleted."""
+    for _ in range(attempts):
+        try:
+            resp = ec2.describe_vpc_endpoints(VpcEndpointIds=[endpoint_id])
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") == "InvalidVpcEndpointId.NotFound":
+                return
+            raise
+        endpoints = resp.get("VpcEndpoints", [])
+        if not endpoints or endpoints[0].get("State") == "deleted":
+            return
+        time.sleep(delay)
+    msg = f"Timed out waiting for VPC endpoint {endpoint_id} deletion after {attempts} attempts"
+    raise TimeoutError(msg)
+
+
+def _delete_with_dependency_retry(
+    fn: Any,
+    *,
+    resource_desc: str,
+    attempts: int = 12,
+    delay: float = 5.0,
+    **kwargs: Any,
+) -> str | None:
+    """Delete a resource that may briefly depend on an AWS-managed ENI."""
+    last_error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            fn(**kwargs)
+            return None
+        except ClientError as e:
+            code = e.response.get("Error", {}).get("Code", "")
+            if code in ALREADY_GONE_CLEANUP_CODES:
+                return None
+            last_error = e
+            if code == "DependencyViolation" and attempt < attempts:
+                time.sleep(delay)
+                continue
+            return str(e)
+    return str(last_error) if last_error else f"{resource_desc} delete did not complete"
+
+
 def _get_nacl_assoc(ec2: Any, vpc_id: str, subnet_id: str) -> str:
     """Get the NACL association ID for a subnet."""
     nacls = ec2.describe_network_acls(
@@ -287,7 +519,7 @@ def main() -> int:
     """Run SG rule scoping test for the given scope and emit JSON result."""
     parser = argparse.ArgumentParser(description="Test SG rule scoping levels")
     parser.add_argument("--region", default=os.environ.get("AWS_REGION", "us-west-2"))
-    parser.add_argument("--scope", required=True, choices=["workload", "node", "subnet"])
+    parser.add_argument("--scope", required=True, choices=["workload", "node", "subnet", "service"])
     args = parser.parse_args()
 
     ec2 = boto3.client("ec2", region_name=args.region)
@@ -315,6 +547,8 @@ def main() -> int:
 
         if args.scope in ("workload", "node"):
             result["tests"] = test_workload_or_node_scoping(ec2, vpc_id, az, args.scope)
+        elif args.scope == "service":
+            result["tests"] = test_service_scoping(ec2, vpc_id, az, args.region)
         else:
             result["tests"] = test_subnet_scoping(ec2, vpc_id, az)
 

@@ -757,7 +757,7 @@ def _run_sg_scoping_check(
     default_scope: str,
     label: str,
 ) -> None:
-    """Shared logic for SG scoping validations (workload/node/subnet)."""
+    """Shared logic for SG scoping validations (workload/node/subnet/service)."""
     if not check_required_tests(validation, required_keys, f"{label} scoping tests failed"):
         return
     scope = validation.config.get("step_output", {}).get("scope", default_scope)
@@ -843,6 +843,34 @@ class SgSubnetScopingCheck(BaseValidation):
             ["create_sg", "apply_subnet_rule", "subnet_allowed", "other_subnet_blocked", "cleanup"],
             "subnet",
             "Subnet",
+        )
+
+
+class SgServiceScopingCheck(BaseValidation):
+    """Validate security group rules can be scoped at service level.
+
+    Verifies the platform supports applying SG rules that target a specific
+    service endpoint (e.g. the K8s API server), so the rule does not leak
+    onto unrelated workloads/nodes/subnets.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        tests: dict with create_sg, apply_service_rule, service_endpoint_allowed,
+               other_endpoint_blocked, cleanup
+    """
+
+    description: ClassVar[str] = "Check SG rules scoped at service level"
+    markers: ClassVar[list[str]] = ["network", "security"]
+
+    def run(self) -> None:
+        """Check service-level SG scoping from step output."""
+        _run_sg_scoping_check(
+            self,
+            ["create_sg", "apply_service_rule", "service_endpoint_allowed", "other_endpoint_blocked", "cleanup"],
+            "service",
+            "Service",
         )
 
 

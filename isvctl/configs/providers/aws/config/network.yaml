@@ -147,6 +147,13 @@ commands:
         args: ["--region", "{{region}}", "--scope", "subnet"]
         timeout: 120
 
+      # Test 4f: SG Scoping - Service Level (~60s, VPC interface endpoint)
+      - name: sg_service_scoping
+        phase: test
+        command: "python3 ../scripts/network/sg_scoping_test.py"
+        args: ["--region", "{{region}}", "--scope", "service"]
+        timeout: 300
+
       # Test 5: Connectivity Test (~3 min)
       - name: connectivity_test
         phase: test

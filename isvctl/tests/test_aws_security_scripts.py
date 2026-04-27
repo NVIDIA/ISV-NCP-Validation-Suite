@@ -301,13 +301,13 @@ def test_bmc_management_network_detects_tenant_cidr_overlap() -> None:
 
 
 def test_bmc_management_network_detects_explicit_management_routes() -> None:
-    """SEC12-01 fails when a tenant route table targets a management CIDR."""
+    """SEC12-01 fails when a tenant route table targets part of a management CIDR."""
     module = _load_security_script("bmc_management_network_test.py")
     ec2 = FakeBmcManagementEc2(
         route_tables=[
             {
                 "RouteTableId": "rtb-mgmt",
-                "Routes": [{"DestinationCidrBlock": "198.18.0.0/15"}],
+                "Routes": [{"DestinationCidrBlock": "198.18.1.0/24"}],
             }
         ]
     )
@@ -316,6 +316,46 @@ def test_bmc_management_network_detects_explicit_management_routes() -> None:
 
     assert result["passed"] is False
     assert "rtb-mgmt" in result["error"]
+
+
+def test_bmc_management_network_detects_management_acl_host_route() -> None:
+    """SEC12-01 fails when a NACL explicitly allows a host inside a management range."""
+    module = _load_security_script("bmc_management_network_test.py")
+    ec2 = FakeBmcManagementEc2(
+        network_acls=[
+            {
+                "NetworkAclId": "acl-mgmt",
+                "Entries": [
+                    {
+                        "RuleAction": "allow",
+                        "CidrBlock": "169.254.169.254/32",
+                    }
+                ],
+            }
+        ]
+    )
+
+    result = module._check_management_acl_enforced(ec2, ["vpc-tenant"])
+
+    assert result["passed"] is False
+    assert "acl-mgmt" in result["error"]
+
+
+def test_bmc_management_network_exempts_default_routes() -> None:
+    """SEC12-01 route checks do not treat default internet routes as management routes."""
+    module = _load_security_script("bmc_management_network_test.py")
+    ec2 = FakeBmcManagementEc2(
+        route_tables=[
+            {
+                "RouteTableId": "rtb-default",
+                "Routes": [{"DestinationCidrBlock": "0.0.0.0/0"}],
+            }
+        ]
+    )
+
+    result = module._check_restricted_management_routes(ec2, ["vpc-tenant"])
+
+    assert result["passed"] is True
 
 
 def test_bmc_management_network_main_emits_sec12_01_contract(

@@ -53,7 +53,6 @@ BMC_MANAGEMENT_CIDRS = [
     ipaddress.ip_network("169.254.0.0/16"),
     ipaddress.ip_network("198.18.0.0/15"),
 ]
-BMC_MANAGEMENT_CIDR_STRS = {str(cidr) for cidr in BMC_MANAGEMENT_CIDRS}
 MANAGEMENT_TAG_TOKENS = ("bmc", "ipmi", "redfish", "oob", "out-of-band", "outofband")
 
 
@@ -106,12 +105,23 @@ def _cidr_overlaps_management(cidr: str) -> bool:
 
 
 def _is_explicit_management_cidr(cidr: str | None) -> bool:
-    """Return True for literal management CIDR targets.
+    """Return True when a CIDR explicitly targets a BMC management range.
 
     Default internet routes such as 0.0.0.0/0 are intentionally not treated
     as management routes here; this check catches explicit BMC network wiring.
     """
-    return cidr in BMC_MANAGEMENT_CIDR_STRS
+    if not cidr:
+        return False
+    try:
+        network = ipaddress.ip_network(cidr, strict=False)
+    except ValueError:
+        return False
+    if network.prefixlen == 0:
+        return False
+    return any(
+        network.version == management_cidr.version and network.overlaps(management_cidr)
+        for management_cidr in BMC_MANAGEMENT_CIDRS
+    )
 
 
 def _check_dedicated_management_network(ec2: Any, vpc_ids: list[str]) -> dict[str, Any]:

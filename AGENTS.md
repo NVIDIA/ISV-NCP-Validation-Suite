@@ -43,10 +43,12 @@ Config (YAML) → Script (any language) → JSON output → Validations (asserti
 ### Lifecycle invariants (non-obvious)
 
 - Phases run in order: `setup → test → teardown`.
-- **Teardown runs even if setup or test failed** - cloud resources still get cleaned up.
+- **Teardown runs after setup/test failures by default** so cloud resources get
+  cleaned up - but it is skipped when `teardown_on_failure` is disabled, or when
+  setup was requested in the same invocation but no setup steps actually ran.
 - **Teardown is best-effort** - one failing teardown step does not block the others.
-- **Standalone teardown** is supported: `isvctl test run -f config.yaml --phase teardown`
-  (useful after a previous run with `AWS_SKIP_TEARDOWN`).
+- **Standalone teardown** (`isvctl test run -f config.yaml --phase teardown`) runs
+  unconditionally - useful after a previous run with `AWS_SKIP_TEARDOWN`.
 - Multiple `-f` configs merge; later files override earlier ones.
 
 ## Architecture

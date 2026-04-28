@@ -83,6 +83,8 @@ Validation classes live in `isvtest/src/isvtest/validations/` grouped by domain
 (`generic.py`, `cluster.py`, `instance.py`, `network.py`, `iam.py`, `security.py`,
 `host.py`, `k8s_*.py`, `slurm_*.py`, `bm_*.py`). Each subclass declares
 `markers: ClassVar[list[str]]` for filtering and is auto-discovered.
+`network.py` includes security group scoping checks for workloads, nodes, subnets,
+and services.
 
 Workloads (`isvtest/src/isvtest/workloads/`) are long-running tests (NIM, NCCL,
 stress) marked `["workload", "slow"]` with manifests and helper scripts colocated.

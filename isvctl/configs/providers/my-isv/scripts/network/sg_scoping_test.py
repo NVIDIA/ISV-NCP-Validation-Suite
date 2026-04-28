@@ -12,8 +12,8 @@
 """Security group scoping test - TEMPLATE (replace with your platform implementation).
 
 Tests that security group rules can be scoped at a specific granularity
-level (workload, node, or subnet/tenant). The --scope flag selects which
-level to test.
+level (workload, node, subnet/tenant, or service). The --scope flag
+selects which level to test.
 
 Required JSON output fields vary by scope:
 
@@ -29,10 +29,15 @@ Required JSON output fields vary by scope:
     tests: {create_sg, apply_subnet_rule, subnet_allowed,
             other_subnet_blocked, cleanup}
 
+  scope=service:
+    tests: {create_sg, apply_service_rule, service_endpoint_allowed,
+            other_endpoint_blocked, cleanup}
+
 Usage:
     python sg_scoping_test.py --region <region> --scope workload
     python sg_scoping_test.py --region <region> --scope node
     python sg_scoping_test.py --region <region> --scope subnet
+    python sg_scoping_test.py --region <region> --scope service
 """
 
 import argparse
@@ -65,6 +70,13 @@ SCOPE_TESTS: dict[str, list[str]] = {
         "other_subnet_blocked",
         "cleanup",
     ],
+    "service": [
+        "create_sg",
+        "apply_service_rule",
+        "service_endpoint_allowed",
+        "other_endpoint_blocked",
+        "cleanup",
+    ],
 }
 
 
@@ -75,7 +87,7 @@ def main() -> int:
     parser.add_argument(
         "--scope",
         required=True,
-        choices=["workload", "node", "subnet"],
+        choices=["workload", "node", "subnet", "service"],
         help="Scoping level to test",
     )
     args = parser.parse_args()

@@ -167,6 +167,12 @@ commands:
         args: ["--region", "{{region}}", "--scope", "subnet"]
         timeout: 60
 
+      - name: sg_service_scoping
+        phase: test
+        command: "python ../scripts/network/sg_scoping_test.py"
+        args: ["--region", "{{region}}", "--scope", "service"]
+        timeout: 300
+
       - name: byoip_test
         phase: test
         command: "python ../scripts/network/byoip_test.py"

@@ -11,6 +11,7 @@
 """Tests for validation module."""
 
 import json
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -40,6 +41,7 @@ from isvtest.validations.network import (
     VpcPeeringCheck,
 )
 from isvtest.validations.nim import NimHealthCheck, NimInferenceCheck, NimModelCheck
+from isvtest.validations.security import ConsoleRbacCheck
 
 
 class ConcreteValidation(BaseValidation):
@@ -670,6 +672,85 @@ class TestInstancePowerCycleCheck:
         result = v.execute()
         assert result["passed"] is True
         assert "i-abc123" in result["output"]
+
+
+def _console_rbac_config(step_output: dict[str, Any] | None = None) -> dict[str, dict[str, Any]]:
+    """Build a minimal ConsoleRbacCheck config."""
+    output: dict[str, Any] = {
+        "success": True,
+        "platform": "vm",
+        "test_name": "console_rbac",
+        "instance_id": "i-abc123",
+        "rbac_model": "aws-iam",
+        "access_restricted": True,
+        "restricted_actions": ["ec2-instance-connect:SendSerialConsoleSSHPublicKey"],
+        "tests": {
+            "denied_principal_cannot_access_console": {"passed": True},
+            "allowed_principal_can_access_console": {"passed": True},
+            "allowed_principal_is_resource_scoped": {"passed": True},
+        },
+    }
+    if step_output:
+        output.update(step_output)
+    return {"step_output": output}
+
+
+class TestConsoleRbacCheck:
+    """Tests for ConsoleRbacCheck validation."""
+
+    def test_all_required_fields_and_subtests_pass(self) -> None:
+        """Console RBAC passes when all required proof fields are present."""
+        v = ConsoleRbacCheck(config=_console_rbac_config())
+        result = v.execute()
+
+        assert result["passed"] is True
+        assert "i-abc123" in result["output"]
+        assert "aws-iam" in result["output"]
+
+    @pytest.mark.parametrize("access_restricted", [None, False])
+    def test_access_restricted_must_be_true(self, access_restricted: bool | None) -> None:
+        """Console RBAC fails when access_restricted is missing or false."""
+        v = ConsoleRbacCheck(config=_console_rbac_config({"access_restricted": access_restricted}))
+        result = v.execute()
+
+        assert result["passed"] is False
+        assert "access_restricted" in result["error"]
+
+    def test_restricted_actions_must_be_non_empty(self) -> None:
+        """Console RBAC fails when no restricted action is reported."""
+        v = ConsoleRbacCheck(config=_console_rbac_config({"restricted_actions": []}))
+        result = v.execute()
+
+        assert result["passed"] is False
+        assert "restricted console actions" in result["error"]
+
+    @pytest.mark.parametrize(
+        ("tests", "expected_error"),
+        [
+            (
+                {
+                    "allowed_principal_can_access_console": {"passed": True},
+                    "allowed_principal_is_resource_scoped": {"passed": True},
+                },
+                "denied_principal_cannot_access_console",
+            ),
+            (
+                {
+                    "denied_principal_cannot_access_console": {"passed": True},
+                    "allowed_principal_can_access_console": {"passed": False, "error": "denied"},
+                    "allowed_principal_is_resource_scoped": {"passed": True},
+                },
+                "allowed_principal_can_access_console",
+            ),
+        ],
+    )
+    def test_required_subtests_must_pass(self, tests: dict[str, Any], expected_error: str) -> None:
+        """Console RBAC fails when a required subtest is missing or failed."""
+        v = ConsoleRbacCheck(config=_console_rbac_config({"tests": tests}))
+        result = v.execute()
+
+        assert result["passed"] is False
+        assert expected_error in result["error"]
 
 
 def _mock_ssh_run(responses: dict[str, tuple[int, str, str]]):

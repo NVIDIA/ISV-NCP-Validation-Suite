@@ -44,7 +44,7 @@ tests:
   # These are PROVIDER-AGNOSTIC. They only check JSON field names/values.
   #
   # Layout mirrors bare_metal.yaml:
-  #   launch checks -> list -> tags -> serial_console -> cloud_init
+  #   launch checks -> list -> tags -> serial_console -> console_rbac -> cloud_init
   #   -> describe_instance (SSH / GPU / host anchor, post-reboot)
   #   -> lifecycle (stop / start / reboot)
   #   -> NIM -> teardown
@@ -76,6 +76,11 @@ tests:
       step: serial_console
       checks:
         SerialConsoleCheck: {}
+
+    console_rbac:
+      step: console_rbac
+      checks:
+        ConsoleRbacCheck: {}
 
     cloud_init:
       step: launch_instance

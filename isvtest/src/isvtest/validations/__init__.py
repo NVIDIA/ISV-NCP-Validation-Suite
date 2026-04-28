@@ -91,6 +91,7 @@ from isvtest.validations.nim import (
 from isvtest.validations.security import (
     ApiEndpointIsolationCheck,
     BmcTenantIsolationCheck,
+    ConsoleRbacCheck,
 )
 
 __all__ = [
@@ -103,6 +104,7 @@ __all__ = [
     "ByoipCheck",
     "CloudInitCheck",
     "ClusterHealthCheck",
+    "ConsoleRbacCheck",
     "ContainerRuntimeCheck",
     "CpuInfoCheck",
     "DhcpIpManagementCheck",

@@ -18,14 +18,15 @@
 #   2. list_instances     - boto3: Lists instances in VPC (test)
 #   3. verify_tags        - boto3: Verifies user-defined tags (test)
 #   4. serial_console     - boto3: Retrieves serial console output (test)
-#   5. stop_instance      - boto3: Stops EC2, verifies stopped state (test)
-#   6. start_instance     - boto3: Starts stopped EC2, verifies recovery (test)
-#   7. reboot_instance    - boto3: Reboots EC2, validates recovery (test)
-#   8. describe_instance  - boto3: Describes current state, passes SSH info (test)
+#   5. console_rbac       - boto3: Simulates EC2 serial console IAM access (test)
+#   6. stop_instance      - boto3: Stops EC2, verifies stopped state (test)
+#   7. start_instance     - boto3: Starts stopped EC2, verifies recovery (test)
+#   8. reboot_instance    - boto3: Reboots EC2, validates recovery (test)
+#   9. describe_instance  - boto3: Describes current state, passes SSH info (test)
 #                           (runs after reboot so IP is current; validation anchor)
-#   9. deploy_nim         - paramiko: Deploys NIM container via SSH (test)
-#  10. teardown_nim       - paramiko: Stops NIM container via SSH (teardown)
-#  11. teardown           - boto3: Terminates EC2 (teardown)
+#  10. deploy_nim         - paramiko: Deploys NIM container via SSH (test)
+#  11. teardown_nim       - paramiko: Stops NIM container via SSH (teardown)
+#  12. teardown           - boto3: Terminates EC2 (teardown)
 #
 # Usage:
 #   uv run isvctl test run -f isvctl/configs/providers/aws/config/vm.yaml
@@ -87,6 +88,17 @@ commands:
           - "--region"
           - "{{region}}"
         timeout: 60
+
+      # AWS-specific: Console RBAC policy simulation (IAM)
+      - name: console_rbac
+        phase: test
+        command: "python3 ../scripts/vm/console_rbac.py"
+        args:
+          - "--instance-id"
+          - "{{steps.launch_instance.instance_id}}"
+          - "--region"
+          - "{{region}}"
+        timeout: 120
 
       # AWS-specific: Stop instance and verify stopped state (boto3)
       - name: stop_instance

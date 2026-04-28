@@ -17,7 +17,7 @@ Note: For cluster lifecycle management, use isvctl instead:
 import json
 import os
 import tempfile
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -321,7 +321,7 @@ def _transform_validations_for_pytest(
     return result
 
 
-class Platform(str, Enum):
+class Platform(StrEnum):
     """Supported platforms for validation."""
 
     ALL = "all"

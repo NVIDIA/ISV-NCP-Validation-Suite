@@ -11,7 +11,7 @@
 """Security validations for infrastructure hardening.
 
 Validations for BMC isolation, API endpoint exposure, tenant isolation,
-and other platform security requirements (SEC* test IDs).
+console RBAC, and other platform security requirements.
 """
 
 from typing import ClassVar
@@ -81,3 +81,58 @@ class ApiEndpointIsolationCheck(BaseValidation):
             return
         endpoints = self.config.get("step_output", {}).get("endpoints_tested", "N/A")
         self.set_passed(f"API endpoints not publicly accessible ({endpoints} endpoints tested)")
+
+
+class ConsoleRbacCheck(BaseValidation):
+    """Validate interactive console access is restricted by RBAC.
+
+    Config:
+        step_output: The console_rbac step output to check
+
+    Step output:
+        instance_id: VM identifier
+        access_restricted: True when unauthorized console access is denied
+        restricted_actions: Non-empty list of console access permissions
+        tests: dict with denied_principal_cannot_access_console,
+               allowed_principal_can_access_console,
+               allowed_principal_is_resource_scoped
+    """
+
+    description: ClassVar[str] = "Check console access is restricted by RBAC"
+    markers: ClassVar[list[str]] = ["vm", "security", "iam"]
+
+    def run(self) -> None:
+        """Validate console RBAC provider proof from step output."""
+        step_output = self.config.get("step_output", {})
+
+        instance_id = step_output.get("instance_id")
+        if not instance_id:
+            self.set_failed("No 'instance_id' in step output")
+            return
+
+        access_restricted = step_output.get("access_restricted")
+        if access_restricted is not True:
+            self.set_failed(
+                f"Console access for {instance_id} is not affirmatively restricted "
+                f"(access_restricted={access_restricted!r})"
+            )
+            return
+
+        restricted_actions = step_output.get("restricted_actions")
+        if not isinstance(restricted_actions, list) or not restricted_actions:
+            self.set_failed(f"No restricted console actions reported for {instance_id}")
+            return
+
+        required = [
+            "denied_principal_cannot_access_console",
+            "allowed_principal_can_access_console",
+            "allowed_principal_is_resource_scoped",
+        ]
+        if not check_required_tests(self, required, "Console RBAC tests failed"):
+            return
+
+        rbac_model = step_output.get("rbac_model", "unknown")
+        self.set_passed(
+            f"Console RBAC restricted for {instance_id} "
+            f"(model={rbac_model}, actions={', '.join(str(action) for action in restricted_actions)})"
+        )

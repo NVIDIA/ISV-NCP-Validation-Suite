@@ -91,6 +91,7 @@ from isvtest.validations.nim import (
 )
 from isvtest.validations.security import (
     ApiEndpointIsolationCheck,
+    BmcBastionAccessCheck,
     BmcManagementNetworkCheck,
     BmcProtocolSecurityCheck,
     BmcTenantIsolationCheck,
@@ -105,6 +106,7 @@ __all__ = [
     "AccessKeyDisabledCheck",
     "AccessKeyRejectedCheck",
     "ApiEndpointIsolationCheck",
+    "BmcBastionAccessCheck",
     "BmcManagementNetworkCheck",
     "BmcProtocolSecurityCheck",
     "BmcTenantIsolationCheck",

@@ -54,6 +54,11 @@ tests:
         BmcProtocolSecurityCheck:
           step: bmc_protocol_security
 
+    bmc_bastion_access:
+      checks:
+        BmcBastionAccessCheck:
+          step: bmc_bastion_access
+
     api_security:
       checks:
         ApiEndpointIsolationCheck:

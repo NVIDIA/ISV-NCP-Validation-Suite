@@ -71,6 +71,7 @@ tests:
       step: serial_console
       checks:
         SerialConsoleCheck: {}
+        SerialConsoleRetentionCheck: {}
 
     cloud_init:
       step: launch_instance

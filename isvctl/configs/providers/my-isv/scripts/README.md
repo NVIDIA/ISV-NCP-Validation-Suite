@@ -100,6 +100,12 @@ read specific keys (`instance_id`, `state`, `public_ip`, etc.). The AWS
 reference implementation is the source of truth for what "correct" output
 looks like.
 
+For bare-metal serial console validation, the scaffold must also prove that
+historical console logs are queryable for the required retention window. Emit
+`console_log_queryable`, `retention_days_configured`,
+`oldest_queryable_log_age_days`, `query_result_count`, and `retention_evidence`
+from a real serial console log archive or retention policy query.
+
 ## See also
 
 - [`config/`](../config/) - the YAML wiring that invokes these scripts

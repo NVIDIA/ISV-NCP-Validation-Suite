@@ -413,6 +413,13 @@ class TestImportEndToEnd:
         assert "k8s_workloads" in validations
         assert result["tests"]["platform"] == "kubernetes"
 
+    def test_aws_bare_metal_overrides_serial_console_retention_check(self) -> None:
+        """AWS BM must not inherit the retention check until archive evidence exists."""
+        result = merge_yaml_files([self.CONFIGS_DIR / "providers" / "aws" / "config" / "bare_metal.yaml"])
+
+        checks = result["tests"]["validations"]["serial_console"]["checks"]
+        assert checks == [{"SerialConsoleCheck": {}}]
+
     def test_microk8s_inherits_k8s_validations(self) -> None:
         """providers/microk8s.yaml imports suites/k8s.yaml and adds overrides."""
         result = merge_yaml_files([self.CONFIGS_DIR / "providers" / "microk8s.yaml"])

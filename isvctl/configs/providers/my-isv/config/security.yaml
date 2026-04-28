@@ -18,6 +18,7 @@
 # Coverage:
 #   SEC12-01: BMC management network (BmcManagementNetworkCheck)
 #   SEC12-02: BMC tenant isolation (BmcTenantIsolationCheck)
+#   SEC12-03: BMC bastion access (BmcBastionAccessCheck)
 #   CNP10-01: BMC protocol security (BmcProtocolSecurityCheck)
 #   SEC14-01: API endpoint isolation (ApiEndpointIsolationCheck)
 #   SEC07-01: MFA enforcement (MfaEnforcedCheck)
@@ -57,6 +58,12 @@ commands:
       - name: bmc_protocol_security
         phase: test
         command: "python ../scripts/security/bmc_protocol_security_test.py"
+        args: ["--region", "{{region}}"]
+        timeout: 60
+
+      - name: bmc_bastion_access
+        phase: test
+        command: "python ../scripts/security/bmc_bastion_access_test.py"
         args: ["--region", "{{region}}"]
         timeout: 60
 

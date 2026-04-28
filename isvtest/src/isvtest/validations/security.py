@@ -121,6 +121,45 @@ class BmcProtocolSecurityCheck(BaseValidation):
         self.set_passed(f"BMC protocol security posture verified ({bmc_count} endpoints tested)")
 
 
+class BmcBastionAccessCheck(BaseValidation):
+    """Validate BMC is only accessible via a hardened bastion.
+
+    Verifies that out-of-band management interfaces (BMC/IPMI/Redfish) accept
+    ingress only through a designated bastion/jumphost, that the bastion
+    itself is hardened (no world-open SSH), and that BMC-tagged subnets have
+    no direct route to the public internet.
+
+    Hyperscalers that hide the BMC plane from customers (e.g. AWS) cannot
+    fully exercise this check; the AWS reference reports each subtest as
+    passed with a ``provider_hidden`` note when no customer-visible BMC
+    network is present. Self-managed NCPs running their own BMC fabric
+    should report concrete pass/fail per subtest.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        tests: dict with bastion_identifiable, management_ingress_via_bastion_only,
+               no_direct_public_route, bastion_hardened
+    """
+
+    description: ClassVar[str] = "Check BMC reachable only via hardened bastion"
+    markers: ClassVar[list[str]] = ["security", "network"]
+
+    def run(self) -> None:
+        """Validate required BMC bastion-access results from step output."""
+        required = [
+            "bastion_identifiable",
+            "management_ingress_via_bastion_only",
+            "no_direct_public_route",
+            "bastion_hardened",
+        ]
+        if not check_required_tests(self, required, "BMC bastion access tests failed"):
+            return
+        endpoints = self.config.get("step_output", {}).get("management_networks_checked", "N/A")
+        self.set_passed(f"BMC reachable only via hardened bastion ({endpoints} networks checked)")
+
+
 class MfaEnforcedCheck(BaseValidation):
     """Validate all administrative interfaces are protected by MFA.
 

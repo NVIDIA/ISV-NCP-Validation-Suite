@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Any
 
 from isvtest.validations.security import (
+    BmcBastionAccessCheck,
     BmcManagementNetworkCheck,
     BmcProtocolSecurityCheck,
     MfaEnforcedCheck,
@@ -176,6 +177,72 @@ def test_bmc_protocol_security_check_preserves_empty_tests_map() -> None:
 
     assert result["passed"] is False
     assert result["error"] == "No 'tests' in step output"
+
+
+def _bastion_access_config(tests: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Build a minimal BMC bastion-access validation config."""
+    return {
+        "step_output": {
+            "success": True,
+            "platform": "security",
+            "test_name": "bmc_bastion_access",
+            "management_networks_checked": 1,
+            "tests": tests,
+        }
+    }
+
+
+class TestBmcBastionAccessCheck:
+    """Tests for SEC12-03 BMC bastion-access validation."""
+
+    def test_all_required_tests_pass(self) -> None:
+        """Pass when all SEC12-03 contract checks passed."""
+        tests = {
+            "bastion_identifiable": {"passed": True},
+            "management_ingress_via_bastion_only": {"passed": True},
+            "no_direct_public_route": {"passed": True},
+            "bastion_hardened": {"passed": True},
+        }
+
+        result = BmcBastionAccessCheck(config=_bastion_access_config(tests)).execute()
+
+        assert result["passed"] is True
+        assert "BMC reachable only via hardened bastion" in result["output"]
+
+    def test_failed_bastion_hardened_reports_contract_key(self) -> None:
+        """Fail with the specific contract key when bastion hardening fails."""
+        tests = {
+            "bastion_identifiable": {"passed": True},
+            "management_ingress_via_bastion_only": {"passed": True},
+            "no_direct_public_route": {"passed": True},
+            "bastion_hardened": {"passed": False, "error": "SSH open to 0.0.0.0/0"},
+        }
+
+        result = BmcBastionAccessCheck(config=_bastion_access_config(tests)).execute()
+
+        assert result["passed"] is False
+        assert "bastion_hardened" in result["error"]
+        assert "0.0.0.0/0" in result["error"]
+
+    def test_missing_required_key_fails(self) -> None:
+        """Fail when one of the four required contract keys is absent."""
+        tests = {
+            "bastion_identifiable": {"passed": True},
+            "management_ingress_via_bastion_only": {"passed": True},
+            "no_direct_public_route": {"passed": True},
+        }
+
+        result = BmcBastionAccessCheck(config=_bastion_access_config(tests)).execute()
+
+        assert result["passed"] is False
+        assert "bastion_hardened" in result["error"]
+
+    def test_missing_tests_fails(self) -> None:
+        """Fail when the step output does not include contract tests."""
+        result = BmcBastionAccessCheck(config={"step_output": {}}).execute()
+
+        assert result["passed"] is False
+        assert "tests" in result["error"]
 
 
 class TestMfaEnforcedCheck:

@@ -536,6 +536,308 @@ def test_bmc_protocol_security_main_reports_sts_probe_failure(
     assert all(test["passed"] is False for test in payload["tests"].values())
 
 
+class FakeBastionEc2:
+    """Fake EC2 client for BMC bastion-access checks."""
+
+    def __init__(
+        self,
+        *,
+        security_groups: list[dict[str, Any]] | None = None,
+        subnets: list[dict[str, Any]] | None = None,
+        route_tables: list[dict[str, Any]] | None = None,
+    ) -> None:
+        """Initialize paginated EC2 responses."""
+        self.paginators = {
+            "describe_security_groups": FakeEc2Paginator(
+                [{"SecurityGroups": security_groups if security_groups is not None else []}]
+            ),
+            "describe_subnets": FakeEc2Paginator([{"Subnets": subnets if subnets is not None else []}]),
+            "describe_route_tables": FakeEc2Paginator([{"RouteTables": route_tables or []}]),
+        }
+
+    def get_paginator(self, operation_name: str) -> FakeEc2Paginator:
+        """Return a fake paginator for the requested EC2 operation."""
+        return self.paginators[operation_name]
+
+
+def test_bmc_bastion_access_provider_hidden_when_no_management_resources(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """SEC12-03 passes with provider_hidden markers when no BMC resources are tagged."""
+    module = _load_security_script("bmc_bastion_access_test.py")
+    ec2 = FakeBastionEc2()
+
+    def fake_client(service_name: str, **_: Any) -> FakeBastionEc2:
+        """Return the fake EC2 client."""
+        assert service_name == "ec2"
+        return ec2
+
+    monkeypatch.setattr(module.boto3, "client", fake_client)
+    monkeypatch.setattr(module.sys, "argv", ["bmc_bastion_access_test.py", "--region", "us-west-2"])
+
+    exit_code = module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["success"] is True
+    assert payload["test_name"] == "bmc_bastion_access"
+    for subtest in (
+        "bastion_identifiable",
+        "management_ingress_via_bastion_only",
+        "no_direct_public_route",
+        "bastion_hardened",
+    ):
+        assert payload["tests"][subtest]["passed"] is True
+        assert payload["tests"][subtest]["provider_hidden"] is True
+
+
+def test_bmc_bastion_access_fails_when_bmc_tagged_but_no_bastion(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """When a BMC-tagged resource exists but no bastion is tagged, bastion_identifiable fails."""
+    module = _load_security_script("bmc_bastion_access_test.py")
+    ec2 = FakeBastionEc2(
+        security_groups=[
+            {
+                "GroupId": "sg-bmc",
+                "Tags": [{"Key": "Role", "Value": "bmc-network"}],
+                "IpPermissions": [],
+            },
+        ],
+    )
+
+    def fake_client(service_name: str, **_: Any) -> FakeBastionEc2:
+        """Return the fake EC2 client."""
+        assert service_name == "ec2"
+        return ec2
+
+    monkeypatch.setattr(module.boto3, "client", fake_client)
+    monkeypatch.setattr(module.sys, "argv", ["bmc_bastion_access_test.py", "--region", "us-west-2"])
+
+    exit_code = module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["success"] is False
+    assert payload["tests"]["bastion_identifiable"]["passed"] is False
+    assert payload["tests"]["bastion_hardened"]["passed"] is False
+
+
+def test_bmc_bastion_access_detects_world_open_management_ingress() -> None:
+    """SEC12-03 fails when a BMC-tagged SG accepts ingress from 0.0.0.0/0 on a management port."""
+    module = _load_security_script("bmc_bastion_access_test.py")
+    management_sgs = [
+        {
+            "GroupId": "sg-bmc",
+            "Tags": [{"Key": "Role", "Value": "bmc-network"}],
+            "IpPermissions": [
+                {
+                    "IpProtocol": "tcp",
+                    "FromPort": 22,
+                    "ToPort": 22,
+                    "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
+                }
+            ],
+        }
+    ]
+    bastion_sgs = [
+        {
+            "GroupId": "sg-bastion",
+            "Tags": [{"Key": "Role", "Value": "bastion"}],
+            "IpPermissions": [],
+        }
+    ]
+    bastion_ids = {sg["GroupId"] for sg in bastion_sgs}
+
+    result = module._check_management_ingress_via_bastion_only(management_sgs, bastion_ids)
+
+    assert result["passed"] is False
+    assert "sg-bmc" in result["error"]
+    assert "public CIDR" in result["error"]
+
+
+def test_bmc_bastion_access_accepts_bastion_sg_referenced_ingress() -> None:
+    """Ingress from the bastion SG (UserIdGroupPairs) is acceptable."""
+    module = _load_security_script("bmc_bastion_access_test.py")
+    management_sgs = [
+        {
+            "GroupId": "sg-bmc",
+            "Tags": [{"Key": "Role", "Value": "bmc-network"}],
+            "IpPermissions": [
+                {
+                    "IpProtocol": "tcp",
+                    "FromPort": 22,
+                    "ToPort": 22,
+                    "UserIdGroupPairs": [{"GroupId": "sg-bastion"}],
+                }
+            ],
+        }
+    ]
+    bastion_ids = {"sg-bastion"}
+
+    result = module._check_management_ingress_via_bastion_only(management_sgs, bastion_ids)
+
+    assert result["passed"] is True
+
+
+def test_bmc_bastion_access_rejects_explicit_cidr_ingress() -> None:
+    """Even a non-public CIDR on a management SG fails; ingress must come via bastion SG ref."""
+    module = _load_security_script("bmc_bastion_access_test.py")
+    management_sgs = [
+        {
+            "GroupId": "sg-bmc",
+            "Tags": [{"Key": "Role", "Value": "bmc-network"}],
+            "IpPermissions": [
+                {
+                    "IpProtocol": "tcp",
+                    "FromPort": 22,
+                    "ToPort": 22,
+                    "IpRanges": [{"CidrIp": "10.99.0.0/24"}],
+                }
+            ],
+        }
+    ]
+
+    result = module._check_management_ingress_via_bastion_only(management_sgs, set())
+
+    assert result["passed"] is False
+    assert "explicit_cidr=True" in result["error"]
+
+
+def test_bmc_bastion_access_detects_igw_route_from_management_subnet() -> None:
+    """SEC12-03 fails when a BMC-tagged subnet has a 0.0.0.0/0 -> igw route."""
+    module = _load_security_script("bmc_bastion_access_test.py")
+    management_subnets = [
+        {
+            "SubnetId": "subnet-bmc",
+            "MapPublicIpOnLaunch": False,
+            "Tags": [{"Key": "Role", "Value": "bmc-management"}],
+        }
+    ]
+    ec2 = FakeBastionEc2(
+        route_tables=[
+            {
+                "RouteTableId": "rtb-bmc",
+                "Routes": [{"DestinationCidrBlock": "0.0.0.0/0", "GatewayId": "igw-12345"}],
+            }
+        ]
+    )
+
+    result = module._check_no_direct_public_route(ec2, management_subnets)
+
+    assert result["passed"] is False
+    assert "rtb-bmc" in result["error"]
+
+
+def test_bmc_bastion_access_detects_map_public_ip() -> None:
+    """SEC12-03 fails when a BMC-tagged subnet auto-assigns public IPs."""
+    module = _load_security_script("bmc_bastion_access_test.py")
+    management_subnets = [
+        {
+            "SubnetId": "subnet-bmc",
+            "MapPublicIpOnLaunch": True,
+            "Tags": [{"Key": "Role", "Value": "bmc-management"}],
+        }
+    ]
+    ec2 = FakeBastionEc2()
+
+    result = module._check_no_direct_public_route(ec2, management_subnets)
+
+    assert result["passed"] is False
+    assert "MapPublicIpOnLaunch" in result["error"]
+
+
+def test_bmc_bastion_access_detects_world_open_bastion_ssh() -> None:
+    """SEC12-03 fails when the bastion SG itself allows SSH from 0.0.0.0/0."""
+    module = _load_security_script("bmc_bastion_access_test.py")
+    bastion_sgs = [
+        {
+            "GroupId": "sg-bastion",
+            "Tags": [{"Key": "Role", "Value": "bastion"}],
+            "IpPermissions": [
+                {
+                    "IpProtocol": "tcp",
+                    "FromPort": 22,
+                    "ToPort": 22,
+                    "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
+                }
+            ],
+        }
+    ]
+
+    result = module._check_bastion_hardened(bastion_sgs)
+
+    assert result["passed"] is False
+    assert "sg-bastion" in result["error"]
+
+
+def test_bmc_bastion_access_main_emits_sec12_03_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Successful AWS reference run emits the SEC12-03 validation contract."""
+    module = _load_security_script("bmc_bastion_access_test.py")
+    bastion_sg = {
+        "GroupId": "sg-bastion",
+        "Tags": [{"Key": "Role", "Value": "jumphost"}],
+        "IpPermissions": [
+            {
+                "IpProtocol": "tcp",
+                "FromPort": 22,
+                "ToPort": 22,
+                "IpRanges": [{"CidrIp": "10.0.0.0/16"}],
+            }
+        ],
+    }
+    bmc_sg = {
+        "GroupId": "sg-bmc",
+        "Tags": [{"Key": "Role", "Value": "bmc-network"}],
+        "IpPermissions": [
+            {
+                "IpProtocol": "tcp",
+                "FromPort": 22,
+                "ToPort": 22,
+                "UserIdGroupPairs": [{"GroupId": "sg-bastion"}],
+            }
+        ],
+    }
+    bmc_subnet = {
+        "SubnetId": "subnet-bmc",
+        "MapPublicIpOnLaunch": False,
+        "Tags": [{"Key": "Role", "Value": "bmc-management"}],
+    }
+    ec2 = FakeBastionEc2(
+        security_groups=[bastion_sg, bmc_sg],
+        subnets=[bmc_subnet],
+        route_tables=[{"RouteTableId": "rtb-bmc-private", "Routes": []}],
+    )
+
+    def fake_client(service_name: str, **_: Any) -> FakeBastionEc2:
+        """Return the fake EC2 client."""
+        assert service_name == "ec2"
+        return ec2
+
+    monkeypatch.setattr(module.boto3, "client", fake_client)
+    monkeypatch.setattr(module.sys, "argv", ["bmc_bastion_access_test.py", "--region", "us-west-2"])
+
+    exit_code = module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["success"] is True
+    assert payload["test_name"] == "bmc_bastion_access"
+    assert set(payload["tests"]) == {
+        "bastion_identifiable",
+        "management_ingress_via_bastion_only",
+        "no_direct_public_route",
+        "bastion_hardened",
+    }
+    for subtest in payload["tests"].values():
+        assert subtest["passed"] is True
+
+
 class FakeIamTags:
     """Small fake for IAM list_user_tags responses."""
 

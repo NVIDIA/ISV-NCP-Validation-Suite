@@ -94,6 +94,7 @@ from isvtest.validations.security import (
     BmcManagementNetworkCheck,
     BmcTenantIsolationCheck,
     ConsoleRbacCheck,
+    MfaEnforcedCheck,
 )
 
 __all__ = [
@@ -126,6 +127,7 @@ __all__ = [
     "InstanceTagCheck",
     "K8sCncfConformanceCheck",
     "LocalizedDnsCheck",
+    "MfaEnforcedCheck",
     "NetworkConnectivityCheck",
     "NetworkProvisionedCheck",
     "NimHealthCheck",

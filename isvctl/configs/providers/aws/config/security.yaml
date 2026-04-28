@@ -22,7 +22,8 @@
 #   1. BMC Management Network - Verify BMC management is dedicated/restricted
 #   2. BMC Tenant Isolation   - Verify BMC/IPMI/Redfish unreachable from VPC
 #   3. API Endpoint Isolation - Verify management APIs are not publicly exposed
-#   4. SA Credential Auth     - Verify IAM user + long-lived access key auth
+#   4. MFA Enforcement        - Verify admin interfaces (UI, CLI, API) require MFA
+#   5. SA Credential Auth     - Verify IAM user + long-lived access key auth
 
 import:
   - ../../../suites/security.yaml
@@ -61,7 +62,14 @@ commands:
         args: ["--region", "{{region}}"]
         timeout: 60
 
-      # Test 4: Service Account Credential Auth (~30s, includes IAM propagation wait)
+      # Test 4: MFA Enforcement (~10s)
+      - name: mfa_enforcement
+        phase: test
+        command: "python3 ../scripts/security/mfa_enforcement_test.py"
+        args: ["--region", "{{region}}"]
+        timeout: 60
+
+      # Test 5: Service Account Credential Auth (~30s, includes IAM propagation wait)
       - name: sa_credential_test
         phase: test
         command: "python3 ../scripts/security/sa_credential_test.py"

@@ -54,6 +54,11 @@ tests:
         ApiEndpointIsolationCheck:
           step: api_endpoint_isolation
 
+    mfa_enforcement:
+      checks:
+        MfaEnforcedCheck:
+          step: mfa_enforcement
+
     service_account_auth:
       checks:
         ServiceAccountCredentialCheck:

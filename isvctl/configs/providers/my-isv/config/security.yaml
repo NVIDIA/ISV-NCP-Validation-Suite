@@ -19,6 +19,7 @@
 #   SEC12-01: BMC management network (BmcManagementNetworkCheck)
 #   SEC12-02: BMC tenant isolation (BmcTenantIsolationCheck)
 #   SEC14-01: API endpoint isolation (ApiEndpointIsolationCheck)
+#   SEC07-01: MFA enforcement (MfaEnforcedCheck)
 #   SEC03-01: Service account credentials (ServiceAccountCredentialCheck)
 #
 # Usage:
@@ -54,6 +55,12 @@ commands:
       - name: api_endpoint_isolation
         phase: test
         command: "python ../scripts/security/api_endpoint_test.py"
+        args: ["--region", "{{region}}"]
+        timeout: 60
+
+      - name: mfa_enforcement
+        phase: test
+        command: "python ../scripts/security/mfa_enforcement_test.py"
         args: ["--region", "{{region}}"]
         timeout: 60
 

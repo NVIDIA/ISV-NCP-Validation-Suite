@@ -10,8 +10,8 @@
 
 """Security validations for infrastructure hardening.
 
-Validations for BMC isolation, API endpoint exposure, tenant isolation,
-console RBAC, and other platform security requirements.
+Validations for BMC isolation, API endpoint exposure, MFA enforcement,
+console RBAC, tenant isolation, and other platform security requirements (SEC* test IDs).
 """
 
 from typing import ClassVar
@@ -82,6 +82,38 @@ class BmcTenantIsolationCheck(BaseValidation):
             return
         bmc_count = self.config.get("step_output", {}).get("bmc_endpoints_tested", "N/A")
         self.set_passed(f"BMC interfaces unreachable from tenant network ({bmc_count} endpoints tested)")
+
+
+class MfaEnforcedCheck(BaseValidation):
+    """Validate all administrative interfaces are protected by MFA.
+
+    Verifies that the platform enforces Multi-Factor Authentication on
+    UI (console), CLI, and API administrative access -- covering root/admin
+    accounts, interactive console users, and programmatic access policies.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        tests: dict with root_mfa_enabled, console_users_mfa,
+               api_mfa_policy, cli_mfa_policy
+    """
+
+    description: ClassVar[str] = "Check admin interfaces protected by MFA"
+    markers: ClassVar[list[str]] = ["security", "iam"]
+
+    def run(self) -> None:
+        """Validate required MFA enforcement results from step output."""
+        required = [
+            "root_mfa_enabled",
+            "console_users_mfa",
+            "api_mfa_policy",
+            "cli_mfa_policy",
+        ]
+        if not check_required_tests(self, required, "MFA enforcement tests failed"):
+            return
+        interfaces = self.config.get("step_output", {}).get("interfaces_checked", "N/A")
+        self.set_passed(f"Admin interfaces protected by MFA ({interfaces} interfaces checked)")
 
 
 class ApiEndpointIsolationCheck(BaseValidation):

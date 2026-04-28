@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from isvtest.validations.security import BmcManagementNetworkCheck
+from isvtest.validations.security import BmcManagementNetworkCheck, MfaEnforcedCheck
 
 
 def _bmc_management_config(tests: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -28,6 +28,24 @@ def _bmc_management_config(tests: dict[str, dict[str, Any]]) -> dict[str, Any]:
             "tests": tests,
         }
     }
+
+
+def _mfa_output(**overrides: Any) -> dict[str, Any]:
+    """Build a minimal passing MFA enforcement step_output."""
+    base: dict[str, Any] = {
+        "success": True,
+        "platform": "security",
+        "test_name": "mfa_enforcement",
+        "interfaces_checked": 4,
+        "tests": {
+            "root_mfa_enabled": {"passed": True, "message": "Root MFA enabled"},
+            "console_users_mfa": {"passed": True, "message": "3/3 users have MFA"},
+            "api_mfa_policy": {"passed": True, "message": "MFA condition found"},
+            "cli_mfa_policy": {"passed": True, "message": "MFA condition found"},
+        },
+    }
+    base.update(overrides)
+    return base
 
 
 class TestBmcManagementNetworkCheck:
@@ -81,3 +99,74 @@ class TestBmcManagementNetworkCheck:
 
         assert result["passed"] is False
         assert "tests" in result["error"]
+
+
+class TestMfaEnforcedCheck:
+    """Tests for MfaEnforcedCheck validation."""
+
+    def test_passes_all_mfa_checks(self) -> None:
+        """Happy path: all four MFA checks pass."""
+        v = MfaEnforcedCheck(config={"step_output": _mfa_output()})
+        result = v.execute()
+        assert result["passed"] is True
+        assert "4 interfaces checked" in result["output"]
+
+    def test_fails_when_root_mfa_disabled(self) -> None:
+        """Fail when root MFA is not enabled."""
+        out = _mfa_output()
+        out["tests"]["root_mfa_enabled"] = {"passed": False, "error": "Root MFA off"}
+        v = MfaEnforcedCheck(config={"step_output": out})
+        result = v.execute()
+        assert result["passed"] is False
+        assert "root_mfa_enabled" in result["error"]
+
+    def test_fails_when_console_users_lack_mfa(self) -> None:
+        """Fail when console users don't have MFA."""
+        out = _mfa_output()
+        out["tests"]["console_users_mfa"] = {"passed": False, "error": "1/3 lack MFA"}
+        v = MfaEnforcedCheck(config={"step_output": out})
+        result = v.execute()
+        assert result["passed"] is False
+        assert "console_users_mfa" in result["error"]
+
+    def test_fails_when_api_mfa_policy_missing(self) -> None:
+        """Fail when no API MFA policy exists."""
+        out = _mfa_output()
+        out["tests"]["api_mfa_policy"] = {"passed": False, "error": "No MFA policy"}
+        v = MfaEnforcedCheck(config={"step_output": out})
+        result = v.execute()
+        assert result["passed"] is False
+        assert "api_mfa_policy" in result["error"]
+
+    def test_fails_when_cli_mfa_policy_missing(self) -> None:
+        """Fail when no CLI MFA policy exists."""
+        out = _mfa_output()
+        out["tests"]["cli_mfa_policy"] = {"passed": False, "error": "No MFA policy"}
+        v = MfaEnforcedCheck(config={"step_output": out})
+        result = v.execute()
+        assert result["passed"] is False
+        assert "cli_mfa_policy" in result["error"]
+
+    def test_fails_when_tests_dict_empty(self) -> None:
+        """Fail when tests dict is missing."""
+        v = MfaEnforcedCheck(config={"step_output": {"success": False}})
+        result = v.execute()
+        assert result["passed"] is False
+        assert "tests" in result["error"].lower()
+
+    def test_fails_when_tests_key_missing(self) -> None:
+        """Fail when a required test key is absent."""
+        out = _mfa_output()
+        del out["tests"]["cli_mfa_policy"]
+        v = MfaEnforcedCheck(config={"step_output": out})
+        result = v.execute()
+        assert result["passed"] is False
+        assert "cli_mfa_policy" in result["error"]
+
+    def test_uses_interfaces_checked_in_message(self) -> None:
+        """Pass output should include the interfaces_checked count."""
+        out = _mfa_output(interfaces_checked=7)
+        v = MfaEnforcedCheck(config={"step_output": out})
+        result = v.execute()
+        assert result["passed"] is True
+        assert "7 interfaces checked" in result["output"]

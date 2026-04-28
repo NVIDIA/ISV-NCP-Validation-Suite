@@ -456,6 +456,80 @@ class SerialConsoleCheck(BaseValidation):
         self.set_passed(f"Serial console available for {instance_id} ({', '.join(details)})")
 
 
+class SerialConsoleRetentionCheck(BaseValidation):
+    """Validate serial console logs are queryable for the required retention window.
+
+    Config:
+        step_output: The serial_console step output
+        retention_days_required: Minimum retention window in days (default: 31)
+
+    Step output:
+        instance_id: Instance identifier
+        console_log_queryable: Whether historical serial console logs were queryable
+        retention_days_configured: Provider-configured retention window in days
+        oldest_queryable_log_age_days: Oldest retained/queryable log age in days
+        query_result_count: Number of records returned by the retention query
+        retention_evidence: Human-readable evidence source
+        retention_limitations: Optional list of limitations explaining failure
+    """
+
+    description: ClassVar[str] = "Check serial console log retention and queryability"
+    markers: ClassVar[list[str]] = ["bare_metal"]
+
+    def run(self) -> None:
+        step_output = self.config.get("step_output", {})
+        limitations = step_output.get("retention_limitations") or []
+        suffix = f"; limitations: {'; '.join(limitations)}" if limitations else ""
+
+        def fail(message: str) -> None:
+            self.set_failed(f"{message}{suffix}")
+
+        instance_id = step_output.get("instance_id")
+        if not instance_id:
+            fail("No 'instance_id' in step output")
+            return
+
+        required_days = self.config.get("retention_days_required", 31)
+
+        if step_output.get("console_log_queryable") is not True:
+            fail(
+                f"Serial console logs are not queryable for {instance_id} "
+                f"(console_log_queryable={step_output.get('console_log_queryable')!r})"
+            )
+            return
+
+        configured_days = step_output.get("retention_days_configured", 0)
+        if configured_days < required_days:
+            fail(
+                f"Serial console log retention for {instance_id} is {configured_days} day(s), "
+                f"below required {required_days}"
+            )
+            return
+
+        oldest_days = step_output.get("oldest_queryable_log_age_days", 0)
+        if oldest_days < required_days:
+            fail(
+                f"Oldest queryable serial console log for {instance_id} is {oldest_days} day(s), "
+                f"below required {required_days}"
+            )
+            return
+
+        if step_output.get("query_result_count", 0) <= 0:
+            fail(f"Serial console log query for {instance_id} returned no records")
+            return
+
+        evidence = step_output.get("retention_evidence")
+        if not evidence:
+            fail(f"No 'retention_evidence' for instance {instance_id}")
+            return
+
+        self.set_passed(
+            f"Serial console logs queryable for {instance_id} "
+            f"(required={required_days}d, configured={configured_days}d, "
+            f"oldest={oldest_days}d, evidence={evidence})"
+        )
+
+
 class TopologyPlacementCheck(BaseValidation):
     """Validate topology-based placement support for an instance.
 

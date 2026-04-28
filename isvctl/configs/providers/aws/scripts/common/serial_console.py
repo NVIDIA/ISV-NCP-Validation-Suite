@@ -21,6 +21,11 @@ from typing import Any
 
 from botocore.exceptions import ClientError
 
+RETENTION_EVIDENCE_LIMITATION = "EC2 GetConsoleOutput does not prove one-month log retention"
+RETENTION_LIMITATIONS = [
+    "AWS EC2 serial console output API does not expose historical retention query evidence",
+]
+
 
 def check_serial_access(ec2: Any) -> dict[str, Any]:
     """Check if EC2 serial console access is enabled for the account."""
@@ -76,6 +81,13 @@ def run_serial_console_check(ec2: Any, instance_id: str, platform: str) -> tuple
         "instance_id": instance_id,
         "console_available": False,
         "serial_access_enabled": False,
+        "console_log_queryable": False,
+        "retention_days_required": 31,
+        "retention_days_configured": 0,
+        "oldest_queryable_log_age_days": 0,
+        "query_result_count": 0,
+        "retention_evidence": RETENTION_EVIDENCE_LIMITATION,
+        "retention_limitations": RETENTION_LIMITATIONS,
     }
 
     try:

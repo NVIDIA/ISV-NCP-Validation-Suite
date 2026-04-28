@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from isvtest.validations.instance import InstanceRebootCheck
+from isvtest.validations.instance import InstanceRebootCheck, SerialConsoleRetentionCheck
 
 
 def _reboot_output(**overrides: Any) -> dict[str, Any]:
@@ -26,6 +26,22 @@ def _reboot_output(**overrides: Any) -> dict[str, Any]:
         "ssh_ready": True,
         "uptime_seconds": 45.2,
         "reboot_confirmed": True,
+    }
+    base.update(overrides)
+    return base
+
+
+def _retention_output(**overrides: Any) -> dict[str, Any]:
+    """Build a minimal passing serial-console retention step_output."""
+    base: dict[str, Any] = {
+        "instance_id": "bm-abc123",
+        "console_log_queryable": True,
+        "retention_days_required": 31,
+        "retention_days_configured": 31,
+        "oldest_queryable_log_age_days": 31,
+        "query_result_count": 1,
+        "retention_evidence": "test-log-archive:bm-abc123",
+        "retention_limitations": [],
     }
     base.update(overrides)
     return base
@@ -90,3 +106,100 @@ class TestInstanceRebootCheck:
         result = v.execute()
         assert result["passed"] is False
         assert "reboot may not have occurred" in result["error"]
+
+
+class TestSerialConsoleRetentionCheck:
+    """Tests for one-month serial console retention evidence validation."""
+
+    def test_passes_with_complete_retention_evidence(self) -> None:
+        """Happy path: queryable logs satisfy the required retention window."""
+        v = SerialConsoleRetentionCheck(
+            config={
+                "step_output": _retention_output(),
+                "retention_days_required": 31,
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is True
+        assert "bm-abc123" in result["output"]
+        assert "configured=31d" in result["output"]
+        assert "test-log-archive:bm-abc123" in result["output"]
+
+    def test_fails_when_instance_id_is_missing(self) -> None:
+        """The provider output must identify the node being checked."""
+        out = _retention_output()
+        del out["instance_id"]
+        v = SerialConsoleRetentionCheck(config={"step_output": out})
+        result = v.execute()
+        assert result["passed"] is False
+        assert "No 'instance_id'" in result["error"]
+
+    def test_fails_when_console_logs_are_not_queryable(self) -> None:
+        """A provider must prove historical logs can be queried."""
+        v = SerialConsoleRetentionCheck(
+            config={
+                "step_output": _retention_output(
+                    console_log_queryable=False,
+                    retention_limitations=["archive API denied"],
+                )
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is False
+        assert "not queryable" in result["error"]
+        assert "archive API denied" in result["error"]
+
+    def test_fails_when_configured_retention_is_below_required(self) -> None:
+        """Configured retention must meet the required minimum."""
+        v = SerialConsoleRetentionCheck(
+            config={
+                "step_output": _retention_output(retention_days_configured=14),
+                "retention_days_required": 31,
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is False
+        assert "below required 31" in result["error"]
+
+    def test_fails_when_oldest_queryable_age_is_below_required(self) -> None:
+        """The returned evidence must cover the full retention window."""
+        v = SerialConsoleRetentionCheck(
+            config={
+                "step_output": _retention_output(oldest_queryable_log_age_days=7),
+                "retention_days_required": 31,
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is False
+        assert "Oldest queryable serial console log" in result["error"]
+        assert "below required 31" in result["error"]
+
+    def test_fails_when_query_returns_no_records(self) -> None:
+        """A configured retention policy alone is insufficient without query results."""
+        v = SerialConsoleRetentionCheck(config={"step_output": _retention_output(query_result_count=0)})
+        result = v.execute()
+        assert result["passed"] is False
+        assert "returned no records" in result["error"]
+
+    def test_fails_when_retention_evidence_is_missing(self) -> None:
+        """Passing retention fields still require an evidence source."""
+        out = _retention_output()
+        del out["retention_evidence"]
+        v = SerialConsoleRetentionCheck(config={"step_output": out})
+        result = v.execute()
+        assert result["passed"] is False
+        assert "No 'retention_evidence'" in result["error"]
+
+    def test_fails_with_useful_message_when_limitations_are_present(self) -> None:
+        """Provider limitation details should be included in failure messages."""
+        v = SerialConsoleRetentionCheck(
+            config={
+                "step_output": _retention_output(
+                    retention_days_configured=0,
+                    retention_limitations=["no historical serial log backend"],
+                )
+            }
+        )
+        result = v.execute()
+        assert result["passed"] is False
+        assert "no historical serial log backend" in result["error"]

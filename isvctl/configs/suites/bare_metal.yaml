@@ -71,6 +71,8 @@ tests:
       step: serial_console
       checks:
         SerialConsoleCheck: {}
+        SerialConsoleRetentionCheck:
+          retention_days_required: 31
 
     cloud_init:
       step: launch_instance

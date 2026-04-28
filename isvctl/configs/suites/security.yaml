@@ -39,6 +39,11 @@ tests:
   # ─── Validations ─────────────────────────────────────────────────
   # These are PROVIDER-AGNOSTIC. They only check JSON field names/values.
   validations:
+    bmc_management_network:
+      checks:
+        BmcManagementNetworkCheck:
+          step: bmc_management_network
+
     bmc_isolation:
       checks:
         BmcTenantIsolationCheck:

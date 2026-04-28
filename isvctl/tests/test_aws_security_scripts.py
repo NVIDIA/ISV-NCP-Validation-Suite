@@ -200,6 +200,42 @@ class FakeBmcEc2:
         return {"Vpcs": []}
 
 
+class FakeBmcManagementEc2:
+    """Fake EC2 client for BMC management-network checks."""
+
+    def __init__(
+        self,
+        *,
+        vpcs: list[dict[str, Any]] | None = None,
+        route_tables: list[dict[str, Any]] | None = None,
+        network_acls: list[dict[str, Any]] | None = None,
+    ) -> None:
+        """Initialize paginated EC2 responses."""
+        self.paginators = {
+            "describe_vpcs": FakeEc2Paginator(
+                [
+                    {
+                        "Vpcs": vpcs
+                        if vpcs is not None
+                        else [
+                            {
+                                "VpcId": "vpc-tenant",
+                                "CidrBlock": "10.0.0.0/16",
+                                "CidrBlockAssociationSet": [{"CidrBlock": "10.0.0.0/16"}],
+                            }
+                        ]
+                    }
+                ]
+            ),
+            "describe_route_tables": FakeEc2Paginator([{"RouteTables": route_tables or []}]),
+            "describe_network_acls": FakeEc2Paginator([{"NetworkAcls": network_acls or []}]),
+        }
+
+    def get_paginator(self, operation_name: str) -> FakeEc2Paginator:
+        """Return a fake paginator for the requested EC2 operation."""
+        return self.paginators[operation_name]
+
+
 def test_bmc_checks_scan_paginated_route_tables_and_security_groups() -> None:
     """BMC route and SG checks inspect every EC2 paginator page."""
     module = _load_security_script("bmc_isolation_test.py")
@@ -244,6 +280,164 @@ def test_bmc_main_scans_non_default_vpcs_when_no_vpc_id(
     assert payload["tests"]["probe_bmc_from_tenant"]["passed"] is False
     assert "vpc-nondefault" in payload["tests"]["probe_bmc_from_tenant"]["error"]
     assert ec2.paginators["describe_vpcs"].calls == [{}]
+
+
+def test_bmc_management_network_detects_tenant_cidr_overlap() -> None:
+    """SEC12-01 fails when tenant VPC CIDRs overlap reserved management ranges."""
+    module = _load_security_script("bmc_management_network_test.py")
+    vpcs = [
+        {
+            "VpcId": "vpc-mgmt-overlap",
+            "CidrBlock": "198.18.1.0/24",
+            "CidrBlockAssociationSet": [{"CidrBlock": "198.18.1.0/24"}],
+        }
+    ]
+
+    result = module._check_dedicated_management_network(vpcs)
+
+    assert result["passed"] is False
+    assert "198.18.1.0/24" in result["error"]
+
+
+def test_bmc_management_network_detects_management_tag() -> None:
+    """SEC12-01 fails when a tenant VPC is tagged as a BMC management network."""
+    module = _load_security_script("bmc_management_network_test.py")
+    vpcs = [
+        {
+            "VpcId": "vpc-mgmt-tag",
+            "CidrBlock": "10.0.0.0/16",
+            "CidrBlockAssociationSet": [{"CidrBlock": "10.0.0.0/16"}],
+            "Tags": [{"Key": "Role", "Value": "bmc-network"}],
+        }
+    ]
+
+    result = module._check_tenant_network_not_management(vpcs)
+
+    assert result["passed"] is False
+    assert "vpc-mgmt-tag" in result["error"]
+
+
+def test_bmc_management_tag_matches_underscore_delimited() -> None:
+    """Tag matcher catches underscore-delimited management names like bmc_network."""
+    module = _load_security_script("bmc_management_network_test.py")
+    vpcs = [
+        {
+            "VpcId": "vpc-underscore",
+            "CidrBlock": "10.0.0.0/16",
+            "CidrBlockAssociationSet": [{"CidrBlock": "10.0.0.0/16"}],
+            "Tags": [{"Key": "Name", "Value": "bmc_network"}],
+        }
+    ]
+
+    result = module._check_tenant_network_not_management(vpcs)
+
+    assert result["passed"] is False
+    assert "vpc-underscore" in result["error"]
+
+
+def test_bmc_management_tag_avoids_substring_false_positive() -> None:
+    """Tag matcher rejects unrelated identifiers that contain management substrings."""
+    module = _load_security_script("bmc_management_network_test.py")
+    vpcs = [
+        {
+            "VpcId": "vpc-tenant",
+            "CidrBlock": "10.0.0.0/16",
+            "CidrBlockAssociationSet": [{"CidrBlock": "10.0.0.0/16"}],
+            "Tags": [{"Key": "Name", "Value": "submarine-bmcollege"}],
+        }
+    ]
+
+    result = module._check_tenant_network_not_management(vpcs)
+
+    assert result["passed"] is True
+
+
+def test_bmc_management_network_detects_explicit_management_routes() -> None:
+    """SEC12-01 fails when a tenant route table targets part of a management CIDR."""
+    module = _load_security_script("bmc_management_network_test.py")
+    ec2 = FakeBmcManagementEc2(
+        route_tables=[
+            {
+                "RouteTableId": "rtb-mgmt",
+                "Routes": [{"DestinationCidrBlock": "198.18.1.0/24"}],
+            }
+        ]
+    )
+
+    result = module._check_restricted_management_routes(ec2, ["vpc-tenant"])
+
+    assert result["passed"] is False
+    assert "rtb-mgmt" in result["error"]
+
+
+def test_bmc_management_network_detects_management_acl_host_route() -> None:
+    """SEC12-01 fails when a NACL explicitly allows a host inside a management range."""
+    module = _load_security_script("bmc_management_network_test.py")
+    ec2 = FakeBmcManagementEc2(
+        network_acls=[
+            {
+                "NetworkAclId": "acl-mgmt",
+                "Entries": [
+                    {
+                        "RuleAction": "allow",
+                        "CidrBlock": "169.254.169.254/32",
+                    }
+                ],
+            }
+        ]
+    )
+
+    result = module._check_management_acl_enforced(ec2, ["vpc-tenant"])
+
+    assert result["passed"] is False
+    assert "acl-mgmt" in result["error"]
+
+
+def test_bmc_management_network_exempts_default_routes() -> None:
+    """SEC12-01 route checks do not treat default internet routes as management routes."""
+    module = _load_security_script("bmc_management_network_test.py")
+    ec2 = FakeBmcManagementEc2(
+        route_tables=[
+            {
+                "RouteTableId": "rtb-default",
+                "Routes": [{"DestinationCidrBlock": "0.0.0.0/0"}],
+            }
+        ]
+    )
+
+    result = module._check_restricted_management_routes(ec2, ["vpc-tenant"])
+
+    assert result["passed"] is True
+
+
+def test_bmc_management_network_main_emits_sec12_01_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Successful AWS reference run emits the SEC12-01 validation contract."""
+    module = _load_security_script("bmc_management_network_test.py")
+    ec2 = FakeBmcManagementEc2()
+
+    def fake_client(service_name: str, **kwargs: Any) -> FakeBmcManagementEc2:
+        """Return the fake EC2 client."""
+        assert service_name == "ec2"
+        return ec2
+
+    monkeypatch.setattr(module.boto3, "client", fake_client)
+    monkeypatch.setattr(module.sys, "argv", ["bmc_management_network_test.py", "--region", "us-west-2"])
+
+    exit_code = module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["success"] is True
+    assert payload["test_name"] == "bmc_management_network"
+    assert set(payload["tests"]) == {
+        "dedicated_management_network",
+        "restricted_management_routes",
+        "tenant_network_not_management",
+        "management_acl_enforced",
+    }
 
 
 class FakeIamTags:

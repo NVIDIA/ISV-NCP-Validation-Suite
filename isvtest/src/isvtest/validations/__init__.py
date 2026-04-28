@@ -90,6 +90,7 @@ from isvtest.validations.nim import (
 )
 from isvtest.validations.security import (
     ApiEndpointIsolationCheck,
+    BmcManagementNetworkCheck,
     BmcTenantIsolationCheck,
 )
 
@@ -99,6 +100,7 @@ __all__ = [
     "AccessKeyDisabledCheck",
     "AccessKeyRejectedCheck",
     "ApiEndpointIsolationCheck",
+    "BmcManagementNetworkCheck",
     "BmcTenantIsolationCheck",
     "ByoipCheck",
     "CloudInitCheck",

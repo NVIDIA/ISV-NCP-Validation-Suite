@@ -16,6 +16,7 @@
 # without any real infrastructure.
 #
 # Coverage:
+#   SEC12-01: BMC management network (BmcManagementNetworkCheck)
 #   SEC12-02: BMC tenant isolation (BmcTenantIsolationCheck)
 #   SEC14-01: API endpoint isolation (ApiEndpointIsolationCheck)
 #   SEC03-01: Service account credentials (ServiceAccountCredentialCheck)
@@ -37,6 +38,12 @@ commands:
         command: "echo"
         args: ["{\"success\": true, \"platform\": \"security\", \"test_name\": \"preflight\"}"]
         timeout: 10
+
+      - name: bmc_management_network
+        phase: test
+        command: "python ../scripts/security/bmc_management_network_test.py"
+        args: ["--region", "{{region}}"]
+        timeout: 60
 
       - name: bmc_tenant_isolation
         phase: test

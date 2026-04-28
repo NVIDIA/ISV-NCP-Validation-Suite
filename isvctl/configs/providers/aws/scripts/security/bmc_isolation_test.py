@@ -13,17 +13,20 @@
 
 In AWS, BMC/IPMI/Redfish are inherently inaccessible from EC2 instances -
 there is no route from tenant VPCs to the hypervisor management plane.
-This test verifies the isolation by:
+This test verifies the customer-visible isolation boundary by:
 
-  1. Launching a lightweight instance inside a VPC
-  2. Running SSM commands to probe well-known BMC ports (IPMI UDP 623,
-     Redfish TCP 443 on link-local/management CIDRs)
-  3. Confirming all probes fail (timeout / connection refused)
-  4. Verifying no reverse path exists from management to tenant network
+  1. Scanning selected VPCs in the region (or a single --vpc-id)
+  2. Verifying route tables have no explicit routes to known BMC CIDRs
+  3. Verifying security groups have no explicit egress rules to BMC CIDRs
+  4. Reporting IPMI/Redfish unreachable based on the absence of tenant routes
+     and egress rules to those management ranges
 
-For non-hyperscaler NCPs, replace the SSM-based probes with your
-platform's equivalent: SSH into a tenant machine and attempt to reach
-BMC endpoints.
+This script does not launch probe instances or run SSM commands. It is a
+configuration/control-plane check for AWS's provider-owned management plane.
+
+For non-hyperscaler NCPs, replace or extend these checks with your platform's
+equivalent tenant-vantage probes: SSH into a tenant machine and attempt to
+reach BMC endpoints.
 
 Usage:
     python bmc_isolation_test.py --region us-west-2

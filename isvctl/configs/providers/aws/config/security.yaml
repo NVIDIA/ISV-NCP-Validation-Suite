@@ -13,15 +13,16 @@
 # Imports validations from the provider-agnostic security canonical config.
 # This file only provides AWS-specific commands (boto3 scripts) and settings.
 #
-# Security tests (SEC* requirements):
-#   1. BMC Tenant Isolation  - Verify BMC/IPMI/Redfish unreachable from VPC
-#   2. API Endpoint Isolation - Verify management APIs are not publicly exposed
-#   3. SA Credential Auth     - Verify IAM user + long-lived access key auth
-#
 # Usage:
 #   uv run isvctl test run -f isvctl/configs/providers/aws/config/security.yaml
 #
 # Estimated runtime: ~1-2 minutes
+#
+# Security tests (SEC* requirements):
+#   1. BMC Management Network - Verify BMC management is dedicated/restricted
+#   2. BMC Tenant Isolation   - Verify BMC/IPMI/Redfish unreachable from VPC
+#   3. API Endpoint Isolation - Verify management APIs are not publicly exposed
+#   4. SA Credential Auth     - Verify IAM user + long-lived access key auth
 
 import:
   - ../../../suites/security.yaml
@@ -39,21 +40,28 @@ commands:
         args: ["{\"success\": true, \"platform\": \"security\", \"test_name\": \"preflight\"}"]
         timeout: 10
 
-      # Test 1: BMC Tenant Isolation (~10s)
+      # Test 1: BMC Management Network (~10s)
+      - name: bmc_management_network
+        phase: test
+        command: "python3 ../scripts/security/bmc_management_network_test.py"
+        args: ["--region", "{{region}}"]
+        timeout: 60
+
+      # Test 2: BMC Tenant Isolation (~10s)
       - name: bmc_tenant_isolation
         phase: test
         command: "python3 ../scripts/security/bmc_isolation_test.py"
         args: ["--region", "{{region}}"]
         timeout: 60
 
-      # Test 2: API Endpoint Isolation (~15s)
+      # Test 3: API Endpoint Isolation (~15s)
       - name: api_endpoint_isolation
         phase: test
         command: "python3 ../scripts/security/api_endpoint_test.py"
         args: ["--region", "{{region}}"]
         timeout: 60
 
-      # Test 3: Service Account Credential Auth (~30s, includes IAM propagation wait)
+      # Test 4: Service Account Credential Auth (~30s, includes IAM propagation wait)
       - name: sa_credential_test
         phase: test
         command: "python3 ../scripts/security/sa_credential_test.py"

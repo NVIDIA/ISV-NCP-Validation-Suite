@@ -20,7 +20,7 @@ import shutil
 import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -33,7 +33,7 @@ from isvctl.redaction import redact_dict, redact_junit_xml_tree
 logger = logging.getLogger(__name__)
 
 
-class Phase(str, Enum):
+class Phase(StrEnum):
     """Test lifecycle phases."""
 
     ALL = "all"

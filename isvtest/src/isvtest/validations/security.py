@@ -19,6 +19,39 @@ from typing import ClassVar
 from isvtest.core.validation import BaseValidation, check_required_tests
 
 
+class BmcManagementNetworkCheck(BaseValidation):
+    """Validate BMC management is on a dedicated, restricted network.
+
+    Verifies that out-of-band BMC/IPMI/Redfish management networks are not
+    shared with tenant networks and that management routes and ACLs are
+    restricted.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        tests: dict with dedicated_management_network,
+               restricted_management_routes, tenant_network_not_management,
+               management_acl_enforced
+    """
+
+    description: ClassVar[str] = "Check BMC management network is dedicated and restricted"
+    markers: ClassVar[list[str]] = ["security", "network"]
+
+    def run(self) -> None:
+        """Validate required BMC management-network results from step output."""
+        required = [
+            "dedicated_management_network",
+            "restricted_management_routes",
+            "tenant_network_not_management",
+            "management_acl_enforced",
+        ]
+        if not check_required_tests(self, required, "BMC management network tests failed"):
+            return
+        network_count = self.config.get("step_output", {}).get("management_networks_checked", "N/A")
+        self.set_passed(f"BMC management network dedicated and restricted ({network_count} networks checked)")
+
+
 class BmcTenantIsolationCheck(BaseValidation):
     """Validate BMC interfaces are not reachable from tenant networks.
 

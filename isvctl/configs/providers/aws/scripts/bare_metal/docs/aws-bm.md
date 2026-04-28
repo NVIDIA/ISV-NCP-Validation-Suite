@@ -66,7 +66,7 @@ uv run isvctl test run -f isvctl/configs/providers/aws/config/bare_metal.yaml --
 | 2 | `list_instances` | test | `providers/aws/scripts/vm/list_instances.py` | List instances in VPC (reuses VM script) |
 | 3 | `verify_tags` | test | `providers/aws/scripts/bare_metal/describe_tags.py` | Verify instance tags (Name, CreatedBy) |
 | 4 | `topology_placement` | test | `providers/aws/scripts/bare_metal/topology_placement.py` | Validate placement group support |
-| 5 | `serial_console` | test | `providers/aws/scripts/bare_metal/serial_console.py` | Retrieve serial console output |
+| 5 | `serial_console` | test | `providers/aws/scripts/bare_metal/serial_console.py` | Retrieve serial console output; retention proof requires an external log archive |
 | 6 | `verify_image` | test | `providers/aws/scripts/image-registry/verify_image_installed.py` | Verify OS image installed on BM |
 | 7 | `verify_config` | test | `providers/aws/scripts/image-registry/verify_config_installable.py` | Verify install config can provision BM |
 | 8 | `stop_instance` | test | `providers/aws/scripts/bare_metal/stop_instance.py` | Power off node, verify stopped state |
@@ -85,6 +85,12 @@ BM provisioning from OS images. Step 13 (`reinstall_instance`) is skipped by def
 root volume replacement is slow on AWS metal (~30-45 min).
 
 ## Validations
+
+`SerialConsoleRetentionCheck` requires evidence from a historical serial console
+log archive. The AWS config currently overrides the canonical bare-metal suite
+to run only `SerialConsoleCheck` because EC2 `GetConsoleOutput` does not prove
+one-month retention by itself. Add an external archive integration before
+re-enabling the retention check for AWS.
 
 | Validation Group | Check | Step | Description |
 |------------------|-------|------|-------------|

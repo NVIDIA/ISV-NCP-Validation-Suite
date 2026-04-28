@@ -22,7 +22,14 @@ Required JSON output fields:
     "console_available": true,
     "serial_access_enabled": true,
     "output_length": 4096,
-    "output_snippet": "... last 500 chars ..."
+    "output_snippet": "... last 500 chars ...",
+    "console_log_queryable": true,
+    "retention_days_required": 31,
+    "retention_days_configured": 31,
+    "oldest_queryable_log_age_days": 31,
+    "query_result_count": 1,
+    "retention_evidence": "provider serial console log archive",
+    "retention_limitations": []
   }
 
 Usage:
@@ -54,6 +61,13 @@ def main() -> int:
         "instance_id": args.instance_id,
         "console_available": False,
         "serial_access_enabled": False,
+        "console_log_queryable": False,
+        "retention_days_required": 31,
+        "retention_days_configured": 0,
+        "oldest_queryable_log_age_days": 0,
+        "query_result_count": 0,
+        "retention_evidence": "",
+        "retention_limitations": [],
     }
 
     # TODO: Replace with your platform's serial console implementation
@@ -63,9 +77,17 @@ def main() -> int:
         result["serial_access_enabled"] = True
         result["output_length"] = 4096
         result["output_snippet"] = "... demo serial console output snippet ..."
+        result["console_log_queryable"] = True
+        result["retention_days_configured"] = 31
+        result["oldest_queryable_log_age_days"] = 31
+        result["query_result_count"] = 1
+        result["retention_evidence"] = "demo serial console log archive"
         result["success"] = True
     else:
         result["error"] = "Not implemented - replace with your platform's serial console logic"
+        result["retention_limitations"] = [
+            "Provider must query its serial console log archive and retention policy",
+        ]
 
     print(json.dumps(result, indent=2))
     return 0 if result["success"] else 1

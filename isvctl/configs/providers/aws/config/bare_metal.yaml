@@ -294,6 +294,14 @@ tests:
 
   # Overrides only - all other validations inherited from ../bare_metal.yaml
   validations:
+    # AWS EC2 GetConsoleOutput can validate current console access, but it does
+    # not prove historical one-month retention. Override the canonical BM group
+    # until an external serial-console archive integration is wired in.
+    serial_console:
+      step: serial_console
+      checks:
+        - SerialConsoleCheck: {}
+
     # GPU stress - AWS metal has 8 GPUs
     gpu_stress:
       step: describe_instance

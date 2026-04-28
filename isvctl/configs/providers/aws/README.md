@@ -13,7 +13,7 @@ Provider configs that wire the [provider-agnostic test suites](../../suites/READ
 | [`config/eks.yaml`](config/eks.yaml) | Kubernetes GPU cluster (nodes, GPU operator, workloads) | [AWS EKS Guide](scripts/eks/docs/aws-eks.md) |
 | [`config/control-plane.yaml`](config/control-plane.yaml) | API health, access keys, tenant lifecycle | [AWS Control Plane Guide](scripts/control-plane/docs/aws-control-plane.md) |
 | [`config/image-registry.yaml`](config/image-registry.yaml) | Image upload, CRUD, VM launch, install config | [AWS Image Registry Guide](scripts/image-registry/docs/aws-image-registry.md) |
-| [`config/security.yaml`](config/security.yaml) | BMC isolation, API endpoint isolation, SA credential auth | - |
+| [`config/security.yaml`](config/security.yaml) | BMC isolation, BMC protocol security, API endpoint isolation, SA credential auth | - |
 
 ## Quick Start
 

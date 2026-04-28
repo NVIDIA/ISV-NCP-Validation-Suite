@@ -15,6 +15,7 @@ These scripts are invoked by the [AWS provider configs](../config/).
 | [`eks/`](eks/) | EKS cluster setup/teardown (Terraform) | [AWS EKS Guide](eks/docs/aws-eks.md) |
 | [`control-plane/`](control-plane/) | API checks, access keys, tenant management | [AWS Control Plane Guide](control-plane/docs/aws-control-plane.md) |
 | [`image-registry/`](image-registry/) | Image upload/CRUD, install configs, BM provisioning | [AWS Image Registry Guide](image-registry/docs/aws-image-registry.md) |
+| [`security/`](security/) | BMC isolation, BMC protocol posture, API endpoint isolation, SA credential auth | - |
 | [`common/`](common/) | Shared utilities (error handling, EC2/VPC helpers) | - |
 
 ## See Also

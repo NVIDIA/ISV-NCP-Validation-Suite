@@ -10,8 +10,8 @@
 
 # Security Validation - Canonical Contract
 #
-# Validations-only contract for infrastructure security hardening (SEC*
-# requirements). Provider configs import this file and supply their own
+# Validations-only contract for infrastructure security hardening
+# requirements. Provider configs import this file and supply their own
 # commands (steps + scripts).
 #
 # This file defines WHAT to validate, not HOW to run it. Each validation
@@ -48,6 +48,11 @@ tests:
       checks:
         BmcTenantIsolationCheck:
           step: bmc_tenant_isolation
+
+    bmc_protocol_security:
+      checks:
+        BmcProtocolSecurityCheck:
+          step: bmc_protocol_security
 
     api_security:
       checks:

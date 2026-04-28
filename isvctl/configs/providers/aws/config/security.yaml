@@ -21,10 +21,11 @@
 # Security tests (SEC* requirements):
 #   1. BMC Management Network - Verify BMC management is dedicated/restricted
 #   2. BMC Tenant Isolation   - Verify BMC/IPMI/Redfish unreachable from VPC
-#   3. API Endpoint Isolation - Verify management APIs are not publicly exposed
-#   4. MFA Enforcement        - Verify admin interfaces (UI, CLI, API) require MFA
-#   5. SA Credential Auth     - Verify IAM user + long-lived access key auth
-#   6. OIDC User Auth         - Probe configured OIDC-protected platform endpoint (SEC01-01)
+#   3. BMC Protocol Security  - Verify CNP10-01 BMC protocol posture
+#   4. API Endpoint Isolation - Verify management APIs are not publicly exposed
+#   5. MFA Enforcement        - Verify admin interfaces (UI, CLI, API) require MFA
+#   6. SA Credential Auth     - Verify IAM user + long-lived access key auth
+#   7. OIDC User Auth         - Probe configured OIDC-protected platform endpoint (SEC01-01)
 
 import:
   - ../../../suites/security.yaml
@@ -56,28 +57,35 @@ commands:
         args: ["--region", "{{region}}"]
         timeout: 60
 
-      # Test 3: API Endpoint Isolation (~15s)
+      # Test 3: BMC Protocol Security (AWS has no customer BMC endpoint)
+      - name: bmc_protocol_security
+        phase: test
+        command: "python3 ../scripts/security/bmc_protocol_security_test.py"
+        args: ["--region", "{{region}}"]
+        timeout: 60
+
+      # Test 4: API Endpoint Isolation (~15s)
       - name: api_endpoint_isolation
         phase: test
         command: "python3 ../scripts/security/api_endpoint_test.py"
         args: ["--region", "{{region}}"]
         timeout: 60
 
-      # Test 4: MFA Enforcement (~10s)
+      # Test 5: MFA Enforcement (~10s)
       - name: mfa_enforcement
         phase: test
         command: "python3 ../scripts/security/mfa_enforcement_test.py"
         args: ["--region", "{{region}}"]
         timeout: 60
 
-      # Test 5: Service Account Credential Auth (~30s, includes IAM propagation wait)
+      # Test 6: Service Account Credential Auth (~30s, includes IAM propagation wait)
       - name: sa_credential_test
         phase: test
         command: "python3 ../scripts/security/sa_credential_test.py"
         args: ["--region", "{{region}}"]
         timeout: 120
 
-      # Test 6: OIDC User Authentication
+      # Test 7: OIDC User Authentication
       # Requires a real issuer, audience, protected target endpoint, and token
       # fixtures. Non-sensitive endpoint settings can come from tests.settings
       # below; token fixtures are read by the script from OIDC_*_TOKEN env vars

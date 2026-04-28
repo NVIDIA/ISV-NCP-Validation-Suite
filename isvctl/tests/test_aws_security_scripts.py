@@ -443,6 +443,99 @@ def test_bmc_management_network_main_emits_sec12_01_contract(
     }
 
 
+def test_bmc_protocol_security_reports_no_customer_bmc_surface() -> None:
+    """AWS BMC protocol check emits all CNP10-01 keys for the no-surface case."""
+    module = _load_security_script("bmc_protocol_security_test.py")
+
+    result = module._aws_no_customer_bmc_result("us-west-2")
+
+    assert result["success"] is True
+    assert result["bmc_endpoints_tested"] == 0
+    assert result["bmc_protocol_surface"] == "none"
+    assert set(result["tests"]) == {
+        "ipmi_disabled",
+        "redfish_tls_enabled",
+        "redfish_plain_http_disabled",
+        "redfish_authentication_required",
+        "redfish_authorization_enforced",
+        "redfish_accounting_enabled",
+    }
+    assert all(test["passed"] is True for test in result["tests"].values())
+    assert "do not receive customer-accessible IPMI or Redfish" in result["evidence"]
+
+
+class FakeStsClient:
+    """Small fake for STS GetCallerIdentity."""
+
+    def __init__(self, error: Exception | None = None) -> None:
+        """Store an optional error returned by get_caller_identity."""
+        self.error = error
+
+    def get_caller_identity(self) -> dict[str, str]:
+        """Return a fake caller identity or raise the configured error."""
+        if self.error:
+            raise self.error
+        return {"Account": "123456789012", "Arn": "arn:aws:iam::123456789012:user/test", "UserId": "test"}
+
+
+def _patch_sts_client(
+    monkeypatch: pytest.MonkeyPatch,
+    module: ModuleType,
+    sts: FakeStsClient,
+    *,
+    expected_region: str,
+) -> None:
+    """Patch boto3.client to return a fake STS client."""
+
+    def fake_client(service_name: str, region_name: str | None = None) -> FakeStsClient:
+        """Return the fake STS client for STS requests."""
+        assert service_name == "sts"
+        assert region_name == expected_region
+        return sts
+
+    monkeypatch.setattr(module.boto3, "client", fake_client)
+
+
+def test_bmc_protocol_security_main_outputs_json(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """AWS BMC protocol script prints the provider-agnostic JSON contract."""
+    module = _load_security_script("bmc_protocol_security_test.py")
+    monkeypatch.setattr(module.sys, "argv", ["bmc_protocol_security_test.py", "--region", "eu-west-1"])
+    _patch_sts_client(monkeypatch, module, FakeStsClient(), expected_region="eu-west-1")
+
+    exit_code = module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["success"] is True
+    assert payload["region"] == "eu-west-1"
+    assert payload["test_name"] == "bmc_protocol_security"
+    assert payload["tests"]["ipmi_disabled"]["passed"] is True
+
+
+def test_bmc_protocol_security_main_reports_sts_probe_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """AWS BMC protocol script fails closed when the STS probe fails."""
+    module = _load_security_script("bmc_protocol_security_test.py")
+    monkeypatch.setattr(module.sys, "argv", ["bmc_protocol_security_test.py", "--region", "eu-west-1"])
+    _patch_sts_client(monkeypatch, module, FakeStsClient(RuntimeError("sts unavailable")), expected_region="eu-west-1")
+
+    exit_code = module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["success"] is False
+    assert payload["platform"] == "security"
+    assert payload["test_name"] == "bmc_protocol_security"
+    assert payload["region"] == "eu-west-1"
+    assert "sts unavailable" in payload["evidence"]
+    assert all(test["passed"] is False for test in payload["tests"].values())
+
+
 class FakeIamTags:
     """Small fake for IAM list_user_tags responses."""
 

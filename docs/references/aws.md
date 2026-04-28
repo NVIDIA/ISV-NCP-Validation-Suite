@@ -25,6 +25,7 @@ Each template has a corresponding AWS config and scripts that show exactly how t
 | **EKS** | [`providers/aws/config/eks.yaml`](../../isvctl/configs/providers/aws/config/eks.yaml) | [`providers/aws/scripts/eks/`](../../isvctl/configs/providers/aws/scripts/eks/) | [Guide](../../isvctl/configs/providers/aws/scripts/eks/docs/aws-eks.md) | [`suites/k8s.yaml`](../../isvctl/configs/suites/k8s.yaml) |
 | **Control Plane** | [`providers/aws/config/control-plane.yaml`](../../isvctl/configs/providers/aws/config/control-plane.yaml) | [`providers/aws/scripts/control-plane/`](../../isvctl/configs/providers/aws/scripts/control-plane/) | [Guide](../../isvctl/configs/providers/aws/scripts/control-plane/docs/aws-control-plane.md) | [`suites/control-plane.yaml`](../../isvctl/configs/suites/control-plane.yaml) |
 | **Image Registry** | [`providers/aws/config/image-registry.yaml`](../../isvctl/configs/providers/aws/config/image-registry.yaml) | [`providers/aws/scripts/image-registry/`](../../isvctl/configs/providers/aws/scripts/image-registry/) | [Guide](../../isvctl/configs/providers/aws/scripts/image-registry/docs/aws-image-registry.md) | [`suites/image-registry.yaml`](../../isvctl/configs/suites/image-registry.yaml) |
+| **Security** | [`providers/aws/config/security.yaml`](../../isvctl/configs/providers/aws/config/security.yaml) | [`providers/aws/scripts/security/`](../../isvctl/configs/providers/aws/scripts/security/) | - | [`suites/security.yaml`](../../isvctl/configs/suites/security.yaml) |
 
 Shared AWS utilities (error handling, EC2/VPC helpers) are in [`providers/aws/scripts/common/`](../../isvctl/configs/providers/aws/scripts/common/).
 
@@ -40,6 +41,7 @@ uv run isvctl test run -f isvctl/configs/providers/aws/config/bare_metal.yaml
 uv run isvctl test run -f isvctl/configs/providers/aws/config/eks.yaml
 uv run isvctl test run -f isvctl/configs/providers/aws/config/control-plane.yaml
 uv run isvctl test run -f isvctl/configs/providers/aws/config/image-registry.yaml
+uv run isvctl test run -f isvctl/configs/providers/aws/config/security.yaml
 ```
 
 ## Using AWS as a Reference

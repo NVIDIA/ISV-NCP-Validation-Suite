@@ -143,6 +143,7 @@ Validations use `sinfo`/`srun` directly: partitions, GPU allocation, job schedul
 | Step | Phase | Script | What It Tests |
 |------|-------|--------|---------------|
 | `bmc_tenant_isolation` | test | `providers/my-isv/scripts/security/bmc_isolation_test.py` | BMC/IPMI/Redfish unreachable from tenant network |
+| `bmc_protocol_security` | test | `providers/my-isv/scripts/security/bmc_protocol_security_test.py` | CNP10-01: IPMI disabled; Redfish over TLS with AAA |
 | `api_endpoint_isolation` | test | `providers/my-isv/scripts/security/api_endpoint_test.py` | API endpoints not publicly accessible |
 | `sa_credential_test` | test | `providers/my-isv/scripts/security/sa_credential_test.py` | Service account long-lived credential auth |
 | `oidc_user_auth_test` | test | `providers/my-isv/scripts/security/oidc_user_auth_test.py` | OIDC issuer metadata and protected endpoint token acceptance/rejection |

@@ -18,7 +18,7 @@ exercises.
 | [`config/bare_metal.yaml`](config/bare_metal.yaml) | BMaaS lifecycle (launch -> topology -> serial -> power-cycle -> teardown) | [`scripts/bare_metal/`](scripts/bare_metal/) |
 | [`config/network.yaml`](config/network.yaml) | VPC CRUD, subnets, isolation, SG, connectivity, traffic, DDI | [`scripts/network/`](scripts/network/) |
 | [`config/image-registry.yaml`](config/image-registry.yaml) | Image upload, CRUD, VM launch, install config, BMaaS install | [`scripts/image-registry/`](scripts/image-registry/) |
-| [`config/security.yaml`](config/security.yaml) | BMC isolation, API endpoint isolation, SA credential auth | [`scripts/security/`](scripts/security/) |
+| [`config/security.yaml`](config/security.yaml) | BMC isolation, BMC protocol security, API endpoint isolation, SA credential auth | [`scripts/security/`](scripts/security/) |
 
 ## Coverage note
 

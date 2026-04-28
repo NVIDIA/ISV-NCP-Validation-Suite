@@ -8,7 +8,7 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-"""Tests for security validation classes."""
+"""Tests for security validations."""
 
 from __future__ import annotations
 
@@ -16,9 +16,19 @@ from typing import Any
 
 from isvtest.validations.security import (
     BmcManagementNetworkCheck,
+    BmcProtocolSecurityCheck,
     MfaEnforcedCheck,
     OidcUserAuthCheck,
 )
+
+REQUIRED_BMC_PROTOCOL_TESTS = [
+    "ipmi_disabled",
+    "redfish_tls_enabled",
+    "redfish_plain_http_disabled",
+    "redfish_authentication_required",
+    "redfish_authorization_enforced",
+    "redfish_accounting_enabled",
+]
 
 OIDC_REQUIRED_TESTS = {
     "valid_token_accepted": {"passed": True},
@@ -113,6 +123,59 @@ class TestBmcManagementNetworkCheck:
 
         assert result["passed"] is False
         assert "tests" in result["error"]
+
+
+def _bmc_protocol_config(
+    tests: dict[str, dict[str, Any]] | None = None,
+    *,
+    bmc_endpoints_tested: int = 1,
+) -> dict[str, Any]:
+    """Build a BMC protocol validation config."""
+    default_tests = {name: {"passed": True, "message": f"{name} passed"} for name in REQUIRED_BMC_PROTOCOL_TESTS}
+    return {
+        "step_output": {
+            "bmc_endpoints_tested": bmc_endpoints_tested,
+            "tests": tests if tests is not None else default_tests,
+        },
+    }
+
+
+def test_bmc_protocol_security_check_passes_with_required_tests() -> None:
+    """BmcProtocolSecurityCheck passes when every required probe passed."""
+    validation = BmcProtocolSecurityCheck(config=_bmc_protocol_config())
+
+    result = validation.execute()
+
+    assert result["passed"] is True
+    assert "BMC protocol security posture verified (1 endpoints tested)" in result["output"]
+
+
+def test_bmc_protocol_security_check_reports_failed_and_missing_tests() -> None:
+    """BmcProtocolSecurityCheck reports both failed and missing probes."""
+    tests = {
+        name: {"passed": True}
+        for name in REQUIRED_BMC_PROTOCOL_TESTS
+        if name not in {"redfish_tls_enabled", "redfish_accounting_enabled"}
+    }
+    tests["redfish_tls_enabled"] = {"passed": False, "error": "certificate expired"}
+    validation = BmcProtocolSecurityCheck(config=_bmc_protocol_config(tests))
+
+    result = validation.execute()
+
+    assert result["passed"] is False
+    assert "BMC protocol security tests failed" in result["error"]
+    assert "redfish_tls_enabled: certificate expired" in result["error"]
+    assert "redfish_accounting_enabled: test not found" in result["error"]
+
+
+def test_bmc_protocol_security_check_preserves_empty_tests_map() -> None:
+    """BmcProtocolSecurityCheck fails when an explicit empty tests map is provided."""
+    validation = BmcProtocolSecurityCheck(config=_bmc_protocol_config({}))
+
+    result = validation.execute()
+
+    assert result["passed"] is False
+    assert result["error"] == "No 'tests' in step output"
 
 
 class TestMfaEnforcedCheck:

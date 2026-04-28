@@ -560,6 +560,44 @@ class FakeBastionEc2:
         return self.paginators[operation_name]
 
 
+class FakeBastionRouteTablePaginator:
+    """Fake route-table paginator that varies responses by route-table association filter."""
+
+    def __init__(
+        self,
+        *,
+        explicit_route_tables: list[dict[str, Any]] | None = None,
+        main_route_tables: list[dict[str, Any]] | None = None,
+    ) -> None:
+        """Store route tables returned for explicit subnet and main associations."""
+        self.explicit_route_tables = explicit_route_tables or []
+        self.main_route_tables = main_route_tables or []
+        self.calls: list[dict[str, Any]] = []
+
+    def paginate(self, **kwargs: Any) -> list[dict[str, Any]]:
+        """Return route tables based on the requested association filter."""
+        self.calls.append(kwargs)
+        filter_names = {filter_config["Name"] for filter_config in kwargs.get("Filters", [])}
+        if "association.main" in filter_names:
+            return [{"RouteTables": self.main_route_tables}]
+        if "association.subnet-id" in filter_names:
+            return [{"RouteTables": self.explicit_route_tables}]
+        return [{"RouteTables": []}]
+
+
+class FakeMainRouteBastionEc2:
+    """Fake EC2 client for BMC bastion route-table association checks."""
+
+    def __init__(self, paginator: FakeBastionRouteTablePaginator) -> None:
+        """Store the route-table paginator."""
+        self.route_table_paginator = paginator
+
+    def get_paginator(self, operation_name: str) -> FakeBastionRouteTablePaginator:
+        """Return the fake route-table paginator."""
+        assert operation_name == "describe_route_tables"
+        return self.route_table_paginator
+
+
 def test_bmc_bastion_access_provider_hidden_when_no_management_resources(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -706,6 +744,30 @@ def test_bmc_bastion_access_rejects_explicit_cidr_ingress() -> None:
     assert "explicit_cidr=True" in result["error"]
 
 
+def test_bmc_bastion_access_rejects_prefix_list_ingress() -> None:
+    """Prefix-list ingress is not bastion SG ingress and must fail SEC12-03."""
+    module = _load_security_script("bmc_bastion_access_test.py")
+    management_sgs = [
+        {
+            "GroupId": "sg-bmc",
+            "Tags": [{"Key": "Role", "Value": "bmc-network"}],
+            "IpPermissions": [
+                {
+                    "IpProtocol": "tcp",
+                    "FromPort": 22,
+                    "ToPort": 22,
+                    "PrefixListIds": [{"PrefixListId": "pl-corporate"}],
+                }
+            ],
+        }
+    ]
+
+    result = module._check_management_ingress_via_bastion_only(management_sgs, {"sg-bastion"})
+
+    assert result["passed"] is False
+    assert "prefix_list=True" in result["error"]
+
+
 def test_bmc_bastion_access_detects_igw_route_from_management_subnet() -> None:
     """SEC12-03 fails when a BMC-tagged subnet has a 0.0.0.0/0 -> igw route."""
     module = _load_security_script("bmc_bastion_access_test.py")
@@ -729,6 +791,43 @@ def test_bmc_bastion_access_detects_igw_route_from_management_subnet() -> None:
 
     assert result["passed"] is False
     assert "rtb-bmc" in result["error"]
+
+
+def test_bmc_bastion_access_detects_igw_route_from_main_route_table() -> None:
+    """SEC12-03 checks the VPC main route table when a BMC subnet has no explicit association."""
+    module = _load_security_script("bmc_bastion_access_test.py")
+    management_subnets = [
+        {
+            "SubnetId": "subnet-bmc",
+            "VpcId": "vpc-bmc",
+            "MapPublicIpOnLaunch": False,
+            "Tags": [{"Key": "Role", "Value": "bmc-management"}],
+        }
+    ]
+    paginator = FakeBastionRouteTablePaginator(
+        main_route_tables=[
+            {
+                "RouteTableId": "rtb-main-public",
+                "Associations": [{"Main": True, "RouteTableAssociationId": "rtbassoc-main"}],
+                "Routes": [{"DestinationCidrBlock": "0.0.0.0/0", "GatewayId": "igw-12345"}],
+            }
+        ]
+    )
+    ec2 = FakeMainRouteBastionEc2(paginator)
+
+    result = module._check_no_direct_public_route(ec2, management_subnets)
+
+    assert result["passed"] is False
+    assert "rtb-main-public" in result["error"]
+    assert paginator.calls == [
+        {"Filters": [{"Name": "association.subnet-id", "Values": ["subnet-bmc"]}]},
+        {
+            "Filters": [
+                {"Name": "vpc-id", "Values": ["vpc-bmc"]},
+                {"Name": "association.main", "Values": ["true"]},
+            ]
+        },
+    ]
 
 
 def test_bmc_bastion_access_detects_map_public_ip() -> None:

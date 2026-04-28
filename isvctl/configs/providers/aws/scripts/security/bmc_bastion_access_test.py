@@ -176,9 +176,10 @@ def _check_management_ingress_via_bastion_only(
             referenced_sg_ids = {pair.get("GroupId") for pair in rule.get("UserIdGroupPairs", [])}
             non_bastion_refs = referenced_sg_ids - bastion_sg_ids - {None}
             has_explicit_cidr = bool(rule.get("IpRanges") or rule.get("Ipv6Ranges"))
-            if not referenced_sg_ids and not has_explicit_cidr:
+            has_prefix_list = bool(rule.get("PrefixListIds"))
+            if not referenced_sg_ids and not has_explicit_cidr and not has_prefix_list:
                 continue
-            if non_bastion_refs or has_explicit_cidr:
+            if non_bastion_refs or has_explicit_cidr or has_prefix_list:
                 return {
                     "passed": False,
                     "security_group_id": sg.get("GroupId"),
@@ -186,7 +187,7 @@ def _check_management_ingress_via_bastion_only(
                         f"BMC management SG {sg.get('GroupId')} accepts ingress from sources "
                         f"other than the designated bastion SG(s) "
                         f"(non_bastion_sg_refs={sorted(s for s in non_bastion_refs if s)}, "
-                        f"explicit_cidr={has_explicit_cidr})"
+                        f"explicit_cidr={has_explicit_cidr}, prefix_list={has_prefix_list})"
                     ),
                 }
     return {
@@ -229,6 +230,32 @@ def _check_no_direct_public_route(
         "RouteTables",
         Filters=[{"Name": "association.subnet-id", "Values": subnet_ids}],
     )
+    explicit_subnet_ids = {
+        association.get("SubnetId")
+        for route_table in route_tables
+        for association in route_table.get("Associations", [])
+        if association.get("SubnetId")
+    }
+    main_route_table_vpc_ids = sorted(
+        {
+            subnet.get("VpcId")
+            for subnet in management_subnets
+            if subnet.get("VpcId") and subnet.get("SubnetId") not in explicit_subnet_ids
+        }
+    )
+    for vpc_id in main_route_table_vpc_ids:
+        route_tables.extend(
+            _collect_paginated(
+                ec2,
+                "describe_route_tables",
+                "RouteTables",
+                Filters=[
+                    {"Name": "vpc-id", "Values": [vpc_id]},
+                    {"Name": "association.main", "Values": ["true"]},
+                ],
+            )
+        )
+
     for route_table in route_tables:
         for route in route_table.get("Routes", []):
             destination = route.get("DestinationCidrBlock") or route.get("DestinationIpv6CidrBlock") or ""

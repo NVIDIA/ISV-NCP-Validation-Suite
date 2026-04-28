@@ -95,6 +95,7 @@ from isvtest.validations.security import (
     BmcTenantIsolationCheck,
     ConsoleRbacCheck,
     MfaEnforcedCheck,
+    OidcUserAuthCheck,
 )
 
 __all__ = [
@@ -134,6 +135,7 @@ __all__ = [
     "NimInferenceCheck",
     "NimModelCheck",
     "NodeCountCheck",
+    "OidcUserAuthCheck",
     "PerformanceCheck",
     "SchemaValidation",
     "SecurityBlockingCheck",

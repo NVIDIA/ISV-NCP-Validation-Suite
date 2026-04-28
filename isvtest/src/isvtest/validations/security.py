@@ -201,3 +201,61 @@ class ConsoleRbacCheck(BaseValidation):
             f"Console RBAC restricted for {instance_id} "
             f"(model={rbac_model}, actions={', '.join(str(action) for action in restricted_actions)})"
         )
+
+
+class OidcUserAuthCheck(BaseValidation):
+    """Validate user authentication via OIDC for platform services.
+
+    Verifies that a configured platform endpoint accepts a properly issued
+    token and rejects tokens with bad signature, wrong issuer, wrong
+    audience, expired exp, or missing required claims, and that the
+    issuer's discovery + JWKS endpoints serve the expected metadata.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        issuer_url: Non-empty OIDC issuer URL
+        audience: Non-empty expected audience
+        target_url: Non-empty platform endpoint probed with bearer tokens
+        endpoints_tested: Positive integer
+        tests: dict with valid_token_accepted, bad_signature_rejected,
+               wrong_issuer_rejected, wrong_audience_rejected,
+               expired_token_rejected, missing_required_claim_rejected,
+               discovery_and_jwks_reachable
+    """
+
+    description: ClassVar[str] = (
+        "Check user auth via OIDC validates signature, issuer, audience, expiration, and required claims"
+    )
+    markers: ClassVar[list[str]] = ["security", "iam"]
+
+    def run(self) -> None:
+        """Validate required OIDC token verification probe results from step output."""
+        required = [
+            "valid_token_accepted",
+            "bad_signature_rejected",
+            "wrong_issuer_rejected",
+            "wrong_audience_rejected",
+            "expired_token_rejected",
+            "missing_required_claim_rejected",
+            "discovery_and_jwks_reachable",
+        ]
+        if not check_required_tests(self, required, "OIDC user auth tests failed"):
+            return
+
+        step_output = self.config.get("step_output", {})
+        for field in ("issuer_url", "audience", "target_url"):
+            value = step_output.get(field)
+            if not isinstance(value, str) or not value.strip():
+                self.set_failed(f"OIDC user auth output missing non-empty '{field}'")
+                return
+
+        endpoints_tested = step_output.get("endpoints_tested")
+        if type(endpoints_tested) is not int or endpoints_tested < 1:
+            self.set_failed("OIDC user auth did not probe any platform endpoint")
+            return
+
+        issuer = step_output["issuer_url"]
+        target_url = step_output["target_url"]
+        self.set_passed(f"OIDC user auth verified (issuer={issuer}, target={target_url})")

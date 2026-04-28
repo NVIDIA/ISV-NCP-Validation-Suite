@@ -145,6 +145,7 @@ Validations use `sinfo`/`srun` directly: partitions, GPU allocation, job schedul
 | `bmc_tenant_isolation` | test | `providers/my-isv/scripts/security/bmc_isolation_test.py` | BMC/IPMI/Redfish unreachable from tenant network |
 | `api_endpoint_isolation` | test | `providers/my-isv/scripts/security/api_endpoint_test.py` | API endpoints not publicly accessible |
 | `sa_credential_test` | test | `providers/my-isv/scripts/security/sa_credential_test.py` | Service account long-lived credential auth |
+| `oidc_user_auth_test` | test | `providers/my-isv/scripts/security/oidc_user_auth_test.py` | OIDC issuer metadata and protected endpoint token acceptance/rejection |
 | `teardown` | teardown | `providers/my-isv/scripts/security/teardown.py` | Cleanup test resources |
 
 ## Related Documentation

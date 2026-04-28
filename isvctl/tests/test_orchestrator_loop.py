@@ -556,6 +556,31 @@ class TestMissingStepRefDetection:
         # "--region" stripped (matching previous behavior for explicit defaults).
         assert results.steps[0].success
 
+    def test_inline_empty_template_value_keeps_flag_value_pair(self) -> None:
+        """Empty optional values stay attached when YAML uses ``--flag={{value}}``."""
+        executor = StepExecutor()
+        config = RunConfig(
+            tests=ValidationConfig(
+                settings={
+                    "oidc_issuer_url": "",
+                    "oidc_audience": "",
+                    "oidc_target_url": "",
+                }
+            )
+        )
+        context = Context(config)
+
+        rendered = executor._render_args(
+            [
+                "--issuer-url={{oidc_issuer_url}}",
+                "--audience={{oidc_audience}}",
+                "--target-url={{oidc_target_url}}",
+            ],
+            context,
+        )
+
+        assert rendered == ["--issuer-url=", "--audience=", "--target-url="]
+
     def test_missing_ref_raised_from_render_args_directly(self) -> None:
         """_render_args raises MissingStepRefError for bare references."""
         import pytest

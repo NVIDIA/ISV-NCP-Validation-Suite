@@ -64,6 +64,11 @@ tests:
         ServiceAccountCredentialCheck:
           step: sa_credential_test
 
+    user_auth_oidc:
+      checks:
+        OidcUserAuthCheck:
+          step: oidc_user_auth_test
+
     teardown_checks:
       step: teardown
       checks:

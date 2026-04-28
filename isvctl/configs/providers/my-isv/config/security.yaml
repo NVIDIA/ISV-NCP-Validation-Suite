@@ -17,6 +17,7 @@
 #
 # Coverage:
 #   SEC12-02: BMC tenant isolation (BmcTenantIsolationCheck)
+#   CNP10-01: BMC protocol security (BmcProtocolSecurityCheck)
 #   SEC14-01: API endpoint isolation (ApiEndpointIsolationCheck)
 #   SEC03-01: Service account credentials (ServiceAccountCredentialCheck)
 #
@@ -41,6 +42,12 @@ commands:
       - name: bmc_tenant_isolation
         phase: test
         command: "python ../scripts/security/bmc_isolation_test.py"
+        args: ["--region", "{{region}}"]
+        timeout: 60
+
+      - name: bmc_protocol_security
+        phase: test
+        command: "python ../scripts/security/bmc_protocol_security_test.py"
         args: ["--region", "{{region}}"]
         timeout: 60
 

@@ -16,7 +16,7 @@ Validations are organized by category:
 - instance: VM/EC2 instance validations
 - network: VPC, subnet, security group validations
 - iam: Access key, tenant, and service account validations
-- security: BMC isolation, API endpoint isolation, infrastructure hardening
+- security: BMC isolation, BMC protocol posture, API endpoint isolation, infrastructure hardening
 
 All validations are also available via step_assertions for backward compatibility.
 """
@@ -90,6 +90,7 @@ from isvtest.validations.nim import (
 )
 from isvtest.validations.security import (
     ApiEndpointIsolationCheck,
+    BmcProtocolSecurityCheck,
     BmcTenantIsolationCheck,
 )
 
@@ -99,6 +100,7 @@ __all__ = [
     "AccessKeyDisabledCheck",
     "AccessKeyRejectedCheck",
     "ApiEndpointIsolationCheck",
+    "BmcProtocolSecurityCheck",
     "BmcTenantIsolationCheck",
     "ByoipCheck",
     "CloudInitCheck",

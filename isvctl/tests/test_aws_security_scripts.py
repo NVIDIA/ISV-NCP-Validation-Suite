@@ -246,6 +246,45 @@ def test_bmc_main_scans_non_default_vpcs_when_no_vpc_id(
     assert ec2.paginators["describe_vpcs"].calls == [{}]
 
 
+def test_bmc_protocol_security_reports_no_customer_bmc_surface() -> None:
+    """AWS BMC protocol check emits all CNP10-01 keys for the no-surface case."""
+    module = _load_security_script("bmc_protocol_security_test.py")
+
+    result = module._aws_no_customer_bmc_result("us-west-2")
+
+    assert result["success"] is True
+    assert result["bmc_endpoints_tested"] == 0
+    assert result["bmc_protocol_surface"] == "none"
+    assert set(result["tests"]) == {
+        "ipmi_disabled",
+        "redfish_tls_enabled",
+        "redfish_plain_http_disabled",
+        "redfish_authentication_required",
+        "redfish_authorization_enforced",
+        "redfish_accounting_enabled",
+    }
+    assert all(test["passed"] is True for test in result["tests"].values())
+    assert "do not receive customer-accessible IPMI or Redfish" in result["evidence"]
+
+
+def test_bmc_protocol_security_main_outputs_json(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """AWS BMC protocol script prints the provider-agnostic JSON contract."""
+    module = _load_security_script("bmc_protocol_security_test.py")
+    monkeypatch.setattr(module.sys, "argv", ["bmc_protocol_security_test.py", "--region", "eu-west-1"])
+
+    exit_code = module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["success"] is True
+    assert payload["region"] == "eu-west-1"
+    assert payload["test_name"] == "bmc_protocol_security"
+    assert payload["tests"]["ipmi_disabled"]["passed"] is True
+
+
 class FakeIamTags:
     """Small fake for IAM list_user_tags responses."""
 

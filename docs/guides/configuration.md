@@ -527,6 +527,14 @@ Below is a summary by category.
 | `TrafficFlowCheck` | Check traffic flow |
 | `DhcpIpManagementCheck` | Check DHCP/IP management via SSH |
 
+### Security (`validations/security.py`)
+
+| Validation | Description |
+| ---------- | ----------- |
+| `BmcTenantIsolationCheck` | Check BMC/IPMI/Redfish are unreachable from tenant networks |
+| `BmcProtocolSecurityCheck` | Check CNP10-01: IPMI disabled; Redfish over TLS with AAA |
+| `ApiEndpointIsolationCheck` | Check management/API endpoints are not publicly accessible |
+
 ### Host (`validations/host.py`)
 
 | Validation | Description |

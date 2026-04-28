@@ -78,6 +78,7 @@ class TestBuildCatalog:
 
         assert by_name["SgCrudCheck"]["platforms"] == ["NETWORK"]
         assert by_name["BmcTenantIsolationCheck"]["platforms"] == ["SECURITY"]
+        assert by_name["BmcProtocolSecurityCheck"]["platforms"] == ["SECURITY"]
         assert by_name["ServiceAccountCredentialCheck"]["platforms"] == ["SECURITY"]
 
 

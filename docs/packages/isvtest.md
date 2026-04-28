@@ -110,6 +110,16 @@ VPC, subnet, security group, DNS, and connectivity checks.
 | `TrafficFlowCheck` | network | Check traffic flow |
 | `DhcpIpManagementCheck` | network, ssh | Check DHCP/IP management via SSH |
 
+### Security (`validations/security.py`)
+
+Infrastructure security hardening checks for management-plane exposure and BMC protocol posture.
+
+| Validation | Platforms | Description |
+| ---------- | --------- | ----------- |
+| `BmcTenantIsolationCheck` | security | Check BMC/IPMI/Redfish are unreachable from tenant networks |
+| `BmcProtocolSecurityCheck` | security | Check CNP10-01: IPMI disabled; Redfish over TLS with AAA |
+| `ApiEndpointIsolationCheck` | security | Check management/API endpoints are not publicly accessible |
+
 ### Host (`validations/host.py`)
 
 SSH-based host validations for GPU, driver, OS, networking, and workloads.

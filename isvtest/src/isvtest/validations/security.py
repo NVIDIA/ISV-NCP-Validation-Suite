@@ -10,8 +10,8 @@
 
 """Security validations for infrastructure hardening.
 
-Validations for BMC isolation, API endpoint exposure, tenant isolation,
-and other platform security requirements (SEC* test IDs).
+Validations for BMC isolation, BMC protocol posture, API endpoint exposure,
+tenant isolation, and other platform security requirements (SEC* test IDs).
 """
 
 from typing import ClassVar
@@ -49,6 +49,42 @@ class BmcTenantIsolationCheck(BaseValidation):
             return
         bmc_count = self.config.get("step_output", {}).get("bmc_endpoints_tested", "N/A")
         self.set_passed(f"BMC interfaces unreachable from tenant network ({bmc_count} endpoints tested)")
+
+
+class BmcProtocolSecurityCheck(BaseValidation):
+    """Validate BMC management protocols enforce CNP10-01 controls.
+
+    Verifies the management protocol posture for BMC endpoints:
+    IPMI must be disabled, Redfish must require TLS and authentication,
+    role authorization must be enforced, and AAA/accounting evidence must
+    be present.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        tests: dict with ipmi_disabled, redfish_tls_enabled,
+               redfish_plain_http_disabled, redfish_authentication_required,
+               redfish_authorization_enforced, redfish_accounting_enabled
+    """
+
+    description: ClassVar[str] = "Check BMC protocol security posture"
+    markers: ClassVar[list[str]] = ["security", "network"]
+
+    def run(self) -> None:
+        """Validate required BMC protocol security probe results."""
+        required = [
+            "ipmi_disabled",
+            "redfish_tls_enabled",
+            "redfish_plain_http_disabled",
+            "redfish_authentication_required",
+            "redfish_authorization_enforced",
+            "redfish_accounting_enabled",
+        ]
+        if not check_required_tests(self, required, "BMC protocol security tests failed"):
+            return
+        bmc_count = self.config.get("step_output", {}).get("bmc_endpoints_tested", "N/A")
+        self.set_passed(f"BMC protocol security posture verified ({bmc_count} endpoints tested)")
 
 
 class ApiEndpointIsolationCheck(BaseValidation):

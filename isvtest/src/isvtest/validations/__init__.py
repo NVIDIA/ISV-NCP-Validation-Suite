@@ -98,6 +98,7 @@ from isvtest.validations.security import (
     BmcProtocolSecurityCheck,
     BmcTenantIsolationCheck,
     ConsoleRbacCheck,
+    CustomerManagedKeyCheck,
     MfaEnforcedCheck,
     OidcUserAuthCheck,
 )
@@ -119,6 +120,7 @@ __all__ = [
     "ConsoleRbacCheck",
     "ContainerRuntimeCheck",
     "CpuInfoCheck",
+    "CustomerManagedKeyCheck",
     "DhcpIpManagementCheck",
     "DriverCheck",
     "FieldExistsCheck",

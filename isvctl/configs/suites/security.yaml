@@ -69,6 +69,11 @@ tests:
         MfaEnforcedCheck:
           step: mfa_enforcement
 
+    customer_managed_key:
+      checks:
+        CustomerManagedKeyCheck:
+          step: customer_managed_key_test
+
     service_account_auth:
       checks:
         ServiceAccountCredentialCheck:

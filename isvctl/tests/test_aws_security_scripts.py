@@ -22,7 +22,7 @@ from typing import Any
 from urllib.error import HTTPError
 
 import pytest
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, WaiterError
 
 ISVCTL_ROOT = Path(__file__).resolve().parents[1]
 AWS_SECURITY_SCRIPTS = ISVCTL_ROOT / "configs" / "providers" / "aws" / "scripts" / "security"
@@ -1115,6 +1115,246 @@ def test_teardown_main_fails_when_owned_user_cleanup_fails(
     assert payload["resources_failed"][0]["username"] == "isv-sa-test-leftover"
     assert len(payload["resources_failed"][0]["errors"]) == 2
     assert iam.delete_user_called is True
+
+
+@pytest.fixture(scope="module")
+def byok_module() -> ModuleType:
+    """Load the customer-managed key script as a module."""
+    return _load_security_script("customer_managed_key_test.py")
+
+
+class FakeByokWaiter:
+    """Fake EC2 waiter for encrypted volume tests."""
+
+    def __init__(self, error: Exception | None = None) -> None:
+        """Initialize wait call tracking."""
+        self.calls: list[dict[str, Any]] = []
+        self.error = error
+
+    def wait(self, **kwargs: Any) -> None:
+        """Record waiter arguments."""
+        self.calls.append(kwargs)
+        if self.error:
+            raise self.error
+
+
+class FakeByokKms:
+    """Fake KMS client for customer-managed key tests."""
+
+    def __init__(
+        self,
+        *,
+        key_manager: str = "CUSTOMER",
+        plaintext_mismatch: bool = False,
+        encrypt_error: ClientError | None = None,
+    ) -> None:
+        """Initialize fake KMS behavior."""
+        self.key_metadata = {
+            "KeyId": "cmk-123",
+            "Arn": "arn:aws:kms:us-west-2:123456789012:key/cmk-123",
+            "KeyManager": key_manager,
+            "KeyState": "Enabled",
+            "KeyUsage": "ENCRYPT_DECRYPT",
+        }
+        self.plaintext_mismatch = plaintext_mismatch
+        self.encrypt_error = encrypt_error
+        self.created_keys: list[dict[str, Any]] = []
+        self.scheduled_deletions: list[dict[str, Any]] = []
+
+    def create_key(self, **kwargs: Any) -> dict[str, dict[str, Any]]:
+        """Create a fake customer-managed key."""
+        self.created_keys.append(kwargs)
+        return {"KeyMetadata": self.key_metadata}
+
+    def describe_key(self, KeyId: str) -> dict[str, dict[str, Any]]:
+        """Return fake KMS key metadata."""
+        assert KeyId in {"cmk-123", self.key_metadata["Arn"], "alias/aws/ebs"}
+        return {"KeyMetadata": self.key_metadata}
+
+    def encrypt(self, KeyId: str, Plaintext: bytes) -> dict[str, bytes]:
+        """Return fake ciphertext or raise the configured error."""
+        assert KeyId == "cmk-123"
+        if self.encrypt_error:
+            raise self.encrypt_error
+        return {"CiphertextBlob": b"ciphertext:" + Plaintext}
+
+    def decrypt(self, KeyId: str, CiphertextBlob: bytes) -> dict[str, bytes]:
+        """Return the decrypted fake plaintext."""
+        assert KeyId == "cmk-123"
+        assert CiphertextBlob.startswith(b"ciphertext:")
+        if self.plaintext_mismatch:
+            return {"Plaintext": b"wrong"}
+        return {"Plaintext": CiphertextBlob.removeprefix(b"ciphertext:")}
+
+    def schedule_key_deletion(self, **kwargs: Any) -> None:
+        """Record a scheduled key deletion request."""
+        self.scheduled_deletions.append(kwargs)
+
+
+class FakeByokEc2:
+    """Fake EC2 client for encrypted EBS volume tests."""
+
+    def __init__(
+        self,
+        *,
+        kms_key_id: str | None = None,
+        encrypted: bool = True,
+        waiter_error: Exception | None = None,
+        describe_error: Exception | None = None,
+    ) -> None:
+        """Initialize fake EC2 behavior."""
+        self.kms_key_id = kms_key_id or "arn:aws:kms:us-west-2:123456789012:key/cmk-123"
+        self.encrypted = encrypted
+        self.describe_error = describe_error
+        self.created_volumes: list[dict[str, Any]] = []
+        self.deleted_volumes: list[str] = []
+        self.waiter = FakeByokWaiter(waiter_error)
+
+    def describe_availability_zones(self, **kwargs: Any) -> dict[str, list[dict[str, str]]]:
+        """Return one available AZ."""
+        assert kwargs == {"Filters": [{"Name": "state", "Values": ["available"]}]}
+        return {"AvailabilityZones": [{"ZoneName": "us-west-2a", "OptInStatus": "opt-in-not-required"}]}
+
+    def create_volume(self, **kwargs: Any) -> dict[str, Any]:
+        """Create a fake encrypted volume."""
+        self.created_volumes.append(kwargs)
+        return {
+            "VolumeId": "vol-byok-123",
+            "Encrypted": self.encrypted,
+            "KmsKeyId": self.kms_key_id,
+        }
+
+    def get_waiter(self, waiter_name: str) -> FakeByokWaiter:
+        """Return a fake waiter."""
+        assert waiter_name == "volume_available"
+        return self.waiter
+
+    def describe_volumes(self, VolumeIds: list[str]) -> dict[str, list[dict[str, Any]]]:
+        """Return the fake volume description."""
+        assert VolumeIds == ["vol-byok-123"]
+        if self.describe_error:
+            raise self.describe_error
+        return {
+            "Volumes": [
+                {
+                    "VolumeId": "vol-byok-123",
+                    "Encrypted": self.encrypted,
+                    "KmsKeyId": self.kms_key_id,
+                }
+            ]
+        }
+
+    def delete_volume(self, VolumeId: str) -> None:
+        """Record fake volume deletion."""
+        self.deleted_volumes.append(VolumeId)
+
+
+def test_byok_existing_customer_managed_key_path(byok_module: ModuleType) -> None:
+    """Existing customer-managed KMS key path passes all SEC09-04 probes."""
+    kms = FakeByokKms()
+    ec2 = FakeByokEc2()
+
+    result = byok_module._run_customer_managed_key_test(kms, ec2, "us-west-2", "cmk-123")
+
+    assert result["success"] is True
+    assert result["key_id"] == "cmk-123"
+    assert result["encrypted_resource_id"] == "vol-byok-123"
+    assert all(test["passed"] for test in result["tests"].values())
+    assert ec2.deleted_volumes == ["vol-byok-123"]
+    assert kms.scheduled_deletions == []
+
+
+def test_byok_rejects_aws_managed_key(byok_module: ModuleType) -> None:
+    """AWS-managed KMS keys fail the customer-managed-key contract."""
+    kms = FakeByokKms(key_manager="AWS")
+    ec2 = FakeByokEc2()
+
+    result = byok_module._run_customer_managed_key_test(kms, ec2, "us-west-2", "alias/aws/ebs")
+
+    assert result["success"] is False
+    assert result["tests"]["customer_managed_key_available"]["passed"] is True
+    assert result["tests"]["key_manager_is_customer"]["passed"] is False
+    assert result["tests"]["provider_managed_key_not_used"]["passed"] is False
+    assert ec2.created_volumes == []
+
+
+def test_byok_encrypt_decrypt_roundtrip_success_and_failure(byok_module: ModuleType) -> None:
+    """KMS encrypt/decrypt roundtrip reports success and plaintext mismatch failure."""
+    success = byok_module._check_encrypt_decrypt_roundtrip(FakeByokKms(), "cmk-123")
+    mismatch = byok_module._check_encrypt_decrypt_roundtrip(FakeByokKms(plaintext_mismatch=True), "cmk-123")
+    aws_error = byok_module._check_encrypt_decrypt_roundtrip(
+        FakeByokKms(encrypt_error=_client_error("Encrypt")),
+        "cmk-123",
+    )
+
+    assert success["passed"] is True
+    assert mismatch["passed"] is False
+    assert "did not match" in mismatch["error"]
+    assert aws_error["passed"] is False
+    assert "denied" in aws_error["error"]
+
+
+def test_byok_ebs_volume_kms_key_verification(byok_module: ModuleType) -> None:
+    """Encrypted EBS volume verification checks the reported KmsKeyId."""
+    key_metadata = FakeByokKms().key_metadata
+
+    success = byok_module._check_resource_encrypted_with_customer_key(FakeByokEc2(), key_metadata, "us-west-2a")
+    mismatch = byok_module._check_resource_encrypted_with_customer_key(
+        FakeByokEc2(kms_key_id="arn:aws:kms:us-west-2:123456789012:key/other"),
+        key_metadata,
+        "us-west-2a",
+    )
+
+    assert success["passed"] is True
+    assert success["volume_id"] == "vol-byok-123"
+    assert mismatch["passed"] is False
+    assert "unexpected KMS key" in mismatch["error"]
+
+
+def test_byok_deletes_volume_when_ebs_waiter_fails(byok_module: ModuleType) -> None:
+    """EBS waiter failures preserve the volume id so final cleanup can delete it."""
+    waiter_error = WaiterError(
+        name="VolumeAvailable",
+        reason="Max attempts exceeded",
+        last_response={"Volumes": [{"VolumeId": "vol-byok-123", "State": "creating"}]},
+    )
+    kms = FakeByokKms()
+    ec2 = FakeByokEc2(waiter_error=waiter_error)
+
+    result = byok_module._run_customer_managed_key_test(kms, ec2, "us-west-2", "cmk-123")
+
+    assert result["success"] is False
+    assert result["encrypted_resource_id"] == "vol-byok-123"
+    assert result["tests"]["resource_encrypted_with_customer_key"]["passed"] is False
+    assert result["tests"]["resource_encrypted_with_customer_key"]["volume_id"] == "vol-byok-123"
+    assert ec2.deleted_volumes == ["vol-byok-123"]
+
+
+def test_byok_deletes_volume_when_ebs_verification_raises_unexpected_error(byok_module: ModuleType) -> None:
+    """Unexpected EBS verification errors preserve the volume id for cleanup."""
+    kms = FakeByokKms()
+    ec2 = FakeByokEc2(describe_error=RuntimeError("describe failed"))
+
+    result = byok_module._run_customer_managed_key_test(kms, ec2, "us-west-2", "cmk-123")
+
+    assert result["success"] is False
+    assert result["encrypted_resource_id"] == "vol-byok-123"
+    assert result["tests"]["resource_encrypted_with_customer_key"]["volume_id"] == "vol-byok-123"
+    assert "describe failed" in result["tests"]["resource_encrypted_with_customer_key"]["error"]
+    assert ec2.deleted_volumes == ["vol-byok-123"]
+
+
+def test_byok_owned_temporary_key_and_volume_are_cleaned_up(byok_module: ModuleType) -> None:
+    """Temporary KMS keys are scheduled for deletion and test volumes are deleted."""
+    kms = FakeByokKms()
+    ec2 = FakeByokEc2()
+
+    result = byok_module._run_customer_managed_key_test(kms, ec2, "us-west-2")
+
+    assert result["success"] is True
+    assert kms.created_keys
+    assert kms.scheduled_deletions == [{"KeyId": "cmk-123", "PendingWindowInDays": 7}]
+    assert ec2.deleted_volumes == ["vol-byok-123"]
 
 
 @pytest.fixture(scope="module")

@@ -25,8 +25,9 @@
 #   4. BMC Bastion Access     - Verify BMC reachable only via hardened bastion
 #   5. API Endpoint Isolation - Verify management APIs are not publicly exposed
 #   6. MFA Enforcement        - Verify admin interfaces (UI, CLI, API) require MFA
-#   7. SA Credential Auth     - Verify IAM user + long-lived access key auth
-#   8. OIDC User Auth         - Probe configured OIDC-protected platform endpoint (SEC01-01)
+#   7. Customer Managed Key   - Verify customer-managed key encryption (SEC09-04)
+#   8. SA Credential Auth     - Verify IAM user + long-lived access key auth
+#   9. OIDC User Auth         - Probe configured OIDC-protected platform endpoint (SEC01-01)
 #
 # Note: SEC12-* (BMC) tests cannot be fully validated on AWS because the
 # Nitro/hypervisor BMC plane is provider-hidden. The references inspect the
@@ -94,14 +95,24 @@ commands:
         args: ["--region", "{{region}}"]
         timeout: 60
 
-      # Test 7: Service Account Credential Auth (~30s, includes IAM propagation wait)
+      # Test 7: Customer Managed Key / BYOK (~30s)
+      - name: customer_managed_key_test
+        phase: test
+        command: "python3 ../scripts/security/customer_managed_key_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--key-id={{customer_managed_key_id}}"
+        timeout: 120
+
+      # Test 8: Service Account Credential Auth (~30s, includes IAM propagation wait)
       - name: sa_credential_test
         phase: test
         command: "python3 ../scripts/security/sa_credential_test.py"
         args: ["--region", "{{region}}"]
         timeout: 120
 
-      # Test 8: OIDC User Authentication
+      # Test 9: OIDC User Authentication
       # Requires a real issuer, audience, protected target endpoint, and token
       # fixtures. Non-sensitive endpoint settings can come from tests.settings
       # below; token fixtures are read by the script from OIDC_*_TOKEN env vars
@@ -139,3 +150,4 @@ tests:
     oidc_issuer_url: "{{env.OIDC_ISSUER_URL | default('', true)}}"
     oidc_audience: "{{env.OIDC_AUDIENCE | default('', true)}}"
     oidc_target_url: "{{env.OIDC_TARGET_URL | default('', true)}}"
+    customer_managed_key_id: "{{env.AWS_KMS_KEY_ID | default('', true)}}"

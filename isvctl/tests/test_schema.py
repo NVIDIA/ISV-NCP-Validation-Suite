@@ -10,7 +10,7 @@
 
 """Tests for Pydantic schema models and output schema registry."""
 
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import pytest
 from pydantic import ValidationError
@@ -373,6 +373,40 @@ class TestOutputSchemaValidation:
         },
     }
 
+    @staticmethod
+    def _backend_switch_fabric_output() -> dict[str, Any]:
+        return {
+            "success": True,
+            "platform": "network",
+            "node_id": "compute-node-1",
+            "fabric": {
+                "leaf_switch_ids": ["leaf-1"],
+                "spine_switch_ids": ["spine-1"],
+                "core_switch_ids": ["core-1"],
+            },
+            "tests": {
+                "node_resolved": {"passed": True},
+                "leaf_switch_ids_present": {"passed": True},
+                "spine_switch_ids_present": {"passed": True},
+                "core_switch_ids_present": {"passed": True},
+            },
+        }
+
+    @staticmethod
+    def _nvlink_domain_output() -> dict[str, Any]:
+        return {
+            "success": True,
+            "platform": "network",
+            "node_id": "compute-node-1",
+            "nvlink_supported": True,
+            "nvlink_domain_id": "domain-1",
+            "tests": {
+                "node_resolved": {"passed": True},
+                "nvlink_support_detected": {"passed": True},
+                "nvlink_domain_id_present": {"passed": True},
+            },
+        }
+
     def test_slurm_output_passes_autodetected_schema(self) -> None:
         """Slurm setup.sh output must pass its auto-detected schema (generic)."""
         schema = get_schema_for_step("setup")
@@ -398,3 +432,66 @@ class TestOutputSchemaValidation:
         """EKS setup.sh output has top-level node_count and must pass cluster schema."""
         is_valid, errors = validate_output(self.EKS_SETUP_OUTPUT, "cluster")
         assert is_valid, f"EKS output failed 'cluster' schema: {errors}"
+
+    @pytest.mark.parametrize(
+        "field_name",
+        ["leaf_switch_ids", "spine_switch_ids", "core_switch_ids"],
+    )
+    def test_backend_switch_fabric_schema_rejects_empty_switch_id_collections(self, field_name: str) -> None:
+        """Backend switch fabric schema must reject empty fabric switch ID arrays."""
+        output = self._backend_switch_fabric_output()
+        output["fabric"][field_name] = []
+
+        is_valid, errors = validate_output(output, "backend_switch_fabric")
+
+        assert not is_valid
+        assert field_name in errors[0]
+
+    @pytest.mark.parametrize(
+        "test_name",
+        ["node_resolved", "leaf_switch_ids_present", "spine_switch_ids_present", "core_switch_ids_present"],
+    )
+    def test_backend_switch_fabric_schema_requires_test_keys(self, test_name: str) -> None:
+        """Backend switch fabric schema must require all contract test result keys."""
+        output = self._backend_switch_fabric_output()
+        output["tests"].pop(test_name)
+
+        is_valid, errors = validate_output(output, "backend_switch_fabric")
+
+        assert not is_valid
+        assert test_name in errors[0]
+
+    @pytest.mark.parametrize(
+        "test_name",
+        ["node_resolved", "nvlink_support_detected", "nvlink_domain_id_present"],
+    )
+    def test_nvlink_domain_schema_requires_test_keys(self, test_name: str) -> None:
+        """NVLink domain schema must require all contract test result keys."""
+        output = self._nvlink_domain_output()
+        output["tests"].pop(test_name)
+
+        is_valid, errors = validate_output(output, "nvlink_domain")
+
+        assert not is_valid
+        assert test_name in errors[0]
+
+    def test_nvlink_domain_schema_requires_domain_id_when_supported(self) -> None:
+        """NVLink domain schema must require nvlink_domain_id only for NVLink-supported nodes."""
+        output = self._nvlink_domain_output()
+        output.pop("nvlink_domain_id")
+
+        is_valid, errors = validate_output(output, "nvlink_domain")
+
+        assert not is_valid
+        assert "nvlink_domain_id" in errors[0]
+
+    def test_nvlink_domain_schema_allows_missing_domain_id_when_unsupported(self) -> None:
+        """Non-NVLink nodes may omit nvlink_domain_id."""
+        output = self._nvlink_domain_output()
+        output["nvlink_supported"] = False
+        output.pop("nvlink_domain_id")
+        output["tests"]["nvlink_domain_id_present"] = {"passed": False}
+
+        is_valid, errors = validate_output(output, "nvlink_domain")
+
+        assert is_valid, f"Unsupported NVLink output failed schema validation: {errors}"

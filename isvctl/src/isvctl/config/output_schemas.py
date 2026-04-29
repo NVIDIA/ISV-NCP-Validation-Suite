@@ -802,14 +802,32 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
                 "type": "object",
                 "required": ["leaf_switch_ids", "spine_switch_ids", "core_switch_ids"],
                 "properties": {
-                    "leaf_switch_ids": {"type": "array", "items": {"type": "string", "minLength": 1}},
-                    "spine_switch_ids": {"type": "array", "items": {"type": "string", "minLength": 1}},
-                    "core_switch_ids": {"type": "array", "items": {"type": "string", "minLength": 1}},
+                    "leaf_switch_ids": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {"type": "string", "minLength": 1},
+                    },
+                    "spine_switch_ids": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {"type": "string", "minLength": 1},
+                    },
+                    "core_switch_ids": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {"type": "string", "minLength": 1},
+                    },
                 },
                 "description": "Backend switch identifiers by fabric layer",
             },
             "tests": {
                 "type": "object",
+                "required": [
+                    "node_resolved",
+                    "leaf_switch_ids_present",
+                    "spine_switch_ids_present",
+                    "core_switch_ids_present",
+                ],
                 "properties": {
                     "node_resolved": {"type": "object"},
                     "leaf_switch_ids_present": {"type": "object"},
@@ -832,6 +850,11 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
             "nvlink_domain_id": {"type": "string", "minLength": 1, "description": "NVLink domain identifier"},
             "tests": {
                 "type": "object",
+                "required": [
+                    "node_resolved",
+                    "nvlink_support_detected",
+                    "nvlink_domain_id_present",
+                ],
                 "properties": {
                     "node_resolved": {"type": "object"},
                     "nvlink_support_detected": {"type": "object"},
@@ -840,6 +863,8 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
                 "description": "NVLink domain metadata checks",
             },
         },
+        "if": {"properties": {"nvlink_supported": {"const": True}}},
+        "then": {"required": ["nvlink_domain_id"]},
         "additionalProperties": True,
     },
     "sg_crud": {

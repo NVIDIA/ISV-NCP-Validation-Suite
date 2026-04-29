@@ -102,6 +102,8 @@ tests:
       checks:
         BackendSwitchFabricCheck:
           step: backend_switch_fabric
+        NvlinkDomainCheck:
+          step: nvlink_domain
 
     teardown_checks:
       step: teardown

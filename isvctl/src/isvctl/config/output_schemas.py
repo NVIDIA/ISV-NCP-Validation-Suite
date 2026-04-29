@@ -125,6 +125,8 @@ STEP_SCHEMA_MAPPING: dict[str, str | None] = {
     "peering_validation": "vpc_peering",
     "backend_switch_fabric": "backend_switch_fabric",
     "backend_switch_fabric_test": "backend_switch_fabric",
+    "nvlink_domain": "nvlink_domain",
+    "nvlink_domain_test": "nvlink_domain",
     "sg_crud_test": "sg_crud",
     "sg_crud": "sg_crud",
     # Node pool operations
@@ -815,6 +817,27 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
                     "core_switch_ids_present": {"type": "object"},
                 },
                 "description": "Backend switch fabric metadata checks",
+            },
+        },
+        "additionalProperties": True,
+    },
+    "nvlink_domain": {
+        "type": "object",
+        "required": ["success", "platform", "node_id", "nvlink_supported", "tests"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "test_name": {"type": "string", "description": "Always 'nvlink_domain'"},
+            "node_id": {"type": "string", "minLength": 1, "description": "Compute node identifier"},
+            "nvlink_supported": {"type": "boolean", "description": "Whether the node supports NVLink"},
+            "nvlink_domain_id": {"type": "string", "minLength": 1, "description": "NVLink domain identifier"},
+            "tests": {
+                "type": "object",
+                "properties": {
+                    "node_resolved": {"type": "object"},
+                    "nvlink_support_detected": {"type": "object"},
+                    "nvlink_domain_id_present": {"type": "object"},
+                },
+                "description": "NVLink domain metadata checks",
             },
         },
         "additionalProperties": True,

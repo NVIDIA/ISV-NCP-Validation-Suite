@@ -525,6 +525,7 @@ Below is a summary by category.
 | `ByoipCheck` | Check BYOIP support |
 | `StablePrivateIpCheck` | Check private IP stability |
 | `NetworkConnectivityCheck` | Check network connectivity |
+| `NvlinkDomainCheck` | Check NVLink domain ID |
 | `TrafficFlowCheck` | Check traffic flow |
 | `DhcpIpManagementCheck` | Check DHCP/IP management via SSH |
 

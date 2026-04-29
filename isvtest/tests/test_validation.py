@@ -38,6 +38,7 @@ from isvtest.validations.network import (
     ByoipCheck,
     FloatingIpCheck,
     LocalizedDnsCheck,
+    NvlinkDomainCheck,
     StablePrivateIpCheck,
     VpcPeeringCheck,
 )
@@ -1297,6 +1298,72 @@ class TestBackendSwitchFabricCheck:
         result = v.execute()
         assert result["passed"] is False
         assert "leaf_switch_ids_present" in result["error"]
+
+
+def _nvlink_domain_output(extra: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Build a step_output dict for NVLink domain tests."""
+    step_output = {
+        "success": True,
+        "platform": "network",
+        "node_id": "compute-node-1",
+        "nvlink_supported": True,
+        "nvlink_domain_id": "domain-1",
+        "tests": {
+            "node_resolved": {"passed": True},
+            "nvlink_support_detected": {"passed": True},
+            "nvlink_domain_id_present": {"passed": True},
+        },
+    }
+    if extra:
+        step_output.update(extra)
+    return {"step_output": step_output}
+
+
+class TestNvlinkDomainCheck:
+    """Tests for NvlinkDomainCheck validation."""
+
+    def test_all_passed(self) -> None:
+        """Validate NVLink domain output when all required checks pass."""
+        v = NvlinkDomainCheck(config=_nvlink_domain_output())
+        result = v.execute()
+        assert result["passed"] is True
+        assert "domain-1" in result["output"]
+
+    def test_unsupported_node_skips(self) -> None:
+        """Skip NVLink domain validation when the node does not support NVLink."""
+        config = _nvlink_domain_output(
+            {
+                "nvlink_supported": False,
+                "nvlink_domain_id": "",
+            }
+        )
+        v = NvlinkDomainCheck(config=config)
+        with pytest.raises(pytest.skip.Exception, match="NVLink not supported"):
+            v.execute()
+
+    def test_missing_domain_id_when_supported(self) -> None:
+        """Reject supported NVLink output when the domain identifier is missing."""
+        config = _nvlink_domain_output({"nvlink_domain_id": ""})
+        v = NvlinkDomainCheck(config=config)
+        result = v.execute()
+        assert result["passed"] is False
+        assert "nvlink_domain_id" in result["error"]
+
+    def test_failed_domain_subtest_when_supported(self) -> None:
+        """Reject supported NVLink output when the domain subtest fails."""
+        config = _nvlink_domain_output(
+            {
+                "tests": {
+                    "node_resolved": {"passed": True},
+                    "nvlink_support_detected": {"passed": True},
+                    "nvlink_domain_id_present": {"passed": False, "error": "domain missing"},
+                }
+            }
+        )
+        v = NvlinkDomainCheck(config=config)
+        result = v.execute()
+        assert result["passed"] is False
+        assert "nvlink_domain_id_present" in result["error"]
 
 
 class TestValidationResultCapture:

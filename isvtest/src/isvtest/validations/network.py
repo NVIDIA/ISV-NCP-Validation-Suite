@@ -951,6 +951,60 @@ class BackendSwitchFabricCheck(BaseValidation):
         )
 
 
+class NvlinkDomainCheck(BaseValidation):
+    """Validate NVLink domain metadata for a compute node.
+
+    Non-NVLink nodes are skipped explicitly so reports distinguish unsupported
+    hardware from validated NVLink domain metadata.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        node_id: Compute node identifier
+        nvlink_supported: True when the node supports NVLink
+        nvlink_domain_id: NVLink domain ID when NVLink is supported
+        tests: dict with node_resolved, nvlink_support_detected,
+               nvlink_domain_id_present
+    """
+
+    description: ClassVar[str] = "Check NVLink domain ID"
+    markers: ClassVar[list[str]] = ["network"]
+
+    def run(self) -> None:
+        """Check NVLink domain metadata from step output."""
+        step_output = self.config.get("step_output", {})
+
+        node_id = step_output.get("node_id")
+        if not _is_non_empty_string(node_id):
+            self.set_failed("`node_id` must be a non-empty string")
+            return
+
+        detection_required = ["node_resolved", "nvlink_support_detected"]
+        if not check_required_tests(self, detection_required, "NVLink support detection tests failed"):
+            return
+
+        nvlink_supported = step_output.get("nvlink_supported")
+        if nvlink_supported is False:
+            import pytest
+
+            pytest.skip(f"NVLink not supported on node {node_id}; skipping NVLink domain validation")
+
+        if nvlink_supported is not True:
+            self.set_failed("`nvlink_supported` must be a boolean")
+            return
+
+        if not check_required_tests(self, ["nvlink_domain_id_present"], "NVLink domain tests failed"):
+            return
+
+        nvlink_domain_id = step_output.get("nvlink_domain_id")
+        if not _is_non_empty_string(nvlink_domain_id):
+            self.set_failed("`nvlink_domain_id` must be a non-empty string when NVLink is supported")
+            return
+
+        self.set_passed(f"NVLink domain for {node_id}: {nvlink_domain_id}")
+
+
 class ByoipCheck(BaseValidation):
     """Validate Bring-Your-Own-IP (BYOIP) with non-conflicting custom CIDRs.
 

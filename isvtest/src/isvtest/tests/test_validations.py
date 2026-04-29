@@ -18,6 +18,7 @@ from isvtest.config.loader import ConfigLoader
 from isvtest.core.discovery import discover_all_tests
 from isvtest.core.runners import LocalRunner
 from isvtest.core.validation import BaseValidation
+from isvtest.release_manifest import INCLUDE_UNRELEASED_ENV, load_released_test_filter
 
 if TYPE_CHECKING:
     from isvtest.testing.subtests import SubTests
@@ -38,6 +39,43 @@ def get_validation_results() -> list[dict[str, Any]]:
 def clear_validation_results() -> None:
     """Clear captured validation results before a new pytest run."""
     _validation_results.clear()
+
+
+def _resolve_validation_class(
+    validation_name: str,
+    test_classes_map: dict[str, type[BaseValidation]],
+) -> type[BaseValidation] | None:
+    """Resolve a configured validation name to a discovered validation class."""
+    if validation_name in test_classes_map:
+        return test_classes_map[validation_name]
+
+    # Suffix match (e.g. ClassName-Variant). Generated duplicate keys use the
+    # same convention, but release filtering decides whether that suffix is an
+    # internal disambiguator or a literal configured variant.
+    possible_matches = [name for name in test_classes_map if validation_name.startswith(f"{name}-")]
+    if not possible_matches:
+        return None
+
+    longest_match = max(possible_matches, key=len)
+    return test_classes_map[longest_match]
+
+
+def _is_released_validation(
+    validation_name: str,
+    validation_config: Any,
+    target_class: type[BaseValidation],
+    released_tests: set[str],
+) -> bool:
+    """Return whether a configured validation is allowed by the release manifest."""
+    if validation_name in released_tests:
+        return True
+
+    return (
+        target_class.__name__ in released_tests
+        and isinstance(validation_config, dict)
+        and "_category" in validation_config
+        and validation_name.startswith(f"{target_class.__name__}-")
+    )
 
 
 def _suggest_similar_tests(name: str, available: list[str], max_suggestions: int = 3) -> list[str]:
@@ -65,6 +103,11 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     """Generate tests for all BaseValidation and BaseWorkloadCheck subclasses."""
     if "validation_class" in metafunc.fixturenames and "validation_config" in metafunc.fixturenames:
         test_classes = list(discover_all_tests())
+        released_tests = load_released_test_filter()
+        if released_tests is None:
+            sys.stderr.write(
+                f"\n\033[33mInfo:\033[0m Including unreleased validations because {INCLUDE_UNRELEASED_ENV} is enabled.\n"
+            )
 
         if not test_classes:
             return
@@ -104,30 +147,24 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
         # Map class names to classes for easier lookup
         test_classes_map = {cls.__name__: cls for cls in test_classes}
-        processed_classes = set()
-        unmatched_validations = []
+        configured_classes: set[str] = set()
+        unmatched_validations: list[str] = []
 
         if filtering_enabled:
             # 1. Process configured validations (including aliases/variants)
             for validation_name, validation_config in enabled_validations_config.items():
-                target_class = None
+                target_class = _resolve_validation_class(validation_name, test_classes_map)
+                if target_class is not None:
+                    configured_classes.add(target_class.__name__)
 
-                # Exact match
-                if validation_name in test_classes_map:
-                    target_class = test_classes_map[validation_name]
-                else:
-                    # Suffix match (e.g. ClassName-Variant)
-                    # Find longest matching class name prefix to handle potential overlaps
-                    possible_matches = [name for name in test_classes_map.keys() if validation_name.startswith(name)]
-                    if possible_matches:
-                        longest_match = max(possible_matches, key=len)
-                        # Dash is the only accepted variant separator
-                        if validation_name.startswith(f"{longest_match}-"):
-                            target_class = test_classes_map[longest_match]
+                if target_class is not None and released_tests is not None:
+                    if not _is_released_validation(validation_name, validation_config, target_class, released_tests):
+                        sys.stderr.write(
+                            f"\n\033[33mInfo:\033[0m Skipping unreleased validation: '{validation_name}'.\n"
+                        )
+                        continue
 
                 if target_class:
-                    processed_classes.add(target_class.__name__)
-
                     # Get markers from class, ensuring we handle inheritance correctly
                     markers = getattr(target_class, "markers", [])
                     pytest_marks = [getattr(pytest.mark, m) for m in markers]
@@ -157,9 +194,11 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
             # 2. Add skipped tests for classes NOT in config (if show_skipped)
             if show_skipped:
                 for cls_name, cls in test_classes_map.items():
-                    # If class was not processed (no exact or variant match found in config)
-                    # We treat it as skipped.
-                    if cls_name not in processed_classes:
+                    if released_tests is not None and cls_name not in released_tests:
+                        continue
+
+                    # If class was not configured by exact or variant match, treat it as skipped.
+                    if cls_name not in configured_classes:
                         markers = getattr(cls, "markers", [])
                         pytest_marks = [getattr(pytest.mark, m) for m in markers]
                         pytest_marks.append(pytest.mark.skip(reason="Not configured in config YAML"))
@@ -171,6 +210,9 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
         else:
             # No filtering, run all discovered tests with empty config
             for cls in test_classes:
+                if released_tests is not None and cls.__name__ not in released_tests:
+                    continue
+
                 markers = getattr(cls, "markers", [])
                 pytest_marks = [getattr(pytest.mark, m) for m in markers]
                 params.append(pytest.param(cls, {"inventory": cluster_inventory}, cls.__name__, marks=pytest_marks))

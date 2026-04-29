@@ -57,6 +57,22 @@ class TestBuildCatalog:
         assert "StepSuccessCheck" in names
         assert "FieldExistsCheck" in names
 
+    def test_released_only_filters_catalog(self) -> None:
+        """Default catalog generation excludes tests not in the release manifest."""
+        with patch("isvtest.catalog.load_released_test_filter", return_value={"StepSuccessCheck"}):
+            catalog = build_catalog()
+
+        assert {e["name"] for e in catalog} == {"StepSuccessCheck"}
+
+    def test_unreleased_env_includes_full_catalog(self) -> None:
+        """When the release filter is disabled, default catalog generation includes all tests."""
+        with patch("isvtest.catalog.load_released_test_filter", return_value=None):
+            catalog = build_catalog()
+
+        names = {e["name"] for e in catalog}
+        assert "StepSuccessCheck" in names
+        assert "FieldExistsCheck" in names
+
     def test_markers_are_lists_of_strings(self) -> None:
         """Test that markers are lists of strings."""
         catalog = build_catalog()
@@ -73,7 +89,7 @@ class TestBuildCatalog:
 
     def test_platforms_come_from_suites_before_filter_markers(self) -> None:
         """Test that feature markers do not add extra platform ownership."""
-        catalog = build_catalog()
+        catalog = build_catalog(released_only=False)
         by_name = {entry["name"]: entry for entry in catalog}
 
         assert by_name["SgCrudCheck"]["platforms"] == ["NETWORK"]

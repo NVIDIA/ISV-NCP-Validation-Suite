@@ -192,6 +192,69 @@ class MfaEnforcedCheck(BaseValidation):
         self.set_passed(f"Admin interfaces protected by MFA ({interfaces} interfaces checked)")
 
 
+class CustomerManagedKeyCheck(BaseValidation):
+    """Validate resources can be encrypted with customer-managed keys.
+
+    Verifies that the platform exposes customer-managed key support, the
+    reported key is customer-owned rather than provider-managed, encryption
+    and decryption work with that key, and a provider resource is encrypted
+    with that exact customer-managed key.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        key_id or key_arn: Non-empty customer-managed key evidence
+        encrypted_resource_id or resource_id: Non-empty encrypted resource evidence
+        tests: dict with customer_managed_key_available,
+               key_manager_is_customer, encrypt_decrypt_roundtrip,
+               resource_encrypted_with_customer_key,
+               provider_managed_key_not_used
+    """
+
+    description: ClassVar[str] = "Check BYOK/customer-managed key encryption support"
+    markers: ClassVar[list[str]] = ["security", "workload", "slow"]
+
+    def run(self) -> None:
+        """Validate required BYOK/customer-managed key results from step output."""
+        required = [
+            "customer_managed_key_available",
+            "key_manager_is_customer",
+            "encrypt_decrypt_roundtrip",
+            "resource_encrypted_with_customer_key",
+            "provider_managed_key_not_used",
+        ]
+        if not check_required_tests(self, required, "Customer-managed key tests failed"):
+            return
+
+        step_output = self.config.get("step_output", {})
+        key_evidence = next(
+            (
+                value.strip()
+                for value in (step_output.get("key_id"), step_output.get("key_arn"))
+                if isinstance(value, str) and value.strip()
+            ),
+            "",
+        )
+        if not key_evidence:
+            self.set_failed("Customer-managed key output missing non-empty key evidence")
+            return
+
+        resource_evidence = next(
+            (
+                value.strip()
+                for value in (step_output.get("encrypted_resource_id"), step_output.get("resource_id"))
+                if isinstance(value, str) and value.strip()
+            ),
+            "",
+        )
+        if not resource_evidence:
+            self.set_failed("Customer-managed key output missing non-empty encrypted resource evidence")
+            return
+
+        self.set_passed(f"Customer-managed key encryption verified (key={key_evidence}, resource={resource_evidence})")
+
+
 class ApiEndpointIsolationCheck(BaseValidation):
     """Validate no public internet access to API endpoints by default.
 

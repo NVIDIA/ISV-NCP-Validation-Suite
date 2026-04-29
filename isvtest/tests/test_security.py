@@ -12,12 +12,14 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 from isvtest.validations.security import (
     BmcBastionAccessCheck,
     BmcManagementNetworkCheck,
     BmcProtocolSecurityCheck,
+    CustomerManagedKeyCheck,
     MfaEnforcedCheck,
     OidcUserAuthCheck,
 )
@@ -39,6 +41,14 @@ OIDC_REQUIRED_TESTS = {
     "expired_token_rejected": {"passed": True},
     "missing_required_claim_rejected": {"passed": True},
     "discovery_and_jwks_reachable": {"passed": True},
+}
+
+BYOK_REQUIRED_TESTS = {
+    "customer_managed_key_available": {"passed": True},
+    "key_manager_is_customer": {"passed": True},
+    "encrypt_decrypt_roundtrip": {"passed": True},
+    "resource_encrypted_with_customer_key": {"passed": True},
+    "provider_managed_key_not_used": {"passed": True},
 }
 
 
@@ -314,6 +324,110 @@ class TestMfaEnforcedCheck:
         result = v.execute()
         assert result["passed"] is True
         assert "7 interfaces checked" in result["output"]
+
+
+def _byok_step_output(**overrides: Any) -> dict[str, Any]:
+    """Return a valid BYOK step output with optional overrides."""
+    output: dict[str, Any] = {
+        "success": True,
+        "platform": "security",
+        "test_name": "customer_managed_key_test",
+        "key_id": "cmk-test-123",
+        "key_arn": "arn:provider:kms:region:tenant:key/cmk-test-123",
+        "encrypted_resource_id": "volume-test-123",
+        "encrypted_resource_kms_key_id": "cmk-test-123",
+        "tests": deepcopy(BYOK_REQUIRED_TESTS),
+    }
+    output.update(overrides)
+    return output
+
+
+def test_customer_managed_key_check_passes_with_required_evidence() -> None:
+    """CustomerManagedKeyCheck passes with all required BYOK checks and evidence."""
+    check = CustomerManagedKeyCheck(config={"step_output": _byok_step_output()})
+
+    result = check.execute()
+
+    assert result["passed"] is True
+    assert "Customer-managed key encryption verified" in result["output"]
+    assert "cmk-test-123" in result["output"]
+
+
+def test_byok_step_output_returns_independent_tests() -> None:
+    """BYOK step output helper returns independent nested test data."""
+    first = _byok_step_output()
+    second = _byok_step_output()
+
+    first["tests"]["customer_managed_key_available"]["passed"] = False
+
+    assert second["tests"]["customer_managed_key_available"]["passed"] is True
+    assert BYOK_REQUIRED_TESTS["customer_managed_key_available"]["passed"] is True
+
+
+def test_customer_managed_key_check_fails_when_required_check_fails() -> None:
+    """CustomerManagedKeyCheck fails with the specific failed BYOK probe."""
+    tests = dict(BYOK_REQUIRED_TESTS)
+    tests["provider_managed_key_not_used"] = {"passed": False, "error": "AWS-managed key selected"}
+    check = CustomerManagedKeyCheck(config={"step_output": _byok_step_output(tests=tests)})
+
+    result = check.execute()
+
+    assert result["passed"] is False
+    assert "provider_managed_key_not_used" in result["error"]
+    assert "AWS-managed key selected" in result["error"]
+
+
+def test_customer_managed_key_check_fails_when_required_check_missing() -> None:
+    """CustomerManagedKeyCheck fails when a required BYOK probe is missing."""
+    tests = {
+        name: result for name, result in BYOK_REQUIRED_TESTS.items() if name != "resource_encrypted_with_customer_key"
+    }
+    check = CustomerManagedKeyCheck(config={"step_output": _byok_step_output(tests=tests)})
+
+    result = check.execute()
+
+    assert result["passed"] is False
+    assert "resource_encrypted_with_customer_key" in result["error"]
+
+
+def test_customer_managed_key_check_fails_without_key_evidence() -> None:
+    """CustomerManagedKeyCheck fails when no key evidence is reported."""
+    check = CustomerManagedKeyCheck(config={"step_output": _byok_step_output(key_id="", key_arn="")})
+
+    result = check.execute()
+
+    assert result["passed"] is False
+    assert "key evidence" in result["error"]
+
+
+def test_customer_managed_key_check_fails_without_resource_evidence() -> None:
+    """CustomerManagedKeyCheck fails when no encrypted resource evidence is reported."""
+    check = CustomerManagedKeyCheck(config={"step_output": _byok_step_output(encrypted_resource_id="", resource_id="")})
+
+    result = check.execute()
+
+    assert result["passed"] is False
+    assert "encrypted resource evidence" in result["error"]
+
+
+def test_customer_managed_key_check_falls_back_from_blank_evidence() -> None:
+    """CustomerManagedKeyCheck falls back when preferred evidence fields are blank."""
+    check = CustomerManagedKeyCheck(
+        config={
+            "step_output": _byok_step_output(
+                key_id="   ",
+                key_arn="  arn:provider:kms:region:tenant:key/fallback-key  ",
+                encrypted_resource_id="   ",
+                resource_id="  volume-fallback-123  ",
+            )
+        }
+    )
+
+    result = check.execute()
+
+    assert result["passed"] is True
+    assert "fallback-key" in result["output"]
+    assert "volume-fallback-123" in result["output"]
 
 
 def _oidc_step_output(**overrides: Any) -> dict[str, Any]:

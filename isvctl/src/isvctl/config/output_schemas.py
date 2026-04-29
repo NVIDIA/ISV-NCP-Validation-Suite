@@ -123,6 +123,10 @@ STEP_SCHEMA_MAPPING: dict[str, str | None] = {
     "dns_validation": "localized_dns",
     "peering_test": "vpc_peering",
     "peering_validation": "vpc_peering",
+    "backend_switch_fabric": "backend_switch_fabric",
+    "backend_switch_fabric_test": "backend_switch_fabric",
+    "nvlink_domain": "nvlink_domain",
+    "nvlink_domain_test": "nvlink_domain",
     "sg_crud_test": "sg_crud",
     "sg_crud": "sg_crud",
     # Node pool operations
@@ -785,6 +789,82 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
                 "properties": {"id": {"type": "string"}, "cidr": {"type": "string"}},
             },
         },
+        "additionalProperties": True,
+    },
+    "backend_switch_fabric": {
+        "type": "object",
+        "required": ["success", "platform", "node_id", "fabric", "tests"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "test_name": {"type": "string", "description": "Always 'backend_switch_fabric'"},
+            "node_id": {"type": "string", "minLength": 1, "description": "Compute node identifier"},
+            "fabric": {
+                "type": "object",
+                "required": ["leaf_switch_ids", "spine_switch_ids", "core_switch_ids"],
+                "properties": {
+                    "leaf_switch_ids": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {"type": "string", "minLength": 1},
+                    },
+                    "spine_switch_ids": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {"type": "string", "minLength": 1},
+                    },
+                    "core_switch_ids": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {"type": "string", "minLength": 1},
+                    },
+                },
+                "description": "Backend switch identifiers by fabric layer",
+            },
+            "tests": {
+                "type": "object",
+                "required": [
+                    "node_resolved",
+                    "leaf_switch_ids_present",
+                    "spine_switch_ids_present",
+                    "core_switch_ids_present",
+                ],
+                "properties": {
+                    "node_resolved": {"type": "object"},
+                    "leaf_switch_ids_present": {"type": "object"},
+                    "spine_switch_ids_present": {"type": "object"},
+                    "core_switch_ids_present": {"type": "object"},
+                },
+                "description": "Backend switch fabric metadata checks",
+            },
+        },
+        "additionalProperties": True,
+    },
+    "nvlink_domain": {
+        "type": "object",
+        "required": ["success", "platform", "node_id", "nvlink_supported", "tests"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "test_name": {"type": "string", "description": "Always 'nvlink_domain'"},
+            "node_id": {"type": "string", "minLength": 1, "description": "Compute node identifier"},
+            "nvlink_supported": {"type": "boolean", "description": "Whether the node supports NVLink"},
+            "nvlink_domain_id": {"type": "string", "minLength": 1, "description": "NVLink domain identifier"},
+            "tests": {
+                "type": "object",
+                "required": [
+                    "node_resolved",
+                    "nvlink_support_detected",
+                    "nvlink_domain_id_present",
+                ],
+                "properties": {
+                    "node_resolved": {"type": "object"},
+                    "nvlink_support_detected": {"type": "object"},
+                    "nvlink_domain_id_present": {"type": "object"},
+                },
+                "description": "NVLink domain metadata checks",
+            },
+        },
+        "if": {"properties": {"nvlink_supported": {"const": True}}},
+        "then": {"required": ["nvlink_domain_id"]},
         "additionalProperties": True,
     },
     "sg_crud": {

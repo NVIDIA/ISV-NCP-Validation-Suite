@@ -94,6 +94,7 @@ VPC, subnet, security group, DNS, and connectivity checks.
 
 | Validation | Platforms | Description |
 | ---------- | --------- | ----------- |
+| `BackendSwitchFabricCheck` | network | Check backend switch fabric IDs |
 | `NetworkProvisionedCheck` | network | Check network was provisioned |
 | `VpcCrudCheck` | network | Check VPC CRUD operations |
 | `SubnetConfigCheck` | network | Check subnet configuration |
@@ -107,6 +108,7 @@ VPC, subnet, security group, DNS, and connectivity checks.
 | `ByoipCheck` | network | Check BYOIP support |
 | `StablePrivateIpCheck` | network | Check private IP stability |
 | `NetworkConnectivityCheck` | network | Check network connectivity |
+| `NvlinkDomainCheck` | network | Check NVLink domain ID |
 | `TrafficFlowCheck` | network | Check traffic flow |
 | `DhcpIpManagementCheck` | network, ssh | Check DHCP/IP management via SSH |
 

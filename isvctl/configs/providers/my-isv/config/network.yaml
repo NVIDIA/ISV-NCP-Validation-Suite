@@ -16,12 +16,14 @@
 # without any real cloud network infrastructure.
 #
 # Coverage:
-#   This example exercises all 13 pure JSON-contract validations
+#   This example exercises the pure JSON-contract validations
 #   (NetworkProvisionedCheck, VpcCrudCheck, SubnetConfigCheck,
 #    VpcIsolationCheck, SgCrudCheck, SecurityBlockingCheck,
 #    NetworkConnectivityCheck, TrafficFlowCheck, VpcIpConfigCheck,
 #    ByoipCheck, StablePrivateIpCheck, FloatingIpCheck, LocalizedDnsCheck,
-#    VpcPeeringCheck, StepSuccessCheck). The DhcpIpManagementCheck
+#    VpcPeeringCheck, BackendSwitchFabricCheck, NvlinkDomainCheck,
+#    StepSuccessCheck). The NET01-01 and NET02-02 checks validate
+#    provider-reported fabric metadata only. The DhcpIpManagementCheck
 #    validation needs to SSH into a real instance, so it is excluded
 #    via `exclude.markers: [ssh]`; the dhcp_ip_test step is also
 #    `skip: true` for the same reason.
@@ -231,6 +233,28 @@ commands:
           - "10.87.0.0/16"
         timeout: 60
         output_schema: vpc_peering
+
+      - name: backend_switch_fabric
+        phase: test
+        command: "python ../scripts/network/backend_switch_fabric_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--node-id"
+          - "compute-node-1"
+        timeout: 60
+        output_schema: backend_switch_fabric
+
+      - name: nvlink_domain
+        phase: test
+        command: "python ../scripts/network/nvlink_domain_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--node-id"
+          - "compute-node-1"
+        timeout: 60
+        output_schema: nvlink_domain
 
       - name: teardown
         phase: teardown

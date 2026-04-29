@@ -55,6 +55,8 @@ For the domain / script-count / AWS-reference overview see the
 | `sg_subnet_scoping` | test | `providers/my-isv/scripts/network/sg_scoping_test.py` | SG rules scoped at subnet/tenant level |
 | `sg_service_scoping` | test | `providers/my-isv/scripts/network/sg_scoping_test.py` | SG rules scoped at service level (e.g. K8s API) |
 | `peering_test` | test | `providers/my-isv/scripts/network/peering_test.py` | Cross-VPC connectivity |
+| `backend_switch_fabric` | test | `providers/my-isv/scripts/network/backend_switch_fabric_test.py` | Backend leaf, spine, and core switch IDs |
+| `nvlink_domain` | test | `providers/my-isv/scripts/network/nvlink_domain_test.py` | NVLink domain ID when the node supports NVLink |
 | `teardown` | teardown | `providers/my-isv/scripts/network/teardown.py` | VPC cleanup |
 
 ### VM (`vm.yaml`)

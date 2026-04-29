@@ -375,6 +375,11 @@ class TestOutputSchemaValidation:
 
     @staticmethod
     def _backend_switch_fabric_output() -> dict[str, Any]:
+        """Return a backend switch fabric schema payload.
+
+        Parameters: none. Returns: dict[str, Any]. Provides a valid baseline
+        output for tests that mutate switch fabric fields.
+        """
         return {
             "success": True,
             "platform": "network",
@@ -394,6 +399,11 @@ class TestOutputSchemaValidation:
 
     @staticmethod
     def _nvlink_domain_output() -> dict[str, Any]:
+        """Return an NVLink domain schema payload.
+
+        Parameters: none. Returns: dict[str, Any]. Provides a valid baseline
+        output for tests that mutate NVLink domain fields.
+        """
         return {
             "success": True,
             "platform": "network",

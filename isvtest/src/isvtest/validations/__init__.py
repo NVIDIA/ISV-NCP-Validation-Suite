@@ -64,6 +64,7 @@ from isvtest.validations.k8s_conformance import (
     K8sCncfConformanceCheck,
 )
 from isvtest.validations.network import (
+    BackendSwitchFabricCheck,
     ByoipCheck,
     DhcpIpManagementCheck,
     FloatingIpCheck,
@@ -106,6 +107,7 @@ __all__ = [
     "AccessKeyDisabledCheck",
     "AccessKeyRejectedCheck",
     "ApiEndpointIsolationCheck",
+    "BackendSwitchFabricCheck",
     "BmcBastionAccessCheck",
     "BmcManagementNetworkCheck",
     "BmcProtocolSecurityCheck",

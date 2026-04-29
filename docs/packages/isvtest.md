@@ -94,6 +94,7 @@ VPC, subnet, security group, DNS, and connectivity checks.
 
 | Validation | Platforms | Description |
 | ---------- | --------- | ----------- |
+| `BackendSwitchFabricCheck` | network | Check backend switch fabric IDs |
 | `NetworkProvisionedCheck` | network | Check network was provisioned |
 | `VpcCrudCheck` | network | Check VPC CRUD operations |
 | `SubnetConfigCheck` | network | Check subnet configuration |

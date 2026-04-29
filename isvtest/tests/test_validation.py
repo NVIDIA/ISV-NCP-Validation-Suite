@@ -34,6 +34,7 @@ from isvtest.validations.instance import (
 )
 from isvtest.validations.k8s_metrics import K8sApiServerMetricsCheck
 from isvtest.validations.network import (
+    BackendSwitchFabricCheck,
     ByoipCheck,
     FloatingIpCheck,
     LocalizedDnsCheck,
@@ -1216,6 +1217,86 @@ class TestVpcPeeringCheck:
         v = VpcPeeringCheck(config={"step_output": {}})
         result = v.execute()
         assert result["passed"] is False
+
+
+def _backend_switch_fabric_output(
+    fabric: dict[str, Any] | None = None,
+    tests: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build a step_output dict for backend switch fabric tests."""
+    return {
+        "step_output": {
+            "success": True,
+            "platform": "network",
+            "node_id": "compute-node-1",
+            "fabric": fabric
+            if fabric is not None
+            else {
+                "leaf_switch_ids": ["leaf-1"],
+                "spine_switch_ids": ["spine-1"],
+                "core_switch_ids": ["core-1"],
+            },
+            "tests": tests
+            if tests is not None
+            else {
+                "node_resolved": {"passed": True},
+                "leaf_switch_ids_present": {"passed": True},
+                "spine_switch_ids_present": {"passed": True},
+                "core_switch_ids_present": {"passed": True},
+            },
+        }
+    }
+
+
+class TestBackendSwitchFabricCheck:
+    """Tests for BackendSwitchFabricCheck validation."""
+
+    def test_all_passed(self) -> None:
+        """Validate backend switch fabric output when all required checks pass."""
+        v = BackendSwitchFabricCheck(config=_backend_switch_fabric_output())
+        result = v.execute()
+        assert result["passed"] is True
+        assert "compute-node-1" in result["output"]
+        assert "leaf" in result["output"]
+
+    def test_missing_node_id(self) -> None:
+        """Reject backend switch fabric output that omits the node identifier."""
+        config = _backend_switch_fabric_output()
+        config["step_output"]["node_id"] = ""
+        v = BackendSwitchFabricCheck(config=config)
+        result = v.execute()
+        assert result["passed"] is False
+        assert "node_id" in result["error"]
+
+    @pytest.mark.parametrize(
+        "field_name",
+        ["leaf_switch_ids", "spine_switch_ids", "core_switch_ids"],
+    )
+    def test_empty_switch_id_collection(self, field_name: str) -> None:
+        """Reject backend switch fabric output with any empty switch ID collection."""
+        fabric = {
+            "leaf_switch_ids": ["leaf-1"],
+            "spine_switch_ids": ["spine-1"],
+            "core_switch_ids": ["core-1"],
+        }
+        fabric[field_name] = []
+        v = BackendSwitchFabricCheck(config=_backend_switch_fabric_output(fabric=fabric))
+        result = v.execute()
+        assert result["passed"] is False
+        assert field_name in result["error"]
+
+    def test_failed_required_subtest(self) -> None:
+        """Reject backend switch fabric output when a required subtest fails."""
+        tests = {
+            "node_resolved": {"passed": True},
+            "leaf_switch_ids_present": {"passed": False, "error": "leaf unavailable"},
+            "spine_switch_ids_present": {"passed": True},
+            "core_switch_ids_present": {"passed": True},
+        }
+        v = BackendSwitchFabricCheck(config=_backend_switch_fabric_output(tests=tests))
+        result = v.execute()
+        assert result["passed"] is False
+        assert "leaf_switch_ids_present" in result["error"]
 
 
 class TestValidationResultCapture:

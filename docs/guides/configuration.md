@@ -511,6 +511,7 @@ Below is a summary by category.
 
 | Validation | Description |
 | ---------- | ----------- |
+| `BackendSwitchFabricCheck` | Check backend switch fabric IDs |
 | `NetworkProvisionedCheck` | Check network was provisioned |
 | `VpcCrudCheck` | Check VPC CRUD operations |
 | `SubnetConfigCheck` | Check subnet configuration |

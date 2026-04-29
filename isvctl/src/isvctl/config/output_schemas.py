@@ -123,6 +123,8 @@ STEP_SCHEMA_MAPPING: dict[str, str | None] = {
     "dns_validation": "localized_dns",
     "peering_test": "vpc_peering",
     "peering_validation": "vpc_peering",
+    "backend_switch_fabric": "backend_switch_fabric",
+    "backend_switch_fabric_test": "backend_switch_fabric",
     "sg_crud_test": "sg_crud",
     "sg_crud": "sg_crud",
     # Node pool operations
@@ -783,6 +785,36 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
             "vpc_b": {
                 "type": "object",
                 "properties": {"id": {"type": "string"}, "cidr": {"type": "string"}},
+            },
+        },
+        "additionalProperties": True,
+    },
+    "backend_switch_fabric": {
+        "type": "object",
+        "required": ["success", "platform", "node_id", "fabric", "tests"],
+        "properties": {
+            **COMMON_PROPERTIES,
+            "test_name": {"type": "string", "description": "Always 'backend_switch_fabric'"},
+            "node_id": {"type": "string", "minLength": 1, "description": "Compute node identifier"},
+            "fabric": {
+                "type": "object",
+                "required": ["leaf_switch_ids", "spine_switch_ids", "core_switch_ids"],
+                "properties": {
+                    "leaf_switch_ids": {"type": "array", "items": {"type": "string", "minLength": 1}},
+                    "spine_switch_ids": {"type": "array", "items": {"type": "string", "minLength": 1}},
+                    "core_switch_ids": {"type": "array", "items": {"type": "string", "minLength": 1}},
+                },
+                "description": "Backend switch identifiers by fabric layer",
+            },
+            "tests": {
+                "type": "object",
+                "properties": {
+                    "node_resolved": {"type": "object"},
+                    "leaf_switch_ids_present": {"type": "object"},
+                    "spine_switch_ids_present": {"type": "object"},
+                    "core_switch_ids_present": {"type": "object"},
+                },
+                "description": "Backend switch fabric metadata checks",
             },
         },
         "additionalProperties": True,

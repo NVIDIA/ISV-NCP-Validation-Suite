@@ -15,6 +15,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+import pytest
+
 from isvtest.validations.security import (
     BmcBastionAccessCheck,
     BmcManagementNetworkCheck,
@@ -472,3 +474,19 @@ def test_oidc_user_auth_check_requires_endpoint_probe_count() -> None:
 
     assert result["passed"] is False
     assert "did not probe any platform endpoint" in result["error"]
+
+
+def test_oidc_user_auth_check_skips_when_step_marks_skipped() -> None:
+    """OidcUserAuthCheck pytest.skips through both run() and execute() when flagged."""
+    step_output = {
+        "success": True,
+        "skipped": True,
+        "skip_reason": "OIDC validation not configured; missing --issuer-url or OIDC_ISSUER_URL",
+        "tests": {},
+    }
+
+    with pytest.raises(pytest.skip.Exception, match="OIDC validation not configured"):
+        OidcUserAuthCheck(config={"step_output": step_output}).run()
+
+    with pytest.raises(pytest.skip.Exception, match="OIDC validation not configured"):
+        OidcUserAuthCheck(config={"step_output": step_output}).execute()

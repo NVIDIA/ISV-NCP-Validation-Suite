@@ -252,7 +252,7 @@ class StepExecutor:
                     logger.warning(f"Step {step.name} failed (best-effort mode, continuing)")
                     results.success = False
                 else:
-                    logger.error(f"Step {step.name} failed, stopping execution")
+                    logger.error(f"Step {step.name} failed; skipping remaining steps in this phase")
                     results.success = False
                     break
 

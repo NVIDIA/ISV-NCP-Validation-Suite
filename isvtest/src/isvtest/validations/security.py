@@ -17,6 +17,8 @@ requirements (SEC* test IDs).
 
 from typing import ClassVar
 
+import pytest
+
 from isvtest.core.validation import BaseValidation, check_required_tests
 
 
@@ -371,6 +373,10 @@ class OidcUserAuthCheck(BaseValidation):
 
     def run(self) -> None:
         """Validate required OIDC token verification probe results from step output."""
+        step_output = self.config.get("step_output", {})
+        if step_output.get("skipped") is True:
+            pytest.skip(step_output.get("skip_reason") or "OIDC validation skipped (not configured)")
+
         required = [
             "valid_token_accepted",
             "bad_signature_rejected",
@@ -383,7 +389,6 @@ class OidcUserAuthCheck(BaseValidation):
         if not check_required_tests(self, required, "OIDC user auth tests failed"):
             return
 
-        step_output = self.config.get("step_output", {})
         for field in ("issuer_url", "audience", "target_url"):
             value = step_output.get(field)
             if not isinstance(value, str) or not value.strip():

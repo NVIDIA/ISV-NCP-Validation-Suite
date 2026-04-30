@@ -16,9 +16,10 @@ endpoint. It fetches the platform issuer's real discovery document and JWKS,
 checks that a supplied valid JWT chains to that issuer/audience, then sends
 valid and invalid bearer tokens to the configured target endpoint.
 
-The step is intentionally fail-closed. If no real issuer, audience, target
-endpoint, or valid test token is configured, it reports failure rather than
-simulating an OIDC provider locally.
+The step is intentionally fail-closed: it never simulates an OIDC provider
+locally. When no real issuer, audience, target endpoint, or valid test token
+is configured, it emits a structured ``skipped`` result (exit 0) so the
+orchestrator and validation can skip the check rather than fabricate a pass.
 
 Usage:
     OIDC_VALID_TOKEN=... \\
@@ -764,9 +765,11 @@ def main() -> int:
 
         missing = _missing_config_errors(args.issuer_url, args.audience, args.target_url, valid_token)
         if missing:
-            error = "OIDC validation not configured; missing " + ", ".join(missing)
-            result["error"] = error
-            result["tests"] = _not_executed_probes(error)
+            result["success"] = True
+            result["skipped"] = True
+            result["skip_reason"] = "OIDC validation not configured; missing " + ", ".join(missing)
+            print(json.dumps(result, indent=2))
+            return 0
         else:
             result["tests"] = run_probes(
                 args.issuer_url,

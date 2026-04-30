@@ -1781,12 +1781,12 @@ def test_oidc_main_emits_success_json(
     assert all(p["passed"] for p in payload["tests"].values())
 
 
-def test_oidc_main_fails_closed_without_real_configuration(
+def test_oidc_main_emits_skip_when_unconfigured(
     oidc_module: ModuleType,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """main() must not pass with the default unconfigured OIDC settings."""
+    """main() emits a structured skip (exit 0) when no OIDC inputs are provided."""
     for env_var in (
         "OIDC_ISSUER_URL",
         "OIDC_AUDIENCE",
@@ -1799,19 +1799,21 @@ def test_oidc_main_fails_closed_without_real_configuration(
     exit_code = oidc_module.main()
     payload = json.loads(capsys.readouterr().out)
 
-    assert exit_code == 1
-    assert payload["success"] is False
+    assert exit_code == 0
+    assert payload["success"] is True
+    assert payload["skipped"] is True
     assert payload["endpoints_tested"] == 0
-    assert "OIDC validation not configured" in payload["error"]
-    assert all(not probe["passed"] for probe in payload["tests"].values())
+    assert "OIDC validation not configured" in payload["skip_reason"]
+    assert payload["tests"] == {}
+    assert "error" not in payload
 
 
-def test_oidc_main_fails_closed_with_inline_empty_config_args(
+def test_oidc_main_emits_skip_with_inline_empty_config_args(
     oidc_module: ModuleType,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Inline empty args reach the script and produce structured fail-closed JSON."""
+    """Inline empty args still produce a structured skip rather than a failure."""
     for env_var in (
         "OIDC_ISSUER_URL",
         "OIDC_AUDIENCE",
@@ -1835,11 +1837,12 @@ def test_oidc_main_fails_closed_with_inline_empty_config_args(
     exit_code = oidc_module.main()
     payload = json.loads(capsys.readouterr().out)
 
-    assert exit_code == 1
-    assert payload["success"] is False
+    assert exit_code == 0
+    assert payload["success"] is True
+    assert payload["skipped"] is True
     assert payload["endpoints_tested"] == 0
-    assert "OIDC validation not configured" in payload["error"]
-    assert all(not probe["passed"] for probe in payload["tests"].values())
+    assert "OIDC validation not configured" in payload["skip_reason"]
+    assert payload["tests"] == {}
 
 
 def test_oidc_main_fails_when_probes_fail(

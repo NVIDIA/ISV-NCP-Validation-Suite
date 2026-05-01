@@ -136,11 +136,18 @@ commands:
         timeout: 60
 
       # Test 10: Short-Lived Credentials (SEC02-01)
-      # Probes sts:GetSessionToken (node-equivalent) and sts:GetFederationToken
-      # (workload-equivalent) and asserts each returned credential has a finite
-      # TTL within the configured upper bound. Emits a structured skip when
-      # the calling principal is itself a session/role and neither API is
-      # available.
+      # Self-contained: provisions a fresh IAM user with an inline policy
+      # granting just sts:GetSessionToken + sts:GetFederationToken, mints
+      # an access key, probes both APIs to assert each returned credential
+      # has a finite TTL within the configured upper bound, then cleans
+      # the user up in a finally block. Works from assumed-role/SSO
+      # orchestrator principals because the probes run as the freshly
+      # provisioned IAM user, not as the caller.
+      #
+      # Orchestrator principal needs:
+      #   iam:CreateUser, iam:PutUserPolicy, iam:CreateAccessKey,
+      #   iam:DeleteUserPolicy, iam:DeleteAccessKey, iam:DeleteUser
+      # When those are missing the step emits a structured skip.
       - name: short_lived_credentials_test
         phase: test
         command: "python3 ../scripts/security/short_lived_credentials_test.py"

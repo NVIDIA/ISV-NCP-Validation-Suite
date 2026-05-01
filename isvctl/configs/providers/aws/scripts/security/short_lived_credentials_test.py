@@ -11,10 +11,17 @@
 
 """Verify the platform issues short-lived credentials to nodes and workloads (SEC02-01).
 
-This AWS reference probes two STS issuance paths whose response shape
-mirrors the node and workload identity flows the requirement targets, and
-asserts each returned credential carries a finite expiry that does not
-exceed a configured upper bound:
+This AWS reference is self-contained (mirrors ``sa_credential_test.py``):
+it provisions a fresh IAM user with an inline policy granting just the two
+STS issuance APIs we probe, mints an access key, runs the probes against
+that user, and cleans the user up in a ``finally`` block. This means the
+test runs successfully even when the orchestrator principal is itself an
+assumed-role/SSO session - those callers cannot invoke
+``sts:GetSessionToken``/``sts:GetFederationToken`` directly, but they can
+``iam:CreateUser`` and let the test impersonate a fresh IAM user.
+
+Two STS issuance paths are probed; their response shape mirrors the node
+and workload identity flows the requirement targets:
 
 * Node-equivalent: ``sts:GetSessionToken`` -- the API a long-lived IAM
   user uses to mint short-lived session credentials, equivalent in shape
@@ -24,10 +31,16 @@ exceed a configured upper bound:
   workload identity, equivalent in shape to the credentials an
   IRSA-enabled pod receives.
 
-When the calling principal is itself an assumed-role session, neither API
-is available, and the step emits a structured ``skipped`` result (exit 0)
-so the orchestrator and validation can skip the check rather than
-fabricate a pass.
+Each probe asserts the returned credential carries a finite expiry that
+does not exceed a configured upper bound.
+
+When the orchestrator principal cannot provision the test IAM user (e.g.
+read-only credentials), the script emits a structured ``skipped`` payload
+(exit 0) so the validation can skip rather than fabricate a pass.
+
+Required orchestrator-principal IAM permissions:
+    iam:CreateUser, iam:PutUserPolicy, iam:CreateAccessKey,
+    iam:DeleteUserPolicy, iam:DeleteAccessKey, iam:DeleteUser
 
 Usage:
     python short_lived_credentials_test.py --region us-west-2
@@ -55,6 +68,8 @@ import argparse
 import json
 import os
 import sys
+import time
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -69,21 +84,36 @@ DEFAULT_MAX_TTL_SECONDS = 43200  # 12h - DGXC SEC02 upper bound for short-lived 
 NODE_METHOD = "sts:GetSessionToken"
 WORKLOAD_METHOD = "sts:GetFederationToken"
 WORKLOAD_FEDERATION_NAME = "isv-sec02-workload"
+TEST_USER_PREFIX = "isv-sec02-test-"
+INLINE_POLICY_NAME = "isv-sec02-sts-allow"
 DENY_ALL_POLICY = json.dumps(
     {
         "Version": "2012-10-17",
         "Statement": [{"Effect": "Deny", "Action": "*", "Resource": "*"}],
     }
 )
-# AWS error codes that mean "this principal cannot call the STS issuance API",
-# which is operational signal (not a SEC02 failure) -> skip the step.
-SKIPPABLE_STS_ERRORS = frozenset(
+INLINE_STS_POLICY = json.dumps(
     {
-        "AccessDenied",
-        "InvalidClientTokenId",
-        "ValidationError",
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["sts:GetSessionToken", "sts:GetFederationToken"],
+                "Resource": "*",
+            }
+        ],
     }
 )
+# AWS error codes that mean the orchestrator principal cannot provision
+# the test IAM user, which is operational signal (not a SEC02 failure)
+# -> emit a structured skip.
+SKIPPABLE_SETUP_ERRORS = frozenset({"AccessDenied", "UnauthorizedOperation"})
+
+# IAM is eventually consistent: a freshly created access key may take
+# 15-30s to propagate to STS. Mirror sa_credential_test.py's retry
+# pattern: exponential backoff capped at 8s, 8 attempts (~46s worst case).
+STS_PROPAGATION_MAX_ATTEMPTS = 8
+STS_PROPAGATION_BACKOFF_CAP = 8
 
 
 def _ttl_seconds(expiration: datetime) -> int:
@@ -129,41 +159,100 @@ def _record_credential(
         result["tests"][ttl_key]["error"] = f"TTL {ttl}s outside (0, {max_ttl_seconds}s] bound"
 
 
-def _probe_node_credential(sts: Any) -> tuple[datetime | None, str | None]:
-    """Call sts:GetSessionToken and return (expiration, skip_reason)."""
-    try:
-        response = sts.get_session_token()
-    except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "")
-        if code in SKIPPABLE_STS_ERRORS:
-            return None, (
-                f"{NODE_METHOD} not available with current principal ({code}); "
-                f"AWS short-lived credential validation requires IAM user credentials"
-            )
-        raise
-    expiration = response.get("Credentials", {}).get("Expiration")
-    return expiration, None
+def _setup_test_user(iam: Any) -> tuple[str, str, str]:
+    """Create test IAM user + inline policy + access key.
+
+    Returns:
+        Tuple of (username, access_key_id, secret_access_key).
+    """
+    username = f"{TEST_USER_PREFIX}{uuid.uuid4().hex[:8]}"
+    iam.create_user(
+        UserName=username,
+        Tags=[{"Key": "CreatedBy", "Value": "isvtest"}],
+    )
+    iam.put_user_policy(
+        UserName=username,
+        PolicyName=INLINE_POLICY_NAME,
+        PolicyDocument=INLINE_STS_POLICY,
+    )
+    response = iam.create_access_key(UserName=username)
+    return (
+        username,
+        response["AccessKey"]["AccessKeyId"],
+        response["AccessKey"]["SecretAccessKey"],
+    )
 
 
-def _probe_workload_credential(sts: Any) -> tuple[datetime | None, str | None]:
-    """Call sts:GetFederationToken (deny-all policy) and return (expiration, error_msg)."""
-    try:
-        response = sts.get_federation_token(
-            Name=WORKLOAD_FEDERATION_NAME,
-            Policy=DENY_ALL_POLICY,
-        )
-    except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "")
-        if code in SKIPPABLE_STS_ERRORS:
-            return None, f"{WORKLOAD_METHOD} not available ({code})"
-        raise
-    expiration = response.get("Credentials", {}).get("Expiration")
-    return expiration, None
+def _cleanup_test_user(
+    iam: Any,
+    username: str | None,
+    access_key_id: str | None,
+    user_created: bool,
+) -> list[str]:
+    """Best-effort delete of the test IAM user's policy, access key, and user.
+
+    Each step is attempted independently so a failure in one does not
+    block the others. ``NoSuchEntity`` is treated as success (already gone).
+    """
+    cleanup_errors: list[str] = []
+    if not username:
+        return cleanup_errors
+
+    if user_created:
+        try:
+            iam.delete_user_policy(UserName=username, PolicyName=INLINE_POLICY_NAME)
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") != "NoSuchEntity":
+                cleanup_errors.append(f"delete inline policy {INLINE_POLICY_NAME} for {username}: {e}")
+
+    if access_key_id:
+        try:
+            iam.delete_access_key(UserName=username, AccessKeyId=access_key_id)
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") != "NoSuchEntity":
+                cleanup_errors.append(f"delete access key {access_key_id} for {username}: {e}")
+
+    if user_created:
+        try:
+            iam.delete_user(UserName=username)
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") != "NoSuchEntity":
+                cleanup_errors.append(f"delete user {username}: {e}")
+
+    return cleanup_errors
+
+
+def _probe_node_credential(sts: Any) -> datetime | None:
+    """Call sts:GetSessionToken with retries for IAM eventual consistency.
+
+    Raises ``ClientError`` if all retry attempts are exhausted or the
+    error is not retryable.
+    """
+    for attempt in range(STS_PROPAGATION_MAX_ATTEMPTS):
+        try:
+            response = sts.get_session_token()
+            return response.get("Credentials", {}).get("Expiration")
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code", "")
+            if code == "InvalidClientTokenId" and attempt < STS_PROPAGATION_MAX_ATTEMPTS - 1:
+                time.sleep(min(2 ** (attempt + 1), STS_PROPAGATION_BACKOFF_CAP))
+                continue
+            raise
+    return None
+
+
+def _probe_workload_credential(sts: Any) -> datetime | None:
+    """Call sts:GetFederationToken with a deny-all session policy."""
+    response = sts.get_federation_token(
+        Name=WORKLOAD_FEDERATION_NAME,
+        Policy=DENY_ALL_POLICY,
+    )
+    return response.get("Credentials", {}).get("Expiration")
 
 
 @handle_aws_errors
 def main() -> int:
-    """Run the short-lived credentials probes and emit JSON result."""
+    """Provision a test IAM user, probe STS issuance, emit JSON, clean up."""
     parser = argparse.ArgumentParser(description="Short-lived credentials test (SEC02-01)")
     parser.add_argument("--region", default=os.environ.get("AWS_REGION", "us-west-2"))
     parser.add_argument(
@@ -178,12 +267,33 @@ def main() -> int:
         print(json.dumps(_skipped_result("--max-ttl-seconds must be a positive integer"), indent=2))
         return 0
 
-    sts = boto3.client("sts", region_name=args.region)
+    iam = boto3.client("iam", region_name=args.region)
 
-    node_expiration, skip_reason = _probe_node_credential(sts)
-    if skip_reason is not None:
-        print(json.dumps(_skipped_result(skip_reason), indent=2, default=str))
-        return 0
+    username: str | None = None
+    access_key_id: str | None = None
+    secret_key: str | None = None
+    user_created = False
+
+    try:
+        username, access_key_id, secret_key = _setup_test_user(iam)
+        user_created = True
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code", "")
+        if code in SKIPPABLE_SETUP_ERRORS:
+            _cleanup_test_user(iam, username, access_key_id, user_created)
+            print(
+                json.dumps(
+                    _skipped_result(
+                        f"cannot provision SEC02 test IAM user ({code}); "
+                        "orchestrator principal needs iam:CreateUser, iam:PutUserPolicy, "
+                        "iam:CreateAccessKey (and matching delete permissions for cleanup)"
+                    ),
+                    indent=2,
+                )
+            )
+            return 0
+        _cleanup_test_user(iam, username, access_key_id, user_created)
+        raise
 
     result: dict[str, Any] = {
         "success": False,
@@ -202,30 +312,51 @@ def main() -> int:
         },
     }
 
-    _record_credential(
-        result,
-        expiry_key="node_credential_has_expiry",
-        ttl_key="node_credential_ttl_within_bound",
-        ttl_field="node_credential_ttl_seconds",
-        expiration=node_expiration,
-        max_ttl_seconds=args.max_ttl_seconds,
-    )
+    try:
+        sts = boto3.client(
+            "sts",
+            region_name=args.region,
+            aws_access_key_id=access_key_id,
+            aws_secret_access_key=secret_key,
+        )
 
-    workload_expiration, workload_error = _probe_workload_credential(sts)
-    if workload_error is not None:
-        result["tests"]["workload_credential_has_expiry"]["error"] = workload_error
-        result["tests"]["workload_credential_ttl_within_bound"]["error"] = workload_error
-    else:
+        node_expiration = _probe_node_credential(sts)
         _record_credential(
             result,
-            expiry_key="workload_credential_has_expiry",
-            ttl_key="workload_credential_ttl_within_bound",
-            ttl_field="workload_credential_ttl_seconds",
-            expiration=workload_expiration,
+            expiry_key="node_credential_has_expiry",
+            ttl_key="node_credential_ttl_within_bound",
+            ttl_field="node_credential_ttl_seconds",
+            expiration=node_expiration,
             max_ttl_seconds=args.max_ttl_seconds,
         )
 
-    result["success"] = all(probe["passed"] for probe in result["tests"].values())
+        try:
+            workload_expiration = _probe_workload_credential(sts)
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code", "")
+            error_msg = f"{WORKLOAD_METHOD} failed ({code})"
+            result["tests"]["workload_credential_has_expiry"]["error"] = error_msg
+            result["tests"]["workload_credential_ttl_within_bound"]["error"] = error_msg
+        else:
+            _record_credential(
+                result,
+                expiry_key="workload_credential_has_expiry",
+                ttl_key="workload_credential_ttl_within_bound",
+                ttl_field="workload_credential_ttl_seconds",
+                expiration=workload_expiration,
+                max_ttl_seconds=args.max_ttl_seconds,
+            )
+
+        result["success"] = all(probe["passed"] for probe in result["tests"].values())
+    finally:
+        cleanup_errors = _cleanup_test_user(iam, username, access_key_id, user_created)
+        if cleanup_errors:
+            result["cleanup_errors"] = cleanup_errors
+            cleanup_msg = f"Cleanup failed: {'; '.join(cleanup_errors)}"
+            existing = result.get("error")
+            result["error"] = f"{existing}; {cleanup_msg}" if existing else cleanup_msg
+            result["success"] = False
+
     print(json.dumps(result, indent=2, default=str))
     return 0 if result["success"] else 1
 

@@ -155,7 +155,9 @@ commands:
           - "--region"
           - "{{region}}"
           - "--max-ttl-seconds={{short_lived_credentials_max_ttl_seconds}}"
-        timeout: 60
+        # Same envelope as sa_credential_test: provisions an IAM user and
+        # waits on IAM->STS propagation (worst case ~46s of backoff).
+        timeout: 120
 
       # Teardown: Clean up leftover test IAM users
       - name: teardown

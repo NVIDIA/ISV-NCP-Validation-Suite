@@ -1134,28 +1134,37 @@ class FakeSec02CleanupIam:
         self.deleted_keys: list[tuple[str, str]] = []
         self.deleted_policies: list[tuple[str, str]] = []
         self.deleted_users: list[str] = []
+        # Ordered call log so tests can lock in the relative order of
+        # delete_user_policy vs delete_user (the inline policy must be
+        # detached first or DeleteUser fails with DeleteConflict on AWS).
+        self.call_sequence: list[str] = []
 
     def list_access_keys(self, UserName: str) -> dict[str, list[dict[str, str]]]:
         """Return one fake access key."""
         assert UserName.startswith("isv-sec02-test-")
+        self.call_sequence.append(f"list_access_keys:{UserName}")
         return {"AccessKeyMetadata": [{"AccessKeyId": "AKIA_SEC02"}]}
 
     def delete_access_key(self, UserName: str, AccessKeyId: str) -> None:
         """Record access key deletion."""
         self.deleted_keys.append((UserName, AccessKeyId))
+        self.call_sequence.append(f"delete_access_key:{UserName}:{AccessKeyId}")
 
     def list_user_policies(self, UserName: str) -> dict[str, list[str]]:
         """Return one inline policy attached to the SEC02 user."""
         assert UserName.startswith("isv-sec02-test-")
+        self.call_sequence.append(f"list_user_policies:{UserName}")
         return {"PolicyNames": ["isv-sec02-sts-allow"]}
 
     def delete_user_policy(self, UserName: str, PolicyName: str) -> None:
         """Record inline policy deletion."""
         self.deleted_policies.append((UserName, PolicyName))
+        self.call_sequence.append(f"delete_user_policy:{UserName}:{PolicyName}")
 
     def delete_user(self, UserName: str) -> None:
         """Record user deletion."""
         self.deleted_users.append(UserName)
+        self.call_sequence.append(f"delete_user:{UserName}")
 
 
 def test_teardown_cleanup_owned_user_deletes_inline_policy_for_sec02_users() -> None:
@@ -1169,6 +1178,11 @@ def test_teardown_cleanup_owned_user_deletes_inline_policy_for_sec02_users() -> 
     assert iam.deleted_keys == [("isv-sec02-test-abcd1234", "AKIA_SEC02")]
     assert iam.deleted_policies == [("isv-sec02-test-abcd1234", "isv-sec02-sts-allow")]
     assert iam.deleted_users == ["isv-sec02-test-abcd1234"]
+    # Order matters: AWS DeleteUser fails with DeleteConflict if an inline
+    # policy is still attached. Lock in policy-before-user.
+    policy_idx = iam.call_sequence.index("delete_user_policy:isv-sec02-test-abcd1234:isv-sec02-sts-allow")
+    user_idx = iam.call_sequence.index("delete_user:isv-sec02-test-abcd1234")
+    assert policy_idx < user_idx
 
 
 def test_teardown_owned_user_prefixes_cover_security_test_scripts() -> None:
@@ -2412,6 +2426,36 @@ def test_short_lived_credentials_main_skips_and_cleans_up_when_put_user_policy_d
     assert "not authorized to perform iam:PutUserPolicy" in payload["skip_reason"]
     assert len(iam.created_users) == 1
     assert iam.deleted_users == [iam.created_users[0]["UserName"]]
+
+
+def test_short_lived_credentials_main_fails_when_skip_path_cleanup_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """Skip-eligible setup error + cleanup failure must surface as a hard failure, never a clean skip.
+
+    Otherwise we'd report ``skipped: true`` while leaving an IAM user
+    behind in the account.
+    """
+    iam = FakeShortLivedIam(
+        put_user_policy_error=_client_error("PutUserPolicy", code="AccessDenied"),
+        delete_user_error=_client_error("DeleteUser", code="ServiceUnavailable"),
+    )
+    sts = FakeShortLivedSts()
+    _patch_short_lived_clients(monkeypatch, short_lived_module, iam=iam, sts=sts)
+    _set_short_lived_argv(monkeypatch, short_lived_module)
+
+    exit_code = short_lived_module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["success"] is False
+    assert payload.get("skipped") is not True
+    assert "cleanup_errors" in payload
+    assert "setup failed" in payload["error"]
+    assert "cleanup failed" in payload["error"]
+    assert any("delete user" in err for err in payload["cleanup_errors"])
 
 
 def test_short_lived_credentials_main_retries_node_probe_on_eventual_consistency(

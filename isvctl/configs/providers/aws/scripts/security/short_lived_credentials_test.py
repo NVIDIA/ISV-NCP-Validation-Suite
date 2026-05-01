@@ -271,7 +271,25 @@ def main() -> int:
         secret_key = response["AccessKey"]["SecretAccessKey"]
     except ClientError as exc:
         code = exc.response.get("Error", {}).get("Code", "")
-        _cleanup_test_user(iam, username, access_key_id, user_created)
+        cleanup_errors = _cleanup_test_user(iam, username, access_key_id, user_created)
+        if cleanup_errors:
+            # Even if the setup error itself is skippable, a failed cleanup
+            # means we leaked IAM state. Surface as a hard failure so the
+            # run is not reported as a clean skip.
+            print(
+                json.dumps(
+                    {
+                        "success": False,
+                        "platform": "security",
+                        "test_name": "short_lived_credentials_test",
+                        "error": f"setup failed: {exc}; cleanup failed: {'; '.join(cleanup_errors)}",
+                        "cleanup_errors": cleanup_errors,
+                        "tests": {},
+                    },
+                    indent=2,
+                )
+            )
+            return 1
         if code in SKIPPABLE_SETUP_ERRORS:
             print(
                 json.dumps(

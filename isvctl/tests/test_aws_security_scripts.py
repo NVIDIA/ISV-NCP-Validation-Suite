@@ -2154,7 +2154,6 @@ class FakeShortLivedSts:
         federation_expiration: Any = None,
         federation_error: ClientError | None = None,
         omit_session_expiration: bool = False,
-        omit_federation_expiration: bool = False,
     ) -> None:
         """Configure fake STS responses, optional retry-error sequence on session, and per-probe expirations."""
         self.session_expiration = session_expiration
@@ -2162,7 +2161,6 @@ class FakeShortLivedSts:
         self.federation_expiration = federation_expiration
         self.federation_error = federation_error
         self.omit_session_expiration = omit_session_expiration
-        self.omit_federation_expiration = omit_federation_expiration
         self.federation_calls: list[dict[str, str]] = []
         self.session_call_count = 0
 
@@ -2185,14 +2183,14 @@ class FakeShortLivedSts:
         self.federation_calls.append(kwargs)
         if self.federation_error is not None:
             raise self.federation_error
-        creds: dict[str, Any] = {
-            "AccessKeyId": "ASIA_FED_FAKE",
-            "SecretAccessKey": "secret",
-            "SessionToken": "session",
+        return {
+            "Credentials": {
+                "AccessKeyId": "ASIA_FED_FAKE",
+                "SecretAccessKey": "secret",
+                "SessionToken": "session",
+                "Expiration": self.federation_expiration,
+            },
         }
-        if not self.omit_federation_expiration:
-            creds["Expiration"] = self.federation_expiration
-        return {"Credentials": creds}
 
 
 def _patch_short_lived_clients(

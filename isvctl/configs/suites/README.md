@@ -152,6 +152,7 @@ Validations use `sinfo`/`srun` directly: partitions, GPU allocation, job schedul
 | `customer_managed_key_test` | test | `providers/my-isv/scripts/security/customer_managed_key_test.py` | SEC09-04: Customer-managed key / BYOK encryption |
 | `sa_credential_test` | test | `providers/my-isv/scripts/security/sa_credential_test.py` | Service account long-lived credential auth |
 | `oidc_user_auth_test` | test | `providers/my-isv/scripts/security/oidc_user_auth_test.py` | OIDC issuer metadata and protected endpoint token acceptance/rejection |
+| `short_lived_credentials_test` | test | `providers/my-isv/scripts/security/short_lived_credentials_test.py` | SEC02-01: workloads and nodes receive credentials with finite, bounded TTL |
 | `teardown` | teardown | `providers/my-isv/scripts/security/teardown.py` | Cleanup test resources |
 
 ## Related Documentation

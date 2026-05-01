@@ -28,6 +28,7 @@
 #   7. Customer Managed Key   - Verify customer-managed key encryption (SEC09-04)
 #   8. SA Credential Auth     - Verify IAM user + long-lived access key auth
 #   9. OIDC User Auth         - Probe configured OIDC-protected platform endpoint (SEC01-01)
+#  10. Short-Lived Credentials - Verify STS issues node + workload creds with bounded TTL (SEC02-01)
 #
 # Note: SEC12-* (BMC) tests cannot be fully validated on AWS because the
 # Nitro/hypervisor BMC plane is provider-hidden. The references inspect the
@@ -134,6 +135,21 @@ commands:
           - "--missing-required-claim-token"
         timeout: 60
 
+      # Test 10: Short-Lived Credentials (SEC02-01)
+      # Probes sts:GetSessionToken (node-equivalent) and sts:GetFederationToken
+      # (workload-equivalent) and asserts each returned credential has a finite
+      # TTL within the configured upper bound. Emits a structured skip when
+      # the calling principal is itself a session/role and neither API is
+      # available.
+      - name: short_lived_credentials_test
+        phase: test
+        command: "python3 ../scripts/security/short_lived_credentials_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--max-ttl-seconds={{short_lived_credentials_max_ttl_seconds}}"
+        timeout: 60
+
       # Teardown: Clean up leftover test IAM users
       - name: teardown
         phase: teardown
@@ -151,3 +167,4 @@ tests:
     oidc_audience: "{{env.OIDC_AUDIENCE | default('', true)}}"
     oidc_target_url: "{{env.OIDC_TARGET_URL | default('', true)}}"
     customer_managed_key_id: "{{env.AWS_KMS_KEY_ID | default('', true)}}"
+    short_lived_credentials_max_ttl_seconds: "{{env.SEC02_MAX_TTL_SECONDS | default('43200', true)}}"

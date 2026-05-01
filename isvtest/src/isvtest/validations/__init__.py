@@ -101,6 +101,7 @@ from isvtest.validations.security import (
     CustomerManagedKeyCheck,
     MfaEnforcedCheck,
     OidcUserAuthCheck,
+    ShortLivedCredentialsCheck,
 )
 
 __all__ = [
@@ -155,6 +156,7 @@ __all__ = [
     "SgServiceScopingCheck",
     "SgSubnetScopingCheck",
     "SgWorkloadScopingCheck",
+    "ShortLivedCredentialsCheck",
     "StableIdentifierCheck",
     "StablePrivateIpCheck",
     "StepSuccessCheck",

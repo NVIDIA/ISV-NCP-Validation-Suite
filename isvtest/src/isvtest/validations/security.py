@@ -403,3 +403,79 @@ class OidcUserAuthCheck(BaseValidation):
         issuer = step_output["issuer_url"]
         target_url = step_output["target_url"]
         self.set_passed(f"OIDC user auth verified (issuer={issuer}, target={target_url})")
+
+
+class ShortLivedCredentialsCheck(BaseValidation):
+    """Validate workloads and nodes receive short-lived credentials/tokens.
+
+    Verifies that the platform issues credentials with a finite expiry on
+    both surfaces SEC02-01 cares about:
+
+    * Node-side: credentials a host/instance role acquires from the
+      platform identity service (AWS reference: ``sts:GetSessionToken``;
+      mirrors instance-metadata role chaining on EC2).
+    * Workload-side: credentials an in-cluster workload acquires through
+      the workload identity flow (AWS reference: ``sts:GetFederationToken``
+      with a deny-all session policy; mirrors IRSA on EKS / GKE Workload
+      Identity / AKS Workload Identity in shape).
+
+    The validation also enforces an upper TTL bound so "short-lived" is
+    enforced numerically, not just by virtue of an ``Expiration`` field
+    being present.
+
+    Like ``OidcUserAuthCheck``, the step may emit a structured top-level
+    ``skipped`` payload when no real issuance path is available (e.g. the
+    AWS reference cannot probe ``sts:GetSessionToken`` from an assumed-role
+    session). In that case the validation skips rather than fabricates a
+    pass.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        node_credential_ttl_seconds: Positive integer
+        workload_credential_ttl_seconds: Positive integer
+        max_ttl_seconds: Positive integer (configured upper bound)
+        tests: dict with node_credential_has_expiry,
+               node_credential_ttl_within_bound,
+               workload_credential_has_expiry,
+               workload_credential_ttl_within_bound
+    """
+
+    description: ClassVar[str] = "Check workloads and nodes receive credentials with finite, bounded TTL"
+    markers: ClassVar[list[str]] = ["security", "iam"]
+
+    def run(self) -> None:
+        """Validate required short-lived credentials results from step output."""
+        step_output = self.config.get("step_output", {})
+        if step_output.get("skipped") is True:
+            pytest.skip(step_output.get("skip_reason") or "Short-lived credentials validation skipped (not configured)")
+
+        required = [
+            "node_credential_has_expiry",
+            "node_credential_ttl_within_bound",
+            "workload_credential_has_expiry",
+            "workload_credential_ttl_within_bound",
+        ]
+        if not check_required_tests(self, required, "Short-lived credentials tests failed"):
+            return
+
+        max_ttl = step_output.get("max_ttl_seconds")
+        if type(max_ttl) is not int or max_ttl < 1:
+            self.set_failed("Short-lived credentials output missing positive int 'max_ttl_seconds'")
+            return
+
+        for field in ("node_credential_ttl_seconds", "workload_credential_ttl_seconds"):
+            value = step_output.get(field)
+            if type(value) is not int or value < 1:
+                self.set_failed(f"Short-lived credentials output missing positive int '{field}'")
+                return
+            if value > max_ttl:
+                self.set_failed(f"{field}={value}s exceeds max_ttl_seconds={max_ttl}s")
+                return
+
+        node_ttl = step_output["node_credential_ttl_seconds"]
+        workload_ttl = step_output["workload_credential_ttl_seconds"]
+        self.set_passed(
+            f"Short-lived credentials verified (node TTL={node_ttl}s, workload TTL={workload_ttl}s, bound={max_ttl}s)"
+        )

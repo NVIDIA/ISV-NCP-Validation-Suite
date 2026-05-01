@@ -87,17 +87,51 @@ class TestBuildCatalog:
             assert "." in entry["module"]
             assert entry["module"].startswith("isvtest.")
 
-    def test_platforms_come_from_suites_before_filter_markers(self) -> None:
-        """Test that feature markers do not add extra platform ownership."""
-        catalog = build_catalog(released_only=False)
-        by_name = {entry["name"]: entry for entry in catalog}
+    def test_suite_membership_overrides_marker_platforms(self) -> None:
+        """Regression: feature markers must not add extra platform ownership.
 
-        assert by_name["SgCrudCheck"]["platforms"] == ["NETWORK"]
-        assert by_name["BmcTenantIsolationCheck"]["platforms"] == ["SECURITY"]
-        assert by_name["BmcBastionAccessCheck"]["platforms"] == ["SECURITY"]
-        assert by_name["ServiceAccountCredentialCheck"]["platforms"] == ["SECURITY"]
-        assert by_name["ConsoleRbacCheck"]["platforms"] == ["VM"]
-        assert by_name["OidcUserAuthCheck"]["platforms"] == ["SECURITY"]
+        A check can carry markers like ``["security", "network"]`` for pytest
+        filtering AND appear in a single suite YAML (e.g. ``security.yaml``).
+        ``_build_platform_map`` must use the suite as the source of truth and
+        skip marker-derived platform inference in that case - otherwise the
+        UI shows phantom platform badges.
+
+        DO NOT add per-check asserts to this test. It is a property test
+        that already covers every check in the catalog. If a new validation
+        breaks the invariant, the failure message names it.
+        """
+        from isvtest.catalog import (
+            MARKER_TO_PLATFORM,
+            PLATFORM_CONFIGS,
+            _extract_checks_from_config,
+            _find_configs_dir,
+        )
+
+        configs_dir = _find_configs_dir()
+        assert configs_dir is not None, "isvctl/configs/ not found"
+
+        suite_platforms: dict[str, set[str]] = {}
+        for platform, files in PLATFORM_CONFIGS.items():
+            for relpath in files:
+                for name in _extract_checks_from_config(configs_dir / relpath):
+                    suite_platforms.setdefault(name, set()).add(platform)
+
+        for entry in build_catalog():
+            name = entry["name"]
+            if name not in suite_platforms:
+                continue
+            marker_platforms = {MARKER_TO_PLATFORM[m] for m in entry["markers"] if m in MARKER_TO_PLATFORM}
+            expected = suite_platforms[name]
+            actual = set(entry["platforms"])
+            phantom = (marker_platforms - expected) & actual
+            assert not phantom, (
+                f"{name}: marker-derived platforms {sorted(phantom)} leaked "
+                f"into catalog; expected exactly {sorted(expected)}, "
+                f"got {sorted(actual)}"
+            )
+            assert actual == expected, (
+                f"{name}: platforms should equal suite assignment {sorted(expected)}, got {sorted(actual)}"
+            )
 
 
 class TestGetCatalogVersion:

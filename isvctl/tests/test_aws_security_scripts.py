@@ -15,6 +15,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+from datetime import UTC
 from email.message import Message
 from pathlib import Path
 from types import ModuleType
@@ -1998,3 +1999,294 @@ def test_oidc_verify_handles_aud_list(oidc_module: ModuleType) -> None:
 
     ok, _ = oidc_module._verify_jwt(token, jwks, "iss", "isv-validation", now=now)
     assert ok
+
+
+# ===========================================================================
+# Short-lived credentials (SEC02-01) tests
+# ===========================================================================
+
+
+@pytest.fixture(scope="module")
+def short_lived_module() -> ModuleType:
+    """Load the short-lived credentials script as a module."""
+    return _load_security_script("short_lived_credentials_test.py")
+
+
+class FakeShortLivedSts:
+    """Minimal STS fake supporting GetSessionToken / GetFederationToken."""
+
+    def __init__(
+        self,
+        *,
+        session_expiration: Any = None,
+        session_error: ClientError | None = None,
+        federation_expiration: Any = None,
+        federation_error: ClientError | None = None,
+        omit_session_expiration: bool = False,
+        omit_federation_expiration: bool = False,
+    ) -> None:
+        """Configure fake STS responses or errors per API."""
+        self.session_expiration = session_expiration
+        self.session_error = session_error
+        self.federation_expiration = federation_expiration
+        self.federation_error = federation_error
+        self.omit_session_expiration = omit_session_expiration
+        self.omit_federation_expiration = omit_federation_expiration
+        self.federation_calls: list[dict[str, str]] = []
+
+    def get_session_token(self) -> dict[str, dict[str, Any]]:
+        """Return fake GetSessionToken response or raise the configured error."""
+        if self.session_error is not None:
+            raise self.session_error
+        creds: dict[str, Any] = {
+            "AccessKeyId": "ASIA_FAKE",
+            "SecretAccessKey": "secret",
+            "SessionToken": "session",
+        }
+        if not self.omit_session_expiration:
+            creds["Expiration"] = self.session_expiration
+        return {"Credentials": creds}
+
+    def get_federation_token(self, **kwargs: Any) -> dict[str, dict[str, Any]]:
+        """Return fake GetFederationToken response or raise the configured error."""
+        self.federation_calls.append(kwargs)
+        if self.federation_error is not None:
+            raise self.federation_error
+        creds: dict[str, Any] = {
+            "AccessKeyId": "ASIA_FED_FAKE",
+            "SecretAccessKey": "secret",
+            "SessionToken": "session",
+        }
+        if not self.omit_federation_expiration:
+            creds["Expiration"] = self.federation_expiration
+        return {"Credentials": creds}
+
+
+def _patch_short_lived_sts(
+    monkeypatch: pytest.MonkeyPatch,
+    module: ModuleType,
+    sts: FakeShortLivedSts,
+) -> None:
+    """Patch boto3.client to return the supplied fake STS client."""
+
+    def fake_client(service_name: str, region_name: str | None = None) -> FakeShortLivedSts:
+        """Return the fake STS client for sts requests."""
+        assert service_name == "sts"
+        assert region_name == "us-west-2"
+        return sts
+
+    monkeypatch.setattr(module.boto3, "client", fake_client)
+
+
+def test_short_lived_credentials_main_passes_with_bounded_ttls(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """Both probes pass when STS returns bounded TTLs on session and federation creds."""
+    from datetime import datetime, timedelta
+
+    now = datetime.now(UTC)
+    sts = FakeShortLivedSts(
+        session_expiration=now + timedelta(seconds=3600),
+        federation_expiration=now + timedelta(seconds=3600),
+    )
+    _patch_short_lived_sts(monkeypatch, short_lived_module, sts)
+    monkeypatch.setattr(
+        short_lived_module.sys,
+        "argv",
+        ["short_lived_credentials_test.py", "--region", "us-west-2"],
+    )
+
+    exit_code = short_lived_module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["success"] is True
+    assert payload["max_ttl_seconds"] == 43200
+    assert payload["node_credential_method"] == "sts:GetSessionToken"
+    assert payload["workload_credential_method"] == "sts:GetFederationToken"
+    assert 0 < payload["node_credential_ttl_seconds"] <= 3600
+    assert 0 < payload["workload_credential_ttl_seconds"] <= 3600
+    for probe in payload["tests"].values():
+        assert probe["passed"] is True
+    assert sts.federation_calls == [
+        {
+            "Name": short_lived_module.WORKLOAD_FEDERATION_NAME,
+            "Policy": short_lived_module.DENY_ALL_POLICY,
+        },
+    ]
+
+
+def test_short_lived_credentials_main_fails_when_node_ttl_exceeds_bound(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """Node TTL above the configured bound fails the within-bound probe."""
+    from datetime import datetime, timedelta
+
+    now = datetime.now(UTC)
+    sts = FakeShortLivedSts(
+        session_expiration=now + timedelta(seconds=7200),
+        federation_expiration=now + timedelta(seconds=1800),
+    )
+    _patch_short_lived_sts(monkeypatch, short_lived_module, sts)
+    monkeypatch.setattr(
+        short_lived_module.sys,
+        "argv",
+        [
+            "short_lived_credentials_test.py",
+            "--region",
+            "us-west-2",
+            "--max-ttl-seconds",
+            "3600",
+        ],
+    )
+
+    exit_code = short_lived_module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["success"] is False
+    assert payload["tests"]["node_credential_has_expiry"]["passed"] is True
+    assert payload["tests"]["node_credential_ttl_within_bound"]["passed"] is False
+    assert "outside" in payload["tests"]["node_credential_ttl_within_bound"]["error"]
+    assert payload["tests"]["workload_credential_ttl_within_bound"]["passed"] is True
+
+
+def test_short_lived_credentials_main_skips_when_get_session_token_denied(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """Assumed-role principal that cannot call GetSessionToken yields a clean skip."""
+    sts = FakeShortLivedSts(session_error=_client_error("GetSessionToken", code="AccessDenied"))
+    _patch_short_lived_sts(monkeypatch, short_lived_module, sts)
+    monkeypatch.setattr(
+        short_lived_module.sys,
+        "argv",
+        ["short_lived_credentials_test.py", "--region", "us-west-2"],
+    )
+
+    exit_code = short_lived_module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["success"] is True
+    assert payload["skipped"] is True
+    assert "AccessDenied" in payload["skip_reason"]
+    assert payload["tests"] == {}
+    assert sts.federation_calls == []
+
+
+def test_short_lived_credentials_main_unhandled_sts_error_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """Unexpected STS errors are not silently skipped; main() returns 1 via the AWS error handler."""
+    sts = FakeShortLivedSts(session_error=_client_error("GetSessionToken", code="ServiceUnavailable"))
+    _patch_short_lived_sts(monkeypatch, short_lived_module, sts)
+    monkeypatch.setattr(
+        short_lived_module.sys,
+        "argv",
+        ["short_lived_credentials_test.py", "--region", "us-west-2"],
+    )
+
+    exit_code = short_lived_module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["success"] is False
+    assert payload.get("skipped") is not True
+
+
+def test_short_lived_credentials_main_marks_workload_failed_when_federation_denied(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """Node still passes when only GetFederationToken is denied; workload fails."""
+    from datetime import datetime, timedelta
+
+    now = datetime.now(UTC)
+    sts = FakeShortLivedSts(
+        session_expiration=now + timedelta(seconds=3600),
+        federation_error=_client_error("GetFederationToken", code="AccessDenied"),
+    )
+    _patch_short_lived_sts(monkeypatch, short_lived_module, sts)
+    monkeypatch.setattr(
+        short_lived_module.sys,
+        "argv",
+        ["short_lived_credentials_test.py", "--region", "us-west-2"],
+    )
+
+    exit_code = short_lived_module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["success"] is False
+    assert payload.get("skipped") is not True
+    assert payload["tests"]["node_credential_has_expiry"]["passed"] is True
+    assert payload["tests"]["node_credential_ttl_within_bound"]["passed"] is True
+    assert payload["tests"]["workload_credential_has_expiry"]["passed"] is False
+    assert "AccessDenied" in payload["tests"]["workload_credential_has_expiry"]["error"]
+
+
+def test_short_lived_credentials_main_handles_missing_expiration(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """Missing Credentials.Expiration in either response surfaces as a probe error."""
+    from datetime import datetime, timedelta
+
+    now = datetime.now(UTC)
+    sts = FakeShortLivedSts(
+        omit_session_expiration=True,
+        federation_expiration=now + timedelta(seconds=1800),
+    )
+    _patch_short_lived_sts(monkeypatch, short_lived_module, sts)
+    monkeypatch.setattr(
+        short_lived_module.sys,
+        "argv",
+        ["short_lived_credentials_test.py", "--region", "us-west-2"],
+    )
+
+    exit_code = short_lived_module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["success"] is False
+    assert payload["tests"]["node_credential_has_expiry"]["passed"] is False
+    assert "Expiration missing" in payload["tests"]["node_credential_has_expiry"]["error"]
+    assert payload["tests"]["workload_credential_has_expiry"]["passed"] is True
+
+
+def test_short_lived_credentials_main_skips_for_non_positive_max_ttl(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """A non-positive --max-ttl-seconds yields a clean skip rather than a hard fail."""
+    sts = FakeShortLivedSts()
+    _patch_short_lived_sts(monkeypatch, short_lived_module, sts)
+    monkeypatch.setattr(
+        short_lived_module.sys,
+        "argv",
+        [
+            "short_lived_credentials_test.py",
+            "--region",
+            "us-west-2",
+            "--max-ttl-seconds",
+            "0",
+        ],
+    )
+
+    exit_code = short_lived_module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["skipped"] is True
+    assert "positive integer" in payload["skip_reason"]

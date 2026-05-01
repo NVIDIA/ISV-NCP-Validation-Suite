@@ -2268,12 +2268,15 @@ def test_short_lived_credentials_main_passes_with_bounded_ttls(
     assert iam.deleted_policies == [(username, short_lived_module.INLINE_POLICY_NAME)]
     assert iam.deleted_keys == [(username, "AKIA_FAKE")]
     assert iam.deleted_users == [username]
-    assert sts.federation_calls == [
-        {
-            "Name": short_lived_module.WORKLOAD_FEDERATION_NAME,
-            "Policy": short_lived_module.DENY_ALL_POLICY,
-        }
-    ]
+    assert len(sts.federation_calls) == 1
+    federation_name = sts.federation_calls[0]["Name"]
+    assert federation_name.startswith(short_lived_module.WORKLOAD_FEDERATION_PREFIX)
+    # Federation Name shares the per-run uuid suffix with the IAM username
+    # so CloudTrail events from the same probe correlate.
+    assert federation_name.removeprefix(short_lived_module.WORKLOAD_FEDERATION_PREFIX) == username.removeprefix(
+        short_lived_module.TEST_USER_PREFIX
+    )
+    assert sts.federation_calls[0]["Policy"] == short_lived_module.DENY_ALL_POLICY
 
 
 def test_short_lived_credentials_main_fails_when_node_ttl_exceeds_bound(
@@ -2311,7 +2314,11 @@ def test_short_lived_credentials_main_skips_when_create_user_denied(
     short_lived_module: ModuleType,
 ) -> None:
     """Orchestrator principal lacking iam:CreateUser yields a clean skip and never probes STS."""
-    iam = FakeShortLivedIam(create_user_error=_client_error("CreateUser", code="AccessDenied"))
+    iam = FakeShortLivedIam(
+        create_user_error=_client_error(
+            "CreateUser", code="AccessDenied", message="not authorized to perform iam:CreateUser"
+        ),
+    )
     sts = FakeShortLivedSts()
     _patch_short_lived_clients(monkeypatch, short_lived_module, iam=iam, sts=sts)
     _set_short_lived_argv(monkeypatch, short_lived_module)
@@ -2322,8 +2329,12 @@ def test_short_lived_credentials_main_skips_when_create_user_denied(
     assert exit_code == 0
     assert payload["success"] is True
     assert payload["skipped"] is True
+    # Skip reason includes the failing operation name, AWS error code, and
+    # the underlying message so operators don't need to re-run with debug
+    # to figure out what was denied.
+    assert "CreateUser" in payload["skip_reason"]
     assert "AccessDenied" in payload["skip_reason"]
-    assert "iam:CreateUser" in payload["skip_reason"]
+    assert "not authorized to perform iam:CreateUser" in payload["skip_reason"]
     assert payload["tests"] == {}
     assert sts.session_call_count == 0
     assert sts.federation_calls == []
@@ -2381,9 +2392,13 @@ def test_short_lived_credentials_main_skips_and_cleans_up_when_put_user_policy_d
     capsys: pytest.CaptureFixture[str],
     short_lived_module: ModuleType,
 ) -> None:
-    """Skip path on a partial-setup AccessDenied still deletes the user that was created."""
+    """Skip path on a partial-setup AccessDenied still deletes the user and surfaces the AWS message."""
     iam = FakeShortLivedIam(
-        put_user_policy_error=_client_error("PutUserPolicy", code="AccessDenied"),
+        put_user_policy_error=_client_error(
+            "PutUserPolicy",
+            code="AccessDenied",
+            message="not authorized to perform iam:PutUserPolicy",
+        ),
     )
     sts = FakeShortLivedSts()
     _patch_short_lived_clients(monkeypatch, short_lived_module, iam=iam, sts=sts)
@@ -2394,8 +2409,9 @@ def test_short_lived_credentials_main_skips_and_cleans_up_when_put_user_policy_d
 
     assert exit_code == 0
     assert payload["skipped"] is True
+    assert "PutUserPolicy" in payload["skip_reason"]
     assert "AccessDenied" in payload["skip_reason"]
-    assert "iam:PutUserPolicy" in payload["skip_reason"]
+    assert "not authorized to perform iam:PutUserPolicy" in payload["skip_reason"]
     assert len(iam.created_users) == 1
     assert iam.deleted_users == [iam.created_users[0]["UserName"]]
 
@@ -2457,14 +2473,18 @@ def test_short_lived_credentials_main_records_workload_error_and_keeps_node_pass
     capsys: pytest.CaptureFixture[str],
     short_lived_module: ModuleType,
 ) -> None:
-    """A workload-side STS error is captured per-probe; node probe still passes."""
+    """A workload-side STS error is captured per-probe with op + code + message; node probe still passes."""
     from datetime import datetime, timedelta
 
     now = datetime.now(UTC)
     iam = FakeShortLivedIam()
     sts = FakeShortLivedSts(
         session_expiration=now + timedelta(seconds=3600),
-        federation_error=_client_error("GetFederationToken", code="AccessDenied"),
+        federation_error=_client_error(
+            "GetFederationToken",
+            code="AccessDenied",
+            message="not authorized to perform sts:GetFederationToken",
+        ),
     )
     _patch_short_lived_clients(monkeypatch, short_lived_module, iam=iam, sts=sts)
     _set_short_lived_argv(monkeypatch, short_lived_module)
@@ -2478,7 +2498,10 @@ def test_short_lived_credentials_main_records_workload_error_and_keeps_node_pass
     assert payload["tests"]["node_credential_has_expiry"]["passed"] is True
     assert payload["tests"]["node_credential_ttl_within_bound"]["passed"] is True
     assert payload["tests"]["workload_credential_has_expiry"]["passed"] is False
-    assert "AccessDenied" in payload["tests"]["workload_credential_has_expiry"]["error"]
+    workload_error = payload["tests"]["workload_credential_has_expiry"]["error"]
+    assert "GetFederationToken" in workload_error
+    assert "AccessDenied" in workload_error
+    assert "not authorized to perform sts:GetFederationToken" in workload_error
     assert iam.deleted_users  # cleanup ran
 
 

@@ -83,7 +83,9 @@ from common.errors import handle_aws_errors
 DEFAULT_MAX_TTL_SECONDS = 43200  # 12h - DGXC SEC02 upper bound for short-lived creds
 NODE_METHOD = "sts:GetSessionToken"
 WORKLOAD_METHOD = "sts:GetFederationToken"
-WORKLOAD_FEDERATION_NAME = "isv-sec02-workload"
+# Federation Name + IAM username share a per-run suffix so CloudTrail /
+# IAM Access Analyzer events from the same probe correlate cleanly.
+WORKLOAD_FEDERATION_PREFIX = "isv-sec02-workload-"
 TEST_USER_PREFIX = "isv-sec02-test-"
 INLINE_POLICY_NAME = "isv-sec02-sts-allow"
 DENY_ALL_POLICY = json.dumps(
@@ -217,10 +219,10 @@ def _probe_node_credential(sts: Any) -> datetime | None:
     return None
 
 
-def _probe_workload_credential(sts: Any) -> datetime | None:
+def _probe_workload_credential(sts: Any, federation_name: str) -> datetime | None:
     """Call sts:GetFederationToken with a deny-all session policy."""
     response = sts.get_federation_token(
-        Name=WORKLOAD_FEDERATION_NAME,
+        Name=federation_name,
         Policy=DENY_ALL_POLICY,
     )
     return response.get("Credentials", {}).get("Expiration")
@@ -249,7 +251,9 @@ def main() -> int:
     # cleanup helper can roll back whatever did succeed when any step
     # raises (e.g. CreateUser succeeds but PutUserPolicy hits LimitExceeded
     # or AccessDenied -> the user was created and must be deleted).
-    username = f"{TEST_USER_PREFIX}{uuid.uuid4().hex[:8]}"
+    run_suffix = uuid.uuid4().hex[:8]
+    username = f"{TEST_USER_PREFIX}{run_suffix}"
+    federation_name = f"{WORKLOAD_FEDERATION_PREFIX}{run_suffix}"
     access_key_id: str | None = None
     secret_key: str | None = None
     user_created = False
@@ -272,7 +276,7 @@ def main() -> int:
             print(
                 json.dumps(
                     _skipped_result(
-                        f"cannot provision SEC02 test IAM user ({code}); "
+                        f"cannot provision SEC02 test IAM user: {exc}; "
                         "orchestrator principal needs iam:CreateUser, iam:PutUserPolicy, "
                         "iam:CreateAccessKey (and matching delete permissions for cleanup)"
                     ),
@@ -318,10 +322,9 @@ def main() -> int:
         )
 
         try:
-            workload_expiration = _probe_workload_credential(sts)
+            workload_expiration = _probe_workload_credential(sts, federation_name)
         except ClientError as exc:
-            code = exc.response.get("Error", {}).get("Code", "")
-            error_msg = f"{WORKLOAD_METHOD} failed ({code})"
+            error_msg = f"{WORKLOAD_METHOD} failed: {exc}"
             result["tests"]["workload_credential_has_expiry"]["error"] = error_msg
             result["tests"]["workload_credential_ttl_within_bound"]["error"] = error_msg
         else:

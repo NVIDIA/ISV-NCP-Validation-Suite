@@ -159,30 +159,6 @@ def _record_credential(
         result["tests"][ttl_key]["error"] = f"TTL {ttl}s outside (0, {max_ttl_seconds}s] bound"
 
 
-def _setup_test_user(iam: Any) -> tuple[str, str, str]:
-    """Create test IAM user + inline policy + access key.
-
-    Returns:
-        Tuple of (username, access_key_id, secret_access_key).
-    """
-    username = f"{TEST_USER_PREFIX}{uuid.uuid4().hex[:8]}"
-    iam.create_user(
-        UserName=username,
-        Tags=[{"Key": "CreatedBy", "Value": "isvtest"}],
-    )
-    iam.put_user_policy(
-        UserName=username,
-        PolicyName=INLINE_POLICY_NAME,
-        PolicyDocument=INLINE_STS_POLICY,
-    )
-    response = iam.create_access_key(UserName=username)
-    return (
-        username,
-        response["AccessKey"]["AccessKeyId"],
-        response["AccessKey"]["SecretAccessKey"],
-    )
-
-
 def _cleanup_test_user(
     iam: Any,
     username: str | None,
@@ -269,18 +245,30 @@ def main() -> int:
 
     iam = boto3.client("iam", region_name=args.region)
 
-    username: str | None = None
+    # Setup runs as three separate IAM calls. Track partial state so the
+    # cleanup helper can roll back whatever did succeed when any step
+    # raises (e.g. CreateUser succeeds but PutUserPolicy hits LimitExceeded
+    # or AccessDenied -> the user was created and must be deleted).
+    username = f"{TEST_USER_PREFIX}{uuid.uuid4().hex[:8]}"
     access_key_id: str | None = None
     secret_key: str | None = None
     user_created = False
 
     try:
-        username, access_key_id, secret_key = _setup_test_user(iam)
+        iam.create_user(UserName=username, Tags=[{"Key": "CreatedBy", "Value": "isvtest"}])
         user_created = True
+        iam.put_user_policy(
+            UserName=username,
+            PolicyName=INLINE_POLICY_NAME,
+            PolicyDocument=INLINE_STS_POLICY,
+        )
+        response = iam.create_access_key(UserName=username)
+        access_key_id = response["AccessKey"]["AccessKeyId"]
+        secret_key = response["AccessKey"]["SecretAccessKey"]
     except ClientError as exc:
         code = exc.response.get("Error", {}).get("Code", "")
+        _cleanup_test_user(iam, username, access_key_id, user_created)
         if code in SKIPPABLE_SETUP_ERRORS:
-            _cleanup_test_user(iam, username, access_key_id, user_created)
             print(
                 json.dumps(
                     _skipped_result(
@@ -292,7 +280,6 @@ def main() -> int:
                 )
             )
             return 0
-        _cleanup_test_user(iam, username, access_key_id, user_created)
         raise
 
     result: dict[str, Any] = {

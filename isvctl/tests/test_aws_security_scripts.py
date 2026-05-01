@@ -2330,6 +2330,76 @@ def test_short_lived_credentials_main_skips_when_create_user_denied(
     assert iam.deleted_users == []  # nothing was created
 
 
+def test_short_lived_credentials_main_cleans_up_when_put_user_policy_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """Non-skippable failure on PutUserPolicy must still delete the user that was just created."""
+    iam = FakeShortLivedIam(
+        put_user_policy_error=_client_error("PutUserPolicy", code="LimitExceeded"),
+    )
+    sts = FakeShortLivedSts()
+    _patch_short_lived_clients(monkeypatch, short_lived_module, iam=iam, sts=sts)
+    _set_short_lived_argv(monkeypatch, short_lived_module)
+
+    exit_code = short_lived_module.main()
+
+    assert exit_code == 1
+    assert len(iam.created_users) == 1
+    username = iam.created_users[0]["UserName"]
+    assert iam.deleted_users == [username]
+    assert sts.session_call_count == 0  # no probes attempted
+    assert sts.federation_calls == []
+
+
+def test_short_lived_credentials_main_cleans_up_when_create_access_key_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """Non-skippable failure on CreateAccessKey must still detach inline policy and delete the user."""
+    iam = FakeShortLivedIam(
+        create_access_key_error=_client_error("CreateAccessKey", code="LimitExceeded"),
+    )
+    sts = FakeShortLivedSts()
+    _patch_short_lived_clients(monkeypatch, short_lived_module, iam=iam, sts=sts)
+    _set_short_lived_argv(monkeypatch, short_lived_module)
+
+    exit_code = short_lived_module.main()
+
+    assert exit_code == 1
+    assert len(iam.created_users) == 1
+    username = iam.created_users[0]["UserName"]
+    assert iam.deleted_policies == [(username, short_lived_module.INLINE_POLICY_NAME)]
+    assert iam.deleted_users == [username]
+    assert sts.session_call_count == 0
+
+
+def test_short_lived_credentials_main_skips_and_cleans_up_when_put_user_policy_denied(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """Skip path on a partial-setup AccessDenied still deletes the user that was created."""
+    iam = FakeShortLivedIam(
+        put_user_policy_error=_client_error("PutUserPolicy", code="AccessDenied"),
+    )
+    sts = FakeShortLivedSts()
+    _patch_short_lived_clients(monkeypatch, short_lived_module, iam=iam, sts=sts)
+    _set_short_lived_argv(monkeypatch, short_lived_module)
+
+    exit_code = short_lived_module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["skipped"] is True
+    assert "AccessDenied" in payload["skip_reason"]
+    assert "iam:PutUserPolicy" in payload["skip_reason"]
+    assert len(iam.created_users) == 1
+    assert iam.deleted_users == [iam.created_users[0]["UserName"]]
+
+
 def test_short_lived_credentials_main_retries_node_probe_on_eventual_consistency(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

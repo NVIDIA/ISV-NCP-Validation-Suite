@@ -17,6 +17,7 @@ Note: For cluster lifecycle management, use isvctl instead:
 import json
 import os
 import tempfile
+from collections.abc import Collection
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Any
@@ -28,6 +29,7 @@ from isvreporter.version import get_version
 from isvtest.config.loader import ConfigLoader
 from isvtest.core import runners as reframe_runner
 from isvtest.core.logger import setup_logger
+from isvtest.release_manifest import INCLUDE_UNRELEASED_ENV, load_released_test_filter
 from isvtest.tests.test_validations import ADAPTER_HANDLED_CATEGORIES
 
 logger = setup_logger()
@@ -80,7 +82,16 @@ def run_validations_via_pytest(
 
     # Transform validations into the format expected by test_validations.py
     # The test_validations.py expects a "validations" dict at config root
-    transformed_validations = _transform_validations_for_pytest(validations, step_outputs, step_phases or {}, phase)
+    released_tests = load_released_test_filter()
+    if released_tests is None:
+        logger.info("Including unreleased validations because %s is enabled", INCLUDE_UNRELEASED_ENV)
+    transformed_validations = _transform_validations_for_pytest(
+        validations,
+        step_outputs,
+        step_phases or {},
+        phase,
+        released_tests=released_tests,
+    )
 
     if not transformed_validations:
         logger.info(f"No validations to run for phase '{phase}'")
@@ -197,6 +208,7 @@ def _transform_validations_for_pytest(
     step_outputs: dict[str, dict[str, Any]],
     step_phases: dict[str, str],
     phase: str,
+    released_tests: Collection[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Transform new-format validations into pytest-compatible format.
 
@@ -218,6 +230,8 @@ def _transform_validations_for_pytest(
         step_outputs: Step outputs for resolving step references
         step_phases: Mapping of step names to their phases
         phase: Current phase to filter validations for
+        released_tests: Optional released validation names. When provided,
+            configured validations not in this set are skipped.
 
     Returns:
         List of validation dicts in pytest-compatible format
@@ -255,6 +269,10 @@ def _transform_validations_for_pytest(
             continue
 
         for name, params in checks_iter:
+            if released_tests is not None and name not in released_tests:
+                logger.info(f"Skipping unreleased validation '{name}' in [{category}]")
+                continue
+
             if params is None:
                 params = {}
 

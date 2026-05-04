@@ -30,6 +30,7 @@ import yaml
 from isvreporter.version import get_version
 
 from isvtest.core.discovery import discover_all_tests
+from isvtest.release_manifest import INCLUDE_UNRELEASED_ENV, load_released_test_filter
 
 logger = logging.getLogger(__name__)
 
@@ -133,13 +134,17 @@ def _build_platform_map() -> dict[str, set[str]]:
     return test_to_platforms
 
 
-def build_catalog() -> list[dict[str, Any]]:
+def build_catalog(*, released_only: bool = True) -> list[dict[str, Any]]:
     """Discover all validation tests and return structured catalog entries.
 
     Each entry includes a 'platforms' field derived from the config files,
     indicating which platforms the test belongs to. Variant entries from
     configs (e.g. K8sNimHelmWorkload-1b) are included as separate entries
     inheriting metadata from their base class.
+
+    Args:
+        released_only: When True, omit tests that are not in the committed
+            release manifest. Set False only when refreshing that manifest.
 
     Returns:
         List of catalog entry dicts, each containing:
@@ -212,6 +217,17 @@ def build_catalog() -> list[dict[str, Any]]:
                 "platforms": sorted(platforms),
             }
         )
+
+    if released_only:
+        released_tests = load_released_test_filter()
+        if released_tests is None:
+            logger.info("Including unreleased tests in catalog because %s is enabled", INCLUDE_UNRELEASED_ENV)
+        else:
+            before = len(catalog)
+            catalog = [entry for entry in catalog if entry["name"] in released_tests]
+            omitted = before - len(catalog)
+            if omitted:
+                logger.info("Omitted %d unreleased tests from catalog", omitted)
 
     logger.info("Built test catalog with %d entries", len(catalog))
     return catalog

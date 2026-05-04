@@ -263,7 +263,19 @@ make bump-major             # 0.4.2 -> 1.0.0
 make bump VERSION=1.2.3     # Explicit version
 ```
 
-The script updates all `pyproject.toml` files and runs `uv lock`.
+The script updates all `pyproject.toml` files, refreshes
+`isvtest/src/isvtest/released_tests.json` from the current validation catalog,
+and runs `uv lock`. Newly added validations are not run by client configs until
+they appear in that `released_tests.json` manifest, so adding tests to `main` and
+releasing them are separate steps.
+
+When validating unreleased tests locally from `main`, disable that release
+filter explicitly:
+
+```bash
+ISVTEST_INCLUDE_UNRELEASED=1 uv run isvctl test run -f config.yaml
+ISVTEST_INCLUDE_UNRELEASED=1 uv run isvtest test --config config.yaml
+```
 
 ### Creating a Release Tag
 

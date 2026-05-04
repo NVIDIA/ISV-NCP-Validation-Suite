@@ -179,6 +179,48 @@ class TestTransformValidationsForPytest:
         """Empty input returns empty list."""
         assert _transform_validations_for_pytest({}, {}, {}, "test") == []
 
+    def test_unreleased_checks_are_skipped(
+        self,
+        step_outputs: dict[str, dict[str, Any]],
+        step_phases: dict[str, str],
+    ) -> None:
+        """Configured checks not in the release manifest are not emitted."""
+        validations: dict[str, Any] = {
+            "ssh": {
+                "step": "describe_instance",
+                "checks": {"ConnectivityCheck": {}, "NewMainOnlyCheck": {}},
+            },
+        }
+        result = _transform_validations_for_pytest(
+            validations,
+            step_outputs,
+            step_phases,
+            "test",
+            released_tests={"ConnectivityCheck"},
+        )
+        assert self._keys(result) == ["ConnectivityCheck"]
+
+    def test_disabled_release_filter_includes_all_checks(
+        self,
+        step_outputs: dict[str, dict[str, Any]],
+        step_phases: dict[str, str],
+    ) -> None:
+        """A disabled release filter emits configured checks regardless of manifest membership."""
+        validations: dict[str, Any] = {
+            "ssh": {
+                "step": "describe_instance",
+                "checks": {"ConnectivityCheck": {}, "NewMainOnlyCheck": {}},
+            },
+        }
+        result = _transform_validations_for_pytest(
+            validations,
+            step_outputs,
+            step_phases,
+            "test",
+            released_tests=None,
+        )
+        assert self._keys(result) == ["ConnectivityCheck", "NewMainOnlyCheck"]
+
     def test_list_format_dedup(self) -> None:
         """Duplicate class names in legacy list format also get qualified."""
         step_outputs = {

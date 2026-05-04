@@ -113,7 +113,9 @@ forwarded env vars → optional isvreporter upload.
 - `isvtest/src/isvtest/released_tests.json` - release-gating manifest owned
   by the release process (bumped via `chore: update package versions`). New
   checks ship unreleased and land here in a separate release commit, not in
-  feature PRs.
+  feature PRs. To exercise an unreleased check end-to-end against a config,
+  run with `ISVTEST_INCLUDE_UNRELEASED=1` (the orchestrator otherwise logs
+  `Skipping unreleased validation '<Name>'` and the new check is a no-op).
 
 ## Directory Layout
 

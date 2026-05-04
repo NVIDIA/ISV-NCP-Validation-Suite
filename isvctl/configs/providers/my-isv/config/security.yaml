@@ -26,6 +26,7 @@
 #   SEC03-01: Service account credentials (ServiceAccountCredentialCheck)
 #   SEC01-01: OIDC user authentication (OidcUserAuthCheck)
 #   SEC02-01: Short-lived credentials/tokens (ShortLivedCredentialsCheck)
+#   SEC11-01: Hard tenant isolation across network/data/compute/storage (TenantIsolationCheck)
 #
 # Usage:
 #   uv run isvctl test run -f isvctl/configs/providers/my-isv/config/security.yaml
@@ -102,6 +103,12 @@ commands:
       - name: short_lived_credentials_test
         phase: test
         command: "python ../scripts/security/short_lived_credentials_test.py"
+        args: ["--region", "{{region}}"]
+        timeout: 60
+
+      - name: tenant_isolation_test
+        phase: test
+        command: "python ../scripts/security/tenant_isolation_test.py"
         args: ["--region", "{{region}}"]
         timeout: 60
 

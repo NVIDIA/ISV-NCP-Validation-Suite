@@ -1096,6 +1096,31 @@ class FakeTeardownIam:
         raise _client_error("DeleteUser", code="DeleteConflict")
 
 
+class FakeNoSec11Resources:
+    """Trivial AWS client stub used for ec2/kms/s3 when the SEC11 sweep has nothing to find.
+
+    The sweep helpers iterate over describe_* / list_* responses; returning
+    empty pages turns each helper into a no-op without exercising it.
+    """
+
+    def get_paginator(self, _operation_name: str) -> Any:
+        """Return a paginator that yields a single empty page."""
+
+        class _P:
+            def paginate(self, **_kwargs: Any) -> list[dict[str, Any]]:
+                return [{"Reservations": [], "Volumes": [], "Aliases": [], "Versions": [], "DeleteMarkers": []}]
+
+        return _P()
+
+    def describe_vpcs(self, **_kwargs: Any) -> dict[str, list[dict[str, Any]]]:
+        """Return no VPCs."""
+        return {"Vpcs": []}
+
+    def list_buckets(self) -> dict[str, list[dict[str, str]]]:
+        """Return no buckets."""
+        return {"Buckets": []}
+
+
 def test_teardown_main_fails_when_owned_user_cleanup_fails(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -1103,11 +1128,16 @@ def test_teardown_main_fails_when_owned_user_cleanup_fails(
     """Teardown reports failure when owned IAM resources cannot be removed."""
     module = _load_security_script("teardown.py")
     iam = FakeTeardownIam()
+    no_sec11 = FakeNoSec11Resources()
 
-    def fake_client(service_name: str, **kwargs: Any) -> FakeTeardownIam:
-        """Return the fake IAM client."""
-        assert service_name == "iam"
-        return iam
+    def fake_client(service_name: str, **kwargs: Any) -> Any:
+        """Return the fake IAM client; trivial empty stub for SEC11 sweep services."""
+        if service_name == "iam":
+            return iam
+        if service_name in {"ec2", "kms", "s3"}:
+            return no_sec11
+        msg = f"unexpected service: {service_name}"
+        raise AssertionError(msg)
 
     monkeypatch.setattr(module.boto3, "client", fake_client)
     monkeypatch.setattr(module.sys, "argv", ["teardown.py", "--region", "us-west-2"])
@@ -1186,11 +1216,12 @@ def test_teardown_cleanup_owned_user_deletes_inline_policy_for_sec02_users() -> 
 
 
 def test_teardown_owned_user_prefixes_cover_security_test_scripts() -> None:
-    """The teardown sweep must recognize both sa_credential and short-lived test users."""
+    """The teardown sweep must recognize sa_credential, short-lived, and tenant-isolation test users."""
     module = _load_security_script("teardown.py")
 
     assert "isv-sa-test-".startswith("isv-sa-test-")
     assert "isv-sec02-test-foo".startswith(module.OWNED_USER_PREFIXES)
+    assert "isv-sec11-test-foo".startswith(module.OWNED_USER_PREFIXES)
     assert "isv-sa-test-bar".startswith(module.OWNED_USER_PREFIXES)
     assert not "isv-network-test-baz".startswith(module.OWNED_USER_PREFIXES)
 
@@ -2631,3 +2662,448 @@ def test_short_lived_credentials_cleanup_handles_partial_setup(
     assert short_lived_module._cleanup_test_user(iam, "isv-sec02-test-xyz", None, False) == []
     assert iam.deleted_policies == []
     assert iam.deleted_users == []
+
+
+# ===========================================================================
+# Tenant isolation (SEC11-01) tests
+# ===========================================================================
+
+
+@pytest.fixture(scope="module")
+def tenant_isolation_module() -> ModuleType:
+    """Load the tenant-isolation script as a module for direct helper testing."""
+    return _load_security_script("tenant_isolation_test.py")
+
+
+def _make_tenant(module: ModuleType, suffix: str, cidr: str) -> Any:
+    """Build a populated ``Tenant`` instance for probe tests."""
+    return module.Tenant(
+        suffix=suffix,
+        cidr=cidr,
+        vpc_id=f"vpc-{suffix}",
+        subnet_id=f"subnet-{suffix}",
+        sg_id=f"sg-{suffix}",
+        kms_key_id=f"key-{suffix}",
+        kms_key_arn=f"arn:aws:kms:us-west-2:111122223333:key/{suffix}",
+        s3_bucket=f"isv-sec11-test-{suffix}-abc123",
+        instance_id=f"i-{suffix}",
+        volume_id=f"vol-{suffix}",
+    )
+
+
+def test_tenant_isolation_scoped_policy_only_grants_own_arns(tenant_isolation_module: ModuleType) -> None:
+    """The scoped policy must NOT reference the peer tenant's ARNs.
+
+    This is the security-critical invariant: every cross-tenant deny in
+    SEC11-01 hinges on tenant A's policy not granting any access to
+    tenant B's resources.
+    """
+    a = _make_tenant(tenant_isolation_module, "aaaa1111", "10.94.0.0/24")
+    b = _make_tenant(tenant_isolation_module, "bbbb2222", "10.95.0.0/24")
+
+    policy = tenant_isolation_module._scoped_policy_document(a)
+
+    assert a.kms_key_arn in policy
+    assert a.s3_bucket in policy
+    assert a.instance_id in policy
+    assert a.volume_id in policy
+    assert b.kms_key_arn not in policy
+    assert b.s3_bucket not in policy
+    assert b.instance_id not in policy
+    assert b.volume_id not in policy
+
+
+def test_tenant_isolation_classify_dry_run_buckets_codes(tenant_isolation_module: ModuleType) -> None:
+    """``_classify_dry_run`` distinguishes denied / allowed / other AWS error codes."""
+    denied = _client_error("StopInstances", code="UnauthorizedOperation")
+    allowed = _client_error("StopInstances", code="DryRunOperation")
+    other = _client_error("StopInstances", code="InvalidInstanceID.NotFound")
+
+    assert tenant_isolation_module._classify_dry_run(denied) == "denied"
+    assert tenant_isolation_module._classify_dry_run(allowed) == "allowed"
+    assert tenant_isolation_module._classify_dry_run(other) == "other"
+
+
+class FakeOrchestratorEc2:
+    """Fake orchestrator-side EC2 client for ``_probe_network_isolation``."""
+
+    def __init__(
+        self,
+        *,
+        peerings: list[dict[str, Any]] | None = None,
+        route_tables: list[dict[str, Any]] | None = None,
+    ) -> None:
+        """Configure peering connections and route tables to return."""
+        self.peerings = peerings or []
+        self.route_tables = route_tables or []
+
+    def describe_vpc_peering_connections(self, **_kwargs: Any) -> dict[str, list[dict[str, Any]]]:
+        """Return configured peering connections."""
+        return {"VpcPeeringConnections": self.peerings}
+
+    def describe_route_tables(self, **_kwargs: Any) -> dict[str, list[dict[str, Any]]]:
+        """Return configured route tables."""
+        return {"RouteTables": self.route_tables}
+
+
+def test_probe_network_isolation_passes_when_no_peering_or_shared_route(
+    tenant_isolation_module: ModuleType,
+) -> None:
+    """Pass when no peering connection and no route to tenant B's CIDR exists."""
+    a = _make_tenant(tenant_isolation_module, "aaaa1111", "10.94.0.0/24")
+    b = _make_tenant(tenant_isolation_module, "bbbb2222", "10.95.0.0/24")
+    ec2 = FakeOrchestratorEc2(
+        route_tables=[
+            {
+                "RouteTableId": "rtb-a",
+                "Routes": [{"DestinationCidrBlock": "10.94.0.0/24", "GatewayId": "local"}],
+            }
+        ],
+    )
+
+    result = tenant_isolation_module._probe_network_isolation(ec2, a, b)
+
+    assert result["passed"] is True
+    assert "No peering" in result["message"]
+
+
+def test_probe_network_isolation_fails_when_active_peering_exists(
+    tenant_isolation_module: ModuleType,
+) -> None:
+    """Fail when an active VPC peering connection links A and B."""
+    a = _make_tenant(tenant_isolation_module, "aaaa1111", "10.94.0.0/24")
+    b = _make_tenant(tenant_isolation_module, "bbbb2222", "10.95.0.0/24")
+    ec2 = FakeOrchestratorEc2(
+        peerings=[{"VpcPeeringConnectionId": "pcx-1", "Status": {"Code": "active"}}],
+    )
+
+    result = tenant_isolation_module._probe_network_isolation(ec2, a, b)
+
+    assert result["passed"] is False
+    assert "VPC peering exists" in result["error"]
+
+
+def test_probe_network_isolation_fails_when_route_to_b_cidr_present(
+    tenant_isolation_module: ModuleType,
+) -> None:
+    """Fail when tenant A's route table has any route to tenant B's CIDR."""
+    a = _make_tenant(tenant_isolation_module, "aaaa1111", "10.94.0.0/24")
+    b = _make_tenant(tenant_isolation_module, "bbbb2222", "10.95.0.0/24")
+    ec2 = FakeOrchestratorEc2(
+        route_tables=[
+            {
+                "RouteTableId": "rtb-a",
+                "Routes": [{"DestinationCidrBlock": "10.95.0.0/24", "GatewayId": "tgw-leak"}],
+            }
+        ],
+    )
+
+    result = tenant_isolation_module._probe_network_isolation(ec2, a, b)
+
+    assert result["passed"] is False
+    assert "Route to tenant B CIDR 10.95.0.0/24" in result["error"]
+
+
+class FakeTenantClient:
+    """Fake AWS service client that raises a configured error on every method."""
+
+    def __init__(self, errors: dict[str, Exception | None]) -> None:
+        """Map method-name -> ClientError (or None to silently succeed)."""
+        self._errors = errors
+
+    def __getattr__(self, name: str) -> Any:
+        """Return a method that raises the configured error or returns ``{}``."""
+        err = self._errors.get(name)
+
+        def _call(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+            if err is not None:
+                raise err
+            return {}
+
+        return _call
+
+
+def _denied_clients(tenant_isolation_module: ModuleType) -> dict[str, Any]:
+    """Build per-service fake clients that all return AccessDenied / UnauthorizedOperation."""
+    return {
+        "ec2": FakeTenantClient(
+            {
+                "stop_instances": _client_error("StopInstances", code="UnauthorizedOperation"),
+                "create_snapshot": _client_error("CreateSnapshot", code="UnauthorizedOperation"),
+                "attach_volume": _client_error("AttachVolume", code="UnauthorizedOperation"),
+            }
+        ),
+        "kms": FakeTenantClient({"encrypt": _client_error("Encrypt")}),
+        "s3": FakeTenantClient({"get_object": _client_error("GetObject")}),
+        "ssm": FakeTenantClient({"start_session": _client_error("StartSession")}),
+        "sts": FakeTenantClient({}),
+    }
+
+
+def test_probe_data_isolation_passes_when_kms_and_s3_denied(tenant_isolation_module: ModuleType) -> None:
+    """Pass when both kms:Encrypt and s3:GetObject return AccessDenied."""
+    b = _make_tenant(tenant_isolation_module, "bbbb2222", "10.95.0.0/24")
+    clients = _denied_clients(tenant_isolation_module)
+
+    result = tenant_isolation_module._probe_data_isolation(clients, b)
+
+    assert result["passed"] is True
+    probe_names = {p["name"] for p in result["probes"]}
+    assert probe_names == {"kms_encrypt_denied", "s3_get_object_denied"}
+
+
+def test_probe_data_isolation_fails_when_kms_unexpectedly_succeeds(tenant_isolation_module: ModuleType) -> None:
+    """Fail when kms:Encrypt returns no error (would mean tenant A could decrypt B's data)."""
+    b = _make_tenant(tenant_isolation_module, "bbbb2222", "10.95.0.0/24")
+    clients = _denied_clients(tenant_isolation_module)
+    # Override kms to silently succeed (the disastrous case).
+    clients["kms"] = FakeTenantClient({"encrypt": None})
+
+    result = tenant_isolation_module._probe_data_isolation(clients, b)
+
+    assert result["passed"] is False
+    kms_probe = next(p for p in result["probes"] if p["name"] == "kms_encrypt_denied")
+    assert kms_probe["passed"] is False
+
+
+def test_probe_compute_isolation_passes_when_dryrun_denied_and_ssm_denied(
+    tenant_isolation_module: ModuleType,
+) -> None:
+    """Pass when EC2 DryRun returns UnauthorizedOperation and SSM returns AccessDenied."""
+    b = _make_tenant(tenant_isolation_module, "bbbb2222", "10.95.0.0/24")
+    clients = _denied_clients(tenant_isolation_module)
+
+    result = tenant_isolation_module._probe_compute_isolation(clients, b)
+
+    assert result["passed"] is True
+    assert {p["name"] for p in result["probes"]} == {"ec2_stop_instances_denied", "ssm_start_session_denied"}
+
+
+def test_probe_compute_isolation_fails_when_dryrun_returns_dryrunoperation(
+    tenant_isolation_module: ModuleType,
+) -> None:
+    """Fail when EC2 returns ``DryRunOperation`` (= IAM allowed the call)."""
+    b = _make_tenant(tenant_isolation_module, "bbbb2222", "10.95.0.0/24")
+    clients = _denied_clients(tenant_isolation_module)
+    clients["ec2"] = FakeTenantClient(
+        {
+            "stop_instances": _client_error("StopInstances", code="DryRunOperation"),
+            "create_snapshot": _client_error("CreateSnapshot", code="UnauthorizedOperation"),
+            "attach_volume": _client_error("AttachVolume", code="UnauthorizedOperation"),
+        }
+    )
+
+    result = tenant_isolation_module._probe_compute_isolation(clients, b)
+
+    assert result["passed"] is False
+    stop_probe = next(p for p in result["probes"] if p["name"] == "ec2_stop_instances_denied")
+    assert stop_probe["code"] == "DryRunOperation"
+
+
+def test_probe_storage_isolation_passes_when_dryrun_denies_snapshot_and_attach(
+    tenant_isolation_module: ModuleType,
+) -> None:
+    """Pass when CreateSnapshot and AttachVolume DryRun calls both return UnauthorizedOperation."""
+    a = _make_tenant(tenant_isolation_module, "aaaa1111", "10.94.0.0/24")
+    b = _make_tenant(tenant_isolation_module, "bbbb2222", "10.95.0.0/24")
+    clients = _denied_clients(tenant_isolation_module)
+
+    result = tenant_isolation_module._probe_storage_isolation(clients, a, b)
+
+    assert result["passed"] is True
+    assert {p["name"] for p in result["probes"]} == {"ec2_create_snapshot_denied", "ec2_attach_volume_denied"}
+
+
+# --- teardown SEC11 sweep helpers ----------------------------------------
+
+
+class FakeSec11Ec2:
+    """Fake EC2 client backing the SEC11 teardown sweep helpers."""
+
+    def __init__(
+        self,
+        *,
+        instances: list[dict[str, Any]] | None = None,
+        volumes: list[dict[str, Any]] | None = None,
+        vpcs: list[dict[str, Any]] | None = None,
+        subnets: list[dict[str, Any]] | None = None,
+        sgs: list[dict[str, Any]] | None = None,
+    ) -> None:
+        """Configure resources returned by describe_*."""
+        self.instances = instances or []
+        self.volumes = volumes or []
+        self.vpcs = vpcs or []
+        self.subnets = subnets or []
+        self.sgs = sgs or []
+        self.terminated: list[str] = []
+        self.deleted_volumes: list[str] = []
+        self.deleted_vpcs: list[str] = []
+        self.deleted_subnets: list[str] = []
+        self.deleted_sgs: list[str] = []
+
+    def get_paginator(self, operation_name: str) -> Any:
+        """Return a fake paginator that yields a single page from the fixture data."""
+        instances = self.instances
+        volumes = self.volumes
+
+        class _P:
+            def paginate(_self, **_kwargs: Any) -> list[dict[str, Any]]:
+                if operation_name == "describe_instances":
+                    return [{"Reservations": [{"Instances": instances}]}]
+                if operation_name == "describe_volumes":
+                    return [{"Volumes": volumes}]
+                msg = f"unexpected paginator: {operation_name}"
+                raise AssertionError(msg)
+
+        return _P()
+
+    def terminate_instances(self, InstanceIds: list[str]) -> None:
+        """Record terminated instance ids."""
+        self.terminated.extend(InstanceIds)
+
+    def get_waiter(self, _name: str) -> Any:
+        """Return a no-op waiter."""
+
+        class _W:
+            def wait(self, **_kwargs: Any) -> None:
+                return None
+
+        return _W()
+
+    def delete_volume(self, VolumeId: str) -> None:
+        """Record deleted volume id."""
+        self.deleted_volumes.append(VolumeId)
+
+    def describe_vpcs(self, **_kwargs: Any) -> dict[str, Any]:
+        """Return configured VPCs."""
+        return {"Vpcs": self.vpcs}
+
+    def describe_subnets(self, **_kwargs: Any) -> dict[str, Any]:
+        """Return configured subnets."""
+        return {"Subnets": self.subnets}
+
+    def describe_security_groups(self, **_kwargs: Any) -> dict[str, Any]:
+        """Return configured security groups."""
+        return {"SecurityGroups": self.sgs}
+
+    def delete_security_group(self, GroupId: str) -> None:
+        """Record deleted SG id."""
+        self.deleted_sgs.append(GroupId)
+
+    def delete_subnet(self, SubnetId: str) -> None:
+        """Record deleted subnet id."""
+        self.deleted_subnets.append(SubnetId)
+
+    def delete_vpc(self, VpcId: str) -> None:
+        """Record deleted VPC id."""
+        self.deleted_vpcs.append(VpcId)
+
+
+def test_teardown_cleanup_sec11_instances_only_terminates_matching_prefix() -> None:
+    """`_cleanup_sec11_instances` skips non-SEC11 instances and ignores terminated ones."""
+    module = _load_security_script("teardown.py")
+    ec2 = FakeSec11Ec2(
+        instances=[
+            {
+                "InstanceId": "i-keep",
+                "State": {"Name": "running"},
+                "Tags": [{"Key": "Name", "Value": "production-app"}, {"Key": "CreatedBy", "Value": "isvtest"}],
+            },
+            {
+                "InstanceId": "i-sec11-active",
+                "State": {"Name": "running"},
+                "Tags": [
+                    {"Key": "Name", "Value": "isv-sec11-test-aaaa1111"},
+                    {"Key": "CreatedBy", "Value": "isvtest"},
+                ],
+            },
+            {
+                "InstanceId": "i-sec11-already-gone",
+                "State": {"Name": "terminated"},
+                "Tags": [
+                    {"Key": "Name", "Value": "isv-sec11-test-bbbb2222"},
+                    {"Key": "CreatedBy", "Value": "isvtest"},
+                ],
+            },
+        ]
+    )
+
+    errors = module._cleanup_sec11_instances(ec2)
+
+    assert errors == []
+    assert ec2.terminated == ["i-sec11-active"]
+
+
+def test_teardown_cleanup_sec11_buckets_skips_untagged_buckets() -> None:
+    """`_cleanup_sec11_buckets` only deletes buckets whose tag set contains ``CreatedBy=isvtest``."""
+    module = _load_security_script("teardown.py")
+    deleted_buckets: list[str] = []
+
+    class FakeS3:
+        def list_buckets(self) -> dict[str, list[dict[str, str]]]:
+            return {
+                "Buckets": [
+                    {"Name": "isv-sec11-test-aaaa-abcdef"},  # tagged
+                    {"Name": "isv-sec11-test-other-zzzzzz"},  # untagged -> skip
+                    {"Name": "production-bucket"},  # wrong prefix -> skip
+                ]
+            }
+
+        def get_bucket_tagging(self, Bucket: str) -> dict[str, list[dict[str, str]]]:
+            if Bucket == "isv-sec11-test-aaaa-abcdef":
+                return {"TagSet": [{"Key": "CreatedBy", "Value": "isvtest"}]}
+            raise _client_error("GetBucketTagging", code="NoSuchTagSet")
+
+        def get_paginator(self, _operation_name: str) -> Any:
+            class _P:
+                def paginate(_self, **_kwargs: Any) -> list[dict[str, Any]]:
+                    return [{"Versions": [], "DeleteMarkers": []}]
+
+            return _P()
+
+        def delete_bucket(self, Bucket: str) -> None:
+            deleted_buckets.append(Bucket)
+
+    errors = module._cleanup_sec11_buckets(FakeS3())
+
+    assert errors == []
+    assert deleted_buckets == ["isv-sec11-test-aaaa-abcdef"]
+
+
+def test_teardown_cleanup_sec11_kms_deletes_alias_and_schedules_key_deletion() -> None:
+    """`_cleanup_sec11_kms` deletes only ``alias/isv-sec11-test-*`` aliases and schedules their target keys."""
+    module = _load_security_script("teardown.py")
+    deleted_aliases: list[str] = []
+    scheduled_keys: list[str] = []
+
+    class FakeKms:
+        def get_paginator(self, _operation_name: str) -> Any:
+            class _P:
+                def paginate(_self, **_kwargs: Any) -> list[dict[str, Any]]:
+                    return [
+                        {
+                            "Aliases": [
+                                {"AliasName": "alias/production-key", "TargetKeyId": "key-prod"},
+                                {"AliasName": "alias/isv-sec11-test-aaaa1111", "TargetKeyId": "key-sec11-a"},
+                                {"AliasName": "alias/isv-sec11-test-bbbb2222", "TargetKeyId": "key-sec11-b"},
+                            ]
+                        }
+                    ]
+
+            return _P()
+
+        def delete_alias(self, AliasName: str) -> None:
+            deleted_aliases.append(AliasName)
+
+        def schedule_key_deletion(self, KeyId: str, PendingWindowInDays: int) -> None:
+            assert PendingWindowInDays == 7
+            scheduled_keys.append(KeyId)
+
+    errors = module._cleanup_sec11_kms(FakeKms())
+
+    assert errors == []
+    assert deleted_aliases == [
+        "alias/isv-sec11-test-aaaa1111",
+        "alias/isv-sec11-test-bbbb2222",
+    ]
+    assert scheduled_keys == ["key-sec11-a", "key-sec11-b"]

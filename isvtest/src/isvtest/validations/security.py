@@ -87,6 +87,63 @@ class BmcTenantIsolationCheck(BaseValidation):
         self.set_passed(f"BMC interfaces unreachable from tenant network ({bmc_count} endpoints tested)")
 
 
+class TenantIsolationCheck(BaseValidation):
+    """Validate hard isolation between tenants (SEC11-01).
+
+    Verifies four orthogonal isolation surfaces by inspecting the boolean
+    sub-claims a provider script reports after running cross-tenant
+    negative probes (tenant A's principal acting against tenant B's
+    resources):
+
+    * ``network_isolated``  -- tenant A's network has no route to tenant B's
+      network (no peering, no shared route, SG/NACL deny).
+    * ``data_isolated``     -- tenant A is denied ``kms:Decrypt`` on tenant
+      B's CMK and ``s3:GetObject`` on tenant B's bucket.
+    * ``compute_isolated``  -- tenant A is denied ``ec2:*`` /
+      ``ssm:StartSession`` against tenant B's instance.
+    * ``storage_isolated``  -- tenant A is denied ``ebs:*`` /
+      snapshot/attach/copy against tenant B's volume.
+
+    Physical isolation (bare-metal) and switch-fabric isolation are out of
+    scope here -- they are covered by SDN04-04/05.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        tenant_a_id: Non-empty identifier for the source tenant
+        tenant_b_id: Non-empty identifier for the target tenant
+        tests: dict with network_isolated, data_isolated,
+               compute_isolated, storage_isolated
+    """
+
+    description: ClassVar[str] = "Check hard tenant isolation across network, data, compute, and storage"
+    markers: ClassVar[list[str]] = ["security", "network", "iam"]
+
+    def run(self) -> None:
+        """Validate the four tenant-isolation sub-claims from step output."""
+        step_output = self.config.get("step_output", {})
+
+        for field in ("tenant_a_id", "tenant_b_id"):
+            value = step_output.get(field)
+            if not isinstance(value, str) or not value.strip():
+                self.set_failed(f"Tenant isolation output missing non-empty '{field}'")
+                return
+
+        required = [
+            "network_isolated",
+            "data_isolated",
+            "compute_isolated",
+            "storage_isolated",
+        ]
+        if not check_required_tests(self, required, "Tenant isolation tests failed"):
+            return
+
+        tenant_a = step_output["tenant_a_id"].strip()
+        tenant_b = step_output["tenant_b_id"].strip()
+        self.set_passed(f"Hard tenant isolation verified ({tenant_a} cannot reach {tenant_b})")
+
+
 class BmcProtocolSecurityCheck(BaseValidation):
     """Validate BMC management protocols enforce CNP10-01 controls.
 

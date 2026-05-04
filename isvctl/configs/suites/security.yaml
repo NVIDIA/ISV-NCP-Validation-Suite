@@ -89,6 +89,11 @@ tests:
         ShortLivedCredentialsCheck:
           step: short_lived_credentials_test
 
+    tenant_isolation:
+      checks:
+        TenantIsolationCheck:
+          step: tenant_isolation_test
+
     teardown_checks:
       step: teardown
       checks:

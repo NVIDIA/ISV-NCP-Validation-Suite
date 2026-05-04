@@ -29,6 +29,7 @@
 #   8. SA Credential Auth     - Verify IAM user + long-lived access key auth
 #   9. OIDC User Auth         - Probe configured OIDC-protected platform endpoint (SEC01-01)
 #  10. Short-Lived Credentials - Verify STS issues node + workload creds with bounded TTL (SEC02-01)
+#  11. Tenant Isolation       - Verify hard tenant isolation across network/data/compute/storage (SEC11-01)
 #
 # Note: SEC12-* (BMC) tests cannot be fully validated on AWS because the
 # Nitro/hypervisor BMC plane is provider-hidden. The references inspect the
@@ -158,6 +159,28 @@ commands:
         # Same envelope as sa_credential_test: provisions an IAM user and
         # waits on IAM->STS propagation (worst case ~46s of backoff).
         timeout: 120
+
+      # Test 11: Tenant Isolation (SEC11-01)
+      # Self-contained: provisions two ephemeral tenants (each with VPC,
+      # IAM user with scoped inline policy, KMS CMK, S3 bucket, t3.micro
+      # EC2, and EBS volume) and runs cross-tenant negative probes from
+      # tenant A's IAM creds against tenant B's resources, asserting
+      # AccessDenied across network/data/compute/storage surfaces. Tears
+      # the fixture down in a finally block.
+      #
+      # Orchestrator principal needs ec2:*, iam:CreateUser/PutUserPolicy/
+      # CreateAccessKey/Delete*, kms:CreateKey/CreateAlias/Schedule*,
+      # s3:CreateBucket/PutBucketTagging/DeleteBucket, plus matching
+      # describe perms. When those are missing the step emits a
+      # structured skip.
+      #
+      # Setup launches two t3.micro instances + waits for instance
+      # termination during teardown (~60s end-to-end on a warm region).
+      - name: tenant_isolation_test
+        phase: test
+        command: "python3 ../scripts/security/tenant_isolation_test.py"
+        args: ["--region", "{{region}}"]
+        timeout: 600
 
       # Teardown: Clean up leftover test IAM users
       - name: teardown

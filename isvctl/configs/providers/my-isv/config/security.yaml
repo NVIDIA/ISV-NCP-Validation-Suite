@@ -25,6 +25,7 @@
 #   SEC09-04: Customer-managed keys / BYOK (CustomerManagedKeyCheck)
 #   SEC03-01: Service account credentials (ServiceAccountCredentialCheck)
 #   SEC01-01: OIDC user authentication (OidcUserAuthCheck)
+#   SEC02-01: Short-lived credentials/tokens (ShortLivedCredentialsCheck)
 #
 # Usage:
 #   uv run isvctl test run -f isvctl/configs/providers/my-isv/config/security.yaml
@@ -95,6 +96,12 @@ commands:
       - name: oidc_user_auth_test
         phase: test
         command: "python ../scripts/security/oidc_user_auth_test.py"
+        args: ["--region", "{{region}}"]
+        timeout: 60
+
+      - name: short_lived_credentials_test
+        phase: test
+        command: "python ../scripts/security/short_lived_credentials_test.py"
         args: ["--region", "{{region}}"]
         timeout: 60
 

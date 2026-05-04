@@ -15,6 +15,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+from datetime import UTC
 from email.message import Message
 from pathlib import Path
 from types import ModuleType
@@ -1083,6 +1084,11 @@ class FakeTeardownIam:
         assert AccessKeyId == "AKIA_LEFTOVER"
         raise _client_error("DeleteAccessKey")
 
+    def list_user_policies(self, UserName: str) -> dict[str, list[str]]:
+        """Return no inline policies for the legacy sa_credential test user."""
+        assert UserName == "isv-sa-test-leftover"
+        return {"PolicyNames": []}
+
     def delete_user(self, UserName: str) -> None:
         """Fail user deletion after access key deletion failed."""
         assert UserName == "isv-sa-test-leftover"
@@ -1113,8 +1119,80 @@ def test_teardown_main_fails_when_owned_user_cleanup_fails(
     assert payload["success"] is False
     assert payload["resources_cleaned"] == 0
     assert payload["resources_failed"][0]["username"] == "isv-sa-test-leftover"
+    # Two failure paths now plus a list_inline_policies success: keep
+    # the existing two-failure assertion but allow the inline-policy
+    # listing call to succeed silently.
     assert len(payload["resources_failed"][0]["errors"]) == 2
     assert iam.delete_user_called is True
+
+
+class FakeSec02CleanupIam:
+    """Fake IAM client exercising teardown's inline-policy cleanup path for SEC02 users."""
+
+    def __init__(self) -> None:
+        """Initialize call tracking."""
+        self.deleted_keys: list[tuple[str, str]] = []
+        self.deleted_policies: list[tuple[str, str]] = []
+        self.deleted_users: list[str] = []
+        # Ordered call log so tests can lock in the relative order of
+        # delete_user_policy vs delete_user (the inline policy must be
+        # detached first or DeleteUser fails with DeleteConflict on AWS).
+        self.call_sequence: list[str] = []
+
+    def list_access_keys(self, UserName: str) -> dict[str, list[dict[str, str]]]:
+        """Return one fake access key."""
+        assert UserName.startswith("isv-sec02-test-")
+        self.call_sequence.append(f"list_access_keys:{UserName}")
+        return {"AccessKeyMetadata": [{"AccessKeyId": "AKIA_SEC02"}]}
+
+    def delete_access_key(self, UserName: str, AccessKeyId: str) -> None:
+        """Record access key deletion."""
+        self.deleted_keys.append((UserName, AccessKeyId))
+        self.call_sequence.append(f"delete_access_key:{UserName}:{AccessKeyId}")
+
+    def list_user_policies(self, UserName: str) -> dict[str, list[str]]:
+        """Return one inline policy attached to the SEC02 user."""
+        assert UserName.startswith("isv-sec02-test-")
+        self.call_sequence.append(f"list_user_policies:{UserName}")
+        return {"PolicyNames": ["isv-sec02-sts-allow"]}
+
+    def delete_user_policy(self, UserName: str, PolicyName: str) -> None:
+        """Record inline policy deletion."""
+        self.deleted_policies.append((UserName, PolicyName))
+        self.call_sequence.append(f"delete_user_policy:{UserName}:{PolicyName}")
+
+    def delete_user(self, UserName: str) -> None:
+        """Record user deletion."""
+        self.deleted_users.append(UserName)
+        self.call_sequence.append(f"delete_user:{UserName}")
+
+
+def test_teardown_cleanup_owned_user_deletes_inline_policy_for_sec02_users() -> None:
+    """`_cleanup_owned_user` must detach inline policies before deleting SEC02 users."""
+    module = _load_security_script("teardown.py")
+    iam = FakeSec02CleanupIam()
+
+    cleanup_errors = module._cleanup_owned_user(iam, "isv-sec02-test-abcd1234")
+
+    assert cleanup_errors == []
+    assert iam.deleted_keys == [("isv-sec02-test-abcd1234", "AKIA_SEC02")]
+    assert iam.deleted_policies == [("isv-sec02-test-abcd1234", "isv-sec02-sts-allow")]
+    assert iam.deleted_users == ["isv-sec02-test-abcd1234"]
+    # Order matters: AWS DeleteUser fails with DeleteConflict if an inline
+    # policy is still attached. Lock in policy-before-user.
+    policy_idx = iam.call_sequence.index("delete_user_policy:isv-sec02-test-abcd1234:isv-sec02-sts-allow")
+    user_idx = iam.call_sequence.index("delete_user:isv-sec02-test-abcd1234")
+    assert policy_idx < user_idx
+
+
+def test_teardown_owned_user_prefixes_cover_security_test_scripts() -> None:
+    """The teardown sweep must recognize both sa_credential and short-lived test users."""
+    module = _load_security_script("teardown.py")
+
+    assert "isv-sa-test-".startswith("isv-sa-test-")
+    assert "isv-sec02-test-foo".startswith(module.OWNED_USER_PREFIXES)
+    assert "isv-sa-test-bar".startswith(module.OWNED_USER_PREFIXES)
+    assert not "isv-network-test-baz".startswith(module.OWNED_USER_PREFIXES)
 
 
 @pytest.fixture(scope="module")
@@ -1998,3 +2076,558 @@ def test_oidc_verify_handles_aud_list(oidc_module: ModuleType) -> None:
 
     ok, _ = oidc_module._verify_jwt(token, jwks, "iss", "isv-validation", now=now)
     assert ok
+
+
+# ===========================================================================
+# Short-lived credentials (SEC02-01) tests
+# ===========================================================================
+
+
+@pytest.fixture(scope="module")
+def short_lived_module() -> ModuleType:
+    """Load the short-lived credentials script as a module."""
+    return _load_security_script("short_lived_credentials_test.py")
+
+
+class FakeShortLivedIam:
+    """Fake IAM client tracking SEC02 user provisioning + cleanup calls."""
+
+    def __init__(
+        self,
+        *,
+        create_user_error: ClientError | None = None,
+        put_user_policy_error: ClientError | None = None,
+        create_access_key_error: ClientError | None = None,
+        delete_user_policy_error: ClientError | None = None,
+        delete_access_key_error: ClientError | None = None,
+        delete_user_error: ClientError | None = None,
+    ) -> None:
+        """Configure optional per-call failures."""
+        self.create_user_error = create_user_error
+        self.put_user_policy_error = put_user_policy_error
+        self.create_access_key_error = create_access_key_error
+        self.delete_user_policy_error = delete_user_policy_error
+        self.delete_access_key_error = delete_access_key_error
+        self.delete_user_error = delete_user_error
+        self.created_users: list[dict[str, Any]] = []
+        self.put_policies: list[dict[str, str]] = []
+        self.deleted_policies: list[tuple[str, str]] = []
+        self.deleted_keys: list[tuple[str, str]] = []
+        self.deleted_users: list[str] = []
+
+    def create_user(self, UserName: str, Tags: list[dict[str, str]]) -> dict[str, dict[str, str]]:
+        """Create a fake IAM user, recording the call."""
+        if self.create_user_error is not None:
+            raise self.create_user_error
+        assert UserName.startswith("isv-sec02-test-")
+        assert {"Key": "CreatedBy", "Value": "isvtest"} in Tags
+        self.created_users.append({"UserName": UserName, "Tags": Tags})
+        return {"User": {"UserName": UserName, "Arn": f"arn:aws:iam::123:user/{UserName}"}}
+
+    def put_user_policy(self, UserName: str, PolicyName: str, PolicyDocument: str) -> None:
+        """Attach a fake inline policy to the test user."""
+        if self.put_user_policy_error is not None:
+            raise self.put_user_policy_error
+        assert UserName.startswith("isv-sec02-test-")
+        self.put_policies.append({"UserName": UserName, "PolicyName": PolicyName, "PolicyDocument": PolicyDocument})
+
+    def create_access_key(self, UserName: str) -> dict[str, dict[str, str]]:
+        """Return fake access key material for the test user."""
+        if self.create_access_key_error is not None:
+            raise self.create_access_key_error
+        assert UserName.startswith("isv-sec02-test-")
+        return {"AccessKey": {"AccessKeyId": "AKIA_FAKE", "SecretAccessKey": "secret_fake"}}
+
+    def delete_user_policy(self, UserName: str, PolicyName: str) -> None:
+        """Detach the inline policy, recording the call."""
+        if self.delete_user_policy_error is not None:
+            raise self.delete_user_policy_error
+        self.deleted_policies.append((UserName, PolicyName))
+
+    def delete_access_key(self, UserName: str, AccessKeyId: str) -> None:
+        """Delete the test user's access key, recording the call."""
+        if self.delete_access_key_error is not None:
+            raise self.delete_access_key_error
+        self.deleted_keys.append((UserName, AccessKeyId))
+
+    def delete_user(self, UserName: str) -> None:
+        """Delete the test user, recording the call."""
+        if self.delete_user_error is not None:
+            raise self.delete_user_error
+        self.deleted_users.append(UserName)
+
+
+class FakeShortLivedSts:
+    """Fake STS client supporting GetSessionToken / GetFederationToken with optional retry sequencing."""
+
+    def __init__(
+        self,
+        *,
+        session_expiration: Any = None,
+        session_errors: list[ClientError] | None = None,
+        federation_expiration: Any = None,
+        federation_error: ClientError | None = None,
+        omit_session_expiration: bool = False,
+    ) -> None:
+        """Configure fake STS responses, optional retry-error sequence on session, and per-probe expirations."""
+        self.session_expiration = session_expiration
+        self.session_errors: list[ClientError] = list(session_errors) if session_errors else []
+        self.federation_expiration = federation_expiration
+        self.federation_error = federation_error
+        self.omit_session_expiration = omit_session_expiration
+        self.federation_calls: list[dict[str, str]] = []
+        self.session_call_count = 0
+
+    def get_session_token(self) -> dict[str, dict[str, Any]]:
+        """Return fake GetSessionToken response, popping a queued error on each call."""
+        self.session_call_count += 1
+        if self.session_errors:
+            raise self.session_errors.pop(0)
+        creds: dict[str, Any] = {
+            "AccessKeyId": "ASIA_FAKE",
+            "SecretAccessKey": "secret",
+            "SessionToken": "session",
+        }
+        if not self.omit_session_expiration:
+            creds["Expiration"] = self.session_expiration
+        return {"Credentials": creds}
+
+    def get_federation_token(self, **kwargs: Any) -> dict[str, dict[str, Any]]:
+        """Return fake GetFederationToken response or raise the configured error."""
+        self.federation_calls.append(kwargs)
+        if self.federation_error is not None:
+            raise self.federation_error
+        return {
+            "Credentials": {
+                "AccessKeyId": "ASIA_FED_FAKE",
+                "SecretAccessKey": "secret",
+                "SessionToken": "session",
+                "Expiration": self.federation_expiration,
+            },
+        }
+
+
+def _patch_short_lived_clients(
+    monkeypatch: pytest.MonkeyPatch,
+    module: ModuleType,
+    *,
+    iam: FakeShortLivedIam,
+    sts: FakeShortLivedSts,
+) -> None:
+    """Patch boto3.client to return fakes for iam and sts, and zero out the IAM-propagation sleep."""
+
+    def fake_client(service_name: str, **kwargs: Any) -> FakeShortLivedIam | FakeShortLivedSts:
+        """Return the matching fake client for iam/sts."""
+        if service_name == "iam":
+            return iam
+        if service_name == "sts":
+            return sts
+        msg = f"unexpected service: {service_name}"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(module.boto3, "client", fake_client)
+    monkeypatch.setattr(module.time, "sleep", lambda _: None)
+
+
+def _set_short_lived_argv(monkeypatch: pytest.MonkeyPatch, module: ModuleType, *extra_args: str) -> None:
+    """Set sys.argv for the short-lived credentials script with optional extra args."""
+    monkeypatch.setattr(
+        module.sys,
+        "argv",
+        ["short_lived_credentials_test.py", "--region", "us-west-2", *extra_args],
+    )
+
+
+def test_short_lived_credentials_main_passes_with_bounded_ttls(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """Both probes pass when STS returns bounded TTLs, and the test user is cleaned up."""
+    from datetime import datetime, timedelta
+
+    now = datetime.now(UTC)
+    iam = FakeShortLivedIam()
+    sts = FakeShortLivedSts(
+        session_expiration=now + timedelta(seconds=3600),
+        federation_expiration=now + timedelta(seconds=3600),
+    )
+    _patch_short_lived_clients(monkeypatch, short_lived_module, iam=iam, sts=sts)
+    _set_short_lived_argv(monkeypatch, short_lived_module)
+
+    exit_code = short_lived_module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["success"] is True
+    assert payload["max_ttl_seconds"] == 43200
+    assert payload["node_credential_method"] == "sts:GetSessionToken"
+    assert payload["workload_credential_method"] == "sts:GetFederationToken"
+    assert 0 < payload["node_credential_ttl_seconds"] <= 3600
+    assert 0 < payload["workload_credential_ttl_seconds"] <= 3600
+    for probe in payload["tests"].values():
+        assert probe["passed"] is True
+
+    assert len(iam.created_users) == 1
+    username = iam.created_users[0]["UserName"]
+    assert iam.put_policies == [
+        {
+            "UserName": username,
+            "PolicyName": short_lived_module.INLINE_POLICY_NAME,
+            "PolicyDocument": short_lived_module.INLINE_STS_POLICY,
+        }
+    ]
+    assert iam.deleted_policies == [(username, short_lived_module.INLINE_POLICY_NAME)]
+    assert iam.deleted_keys == [(username, "AKIA_FAKE")]
+    assert iam.deleted_users == [username]
+    assert len(sts.federation_calls) == 1
+    federation_name = sts.federation_calls[0]["Name"]
+    assert federation_name.startswith(short_lived_module.WORKLOAD_FEDERATION_PREFIX)
+    # Federation Name shares the per-run uuid suffix with the IAM username
+    # so CloudTrail events from the same probe correlate.
+    assert federation_name.removeprefix(short_lived_module.WORKLOAD_FEDERATION_PREFIX) == username.removeprefix(
+        short_lived_module.TEST_USER_PREFIX
+    )
+    assert sts.federation_calls[0]["Policy"] == short_lived_module.DENY_ALL_POLICY
+
+
+def test_short_lived_credentials_main_fails_when_node_ttl_exceeds_bound(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """Node TTL above the configured bound fails the within-bound probe and still cleans up."""
+    from datetime import datetime, timedelta
+
+    now = datetime.now(UTC)
+    iam = FakeShortLivedIam()
+    sts = FakeShortLivedSts(
+        session_expiration=now + timedelta(seconds=7200),
+        federation_expiration=now + timedelta(seconds=1800),
+    )
+    _patch_short_lived_clients(monkeypatch, short_lived_module, iam=iam, sts=sts)
+    _set_short_lived_argv(monkeypatch, short_lived_module, "--max-ttl-seconds", "3600")
+
+    exit_code = short_lived_module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["success"] is False
+    assert payload["tests"]["node_credential_has_expiry"]["passed"] is True
+    assert payload["tests"]["node_credential_ttl_within_bound"]["passed"] is False
+    assert "outside" in payload["tests"]["node_credential_ttl_within_bound"]["error"]
+    assert payload["tests"]["workload_credential_ttl_within_bound"]["passed"] is True
+    assert iam.deleted_users  # cleanup still ran on probe failure
+
+
+def test_short_lived_credentials_main_skips_when_create_user_denied(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """Orchestrator principal lacking iam:CreateUser yields a clean skip and never probes STS."""
+    iam = FakeShortLivedIam(
+        create_user_error=_client_error(
+            "CreateUser", code="AccessDenied", message="not authorized to perform iam:CreateUser"
+        ),
+    )
+    sts = FakeShortLivedSts()
+    _patch_short_lived_clients(monkeypatch, short_lived_module, iam=iam, sts=sts)
+    _set_short_lived_argv(monkeypatch, short_lived_module)
+
+    exit_code = short_lived_module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["success"] is True
+    assert payload["skipped"] is True
+    # Skip reason includes the failing operation name, AWS error code, and
+    # the underlying message so operators don't need to re-run with debug
+    # to figure out what was denied.
+    assert "CreateUser" in payload["skip_reason"]
+    assert "AccessDenied" in payload["skip_reason"]
+    assert "not authorized to perform iam:CreateUser" in payload["skip_reason"]
+    assert payload["tests"] == {}
+    assert sts.session_call_count == 0
+    assert sts.federation_calls == []
+    assert iam.deleted_users == []  # nothing was created
+
+
+def test_short_lived_credentials_main_cleans_up_when_put_user_policy_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """Non-skippable failure on PutUserPolicy must still delete the user that was just created."""
+    iam = FakeShortLivedIam(
+        put_user_policy_error=_client_error("PutUserPolicy", code="LimitExceeded"),
+    )
+    sts = FakeShortLivedSts()
+    _patch_short_lived_clients(monkeypatch, short_lived_module, iam=iam, sts=sts)
+    _set_short_lived_argv(monkeypatch, short_lived_module)
+
+    exit_code = short_lived_module.main()
+
+    assert exit_code == 1
+    assert len(iam.created_users) == 1
+    username = iam.created_users[0]["UserName"]
+    assert iam.deleted_users == [username]
+    assert sts.session_call_count == 0  # no probes attempted
+    assert sts.federation_calls == []
+
+
+def test_short_lived_credentials_main_cleans_up_when_create_access_key_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """Non-skippable failure on CreateAccessKey must still detach inline policy and delete the user."""
+    iam = FakeShortLivedIam(
+        create_access_key_error=_client_error("CreateAccessKey", code="LimitExceeded"),
+    )
+    sts = FakeShortLivedSts()
+    _patch_short_lived_clients(monkeypatch, short_lived_module, iam=iam, sts=sts)
+    _set_short_lived_argv(monkeypatch, short_lived_module)
+
+    exit_code = short_lived_module.main()
+
+    assert exit_code == 1
+    assert len(iam.created_users) == 1
+    username = iam.created_users[0]["UserName"]
+    assert iam.deleted_policies == [(username, short_lived_module.INLINE_POLICY_NAME)]
+    assert iam.deleted_users == [username]
+    assert sts.session_call_count == 0
+
+
+def test_short_lived_credentials_main_skips_and_cleans_up_when_put_user_policy_denied(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """Skip path on a partial-setup AccessDenied still deletes the user and surfaces the AWS message."""
+    iam = FakeShortLivedIam(
+        put_user_policy_error=_client_error(
+            "PutUserPolicy",
+            code="AccessDenied",
+            message="not authorized to perform iam:PutUserPolicy",
+        ),
+    )
+    sts = FakeShortLivedSts()
+    _patch_short_lived_clients(monkeypatch, short_lived_module, iam=iam, sts=sts)
+    _set_short_lived_argv(monkeypatch, short_lived_module)
+
+    exit_code = short_lived_module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["skipped"] is True
+    assert "PutUserPolicy" in payload["skip_reason"]
+    assert "AccessDenied" in payload["skip_reason"]
+    assert "not authorized to perform iam:PutUserPolicy" in payload["skip_reason"]
+    assert len(iam.created_users) == 1
+    assert iam.deleted_users == [iam.created_users[0]["UserName"]]
+
+
+def test_short_lived_credentials_main_fails_when_skip_path_cleanup_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """Skip-eligible setup error + cleanup failure must surface as a hard failure, never a clean skip.
+
+    Otherwise we'd report ``skipped: true`` while leaving an IAM user
+    behind in the account.
+    """
+    iam = FakeShortLivedIam(
+        put_user_policy_error=_client_error("PutUserPolicy", code="AccessDenied"),
+        delete_user_error=_client_error("DeleteUser", code="ServiceUnavailable"),
+    )
+    sts = FakeShortLivedSts()
+    _patch_short_lived_clients(monkeypatch, short_lived_module, iam=iam, sts=sts)
+    _set_short_lived_argv(monkeypatch, short_lived_module)
+
+    exit_code = short_lived_module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["success"] is False
+    assert payload.get("skipped") is not True
+    assert "cleanup_errors" in payload
+    assert "setup failed" in payload["error"]
+    assert "cleanup failed" in payload["error"]
+    assert any("delete user" in err for err in payload["cleanup_errors"])
+
+
+def test_short_lived_credentials_main_retries_node_probe_on_eventual_consistency(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """A burst of InvalidClientTokenId errors is retried until STS sees the new key."""
+    from datetime import datetime, timedelta
+
+    now = datetime.now(UTC)
+    iam = FakeShortLivedIam()
+    sts = FakeShortLivedSts(
+        session_expiration=now + timedelta(seconds=3600),
+        federation_expiration=now + timedelta(seconds=3600),
+        session_errors=[
+            _client_error("GetSessionToken", code="InvalidClientTokenId"),
+            _client_error("GetSessionToken", code="InvalidClientTokenId"),
+        ],
+    )
+    _patch_short_lived_clients(monkeypatch, short_lived_module, iam=iam, sts=sts)
+    _set_short_lived_argv(monkeypatch, short_lived_module)
+
+    exit_code = short_lived_module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["success"] is True
+    assert sts.session_call_count == 3  # two failures plus one success
+    assert iam.deleted_users  # cleanup still ran
+
+
+def test_short_lived_credentials_main_unhandled_node_error_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """Non-retryable STS errors on the node probe surface as a failure (not a skip)."""
+    iam = FakeShortLivedIam()
+    sts = FakeShortLivedSts(
+        session_errors=[_client_error("GetSessionToken", code="ServiceUnavailable")],
+    )
+    _patch_short_lived_clients(monkeypatch, short_lived_module, iam=iam, sts=sts)
+    _set_short_lived_argv(monkeypatch, short_lived_module)
+
+    exit_code = short_lived_module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["success"] is False
+    assert payload.get("skipped") is not True
+    assert iam.deleted_users  # cleanup still ran via the decorator-caught path
+
+
+def test_short_lived_credentials_main_records_workload_error_and_keeps_node_pass(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """A workload-side STS error is captured per-probe with op + code + message; node probe still passes."""
+    from datetime import datetime, timedelta
+
+    now = datetime.now(UTC)
+    iam = FakeShortLivedIam()
+    sts = FakeShortLivedSts(
+        session_expiration=now + timedelta(seconds=3600),
+        federation_error=_client_error(
+            "GetFederationToken",
+            code="AccessDenied",
+            message="not authorized to perform sts:GetFederationToken",
+        ),
+    )
+    _patch_short_lived_clients(monkeypatch, short_lived_module, iam=iam, sts=sts)
+    _set_short_lived_argv(monkeypatch, short_lived_module)
+
+    exit_code = short_lived_module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["success"] is False
+    assert payload.get("skipped") is not True
+    assert payload["tests"]["node_credential_has_expiry"]["passed"] is True
+    assert payload["tests"]["node_credential_ttl_within_bound"]["passed"] is True
+    assert payload["tests"]["workload_credential_has_expiry"]["passed"] is False
+    workload_error = payload["tests"]["workload_credential_has_expiry"]["error"]
+    assert "GetFederationToken" in workload_error
+    assert "AccessDenied" in workload_error
+    assert "not authorized to perform sts:GetFederationToken" in workload_error
+    assert iam.deleted_users  # cleanup ran
+
+
+def test_short_lived_credentials_main_handles_missing_expiration(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """Missing Credentials.Expiration in either response surfaces as a per-probe error."""
+    from datetime import datetime, timedelta
+
+    now = datetime.now(UTC)
+    iam = FakeShortLivedIam()
+    sts = FakeShortLivedSts(
+        omit_session_expiration=True,
+        federation_expiration=now + timedelta(seconds=1800),
+    )
+    _patch_short_lived_clients(monkeypatch, short_lived_module, iam=iam, sts=sts)
+    _set_short_lived_argv(monkeypatch, short_lived_module)
+
+    exit_code = short_lived_module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["success"] is False
+    assert payload["tests"]["node_credential_has_expiry"]["passed"] is False
+    assert "Expiration missing" in payload["tests"]["node_credential_has_expiry"]["error"]
+    assert payload["tests"]["workload_credential_has_expiry"]["passed"] is True
+
+
+def test_short_lived_credentials_main_records_cleanup_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """Successful probes are reported failed when IAM cleanup fails."""
+    from datetime import datetime, timedelta
+
+    now = datetime.now(UTC)
+    iam = FakeShortLivedIam(delete_user_error=_client_error("DeleteUser", code="ServiceUnavailable"))
+    sts = FakeShortLivedSts(
+        session_expiration=now + timedelta(seconds=3600),
+        federation_expiration=now + timedelta(seconds=3600),
+    )
+    _patch_short_lived_clients(monkeypatch, short_lived_module, iam=iam, sts=sts)
+    _set_short_lived_argv(monkeypatch, short_lived_module)
+
+    exit_code = short_lived_module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["success"] is False
+    assert "cleanup_errors" in payload
+    assert any("delete user" in err for err in payload["cleanup_errors"])
+    assert "Cleanup failed" in payload["error"]
+
+
+def test_short_lived_credentials_main_skips_for_non_positive_max_ttl(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    short_lived_module: ModuleType,
+) -> None:
+    """A non-positive --max-ttl-seconds yields a clean skip rather than a hard fail or any AWS calls."""
+    iam = FakeShortLivedIam()
+    sts = FakeShortLivedSts()
+    _patch_short_lived_clients(monkeypatch, short_lived_module, iam=iam, sts=sts)
+    _set_short_lived_argv(monkeypatch, short_lived_module, "--max-ttl-seconds", "0")
+
+    exit_code = short_lived_module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["skipped"] is True
+    assert "positive integer" in payload["skip_reason"]
+    assert iam.created_users == []
+    assert sts.session_call_count == 0
+
+
+def test_short_lived_credentials_cleanup_handles_partial_setup(
+    short_lived_module: ModuleType,
+) -> None:
+    """_cleanup_test_user is no-op for an unset username and skips inline policy when user_created is False."""
+    iam = FakeShortLivedIam()
+    assert short_lived_module._cleanup_test_user(iam, None, None, False) == []
+    assert short_lived_module._cleanup_test_user(iam, "isv-sec02-test-xyz", None, False) == []
+    assert iam.deleted_policies == []
+    assert iam.deleted_users == []

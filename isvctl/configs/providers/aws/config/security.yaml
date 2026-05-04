@@ -28,6 +28,7 @@
 #   7. Customer Managed Key   - Verify customer-managed key encryption (SEC09-04)
 #   8. SA Credential Auth     - Verify IAM user + long-lived access key auth
 #   9. OIDC User Auth         - Probe configured OIDC-protected platform endpoint (SEC01-01)
+#  10. Short-Lived Credentials - Verify STS issues node + workload creds with bounded TTL (SEC02-01)
 #
 # Note: SEC12-* (BMC) tests cannot be fully validated on AWS because the
 # Nitro/hypervisor BMC plane is provider-hidden. The references inspect the
@@ -134,6 +135,30 @@ commands:
           - "--missing-required-claim-token"
         timeout: 60
 
+      # Test 10: Short-Lived Credentials (SEC02-01)
+      # Self-contained: provisions a fresh IAM user with an inline policy
+      # granting just sts:GetSessionToken + sts:GetFederationToken, mints
+      # an access key, probes both APIs to assert each returned credential
+      # has a finite TTL within the configured upper bound, then cleans
+      # the user up in a finally block. Works from assumed-role/SSO
+      # orchestrator principals because the probes run as the freshly
+      # provisioned IAM user, not as the caller.
+      #
+      # Orchestrator principal needs:
+      #   iam:CreateUser, iam:PutUserPolicy, iam:CreateAccessKey,
+      #   iam:DeleteUserPolicy, iam:DeleteAccessKey, iam:DeleteUser
+      # When those are missing the step emits a structured skip.
+      - name: short_lived_credentials_test
+        phase: test
+        command: "python3 ../scripts/security/short_lived_credentials_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--max-ttl-seconds={{short_lived_credentials_max_ttl_seconds}}"
+        # Same envelope as sa_credential_test: provisions an IAM user and
+        # waits on IAM->STS propagation (worst case ~46s of backoff).
+        timeout: 120
+
       # Teardown: Clean up leftover test IAM users
       - name: teardown
         phase: teardown
@@ -151,3 +176,4 @@ tests:
     oidc_audience: "{{env.OIDC_AUDIENCE | default('', true)}}"
     oidc_target_url: "{{env.OIDC_TARGET_URL | default('', true)}}"
     customer_managed_key_id: "{{env.AWS_KMS_KEY_ID | default('', true)}}"
+    short_lived_credentials_max_ttl_seconds: "{{env.SEC02_MAX_TTL_SECONDS | default('43200', true)}}"

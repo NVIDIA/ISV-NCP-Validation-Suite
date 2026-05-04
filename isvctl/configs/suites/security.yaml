@@ -84,6 +84,11 @@ tests:
         OidcUserAuthCheck:
           step: oidc_user_auth_test
 
+    short_lived_credentials:
+      checks:
+        ShortLivedCredentialsCheck:
+          step: short_lived_credentials_test
+
     teardown_checks:
       step: teardown
       checks:

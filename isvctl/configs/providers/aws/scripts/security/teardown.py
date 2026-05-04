@@ -12,8 +12,12 @@
 """Security test teardown (AWS reference).
 
 Each individual test script handles its own cleanup.  This teardown
-step is a safety net that scans for leftover isv-sa-test-* IAM users
-created by the SA credential test.
+step is a safety net that scans for leftover IAM users created by
+security test scripts:
+
+* ``isv-sa-test-*``     - sa_credential_test.py
+* ``isv-sec02-test-*``  - short_lived_credentials_test.py (has an inline
+                          policy that must be deleted before the user)
 
 Usage:
     python teardown.py --region us-west-2
@@ -31,6 +35,8 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
 import boto3
 from botocore.exceptions import ClientError
 from common.errors import handle_aws_errors
+
+OWNED_USER_PREFIXES: tuple[str, ...] = ("isv-sa-test-", "isv-sec02-test-")
 
 
 def _user_has_isvtest_tag(iam: Any, username: str) -> bool:
@@ -50,9 +56,15 @@ def _user_has_isvtest_tag(iam: Any, username: str) -> bool:
 
 
 def _cleanup_owned_user(iam: Any, username: str) -> list[str]:
-    """Delete one owned IAM user and its access keys, returning cleanup errors."""
+    """Delete one owned IAM user, its access keys, and any inline policies.
+
+    Inline policies must be detached before ``DeleteUser`` succeeds; SEC02
+    test users carry one. SA-credential test users have no inline policies,
+    so the inline-policy pass is a no-op for them.
+    """
     cleanup_errors: list[str] = []
     keys: list[dict[str, Any]] = []
+    inline_policies: list[str] = []
 
     try:
         keys = iam.list_access_keys(UserName=username)["AccessKeyMetadata"]
@@ -65,6 +77,17 @@ def _cleanup_owned_user(iam: Any, username: str) -> list[str]:
             iam.delete_access_key(UserName=username, AccessKeyId=access_key_id)
         except ClientError as e:
             cleanup_errors.append(f"delete access key {access_key_id} for {username}: {e}")
+
+    try:
+        inline_policies = iam.list_user_policies(UserName=username).get("PolicyNames", [])
+    except ClientError as e:
+        cleanup_errors.append(f"list inline policies for {username}: {e}")
+
+    for policy_name in inline_policies:
+        try:
+            iam.delete_user_policy(UserName=username, PolicyName=policy_name)
+        except ClientError as e:
+            cleanup_errors.append(f"delete inline policy {policy_name} for {username}: {e}")
 
     try:
         iam.delete_user(UserName=username)
@@ -104,7 +127,7 @@ def main() -> int:
         for page in paginator.paginate():
             for user in page["Users"]:
                 name = user["UserName"]
-                if not name.startswith("isv-sa-test-"):
+                if not name.startswith(OWNED_USER_PREFIXES):
                     continue
                 if not _user_has_isvtest_tag(iam, name):
                     skipped_unowned += 1

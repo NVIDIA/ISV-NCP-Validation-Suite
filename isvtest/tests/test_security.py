@@ -24,6 +24,7 @@ from isvtest.validations.security import (
     CustomerManagedKeyCheck,
     MfaEnforcedCheck,
     OidcUserAuthCheck,
+    ShortLivedCredentialsCheck,
 )
 
 REQUIRED_BMC_PROTOCOL_TESTS = [
@@ -490,3 +491,107 @@ def test_oidc_user_auth_check_skips_when_step_marks_skipped() -> None:
 
     with pytest.raises(pytest.skip.Exception, match="OIDC validation not configured"):
         OidcUserAuthCheck(config={"step_output": step_output}).execute()
+
+
+SHORT_LIVED_REQUIRED_TESTS = {
+    "node_credential_has_expiry": {"passed": True},
+    "node_credential_ttl_within_bound": {"passed": True},
+    "workload_credential_has_expiry": {"passed": True},
+    "workload_credential_ttl_within_bound": {"passed": True},
+}
+
+
+def _short_lived_step_output(**overrides: Any) -> dict[str, Any]:
+    """Return a valid short-lived credentials step output with optional overrides."""
+    output: dict[str, Any] = {
+        "success": True,
+        "platform": "security",
+        "test_name": "short_lived_credentials_test",
+        "node_credential_method": "sts:GetSessionToken",
+        "workload_credential_method": "sts:GetFederationToken",
+        "node_credential_ttl_seconds": 3600,
+        "workload_credential_ttl_seconds": 3600,
+        "max_ttl_seconds": 43200,
+        "tests": deepcopy(SHORT_LIVED_REQUIRED_TESTS),
+    }
+    output.update(overrides)
+    return output
+
+
+def test_short_lived_credentials_check_passes_with_bounded_ttls() -> None:
+    """ShortLivedCredentialsCheck passes when both TTLs sit within the configured bound."""
+    check = ShortLivedCredentialsCheck(config={"step_output": _short_lived_step_output()})
+
+    result = check.execute()
+
+    assert result["passed"] is True
+    assert "node TTL=3600s" in result["output"]
+    assert "workload TTL=3600s" in result["output"]
+    assert "bound=43200s" in result["output"]
+
+
+def test_short_lived_credentials_check_fails_when_required_probe_missing() -> None:
+    """ShortLivedCredentialsCheck reports the missing contract probe by name."""
+    tests = {
+        name: result
+        for name, result in SHORT_LIVED_REQUIRED_TESTS.items()
+        if name != "workload_credential_ttl_within_bound"
+    }
+    check = ShortLivedCredentialsCheck(config={"step_output": _short_lived_step_output(tests=tests)})
+
+    result = check.execute()
+
+    assert result["passed"] is False
+    assert "workload_credential_ttl_within_bound" in result["error"]
+
+
+def test_short_lived_credentials_check_fails_when_node_ttl_exceeds_bound() -> None:
+    """ShortLivedCredentialsCheck fails when the node TTL is over the configured bound."""
+    check = ShortLivedCredentialsCheck(
+        config={"step_output": _short_lived_step_output(node_credential_ttl_seconds=99999)},
+    )
+
+    result = check.execute()
+
+    assert result["passed"] is False
+    assert "node_credential_ttl_seconds=99999s exceeds max_ttl_seconds=43200s" in result["error"]
+
+
+def test_short_lived_credentials_check_fails_when_workload_ttl_zero() -> None:
+    """ShortLivedCredentialsCheck rejects non-positive TTL values."""
+    check = ShortLivedCredentialsCheck(
+        config={"step_output": _short_lived_step_output(workload_credential_ttl_seconds=0)},
+    )
+
+    result = check.execute()
+
+    assert result["passed"] is False
+    assert "workload_credential_ttl_seconds" in result["error"]
+
+
+def test_short_lived_credentials_check_fails_when_max_ttl_missing() -> None:
+    """ShortLivedCredentialsCheck fails when max_ttl_seconds is missing or non-positive."""
+    check = ShortLivedCredentialsCheck(
+        config={"step_output": _short_lived_step_output(max_ttl_seconds=0)},
+    )
+
+    result = check.execute()
+
+    assert result["passed"] is False
+    assert "max_ttl_seconds" in result["error"]
+
+
+def test_short_lived_credentials_check_skips_when_step_marks_skipped() -> None:
+    """ShortLivedCredentialsCheck pytest.skips through both run() and execute() when flagged."""
+    step_output = {
+        "success": True,
+        "skipped": True,
+        "skip_reason": "sts:GetSessionToken not available with current principal (AccessDenied)",
+        "tests": {},
+    }
+
+    with pytest.raises(pytest.skip.Exception, match="GetSessionToken not available"):
+        ShortLivedCredentialsCheck(config={"step_output": step_output}).run()
+
+    with pytest.raises(pytest.skip.Exception, match="GetSessionToken not available"):
+        ShortLivedCredentialsCheck(config={"step_output": step_output}).execute()

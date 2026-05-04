@@ -15,7 +15,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
-from datetime import UTC
+from datetime import UTC, datetime, timedelta
 from email.message import Message
 from pathlib import Path
 from types import ModuleType
@@ -1227,6 +1227,439 @@ def test_teardown_owned_user_prefixes_cover_security_test_scripts() -> None:
 
 
 @pytest.fixture(scope="module")
+def cert_rotation_module() -> ModuleType:
+    """Load the certificate-rotation script as a module."""
+    return _load_security_script("cert_rotation_test.py")
+
+
+class FakeCertRotationEks:
+    """Fake EKS client for certificate-rotation tests."""
+
+    def __init__(self, clusters: dict[str, str | dict[str, Any]] | None = None) -> None:
+        """Store fake cluster metadata keyed by cluster name."""
+        self.clusters = clusters or {}
+        self.describe_call_count = 0
+
+    def list_clusters(self, **kwargs: Any) -> dict[str, list[str]]:
+        """Return fake EKS cluster names."""
+        assert kwargs in ({}, {"nextToken": ""})
+        return {"clusters": list(self.clusters)}
+
+    def describe_cluster(self, name: str) -> dict[str, dict[str, Any]]:
+        """Return a fake EKS cluster description."""
+        self.describe_call_count += 1
+        cluster = self.clusters[name]
+        if isinstance(cluster, str):
+            return {"cluster": {"endpoint": cluster}}
+        return {"cluster": cluster}
+
+
+def test_cert_rotation_accepts_eks_control_plane_endpoint_certs(
+    cert_rotation_module: ModuleType,
+) -> None:
+    """SEC09-01 emits an explicit provider-hidden skip for EKS endpoint certificates."""
+    eks = FakeCertRotationEks({"cluster-a": "https://eks.test.local"})
+
+    result = cert_rotation_module._run_cert_rotation_test(eks, "us-west-2")
+
+    assert result["success"] is True
+    assert result["skipped"] is True
+    assert result["skip_reason"] == "Managed TLS certificate rotation evidence is provider-hidden"
+    assert result["certs_inspected"] == 1
+    assert result["auto_rotated"] == 0
+    assert result["short_validity"] == 0
+    assert result["out_of_policy"] == 0
+    assert result["certificates"][0]["source"] == "eks"
+    assert result["certificates"][0]["provider_managed"] is True
+    assert result["certificates"][0]["rotation_evidence_hidden"] is True
+    assert "auto_rotated" not in result["certificates"][0]
+    assert all(test["passed"] and test["skipped"] for test in result["tests"].values())
+
+
+def test_cert_rotation_treats_private_eks_endpoint_certs_as_provider_managed(
+    cert_rotation_module: ModuleType,
+) -> None:
+    """Private-only EKS API endpoint certificates are AWS-managed and not probed."""
+    eks = FakeCertRotationEks(
+        {
+            "private-cluster": {
+                "endpoint": "https://private.eks.test.local",
+                "resourcesVpcConfig": {
+                    "endpointPublicAccess": False,
+                    "endpointPrivateAccess": True,
+                },
+            }
+        }
+    )
+
+    result = cert_rotation_module._run_cert_rotation_test(eks, "us-west-2")
+
+    record = result["certificates"][0]
+    assert result["success"] is True
+    assert result["skipped"] is True
+    assert result["certs_inspected"] == 1
+    assert result["auto_rotated"] == 0
+    assert result["short_validity"] == 0
+    assert result["out_of_policy"] == 0
+    assert "inspection_errors" not in result
+    assert record["source"] == "eks"
+    assert record["provider_managed"] is True
+    assert record["rotation_evidence_hidden"] is True
+    assert "out_of_policy" not in record
+    assert record["endpoint_private_access"] is True
+
+
+def test_cert_rotation_reports_skipped_when_no_eks_clusters(cert_rotation_module: ModuleType) -> None:
+    """SEC09-01 skips cleanly when no EKS control-plane cert inventory exists."""
+    result = cert_rotation_module._run_cert_rotation_test(FakeCertRotationEks(), "us-west-2")
+
+    assert result["success"] is True
+    assert result["skipped"] is True
+    assert result["skip_reason"] == "No managed TLS certificates found on this platform"
+    assert result["certs_inspected"] == 0
+    assert all(test["passed"] and test["skipped"] for test in result["tests"].values())
+
+
+def test_cert_rotation_caps_eks_inventory_at_sample_limit(cert_rotation_module: ModuleType) -> None:
+    """EKS cluster inspection stops at MAX_CERTS_PER_SOURCE so the step stays within the YAML timeout."""
+    limit = cert_rotation_module.MAX_CERTS_PER_SOURCE
+    eks = FakeCertRotationEks({f"cluster-{i}": f"https://cluster-{i}.eks.test.local" for i in range(limit + 5)})
+
+    result = cert_rotation_module._run_cert_rotation_test(eks, "us-west-2")
+
+    eks_records = [r for r in result["certificates"] if r["source"] == "eks"]
+    assert len(eks_records) == limit
+    assert eks.describe_call_count == limit
+    assert result["sample_limit_per_source"] == limit
+
+
+@pytest.fixture(scope="module")
+def kms_options_module() -> ModuleType:
+    """Load the KMS encryption options script as a module."""
+    return _load_security_script("kms_encryption_options_test.py")
+
+
+class FakeKmsOptionsKms:
+    """Fake KMS client for SEC09-02 tests."""
+
+    def __init__(
+        self,
+        *,
+        provider_key_manager: str = "AWS",
+        schedule_error: ClientError | None = None,
+        describe_errors: dict[str, ClientError] | None = None,
+        aliases: list[str] | None = None,
+        alias_pages: list[list[str]] | None = None,
+    ) -> None:
+        """Configure provider key metadata and optional cleanup failure."""
+        self.provider_key_manager = provider_key_manager
+        self.schedule_error = schedule_error
+        self.describe_errors = describe_errors or {}
+        self.aliases = aliases if aliases is not None else []
+        self.alias_pages = alias_pages
+        self.scheduled_deletions: list[dict[str, Any]] = []
+
+    def list_aliases(self) -> dict[str, list[dict[str, str]]]:
+        """Return fake KMS aliases."""
+        return {"Aliases": [{"AliasName": name} for name in self.aliases]}
+
+    def get_paginator(self, operation_name: str) -> FakeKmsAliasPaginator:
+        """Return a fake paginator for alias discovery."""
+        assert operation_name == "list_aliases"
+        if self.alias_pages is None:
+            raise AttributeError("get_paginator")
+        return FakeKmsAliasPaginator(self.alias_pages)
+
+    def describe_key(self, KeyId: str) -> dict[str, dict[str, Any]]:
+        """Return fake provider or customer key metadata."""
+        if KeyId in self.describe_errors:
+            raise self.describe_errors[KeyId]
+        if KeyId.startswith("alias/aws/"):
+            return {
+                "KeyMetadata": {
+                    "KeyId": "aws-managed-123",
+                    "Arn": "arn:aws:kms:us-west-2:123:key/aws-managed-123",
+                    "KeyManager": self.provider_key_manager,
+                    "KeyState": "Enabled",
+                    "KeyUsage": "ENCRYPT_DECRYPT",
+                }
+            }
+        assert KeyId == "cmk-options-123"
+        return {
+            "KeyMetadata": {
+                "KeyId": "cmk-options-123",
+                "Arn": "arn:aws:kms:us-west-2:123:key/cmk-options-123",
+                "KeyManager": "CUSTOMER",
+                "KeyState": "Enabled",
+                "KeyUsage": "ENCRYPT_DECRYPT",
+            }
+        }
+
+    def create_key(self, **kwargs: Any) -> dict[str, dict[str, Any]]:
+        """Create a fake temporary CMK."""
+        assert kwargs["KeyUsage"] == "ENCRYPT_DECRYPT"
+        return self.describe_key(KeyId="cmk-options-123")
+
+    def schedule_key_deletion(self, **kwargs: Any) -> None:
+        """Record or fail temporary key deletion."""
+        if self.schedule_error:
+            raise self.schedule_error
+        self.scheduled_deletions.append(kwargs)
+
+
+class FakeKmsAliasPaginator:
+    """Fake KMS alias paginator."""
+
+    def __init__(self, alias_pages: list[list[str]]) -> None:
+        """Store pages of alias names."""
+        self.alias_pages = alias_pages
+
+    def paginate(self) -> list[dict[str, list[dict[str, str]]]]:
+        """Return fake list_aliases pages."""
+        return [{"Aliases": [{"AliasName": name} for name in page]} for page in self.alias_pages]
+
+
+def test_kms_options_creates_customer_key_and_schedules_deletion(kms_options_module: ModuleType) -> None:
+    """SEC09-02 passes with AWS-managed and temporary customer-managed keys."""
+    kms = FakeKmsOptionsKms()
+
+    result = kms_options_module._run_kms_encryption_options_test(kms, "us-west-2")
+
+    assert result["success"] is True
+    assert result["provider_managed_key_id"] == "alias/aws/eks"
+    assert result["customer_managed_key_id"] == "cmk-options-123"
+    assert kms.scheduled_deletions == [{"KeyId": "cmk-options-123", "PendingWindowInDays": 7}]
+
+
+def test_kms_options_rejects_provider_alias_that_is_not_aws_managed(kms_options_module: ModuleType) -> None:
+    """SEC09-02 fails when the provider-managed alias does not report KeyManager=AWS."""
+    kms = FakeKmsOptionsKms(provider_key_manager="CUSTOMER")
+
+    result = kms_options_module._run_kms_encryption_options_test(kms, "us-west-2")
+
+    assert result["success"] is False
+    assert result["tests"]["provider_managed_key_available"]["passed"] is False
+    assert result["tests"]["customer_managed_key_available"]["passed"] is True
+    assert kms.scheduled_deletions == [{"KeyId": "cmk-options-123", "PendingWindowInDays": 7}]
+
+
+def test_kms_options_skips_when_only_generic_aliases_are_discovered(
+    kms_options_module: ModuleType,
+) -> None:
+    """SEC09-02 skips when only generic AWS-managed aliases are visible.
+
+    Generic AWS-managed service keys are not scoped control-plane evidence, so
+    discovery is diagnostic only and must not pass the control.
+    """
+    kms = FakeKmsOptionsKms(
+        describe_errors={
+            "alias/aws/eks": _client_error("DescribeKey", code="NotFoundException"),
+        },
+        aliases=["alias/aws/ebs", "alias/aws/lambda"],
+    )
+
+    result = kms_options_module._run_kms_encryption_options_test(kms, "us-west-2")
+
+    assert result["success"] is True
+    assert result["skipped"] is True
+    assert "only non-control-plane AWS-managed aliases" in result["skip_reason"]
+    assert "alias/aws/ebs" in result["skip_reason"]
+    assert result["provider_managed_key_id"] == ""
+    assert result["customer_managed_key_id"] == ""
+    assert kms.scheduled_deletions == []
+
+
+def test_kms_options_discovers_aws_managed_aliases_across_pages(kms_options_module: ModuleType) -> None:
+    """SEC09-02 alias discovery checks every KMS list_aliases page."""
+    kms = FakeKmsOptionsKms(alias_pages=[["alias/customer/team-a"], ["alias/aws/s3"]])
+
+    discovered, errors = kms_options_module._discover_aws_managed_aliases(kms)
+
+    assert errors == []
+    assert discovered == ["alias/aws/s3"]
+
+
+def test_kms_options_fails_when_no_aws_managed_alias_exists(kms_options_module: ModuleType) -> None:
+    """SEC09-02 fails cleanly when no AWS-managed alias is reachable."""
+    kms = FakeKmsOptionsKms(
+        describe_errors={
+            "alias/aws/eks": _client_error("DescribeKey", code="NotFoundException"),
+        },
+        aliases=[],
+    )
+
+    result = kms_options_module._run_kms_encryption_options_test(kms, "us-west-2")
+
+    assert result["success"] is False
+    assert result["tests"]["provider_managed_key_available"]["passed"] is False
+    assert "alias/aws/eks" in result["tests"]["provider_managed_key_available"]["error"]
+
+
+def test_kms_options_fails_when_temporary_key_cleanup_fails(kms_options_module: ModuleType) -> None:
+    """SEC09-02 reports cleanup failures because the temporary CMK would leak."""
+    kms = FakeKmsOptionsKms(schedule_error=_client_error("ScheduleKeyDeletion"))
+
+    result = kms_options_module._run_kms_encryption_options_test(kms, "us-west-2")
+
+    assert result["success"] is False
+    assert "cleanup_errors" in result
+    assert "schedule key deletion cmk-options-123" in result["cleanup_errors"][0]
+    assert result["tests"]["both_options_supported"]["passed"] is False
+    assert "Cleanup failed" in result["tests"]["both_options_supported"]["error"]
+
+
+@pytest.fixture(scope="module")
+def centralized_kms_module() -> ModuleType:
+    """Load the centralized KMS script as a module."""
+    return _load_security_script("centralized_kms_test.py")
+
+
+class FakeCentralizedKms:
+    """Fake KMS client for SEC09-03 tests."""
+
+    def __init__(self, keys: list[str] | None = None, missing_keys: set[str] | None = None) -> None:
+        """Store visible and non-resolving key ids."""
+        self.keys = keys if keys is not None else ["key-1"]
+        self.missing_keys = missing_keys or set()
+
+    def list_keys(self) -> dict[str, list[dict[str, str]]]:
+        """Return fake KMS keys."""
+        return {"Keys": [{"KeyId": key_id} for key_id in self.keys]}
+
+    def describe_key(self, KeyId: str) -> dict[str, dict[str, str]]:
+        """Resolve fake KMS key ids."""
+        if KeyId in self.missing_keys:
+            raise _client_error("DescribeKey", code="NotFoundException")
+        return {"KeyMetadata": {"KeyId": KeyId, "KeyState": "Enabled"}}
+
+
+class FakeCentralizedEc2:
+    """Fake EC2 client for SEC09-03 tests."""
+
+    def __init__(self, volumes: list[dict[str, Any]] | None = None) -> None:
+        """Store fake EBS volumes."""
+        self.volumes = (
+            volumes if volumes is not None else [{"VolumeId": "vol-1", "Encrypted": True, "KmsKeyId": "key-1"}]
+        )
+
+    def describe_volumes(self, **kwargs: Any) -> dict[str, list[dict[str, Any]]]:
+        """Return fake encrypted volumes."""
+        assert kwargs == {"Filters": [{"Name": "encrypted", "Values": ["true"]}]}
+        return {"Volumes": self.volumes}
+
+
+class FakeCentralizedEks:
+    """Fake EKS client for SEC09-03 tests."""
+
+    def __init__(self, clusters: dict[str, dict[str, Any]] | None = None) -> None:
+        """Store fake EKS cluster descriptions."""
+        self.clusters = clusters or {}
+        self.described: list[str] = []
+
+    def list_clusters(self, **kwargs: Any) -> dict[str, list[str]]:
+        """Return fake EKS clusters."""
+        assert kwargs in ({}, {"nextToken": ""})
+        return {"clusters": list(self.clusters)}
+
+    def describe_cluster(self, name: str) -> dict[str, dict[str, Any]]:
+        """Return fake EKS cluster metadata."""
+        self.described.append(name)
+        return {"cluster": self.clusters[name]}
+
+
+def test_centralized_kms_accepts_resources_that_resolve_to_kms(centralized_kms_module: ModuleType) -> None:
+    """SEC09-03 passes when sampled encrypted resources resolve through KMS."""
+    eks = FakeCentralizedEks({"cluster-a": {"encryptionConfig": [{"provider": {"keyArn": "key-1"}}]}})
+
+    result = centralized_kms_module._run_centralized_kms_test(
+        FakeCentralizedKms(),
+        FakeCentralizedEc2(),
+        eks,
+        "us-west-2",
+    )
+
+    assert result["success"] is True
+    assert result["kms_keys_total"] == 1
+    assert result["encrypted_resources_inspected"] == 2
+    assert result["non_kms_resources"] == 0
+
+
+def test_centralized_kms_limits_eks_cluster_descriptions(centralized_kms_module: ModuleType) -> None:
+    """SEC09-03 caps EKS cluster descriptions even when no clusters expose KMS providers."""
+    limit = centralized_kms_module.MAX_RESOURCES_PER_SERVICE
+    eks = FakeCentralizedEks({f"cluster-{idx}": {} for idx in range(limit + 5)})
+    details: list[str] = []
+
+    inspected = centralized_kms_module._inspect_eks_clusters(eks, FakeCentralizedKms(), details)
+
+    assert inspected == 0
+    assert details == []
+    assert len(eks.described) == limit
+
+
+def test_centralized_kms_flags_encrypted_volume_without_kms_key(centralized_kms_module: ModuleType) -> None:
+    """SEC09-03 fails when an encrypted volume has no resolvable KMS key id."""
+    ec2 = FakeCentralizedEc2([{"VolumeId": "vol-no-key", "Encrypted": True}])
+
+    result = centralized_kms_module._run_centralized_kms_test(
+        FakeCentralizedKms(),
+        ec2,
+        FakeCentralizedEks(),
+        "us-west-2",
+    )
+
+    assert result["success"] is False
+    assert result["non_kms_resources"] == 1
+    assert "ec2:vol-no-key" in result["non_kms_details"][0]
+
+
+def test_centralized_kms_separates_inspection_errors_from_non_kms_count(
+    centralized_kms_module: ModuleType,
+) -> None:
+    """SEC09-03 surfaces inspection errors without inflating non_kms_resources.
+
+    A read-only AWS permission gap raising ClientError must not be reported
+    as 'N encrypted resource(s) not using KMS' in the failure message.
+    """
+
+    class RaisingEc2:
+        """Fake EC2 client whose service-level describe call raises ClientError."""
+
+        def describe_volumes(self, **kwargs: Any) -> dict[str, list[dict[str, Any]]]:
+            """Fake EC2 describe_volumes that always raises AccessDenied."""
+            raise _client_error("DescribeVolumes", code="AccessDenied")
+
+    result = centralized_kms_module._run_centralized_kms_test(
+        FakeCentralizedKms(),
+        RaisingEc2(),
+        FakeCentralizedEks(),
+        "us-west-2",
+    )
+
+    assert result["success"] is False
+    assert result["non_kms_resources"] == 0
+    assert result["non_kms_details"] == []
+    assert len(result["inspection_errors"]) == 1
+    assert any("ec2:" in err for err in result["inspection_errors"])
+    error_message = result["tests"]["all_encrypted_resources_use_kms"]["error"]
+    assert "Inspection errors" in error_message
+
+
+def test_centralized_kms_requires_visible_kms_keys(centralized_kms_module: ModuleType) -> None:
+    """SEC09-03 fails when KMS is reachable but no keys are visible."""
+    result = centralized_kms_module._run_centralized_kms_test(
+        FakeCentralizedKms(keys=[]),
+        FakeCentralizedEc2(volumes=[]),
+        FakeCentralizedEks(),
+        "us-west-2",
+    )
+
+    assert result["success"] is False
+    assert result["tests"]["kms_service_reachable"]["passed"] is True
+    assert result["tests"]["kms_keys_present"]["passed"] is False
+
+
+@pytest.fixture(scope="module")
 def byok_module() -> ModuleType:
     """Load the customer-managed key script as a module."""
     return _load_security_script("customer_managed_key_test.py")
@@ -2275,7 +2708,6 @@ def test_short_lived_credentials_main_passes_with_bounded_ttls(
     short_lived_module: ModuleType,
 ) -> None:
     """Both probes pass when STS returns bounded TTLs, and the test user is cleaned up."""
-    from datetime import datetime, timedelta
 
     now = datetime.now(UTC)
     iam = FakeShortLivedIam()
@@ -2328,7 +2760,6 @@ def test_short_lived_credentials_main_fails_when_node_ttl_exceeds_bound(
     short_lived_module: ModuleType,
 ) -> None:
     """Node TTL above the configured bound fails the within-bound probe and still cleans up."""
-    from datetime import datetime, timedelta
 
     now = datetime.now(UTC)
     iam = FakeShortLivedIam()
@@ -2495,7 +2926,6 @@ def test_short_lived_credentials_main_retries_node_probe_on_eventual_consistency
     short_lived_module: ModuleType,
 ) -> None:
     """A burst of InvalidClientTokenId errors is retried until STS sees the new key."""
-    from datetime import datetime, timedelta
 
     now = datetime.now(UTC)
     iam = FakeShortLivedIam()
@@ -2547,7 +2977,6 @@ def test_short_lived_credentials_main_records_workload_error_and_keeps_node_pass
     short_lived_module: ModuleType,
 ) -> None:
     """A workload-side STS error is captured per-probe with op + code + message; node probe still passes."""
-    from datetime import datetime, timedelta
 
     now = datetime.now(UTC)
     iam = FakeShortLivedIam()
@@ -2584,7 +3013,6 @@ def test_short_lived_credentials_main_handles_missing_expiration(
     short_lived_module: ModuleType,
 ) -> None:
     """Missing Credentials.Expiration in either response surfaces as a per-probe error."""
-    from datetime import datetime, timedelta
 
     now = datetime.now(UTC)
     iam = FakeShortLivedIam()
@@ -2611,7 +3039,6 @@ def test_short_lived_credentials_main_records_cleanup_failure(
     short_lived_module: ModuleType,
 ) -> None:
     """Successful probes are reported failed when IAM cleanup fails."""
-    from datetime import datetime, timedelta
 
     now = datetime.now(UTC)
     iam = FakeShortLivedIam(delete_user_error=_client_error("DeleteUser", code="ServiceUnavailable"))

@@ -681,3 +681,18 @@ class TestTenantIsolationCheck:
 
         assert result["passed"] is False
         assert "tests" in result["error"].lower()
+
+    def test_skips_when_step_marks_skipped(self) -> None:
+        """TenantIsolationCheck pytest.skips through both run() and execute() when flagged."""
+        step_output = {
+            "success": True,
+            "skipped": True,
+            "skip_reason": "tenant isolation fixture not provisionable (AccessDenied)",
+            "tests": {},
+        }
+
+        with pytest.raises(pytest.skip.Exception, match="tenant isolation fixture not provisionable"):
+            TenantIsolationCheck(config={"step_output": step_output}).run()
+
+        with pytest.raises(pytest.skip.Exception, match="tenant isolation fixture not provisionable"):
+            TenantIsolationCheck(config={"step_output": step_output}).execute()

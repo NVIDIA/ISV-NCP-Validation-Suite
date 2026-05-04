@@ -123,6 +123,8 @@ class TenantIsolationCheck(BaseValidation):
     def run(self) -> None:
         """Validate the four tenant-isolation sub-claims from step output."""
         step_output = self.config.get("step_output", {})
+        if step_output.get("skipped") is True:
+            pytest.skip(step_output.get("skip_reason") or "Tenant isolation validation skipped (not configured)")
 
         for field in ("tenant_a_id", "tenant_b_id"):
             value = step_output.get(field)

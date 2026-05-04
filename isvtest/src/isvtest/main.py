@@ -96,7 +96,13 @@ def run_validations_via_pytest(
             # Env override is set: enumerate which configured validations are being included that would
             # otherwise be gated, so it's obvious in the log which unreleased checks are actually running.
             logger.info(f"Including unreleased validations because {INCLUDE_UNRELEASED_ENV} is enabled")
-            manifest = load_released_tests()
+            # Manifest read is for log diffing only; failure must not abort the unreleased run since
+            # that's the path that exists precisely to bypass the gate.
+            try:
+                manifest = load_released_tests()
+            except (FileNotFoundError, ValueError) as exc:
+                logger.warning(f"Could not diff against released_tests.json: {exc}")
+                manifest = set()
             for name in _iter_configured_validation_names(validations):
                 if name not in manifest:
                     logger.info(f"Including unreleased validation '{name}' (not in manifest)")

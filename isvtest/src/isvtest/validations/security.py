@@ -97,7 +97,7 @@ class TenantIsolationCheck(BaseValidation):
 
     * ``network_isolated``  -- tenant A's network has no route to tenant B's
       network (no peering, no shared route, SG/NACL deny).
-    * ``data_isolated``     -- tenant A is denied ``kms:Decrypt`` on tenant
+    * ``data_isolated``     -- tenant A is denied ``kms:Encrypt`` on tenant
       B's CMK and ``s3:GetObject`` on tenant B's bucket.
     * ``compute_isolated``  -- tenant A is denied ``ec2:*`` /
       ``ssm:StartSession`` against tenant B's instance.

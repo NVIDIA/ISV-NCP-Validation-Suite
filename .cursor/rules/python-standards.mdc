@@ -20,6 +20,18 @@ alwaysApply: false
 - Return types must be explicitly specified for all functions
 - Maintain existing comments when modifying files
 
+## Imports
+
+- Place all imports at the top of the file
+- Defer imports inside functions only with a one-line comment giving the reason (import cycle, lazy expensive dep, side effects)
+- If a function-local import is from a module that's already imported at the top of the file, fold it into the top-level import (the deferred form is a stale leftover, not load-bearing)
+
+## Line Length
+
+- Code: respect `[tool.ruff] line-length` (120)
+- Comments and docstrings: wrap at ~100 for readability (prose at 120 reads as a wall)
+- `E501` is ignored in this repo, so the linter won't catch long comments — apply both limits at authoring time
+
 ## Testing Requirements
 
 - Use pytest exclusively (no unittest)

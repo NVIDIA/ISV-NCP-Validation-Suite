@@ -2732,10 +2732,12 @@ class FakeOrchestratorEc2:
         *,
         peerings: list[dict[str, Any]] | None = None,
         route_tables: list[dict[str, Any]] | None = None,
+        tgw_attachments: list[dict[str, Any]] | None = None,
     ) -> None:
-        """Configure peering connections and route tables to return."""
+        """Configure peering connections, route tables, and TGW attachments to return."""
         self.peerings = peerings or []
         self.route_tables = route_tables or []
+        self.tgw_attachments = tgw_attachments or []
 
     def describe_vpc_peering_connections(self, **_kwargs: Any) -> dict[str, list[dict[str, Any]]]:
         """Return configured peering connections."""
@@ -2744,6 +2746,10 @@ class FakeOrchestratorEc2:
     def describe_route_tables(self, **_kwargs: Any) -> dict[str, list[dict[str, Any]]]:
         """Return configured route tables."""
         return {"RouteTables": self.route_tables}
+
+    def describe_transit_gateway_vpc_attachments(self, **_kwargs: Any) -> dict[str, list[dict[str, Any]]]:
+        """Return configured Transit Gateway VPC attachments."""
+        return {"TransitGatewayVpcAttachments": self.tgw_attachments}
 
 
 def test_probe_network_isolation_passes_when_no_peering_or_shared_route(
@@ -2765,6 +2771,61 @@ def test_probe_network_isolation_passes_when_no_peering_or_shared_route(
 
     assert result["passed"] is True
     assert "No peering" in result["message"]
+    assert "transit gateway" in result["message"]
+
+
+def test_probe_network_isolation_fails_when_shared_tgw_attachment_exists(
+    tenant_isolation_module: ModuleType,
+) -> None:
+    """Fail when a single Transit Gateway is attached to BOTH tenant VPCs."""
+    a = _make_tenant(tenant_isolation_module, "aaaa1111", "10.94.0.0/24")
+    b = _make_tenant(tenant_isolation_module, "bbbb2222", "10.95.0.0/24")
+    ec2 = FakeOrchestratorEc2(
+        tgw_attachments=[
+            {"TransitGatewayId": "tgw-leak", "VpcId": a.vpc_id, "State": "available"},
+            {"TransitGatewayId": "tgw-leak", "VpcId": b.vpc_id, "State": "available"},
+        ],
+    )
+
+    result = tenant_isolation_module._probe_network_isolation(ec2, a, b)
+
+    assert result["passed"] is False
+    assert "Transit Gateway tgw-leak" in result["error"]
+
+
+def test_probe_network_isolation_passes_when_tgw_attached_to_only_one_vpc(
+    tenant_isolation_module: ModuleType,
+) -> None:
+    """A TGW attached to only one tenant VPC is not a cross-tenant bridge."""
+    a = _make_tenant(tenant_isolation_module, "aaaa1111", "10.94.0.0/24")
+    b = _make_tenant(tenant_isolation_module, "bbbb2222", "10.95.0.0/24")
+    ec2 = FakeOrchestratorEc2(
+        tgw_attachments=[
+            {"TransitGatewayId": "tgw-only-a", "VpcId": a.vpc_id, "State": "available"},
+        ],
+    )
+
+    result = tenant_isolation_module._probe_network_isolation(ec2, a, b)
+
+    assert result["passed"] is True
+
+
+def test_probe_network_isolation_ignores_deleted_tgw_attachment(
+    tenant_isolation_module: ModuleType,
+) -> None:
+    """A TGW attachment in 'deleted' state must not count as a live bridge."""
+    a = _make_tenant(tenant_isolation_module, "aaaa1111", "10.94.0.0/24")
+    b = _make_tenant(tenant_isolation_module, "bbbb2222", "10.95.0.0/24")
+    ec2 = FakeOrchestratorEc2(
+        tgw_attachments=[
+            {"TransitGatewayId": "tgw-stale", "VpcId": a.vpc_id, "State": "deleted"},
+            {"TransitGatewayId": "tgw-stale", "VpcId": b.vpc_id, "State": "deleted"},
+        ],
+    )
+
+    result = tenant_isolation_module._probe_network_isolation(ec2, a, b)
+
+    assert result["passed"] is True
 
 
 def test_probe_network_isolation_fails_when_active_peering_exists(

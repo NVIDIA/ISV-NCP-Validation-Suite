@@ -41,7 +41,7 @@ from typing import Any
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, WaiterError
 from common.errors import delete_with_retry, handle_aws_errors
 
 OWNED_USER_PREFIXES: tuple[str, ...] = ("isv-sa-test-", "isv-sec02-test-", "isv-sec11-test-")
@@ -139,12 +139,19 @@ def _cleanup_sec11_instances(ec2: Any) -> list[str]:
 
     try:
         ec2.terminate_instances(InstanceIds=instance_ids)
+    except ClientError as e:
+        errors.append(f"terminate instances {instance_ids}: {e}")
+        return errors
+    try:
         ec2.get_waiter("instance_terminated").wait(
             InstanceIds=instance_ids,
             WaiterConfig={"Delay": 5, "MaxAttempts": 60},
         )
-    except ClientError as e:
-        errors.append(f"terminate instances {instance_ids}: {e}")
+    except (ClientError, WaiterError) as e:
+        # ``pending`` is a terminal failure for the InstanceTerminated
+        # waiter; happens when a previous run died mid-launch. Volume
+        # delete is retry-driven downstream, so log and move on.
+        errors.append(f"wait terminated {instance_ids}: {e}")
     return errors
 
 

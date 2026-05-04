@@ -67,8 +67,8 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import boto3
-from botocore.exceptions import ClientError
-from common.errors import delete_with_retry, handle_aws_errors
+from botocore.exceptions import BotoCoreError, ClientError, WaiterError
+from common.errors import classify_aws_error, delete_with_retry, handle_aws_errors
 
 TEST_NAME = "tenant_isolation_test"
 TENANT_PREFIX = "isv-sec11-test-"
@@ -98,6 +98,11 @@ DENY_CODES = frozenset({"AccessDenied", "AccessDeniedException", "UnauthorizedOp
 # the cross-tenant probe FAILS.
 DRY_RUN_ALLOWED_CODE = "DryRunOperation"
 
+# TGW VPC-attachment states that still represent a live cross-VPC bridge.
+# Anything outside this set (deleted, deleting, failed, ...) is a stale
+# attachment that can't carry traffic.
+LIVE_TGW_STATES = frozenset({"available", "pending", "modifying", "initiating", "initiatingRequest", "rollingBack"})
+
 
 @dataclass
 class Tenant:
@@ -107,6 +112,7 @@ class Tenant:
     cidr: str
     vpc_id: str = ""
     subnet_id: str = ""
+    availability_zone: str = ""
     sg_id: str = ""
     iam_user_arn: str = ""
     access_key_id: str = ""
@@ -194,6 +200,7 @@ def _create_vpc_and_subnet(ec2: Any, tenant: Tenant) -> None:
     az = ec2.describe_availability_zones(Filters=[{"Name": "state", "Values": ["available"]}])["AvailabilityZones"][0][
         "ZoneName"
     ]
+    tenant.availability_zone = az
     subnet = ec2.create_subnet(VpcId=tenant.vpc_id, CidrBlock=tenant.cidr, AvailabilityZone=az)
     tenant.subnet_id = subnet["Subnet"]["SubnetId"]
     tenant.created["subnet"] = True
@@ -253,9 +260,8 @@ def _launch_instance(ec2: Any, tenant: Tenant, ami_id: str) -> None:
 
 def _create_volume(ec2: Any, tenant: Tenant) -> None:
     """Create a 1 GiB gp3 EBS volume in the tenant's AZ."""
-    az = ec2.describe_subnets(SubnetIds=[tenant.subnet_id])["Subnets"][0]["AvailabilityZone"]
     response = ec2.create_volume(
-        AvailabilityZone=az,
+        AvailabilityZone=tenant.availability_zone,
         Size=VOLUME_SIZE_GIB,
         VolumeType="gp3",
         TagSpecifications=[{"ResourceType": "volume", "Tags": _isvtest_tags(tenant.name)}],
@@ -290,7 +296,7 @@ def _create_kms_key(kms: Any, tenant: Tenant) -> None:
 
 def _create_s3_bucket(s3: Any, tenant: Tenant, region: str) -> None:
     """Create a tagged S3 bucket. us-east-1 must NOT pass LocationConstraint."""
-    bucket = f"{tenant.name}-{uuid.uuid4().hex[:6]}"
+    bucket = f"{tenant.name}-{uuid.uuid4().hex[:8]}"
     create_kwargs: dict[str, Any] = {"Bucket": bucket}
     if region != "us-east-1":
         create_kwargs["CreateBucketConfiguration"] = {"LocationConstraint": region}
@@ -368,14 +374,23 @@ def _teardown_tenant(
     errors: list[str] = []
 
     if tenant.created.get("instance") and tenant.instance_id:
+        # NB: catch WaiterError too -- the InstanceTerminated waiter treats
+        # "pending" as a terminal failure, which fires when setup raised
+        # before the instance reached running. Letting it propagate would
+        # mask the original error (and skip the rest of cleanup); the
+        # safety-net teardown step picks up any leftover instance.
         try:
             ec2.terminate_instances(InstanceIds=[tenant.instance_id])
-            ec2.get_waiter("instance_terminated").wait(
-                InstanceIds=[tenant.instance_id],
-                WaiterConfig={"Delay": 5, "MaxAttempts": 60},
-            )
         except ClientError as e:
             errors.append(f"terminate instance {tenant.instance_id}: {e}")
+        else:
+            try:
+                ec2.get_waiter("instance_terminated").wait(
+                    InstanceIds=[tenant.instance_id],
+                    WaiterConfig={"Delay": 5, "MaxAttempts": 60},
+                )
+            except (ClientError, WaiterError) as e:
+                errors.append(f"wait terminated {tenant.instance_id}: {e}")
 
     if tenant.created.get("volume") and tenant.volume_id:
         if not delete_with_retry(
@@ -489,6 +504,15 @@ def _classify_dry_run(exc: ClientError) -> str:
     return "other"
 
 
+def _build_probe_result(probes: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate per-probe results into the ``passed`` / ``probes`` / ``error`` envelope."""
+    passed = all(p["passed"] for p in probes)
+    result: dict[str, Any] = {"passed": passed, "probes": probes}
+    if not passed:
+        result["error"] = "; ".join(p.get("error", p.get("code", "")) for p in probes if not p["passed"])
+    return result
+
+
 def _wait_for_iam_propagation(sts_a: Any) -> None:
     """Block until tenant A's STS client can call GetCallerIdentity (or give up)."""
     for attempt in range(IAM_PROPAGATION_MAX_ATTEMPTS):
@@ -523,12 +547,13 @@ def _build_tenant_clients(tenant: Tenant, region: str) -> dict[str, Any]:
 
 
 def _probe_network_isolation(orchestrator_ec2: Any, tenant_a: Tenant, tenant_b: Tenant) -> dict[str, Any]:
-    """Verify no peering and no shared route between tenant A's and B's VPCs.
+    """Verify no peering, TGW attachment, or shared route between tenant A and B.
 
-    This is a config-plane check (mirrors bmc_isolation_test.py): in AWS,
-    two freshly created VPCs are unreachable to each other unless a
-    peering connection or transit gateway is wired in. We assert no such
-    plumbing exists.
+    Config-plane check (mirrors bmc_isolation_test.py): two freshly created
+    VPCs in AWS are unreachable to each other unless cross-VPC plumbing is
+    wired in. We assert none of the three common mechanisms exists --
+    VPC peering, Transit Gateway attachment binding both VPCs, or a route
+    in tenant A's route tables targeting tenant B's CIDR.
     """
     peerings = orchestrator_ec2.describe_vpc_peering_connections(
         Filters=[
@@ -543,6 +568,32 @@ def _probe_network_isolation(orchestrator_ec2: Any, tenant_a: Tenant, tenant_b: 
         return {
             "passed": False,
             "error": f"VPC peering exists between tenant A ({tenant_a.vpc_id}) and tenant B ({tenant_b.vpc_id})",
+        }
+
+    # Transit Gateway: a TGW attached to BOTH VPCs is a separate teleport
+    # mechanism that would route around the peering check above. We
+    # describe attachments for either VPC and flag any TGW that appears
+    # for both.
+    tgw_attachments = orchestrator_ec2.describe_transit_gateway_vpc_attachments(
+        Filters=[{"Name": "vpc-id", "Values": [tenant_a.vpc_id, tenant_b.vpc_id]}]
+    ).get("TransitGatewayVpcAttachments", [])
+    by_tgw: dict[str, set[str]] = {}
+    for att in tgw_attachments:
+        if att.get("State") not in LIVE_TGW_STATES:
+            continue
+        tgw_id = att.get("TransitGatewayId")
+        vpc_id = att.get("VpcId")
+        if not tgw_id or not vpc_id:
+            continue
+        by_tgw.setdefault(tgw_id, set()).add(vpc_id)
+    shared_tgws = [tgw_id for tgw_id, vpcs in by_tgw.items() if {tenant_a.vpc_id, tenant_b.vpc_id}.issubset(vpcs)]
+    if shared_tgws:
+        return {
+            "passed": False,
+            "error": (
+                f"Transit Gateway {shared_tgws[0]} bridges tenant A ({tenant_a.vpc_id}) "
+                f"and tenant B ({tenant_b.vpc_id})"
+            ),
         }
 
     tenant_b_cidrs = {tenant_b.cidr}
@@ -563,8 +614,8 @@ def _probe_network_isolation(orchestrator_ec2: Any, tenant_a: Tenant, tenant_b: 
     return {
         "passed": True,
         "message": (
-            f"No peering or shared route between tenant A VPC {tenant_a.vpc_id} ({tenant_a.cidr}) "
-            f"and tenant B VPC {tenant_b.vpc_id} ({tenant_b.cidr})"
+            f"No peering, transit gateway, or shared route between tenant A VPC {tenant_a.vpc_id} "
+            f"({tenant_a.cidr}) and tenant B VPC {tenant_b.vpc_id} ({tenant_b.cidr})"
         ),
     }
 
@@ -602,16 +653,7 @@ def _probe_data_isolation(clients_a: dict[str, Any], tenant_b: Tenant) -> dict[s
     else:
         probes.append({"name": "s3_get_object_denied", "passed": False, "error": "s3:GetObject unexpectedly succeeded"})
 
-    passed = all(p["passed"] for p in probes)
-    return {
-        "passed": passed,
-        "probes": probes,
-        **(
-            {"error": "; ".join(p.get("error", p.get("code", "")) for p in probes if not p["passed"])}
-            if not passed
-            else {}
-        ),
-    }
+    return _build_probe_result(probes)
 
 
 def _probe_compute_isolation(clients_a: dict[str, Any], tenant_b: Tenant) -> dict[str, Any]:
@@ -655,16 +697,7 @@ def _probe_compute_isolation(clients_a: dict[str, Any], tenant_b: Tenant) -> dic
             {"name": "ssm_start_session_denied", "passed": False, "error": "ssm:StartSession unexpectedly succeeded"}
         )
 
-    passed = all(p["passed"] for p in probes)
-    return {
-        "passed": passed,
-        "probes": probes,
-        **(
-            {"error": "; ".join(p.get("error", p.get("code", "")) for p in probes if not p["passed"])}
-            if not passed
-            else {}
-        ),
-    }
+    return _build_probe_result(probes)
 
 
 def _probe_storage_isolation(clients_a: dict[str, Any], tenant_a: Tenant, tenant_b: Tenant) -> dict[str, Any]:
@@ -719,16 +752,7 @@ def _probe_storage_isolation(clients_a: dict[str, Any], tenant_a: Tenant, tenant
             }
         )
 
-    passed = all(p["passed"] for p in probes)
-    return {
-        "passed": passed,
-        "probes": probes,
-        **(
-            {"error": "; ".join(p.get("error", p.get("code", "")) for p in probes if not p["passed"])}
-            if not passed
-            else {}
-        ),
-    }
+    return _build_probe_result(probes)
 
 
 # -- Main -----------------------------------------------------------------
@@ -780,6 +804,8 @@ def main() -> int:
         },
     }
 
+    skip_payload: dict[str, Any] | None = None
+
     try:
         try:
             ami_id = _get_amazon_linux_ami(ec2)
@@ -805,65 +831,56 @@ def main() -> int:
             )
         except ClientError as exc:
             code = exc.response.get("Error", {}).get("Code", "")
-            if code in SKIPPABLE_SETUP_ERRORS:
-                # Best-effort cleanup of whatever did get created before reraising as skip.
-                cleanup_errors: list[str] = []
-                if tenant_a is not None:
-                    cleanup_errors.extend(_teardown_tenant(ec2=ec2, iam=iam, kms=kms, s3=s3, tenant=tenant_a))
-                if tenant_b is not None:
-                    cleanup_errors.extend(_teardown_tenant(ec2=ec2, iam=iam, kms=kms, s3=s3, tenant=tenant_b))
-                if cleanup_errors:
-                    print(
-                        json.dumps(
-                            {
-                                "success": False,
-                                "platform": "security",
-                                "test_name": TEST_NAME,
-                                "error": (f"setup failed: {exc}; cleanup left orphans: " + "; ".join(cleanup_errors)),
-                                "cleanup_errors": cleanup_errors,
-                                "tests": {},
-                            },
-                            indent=2,
-                        )
-                    )
-                    return 1
-                print(
-                    json.dumps(
-                        _skipped_result(
-                            f"cannot provision SEC11-01 tenant fixture: {exc}; "
-                            "orchestrator principal needs ec2/iam/kms/s3 create+delete perms "
-                            "(see script docstring)"
-                        ),
-                        indent=2,
-                    )
+            if code in SKIPPABLE_SETUP_ERRORS and tenant_a is None and tenant_b is None:
+                # Pure-permission denial with NO partial state -- emit a skip
+                # so the validation pytest.skips rather than fabricating a pass.
+                skip_payload = _skipped_result(
+                    f"cannot provision SEC11-01 tenant fixture: {exc}; "
+                    "orchestrator principal needs ec2/iam/kms/s3 create+delete perms "
+                    "(see script docstring)"
                 )
-                return 0
-            raise
+            else:
+                raise
 
-        result["tenant_a_id"] = tenant_a.name
-        result["tenant_b_id"] = tenant_b.name
+        if tenant_a is not None and tenant_b is not None:
+            result["tenant_a_id"] = tenant_a.name
+            result["tenant_b_id"] = tenant_b.name
 
-        clients_a = _build_tenant_clients(tenant_a, region)
-        _wait_for_iam_propagation(clients_a["sts"])
+            clients_a = _build_tenant_clients(tenant_a, region)
+            _wait_for_iam_propagation(clients_a["sts"])
 
-        result["tests"]["network_isolated"] = _probe_network_isolation(ec2, tenant_a, tenant_b)
-        result["tests"]["data_isolated"] = _probe_data_isolation(clients_a, tenant_b)
-        result["tests"]["compute_isolated"] = _probe_compute_isolation(clients_a, tenant_b)
-        result["tests"]["storage_isolated"] = _probe_storage_isolation(clients_a, tenant_a, tenant_b)
+            result["tests"]["network_isolated"] = _probe_network_isolation(ec2, tenant_a, tenant_b)
+            result["tests"]["data_isolated"] = _probe_data_isolation(clients_a, tenant_b)
+            result["tests"]["compute_isolated"] = _probe_compute_isolation(clients_a, tenant_b)
+            result["tests"]["storage_isolated"] = _probe_storage_isolation(clients_a, tenant_a, tenant_b)
 
-        result["success"] = all(t.get("passed") for t in result["tests"].values())
+            result["success"] = all(t.get("passed") for t in result["tests"].values())
+    except (ClientError, WaiterError, BotoCoreError) as exc:
+        # Capture the FIRST error before cleanup runs, otherwise a downstream
+        # WaiterError from terminating a still-pending instance would mask
+        # the real cause (IAM limit, VPC limit, ResourceLimitExceeded, ...).
+        error_type, error_msg = classify_aws_error(exc)
+        result["error"] = f"[{error_type}] {error_msg}"
+        result["success"] = False
     finally:
-        cleanup_errors = []
-        if tenant_a is not None:
-            cleanup_errors.extend(_teardown_tenant(ec2=ec2, iam=iam, kms=kms, s3=s3, tenant=tenant_a))
-        if tenant_b is not None:
-            cleanup_errors.extend(_teardown_tenant(ec2=ec2, iam=iam, kms=kms, s3=s3, tenant=tenant_b))
+        cleanup_errors: list[str] = []
+        for tenant in (tenant_a, tenant_b):
+            if tenant is None:
+                continue
+            try:
+                cleanup_errors.extend(_teardown_tenant(ec2=ec2, iam=iam, kms=kms, s3=s3, tenant=tenant))
+            except (ClientError, WaiterError, BotoCoreError) as exc:
+                cleanup_errors.append(f"unexpected cleanup error for {tenant.name}: {type(exc).__name__}: {exc}")
         if cleanup_errors:
             result["cleanup_errors"] = cleanup_errors
             cleanup_msg = f"Cleanup failed: {'; '.join(cleanup_errors)}"
             existing = result.get("error")
             result["error"] = f"{existing}; {cleanup_msg}" if existing else cleanup_msg
             result["success"] = False
+
+    if skip_payload is not None and not result.get("cleanup_errors"):
+        print(json.dumps(skip_payload, indent=2))
+        return 0
 
     print(json.dumps(result, indent=2, default=str))
     return 0 if result["success"] else 1

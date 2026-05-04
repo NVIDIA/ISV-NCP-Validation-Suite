@@ -139,9 +139,7 @@ def main() -> int:
     if args.check:
         missing = check_headers(files)
         if missing:
-            print(
-                f"\n{missing} file(s) missing SPDX headers. Run 'make update-spdx-headers' to fix."
-            )
+            print(f"\n{missing} file(s) missing SPDX headers. Run 'make update-spdx-headers' to fix.")
             return 1
         print("\nAll files have SPDX headers.")
         return 0

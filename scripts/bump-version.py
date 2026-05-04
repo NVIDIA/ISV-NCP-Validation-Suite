@@ -68,15 +68,9 @@ def _load_release_manifest_version(manifest_path: Path) -> str:
     version = data.get("version")
     tests = data.get("tests")
     if not isinstance(version, str) or not version:
-        raise ValueError(
-            "released test manifest requires non-empty string field 'version'"
-        )
-    if not isinstance(tests, list) or not all(
-        isinstance(name, str) and name for name in tests
-    ):
-        raise ValueError(
-            "released test manifest requires 'tests' to be a list of non-empty strings"
-        )
+        raise ValueError("released test manifest requires non-empty string field 'version'")
+    if not isinstance(tests, list) or not all(isinstance(name, str) and name for name in tests):
+        raise ValueError("released test manifest requires 'tests' to be a list of non-empty strings")
 
     return version
 
@@ -177,25 +171,17 @@ def _confirm(base: str, base_source: str, new: str) -> None:
 
     if new_parts > base_parts:
         if new_parts[0] > base_parts[0] + 1:
-            warnings.append(
-                f"skipping major versions ({base_parts[0]} -> {new_parts[0]})"
-            )
+            warnings.append(f"skipping major versions ({base_parts[0]} -> {new_parts[0]})")
         elif new_parts[0] == base_parts[0] and new_parts[1] > base_parts[1] + 1:
-            warnings.append(
-                f"skipping minor versions ({base_parts[1]} -> {new_parts[1]})"
-            )
+            warnings.append(f"skipping minor versions ({base_parts[1]} -> {new_parts[1]})")
         elif new_parts[:2] == base_parts[:2] and new_parts[2] > base_parts[2] + 1:
-            warnings.append(
-                f"skipping patch versions ({base_parts[2]} -> {new_parts[2]})"
-            )
+            warnings.append(f"skipping patch versions ({base_parts[2]} -> {new_parts[2]})")
 
         # Non-zero trailing digits on major/minor bump (e.g. 0.4.2 -> 0.5.2 should be 0.5.0)
         if new_parts[0] != base_parts[0] and (new_parts[1] != 0 or new_parts[2] != 0):
             warnings.append(f"major bump should reset to {new_parts[0]}.0.0")
         elif new_parts[1] != base_parts[1] and new_parts[2] != 0:
-            warnings.append(
-                f"minor bump should reset to {new_parts[0]}.{new_parts[1]}.0"
-            )
+            warnings.append(f"minor bump should reset to {new_parts[0]}.{new_parts[1]}.0")
 
     if new == base:
         print(f"Already at {base}, nothing to do.")
@@ -254,9 +240,7 @@ def refresh_released_tests(new_version: str) -> None:
 def check(expected: str) -> None:
     """Verify all pyproject.toml files already have the expected version."""
     if not SEMVER_RE.match(expected):
-        print(
-            f"error: '{expected}' is not valid semver (expected X.Y.Z)", file=sys.stderr
-        )
+        print(f"error: '{expected}' is not valid semver (expected X.Y.Z)", file=sys.stderr)
         sys.exit(1)
 
     ok = True

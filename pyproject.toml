@@ -40,3 +40,16 @@ override-dependencies = [
     "pyasn1>=0.6.3",
     "requests>=2.32.5",
 ]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I", "A", "UP", "RUF"]
+ignore = ["E501"]

@@ -149,6 +149,9 @@ Validations use `sinfo`/`srun` directly: partitions, GPU allocation, job schedul
 | `bmc_protocol_security` | test | `providers/my-isv/scripts/security/bmc_protocol_security_test.py` | CNP10-01: IPMI disabled; Redfish over TLS with AAA |
 | `api_endpoint_isolation` | test | `providers/my-isv/scripts/security/api_endpoint_test.py` | API endpoints not publicly accessible |
 | `mfa_enforcement` | test | `providers/my-isv/scripts/security/mfa_enforcement_test.py` | Administrative UI, CLI, and API access require MFA |
+| `cert_rotation_test` | test | `providers/my-isv/scripts/security/cert_rotation_test.py` | SEC09-01: TLS certificate rotation cycle or auto-renewal |
+| `kms_encryption_options_test` | test | `providers/my-isv/scripts/security/kms_encryption_options_test.py` | SEC09-02: Provider-managed and customer-managed KMS options |
+| `centralized_kms_test` | test | `providers/my-isv/scripts/security/centralized_kms_test.py` | SEC09-03: Encrypted resources use centralized KMS |
 | `customer_managed_key_test` | test | `providers/my-isv/scripts/security/customer_managed_key_test.py` | SEC09-04: Customer-managed key / BYOK encryption |
 | `sa_credential_test` | test | `providers/my-isv/scripts/security/sa_credential_test.py` | Service account long-lived credential auth |
 | `oidc_user_auth_test` | test | `providers/my-isv/scripts/security/oidc_user_auth_test.py` | OIDC issuer metadata and protected endpoint token acceptance/rejection |

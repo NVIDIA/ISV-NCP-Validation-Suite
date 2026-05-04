@@ -22,6 +22,9 @@
 #   CNP10-01: BMC protocol security (BmcProtocolSecurityCheck)
 #   SEC14-01: API endpoint isolation (ApiEndpointIsolationCheck)
 #   SEC07-01: MFA enforcement (MfaEnforcedCheck)
+#   SEC09-01: Certificate rotation cycle (CertRotationCycleCheck)
+#   SEC09-02: Provider- and customer-managed KMS options (KmsEncryptionOptionCheck)
+#   SEC09-03: Centralized KMS (CentralizedKmsCheck)
 #   SEC09-04: Customer-managed keys / BYOK (CustomerManagedKeyCheck)
 #   SEC03-01: Service account credentials (ServiceAccountCredentialCheck)
 #   SEC01-01: OIDC user authentication (OidcUserAuthCheck)
@@ -79,6 +82,24 @@ commands:
       - name: mfa_enforcement
         phase: test
         command: "python ../scripts/security/mfa_enforcement_test.py"
+        args: ["--region", "{{region}}"]
+        timeout: 60
+
+      - name: cert_rotation_test
+        phase: test
+        command: "python ../scripts/security/cert_rotation_test.py"
+        args: ["--region", "{{region}}"]
+        timeout: 60
+
+      - name: kms_encryption_options_test
+        phase: test
+        command: "python ../scripts/security/kms_encryption_options_test.py"
+        args: ["--region", "{{region}}"]
+        timeout: 60
+
+      - name: centralized_kms_test
+        phase: test
+        command: "python ../scripts/security/centralized_kms_test.py"
         args: ["--region", "{{region}}"]
         timeout: 60
 

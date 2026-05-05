@@ -938,6 +938,373 @@ def test_bmc_bastion_access_main_emits_sec12_03_contract(
         assert subtest["passed"] is True
 
 
+# --- Audit logging (SEC08-01/02) tests -------------------------------------
+
+
+def test_audit_logging_includes_cloudtrail_shadow_trails() -> None:
+    """Audit logging discovery must include multi-region shadow trails in non-home regions."""
+    module = _load_security_script("audit_logging_test.py")
+
+    class FakeCloudTrail:
+        def __init__(self) -> None:
+            """Track the requested shadow-trail setting."""
+            self.include_shadow_trails: bool | None = None
+            self.status_names: list[str] = []
+
+        def describe_trails(self, includeShadowTrails: bool) -> dict[str, list[dict[str, Any]]]:
+            """Return the fake org trail only when shadow trails are requested."""
+            self.include_shadow_trails = includeShadowTrails
+            if not includeShadowTrails:
+                return {"trailList": []}
+            return {
+                "trailList": [
+                    {
+                        "Name": "org-trail",
+                        "TrailARN": "arn:aws:cloudtrail:us-east-1:123456789012:trail/org-trail",
+                        "IsMultiRegionTrail": True,
+                        "S3BucketName": "audit-logs",
+                    }
+                ]
+            }
+
+        def get_trail_status(self, Name: str) -> dict[str, bool]:
+            """Report the shadow trail as actively logging."""
+            self.status_names.append(Name)
+            return {"IsLogging": True}
+
+    cloudtrail = FakeCloudTrail()
+
+    logging_trails, multi_region_logging_trails = module._find_logging_trails(cloudtrail)
+
+    assert cloudtrail.include_shadow_trails is True
+    assert len(logging_trails) == 1
+    assert len(multi_region_logging_trails) == 1
+    assert cloudtrail.status_names == ["arn:aws:cloudtrail:us-east-1:123456789012:trail/org-trail"]
+
+
+def test_audit_logging_lookup_scans_all_lookup_event_pages(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A matching CloudTrail event on a later page must be found before the next poll delay."""
+    module = _load_security_script("audit_logging_test.py")
+    request_id = "request-later-page"
+    user_agent_suffix = "isv-sec08-unit"
+    target_event = {
+        "EventId": "event-target",
+        "CloudTrailEvent": json.dumps({"requestID": request_id, "userAgent": f"botocore {user_agent_suffix}"}),
+    }
+
+    class FakePagedCloudTrail:
+        def __init__(self) -> None:
+            """Build five non-matching pages followed by the target event."""
+            self.calls: list[dict[str, Any]] = []
+            self.pages = [
+                {
+                    "Events": [
+                        {
+                            "EventId": f"event-{index}",
+                            "CloudTrailEvent": json.dumps({"requestID": f"other-{index}", "userAgent": "botocore"}),
+                        }
+                    ],
+                    "NextToken": f"token-{index + 1}",
+                }
+                for index in range(5)
+            ]
+            self.pages.append({"Events": [target_event]})
+
+        def lookup_events(self, **kwargs: Any) -> dict[str, Any]:
+            """Return one configured LookupEvents page and verify token sequencing."""
+            index = len(self.calls)
+            self.calls.append(kwargs)
+            if index == 0:
+                assert "NextToken" not in kwargs
+            else:
+                assert kwargs["NextToken"] == f"token-{index}"
+            if index >= len(self.pages):
+                raise AssertionError("lookup restarted polling before scanning all pages")
+            return self.pages[index]
+
+    cloudtrail = FakePagedCloudTrail()
+    monkeypatch.setattr(
+        module.time,
+        "sleep",
+        lambda _seconds: (_ for _ in ()).throw(AssertionError("matching event was on a later page")),
+    )
+
+    event = module._lookup_management_event(
+        cloudtrail,
+        request_id=request_id,
+        user_agent_suffix=user_agent_suffix,
+        call_start=datetime(2026, 5, 5, tzinfo=UTC),
+        timeout_seconds=60,
+    )
+
+    assert event == target_event
+    assert len(cloudtrail.calls) == 6
+
+
+def test_audit_logging_retention_ignores_unrelated_lifecycle_prefixes() -> None:
+    """A short expiration rule for another prefix must not fail CloudTrail log retention."""
+    module = _load_security_script("audit_logging_test.py")
+
+    class FakeLifecycleS3:
+        def get_bucket_lifecycle_configuration(self, Bucket: str) -> dict[str, list[dict[str, Any]]]:
+            """Return both unrelated short retention and applicable long retention rules."""
+            assert Bucket == "audit-logs"
+            return {
+                "Rules": [
+                    {
+                        "ID": "tmp-short",
+                        "Status": "Enabled",
+                        "Filter": {"Prefix": "tmp/"},
+                        "Expiration": {"Days": 7},
+                    },
+                    {
+                        "ID": "cloudtrail-long",
+                        "Status": "Enabled",
+                        "Filter": {"Prefix": "AWSLogs/"},
+                        "Expiration": {"Days": 90},
+                    },
+                ]
+            }
+
+    retention_result, minimum_retention = module._evaluate_lifecycle_retention(FakeLifecycleS3(), "audit-logs")
+
+    assert retention_result["passed"] is True
+    assert minimum_retention == 90
+
+
+def test_audit_logging_retention_skips_when_lifecycle_access_denied(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Missing bucket lifecycle permission must skip retention instead of failing SEC08-01."""
+    module = _load_security_script("audit_logging_test.py")
+
+    class FakeCloudTrail:
+        def describe_trails(self, includeShadowTrails: bool) -> dict[str, list[dict[str, Any]]]:
+            """Return one active multi-region trail."""
+            assert includeShadowTrails is True
+            return {
+                "trailList": [
+                    {
+                        "Name": "org-trail",
+                        "TrailARN": "arn:aws:cloudtrail:us-east-1:123456789012:trail/org-trail",
+                        "IsMultiRegionTrail": True,
+                        "S3BucketName": "audit-logs",
+                    }
+                ]
+            }
+
+        def get_trail_status(self, Name: str) -> dict[str, bool]:
+            """Report the trail as actively logging."""
+            assert Name == "arn:aws:cloudtrail:us-east-1:123456789012:trail/org-trail"
+            return {"IsLogging": True}
+
+    class FakeS3:
+        def get_bucket_lifecycle_configuration(self, Bucket: str) -> dict[str, list[dict[str, Any]]]:
+            """Deny lifecycle reads for the audit-log bucket."""
+            assert Bucket == "audit-logs"
+            raise _client_error("GetBucketLifecycleConfiguration", code="AccessDenied")
+
+    def fake_client(service_name: str, **_kwargs: Any) -> Any:
+        """Return fake clients used by the audit script."""
+        if service_name == "cloudtrail":
+            return FakeCloudTrail()
+        if service_name == "s3":
+            return FakeS3()
+        raise AssertionError(service_name)
+
+    def fake_lookup_management_event(*_args: Any, **kwargs: Any) -> dict[str, str]:
+        """Return a matched CloudTrail event using the generated user-agent suffix."""
+        user_agent_suffix = kwargs["user_agent_suffix"]
+        return {
+            "EventId": "event-1",
+            "CloudTrailEvent": json.dumps(
+                {
+                    "requestID": "request-1",
+                    "eventName": module.EVENT_NAME,
+                    "eventTime": datetime.now(UTC).isoformat(),
+                    "userIdentity": {"arn": "arn:aws:iam::123456789012:user/test"},
+                    "sourceIPAddress": "203.0.113.10",
+                    "userAgent": f"botocore {user_agent_suffix}",
+                    "awsRegion": "us-west-2",
+                    "eventSource": module.EVENT_SOURCE,
+                }
+            ),
+        }
+
+    monkeypatch.setattr(module.boto3, "client", fake_client)
+    monkeypatch.setattr(
+        module,
+        "_emit_management_call",
+        lambda _region, _suffix: ("request-1", datetime.now(UTC), datetime.now(UTC)),
+    )
+    monkeypatch.setattr(module, "_lookup_management_event", fake_lookup_management_event)
+    monkeypatch.setattr(module.sys, "argv", ["audit_logging_test.py", "--region", "us-west-2"])
+
+    exit_code = module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["success"] is True
+    assert payload["audit_log_retention_skipped"] is True
+    assert payload["audit_log_retention_skip_reason"] == "cannot inspect audit log retention policy"
+    assert payload["tests"]["audit_log_entry_found"]["passed"] is True
+
+
+def test_audit_logging_retention_falls_back_to_single_region_trail(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """SEC08-02 evaluates an active single-region trail when no multi-region trail exists."""
+    module = _load_security_script("audit_logging_test.py")
+
+    class FakeCloudTrail:
+        def describe_trails(self, includeShadowTrails: bool) -> dict[str, list[dict[str, Any]]]:
+            """Return one active single-region trail with an S3 destination."""
+            assert includeShadowTrails is True
+            return {
+                "trailList": [
+                    {
+                        "Name": "regional-trail",
+                        "TrailARN": "arn:aws:cloudtrail:us-west-2:123456789012:trail/regional-trail",
+                        "IsMultiRegionTrail": False,
+                        "S3BucketName": "regional-audit-logs",
+                    }
+                ]
+            }
+
+        def get_trail_status(self, Name: str) -> dict[str, bool]:
+            """Report the regional trail as actively logging."""
+            assert Name == "arn:aws:cloudtrail:us-west-2:123456789012:trail/regional-trail"
+            return {"IsLogging": True}
+
+    class FakeS3:
+        def get_bucket_lifecycle_configuration(self, Bucket: str) -> dict[str, list[dict[str, Any]]]:
+            """Return no applicable expiration rules for unbounded retention."""
+            assert Bucket == "regional-audit-logs"
+            return {"Rules": []}
+
+    def fake_client(service_name: str, **_kwargs: Any) -> Any:
+        """Return fake clients used by the audit script."""
+        if service_name == "cloudtrail":
+            return FakeCloudTrail()
+        if service_name == "s3":
+            return FakeS3()
+        raise AssertionError(service_name)
+
+    def fake_lookup_management_event(*_args: Any, **kwargs: Any) -> dict[str, str]:
+        """Return a matched CloudTrail event using the generated user-agent suffix."""
+        user_agent_suffix = kwargs["user_agent_suffix"]
+        return {
+            "EventId": "event-1",
+            "CloudTrailEvent": json.dumps(
+                {
+                    "requestID": "request-1",
+                    "eventName": module.EVENT_NAME,
+                    "eventTime": datetime.now(UTC).isoformat(),
+                    "userIdentity": {"arn": "arn:aws:iam::123456789012:user/test"},
+                    "sourceIPAddress": "203.0.113.10",
+                    "userAgent": f"botocore {user_agent_suffix}",
+                    "awsRegion": "us-west-2",
+                    "eventSource": module.EVENT_SOURCE,
+                }
+            ),
+        }
+
+    monkeypatch.setattr(module.boto3, "client", fake_client)
+    monkeypatch.setattr(
+        module,
+        "_emit_management_call",
+        lambda _region, _suffix: ("request-1", datetime.now(UTC), datetime.now(UTC)),
+    )
+    monkeypatch.setattr(module, "_lookup_management_event", fake_lookup_management_event)
+    monkeypatch.setattr(module.sys, "argv", ["audit_logging_test.py", "--region", "us-west-2"])
+
+    exit_code = module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["success"] is True
+    assert payload["audit_log_destination"] == "audit_log_store"
+    assert payload["minimum_retention_days"] == "unbounded"
+    assert "single-region" in payload["tests"]["audit_log_trail_logging_enabled"]["message"]
+    assert "audit_log_bucket" not in payload
+    assert "audit_log_prefix" not in payload
+    assert "audit_log_trail_arn" not in payload
+
+
+class FakeIpResponse:
+    """Context manager returned by fake URL open calls."""
+
+    def __init__(self, body: str) -> None:
+        """Store the fake response body."""
+        self.body = body
+
+    def __enter__(self) -> FakeIpResponse:
+        """Return this fake response."""
+        return self
+
+    def __exit__(self, *_args: Any) -> None:
+        """Close the fake response."""
+
+    def read(self) -> bytes:
+        """Return the configured response body."""
+        return self.body.encode("utf-8")
+
+
+@pytest.mark.parametrize(
+    ("raw_ip", "expected_cidr"),
+    [
+        ("203.0.113.10\n", "203.0.113.10/32"),
+        ("2001:db8::1\n", "2001:db8::1/128"),
+    ],
+)
+def test_least_privilege_detect_source_cidr_handles_ipv4_and_ipv6(
+    monkeypatch: pytest.MonkeyPatch,
+    raw_ip: str,
+    expected_cidr: str,
+) -> None:
+    """Source CIDR detection normalizes IPv4 and IPv6 host addresses."""
+    module = _load_security_script("least_privilege_test.py")
+
+    monkeypatch.setattr(module.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeIpResponse(raw_ip))
+
+    assert module._detect_source_cidr() == expected_cidr
+
+
+def test_least_privilege_dimension_results_require_denied_bucket_and_source_cidr() -> None:
+    """SEC04 dimension flags require denied-resource evidence and the SourceIp policy condition."""
+    module = _load_security_script("least_privilege_test.py")
+    policy_document = module._policy_document("allowed-bucket", "2001:db8::1/128")
+
+    resource_result, network_result = module._policy_dimension_scope_results(
+        allowed_result={"passed": True},
+        denied_resource_result={
+            "name": "storage_list_unscoped_resource_denied",
+            "passed": True,
+            "code": "AccessDenied",
+        },
+        policy_document=policy_document,
+        allowed_bucket="allowed-bucket",
+        source_cidr="2001:db8::1/128",
+    )
+
+    assert resource_result["passed"] is True
+    assert resource_result["probes"][0]["code"] == "AccessDenied"
+    assert network_result["passed"] is True
+
+    failed_resource_result, failed_network_result = module._policy_dimension_scope_results(
+        allowed_result={"passed": True},
+        denied_resource_result={"name": "storage_list_unscoped_resource_denied", "passed": False, "error": "allowed"},
+        policy_document=policy_document,
+        allowed_bucket="allowed-bucket",
+        source_cidr="203.0.113.10/32",
+    )
+
+    assert failed_resource_result["passed"] is False
+    assert failed_network_result["passed"] is False
+
+
 class FakeIamTags:
     """Small fake for IAM list_user_tags responses."""
 
@@ -1216,10 +1583,11 @@ def test_teardown_cleanup_owned_user_deletes_inline_policy_for_sec02_users() -> 
 
 
 def test_teardown_owned_user_prefixes_cover_security_test_scripts() -> None:
-    """The teardown sweep must recognize sa_credential, short-lived, and tenant-isolation test users."""
+    """The teardown sweep must recognize every owned security-test IAM user prefix."""
     module = _load_security_script("teardown.py")
 
     assert "isv-sa-test-".startswith("isv-sa-test-")
+    assert "isv-sec04-test-foo".startswith(module.OWNED_USER_PREFIXES)
     assert "isv-sec02-test-foo".startswith(module.OWNED_USER_PREFIXES)
     assert "isv-sec11-test-foo".startswith(module.OWNED_USER_PREFIXES)
     assert "isv-sa-test-bar".startswith(module.OWNED_USER_PREFIXES)
@@ -3602,8 +3970,8 @@ class FakeSec11Ec2:
         self.deleted_vpcs.append(VpcId)
 
 
-def test_teardown_cleanup_sec11_instances_only_terminates_matching_prefix() -> None:
-    """`_cleanup_sec11_instances` skips non-SEC11 instances and ignores terminated ones."""
+def test_teardown_cleanup_owned_instances_only_terminates_matching_prefix() -> None:
+    """`_cleanup_owned_instances` skips non-owned instances and ignores terminated ones."""
     module = _load_security_script("teardown.py")
     ec2 = FakeSec11Ec2(
         instances=[
@@ -3631,14 +3999,56 @@ def test_teardown_cleanup_sec11_instances_only_terminates_matching_prefix() -> N
         ]
     )
 
-    errors = module._cleanup_sec11_instances(ec2)
+    errors = module._cleanup_owned_instances(ec2)
 
     assert errors == []
     assert ec2.terminated == ["i-sec11-active"]
 
 
-def test_teardown_cleanup_sec11_buckets_skips_untagged_buckets() -> None:
-    """`_cleanup_sec11_buckets` only deletes buckets whose tag set contains ``CreatedBy=isvtest``."""
+def test_teardown_cleanup_sec04_ec2_fixtures_by_owned_name_prefix() -> None:
+    """The standalone teardown sweep must remove SEC04 EC2 fixtures leaked by a killed test."""
+    module = _load_security_script("teardown.py")
+    ec2 = FakeSec11Ec2(
+        instances=[
+            {
+                "InstanceId": "i-sec04-active",
+                "State": {"Name": "running"},
+                "Tags": [
+                    {"Key": "Name", "Value": "isv-sec04-test-aaaa1111"},
+                    {"Key": "CreatedBy", "Value": "isvtest"},
+                ],
+            }
+        ],
+        vpcs=[
+            {
+                "VpcId": "vpc-sec04",
+                "Tags": [
+                    {"Key": "Name", "Value": "isv-sec04-test-aaaa1111"},
+                    {"Key": "CreatedBy", "Value": "isvtest"},
+                ],
+            },
+            {
+                "VpcId": "vpc-keep",
+                "Tags": [{"Key": "Name", "Value": "production"}, {"Key": "CreatedBy", "Value": "isvtest"}],
+            },
+        ],
+        subnets=[{"SubnetId": "subnet-sec04"}],
+        sgs=[{"GroupId": "sg-sec04", "GroupName": "isv-sec04-test-aaaa1111-sg"}],
+    )
+
+    instance_errors = module._cleanup_owned_instances(ec2)
+    vpc_errors = module._cleanup_owned_vpcs(ec2)
+
+    assert instance_errors == []
+    assert vpc_errors == []
+    assert ec2.terminated == ["i-sec04-active"]
+    assert ec2.deleted_sgs == ["sg-sec04"]
+    assert ec2.deleted_subnets == ["subnet-sec04"]
+    assert ec2.deleted_vpcs == ["vpc-sec04"]
+
+
+def test_teardown_cleanup_owned_buckets_skips_untagged_buckets() -> None:
+    """`_cleanup_owned_buckets` deletes owned SEC04/SEC11 buckets and skips unowned buckets."""
     module = _load_security_script("teardown.py")
     deleted_buckets: list[str] = []
 
@@ -3646,6 +4056,7 @@ def test_teardown_cleanup_sec11_buckets_skips_untagged_buckets() -> None:
         def list_buckets(self) -> dict[str, list[dict[str, str]]]:
             return {
                 "Buckets": [
+                    {"Name": "isv-sec04-test-aaaa1111-allowed"},  # tagged
                     {"Name": "isv-sec11-test-aaaa-abcdef"},  # tagged
                     {"Name": "isv-sec11-test-other-zzzzzz"},  # untagged -> skip
                     {"Name": "production-bucket"},  # wrong prefix -> skip
@@ -3653,7 +4064,7 @@ def test_teardown_cleanup_sec11_buckets_skips_untagged_buckets() -> None:
             }
 
         def get_bucket_tagging(self, Bucket: str) -> dict[str, list[dict[str, str]]]:
-            if Bucket == "isv-sec11-test-aaaa-abcdef":
+            if Bucket in {"isv-sec04-test-aaaa1111-allowed", "isv-sec11-test-aaaa-abcdef"}:
                 return {"TagSet": [{"Key": "CreatedBy", "Value": "isvtest"}]}
             raise _client_error("GetBucketTagging", code="NoSuchTagSet")
 
@@ -3667,14 +4078,14 @@ def test_teardown_cleanup_sec11_buckets_skips_untagged_buckets() -> None:
         def delete_bucket(self, Bucket: str) -> None:
             deleted_buckets.append(Bucket)
 
-    errors = module._cleanup_sec11_buckets(FakeS3())
+    errors = module._cleanup_owned_buckets(FakeS3())
 
     assert errors == []
-    assert deleted_buckets == ["isv-sec11-test-aaaa-abcdef"]
+    assert deleted_buckets == ["isv-sec04-test-aaaa1111-allowed", "isv-sec11-test-aaaa-abcdef"]
 
 
-def test_teardown_cleanup_sec11_kms_deletes_alias_and_schedules_key_deletion() -> None:
-    """`_cleanup_sec11_kms` deletes only ``alias/isv-sec11-test-*`` aliases and schedules their target keys."""
+def test_teardown_cleanup_owned_kms_deletes_alias_and_schedules_key_deletion() -> None:
+    """`_cleanup_owned_kms` deletes only ``alias/isv-sec11-test-*`` aliases and schedules their target keys."""
     module = _load_security_script("teardown.py")
     deleted_aliases: list[str] = []
     scheduled_keys: list[str] = []
@@ -3702,7 +4113,7 @@ def test_teardown_cleanup_sec11_kms_deletes_alias_and_schedules_key_deletion() -
             assert PendingWindowInDays == 7
             scheduled_keys.append(KeyId)
 
-    errors = module._cleanup_sec11_kms(FakeKms())
+    errors = module._cleanup_owned_kms(FakeKms())
 
     assert errors == []
     assert deleted_aliases == [

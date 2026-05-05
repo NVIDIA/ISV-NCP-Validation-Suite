@@ -688,3 +688,203 @@ class ShortLivedCredentialsCheck(BaseValidation):
         self.set_passed(
             f"Short-lived credentials verified (node TTL={node_ttl}s, workload TTL={workload_ttl}s, bound={max_ttl}s)"
         )
+
+
+class LeastPrivilegePolicyCheck(BaseValidation):
+    """Validate least-privilege policy dimensions are enforced (SEC04-01).
+
+    Verifies the provider probe exercised user-scoped, resource-scoped, and
+    network-scoped access policy constraints. The probe may emit a structured
+    top-level skip when it cannot provision the temporary identity needed for
+    the check.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        test_identity: Required non-empty identity used for the policy probe
+        allowed_resource: Required non-empty resource identifier that should be allowed
+        allowed_source_cidr: Required non-empty source CIDR used for network-scope enforcement
+        tests: dict with policy_dimensions_user_based,
+               policy_dimensions_resource_based,
+               policy_dimensions_network_based,
+               policy_dimensions_allowed_action_succeeds
+    """
+
+    description: ClassVar[str] = "Check least-privilege access policies are user, resource, and network scoped"
+    markers: ClassVar[list[str]] = ["security", "iam"]
+
+    def run(self) -> None:
+        """Validate required least-privilege policy-dimension results from step output."""
+        step_output = self.config.get("step_output", {})
+        if step_output.get("skipped") is True:
+            pytest.skip(step_output.get("skip_reason") or "Least-privilege policy validation skipped")
+
+        required = [
+            "policy_dimensions_user_based",
+            "policy_dimensions_resource_based",
+            "policy_dimensions_network_based",
+            "policy_dimensions_allowed_action_succeeds",
+        ]
+        if not check_required_tests(self, required, "Least-privilege policy tests failed"):
+            return
+
+        for field in ("test_identity", "allowed_resource", "allowed_source_cidr"):
+            value = step_output.get(field)
+            if not isinstance(value, str) or not value.strip():
+                self.set_failed(f"Least-privilege policy output missing non-empty '{field}'")
+                return
+
+        identity = step_output["test_identity"]
+        resource = step_output["allowed_resource"]
+        self.set_passed(f"Least-privilege policy dimensions verified for {identity} on {resource}")
+
+
+class MinimalRoleEnforcementCheck(BaseValidation):
+    """Validate a minimal role denies out-of-scope actions (SEC04-02).
+
+    Verifies the same minimal identity used for SEC04-01 cannot perform
+    compute, storage, or network actions outside its grant.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        test_identity: Required non-empty identity used for the minimal-role probe
+        tests: dict with out_of_scope_compute_denied,
+               out_of_scope_storage_denied,
+               out_of_scope_network_denied
+    """
+
+    description: ClassVar[str] = "Check minimal role denies out-of-scope compute, storage, and network APIs"
+    markers: ClassVar[list[str]] = ["security", "iam"]
+
+    def run(self) -> None:
+        """Validate required out-of-scope denial results from step output."""
+        step_output = self.config.get("step_output", {})
+        if step_output.get("skipped") is True:
+            pytest.skip(step_output.get("skip_reason") or "Minimal-role enforcement validation skipped")
+
+        required = [
+            "out_of_scope_compute_denied",
+            "out_of_scope_storage_denied",
+            "out_of_scope_network_denied",
+        ]
+        if not check_required_tests(self, required, "Minimal-role enforcement tests failed"):
+            return
+
+        identity = step_output.get("test_identity")
+        if not isinstance(identity, str) or not identity.strip():
+            self.set_failed("Minimal-role enforcement output missing non-empty 'test_identity'")
+            return
+        self.set_passed(f"Minimal role denied out-of-scope compute, storage, and network APIs for {identity}")
+
+
+class AuditLogEntryCheck(BaseValidation):
+    """Validate management API calls produce audit-log entries (SEC08-01).
+
+    Verifies the provider emitted a known management API call, found the
+    corresponding audit event, and checked required metadata fields. Cloud
+    audit pipelines can legitimately lag; the probe may emit a check-specific
+    structured skip if the event has not propagated within its poll budget.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        event_name: Required non-empty management event name being validated
+        request_id: Required non-empty request identifier correlated to the event
+        tests: dict with audit_log_entry_found,
+               audit_log_event_name_matches,
+               audit_log_event_time_in_window,
+               audit_log_user_identity_present,
+               audit_log_source_ip_present,
+               audit_log_user_agent_matches,
+               audit_log_region_matches,
+               audit_log_event_source_matches
+    """
+
+    description: ClassVar[str] = "Check management API calls are recorded in audit logs with required metadata"
+    markers: ClassVar[list[str]] = ["security"]
+
+    def run(self) -> None:
+        """Validate required audit-log entry and metadata results from step output."""
+        step_output = self.config.get("step_output", {})
+        if step_output.get("skipped") is True:
+            pytest.skip(step_output.get("skip_reason") or "Audit-log entry validation skipped")
+        if step_output.get("audit_log_entry_skipped") is True:
+            pytest.skip(step_output.get("audit_log_entry_skip_reason") or "Audit-log entry validation skipped")
+
+        required = [
+            "audit_log_entry_found",
+            "audit_log_event_name_matches",
+            "audit_log_event_time_in_window",
+            "audit_log_user_identity_present",
+            "audit_log_source_ip_present",
+            "audit_log_user_agent_matches",
+            "audit_log_region_matches",
+            "audit_log_event_source_matches",
+        ]
+        if not check_required_tests(self, required, "Audit-log entry tests failed"):
+            return
+
+        for field in ("event_name", "request_id"):
+            value = step_output.get(field)
+            if not isinstance(value, str) or not value.strip():
+                self.set_failed(f"Audit-log entry output missing non-empty '{field}'")
+                return
+
+        event_name = step_output["event_name"]
+        request_id = step_output["request_id"]
+        self.set_passed(f"Audit log entry verified for {event_name} request {request_id}")
+
+
+class AuditLogRetentionCheck(BaseValidation):
+    """Validate audit logs are retained for at least 30 days (SEC08-02).
+
+    Verifies the provider found an active audit trail and confirmed its log
+    destination has no current-object expiration or only expiration rules with
+    at least a 30-day retention period.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        audit_log_destination: Required non-empty audit log destination
+        minimum_retention_days: Required int >= 30, or "unbounded"
+        tests: dict with audit_log_trail_logging_enabled,
+               audit_log_retention_at_least_30_days
+    """
+
+    description: ClassVar[str] = "Check audit logs are retained for at least 30 days"
+    markers: ClassVar[list[str]] = ["security"]
+
+    def run(self) -> None:
+        """Validate required audit-log retention results from step output."""
+        step_output = self.config.get("step_output", {})
+        if step_output.get("skipped") is True:
+            pytest.skip(step_output.get("skip_reason") or "Audit-log retention validation skipped")
+        if step_output.get("audit_log_retention_skipped") is True:
+            pytest.skip(step_output.get("audit_log_retention_skip_reason") or "Audit-log retention validation skipped")
+
+        required = [
+            "audit_log_trail_logging_enabled",
+            "audit_log_retention_at_least_30_days",
+        ]
+        if not check_required_tests(self, required, "Audit-log retention tests failed"):
+            return
+
+        destination = step_output.get("audit_log_destination")
+        if not isinstance(destination, str) or not destination.strip():
+            self.set_failed("Audit-log retention output missing non-empty audit log destination")
+            return
+
+        retention_days = step_output.get("minimum_retention_days")
+        if type(retention_days) is int and retention_days >= 30:
+            retention_summary = f"{retention_days} days"
+        elif retention_days == "unbounded":
+            retention_summary = "unbounded"
+        else:
+            self.set_failed("Audit-log retention output missing retention >= 30 days or 'unbounded'")
+            return
+        self.set_passed(f"Audit log retention verified for {destination} (minimum retention {retention_summary})")

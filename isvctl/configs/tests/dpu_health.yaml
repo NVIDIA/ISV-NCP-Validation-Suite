@@ -1,0 +1,69 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+# DPU Health Validation - Canonical Configuration
+#
+# Verifies DPU health status for all machines at a NICo site.
+# Checks DPU agent heartbeat, health probes, and capability inventory.
+#
+# Architecture:
+#   - check_dpu_health.py queries the NICo API for machine health data
+#   - DpuHealthCheck validates DPU presence, heartbeat, and alerts
+#
+# Note: DpuNetworkCheck (interface status, BGP, extension services) requires
+# an active instance with EVPN overlay. Use a separate config for that.
+#
+# Prerequisites:
+#   - NGC_API_KEY environment variable set with org access
+#   - Machines ingested and DPUs initialized
+#
+# Usage:
+#   NGC_API_KEY=<key> uv run isvctl test run \
+#     -f isvctl/configs/providers/nico/dpu_health.yaml
+
+version: "1.0"
+
+commands:
+  dpu_health:
+    phases: ["test"]
+    steps:
+      # ─── Step 1: Check DPU Health ──────────────────────────────────
+      # Queries NICo API for machine health data including DPU-specific
+      # probes, agent heartbeat status, and capability inventory.
+      - name: check_dpu_health
+        phase: test
+        command: "python3 ../stubs/nico/dpu/check_dpu_health.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+        timeout: 120
+
+tests:
+  platform: nico
+  cluster_name: "dpu-health-validation"
+  description: "Verify DPU health and agent heartbeat status"
+
+  settings:
+    org: "{{org}}"
+    site_id: "{{site_id}}"
+
+  validations:
+    dpu_health:
+      step: check_dpu_health
+      checks:
+        DpuHealthCheck:
+          require_heartbeat: true
+          # Set expected_dpu_count per your hardware (e.g., 2 for GB200 NVL tray)
+          # expected_dpu_count: 2
+
+  exclude:
+    markers: []

@@ -253,6 +253,109 @@ class MfaEnforcedCheck(BaseValidation):
         self.set_passed(f"Admin interfaces protected by MFA ({interfaces} interfaces checked)")
 
 
+class CentralizedKmsCheck(BaseValidation):
+    """Validate encrypted resources reference centralized KMS-backed keys.
+
+    Config:
+        step_output: The centralized_kms_test step output to check
+
+    Step output:
+        kms_keys_total: Positive number of visible KMS keys
+        encrypted_resources_inspected: Positive number of encrypted resources inspected
+        non_kms_resources: Number of encrypted resources that do not resolve to KMS
+        tests: dict with kms_service_reachable, kms_keys_present,
+               all_encrypted_resources_use_kms
+    """
+
+    description: ClassVar[str] = "Check encrypted resources use centralized KMS"
+    markers: ClassVar[list[str]] = ["security"]
+
+    def run(self) -> None:
+        """Validate required centralized-KMS results from step output."""
+        required = [
+            "kms_service_reachable",
+            "kms_keys_present",
+            "all_encrypted_resources_use_kms",
+        ]
+        if not check_required_tests(self, required, "Centralized KMS tests failed"):
+            return
+
+        step_output = self.config.get("step_output", {})
+        kms_keys_total = step_output.get("kms_keys_total")
+        if type(kms_keys_total) is not int or kms_keys_total < 1:
+            self.set_failed("Centralized KMS output missing positive 'kms_keys_total'")
+            return
+
+        non_kms_resources = step_output.get("non_kms_resources")
+        if type(non_kms_resources) is not int:
+            self.set_failed("Centralized KMS output missing integer 'non_kms_resources'")
+            return
+        if non_kms_resources != 0:
+            self.set_failed(f"Centralized KMS found {non_kms_resources} encrypted resource(s) not using KMS")
+            return
+
+        inspected = step_output.get("encrypted_resources_inspected")
+        if type(inspected) is not int or inspected < 1:
+            self.set_failed("Centralized KMS output missing positive 'encrypted_resources_inspected'")
+            return
+        self.set_passed(f"Centralized KMS verified ({kms_keys_total} keys, {inspected} encrypted resources inspected)")
+
+
+class CertRotationCycleCheck(BaseValidation):
+    """Validate TLS certificate rotation evidence is present.
+
+    Config:
+        step_output: The cert_rotation_test step output to check
+
+    Step output:
+        rotation_window_days: Maximum allowed rotation window, expected 1..60
+        certs_inspected: Positive number of customer-visible certs inspected
+        skipped: True when no managed TLS certificate evidence is available
+        skip_reason: Human-readable skip reason when skipped is True
+        tests: dict with cert_inventory_non_empty, no_certs_out_of_policy,
+               rotation_evidence_present
+    """
+
+    description: ClassVar[str] = "Check TLS certificates rotate within 60 days or auto-renew"
+    markers: ClassVar[list[str]] = ["security"]
+
+    def run(self) -> None:
+        """Validate required certificate-rotation results from step output."""
+        step_output = self.config.get("step_output", {})
+        if step_output.get("skipped") is True:
+            pytest.skip(step_output.get("skip_reason") or "Certificate rotation validation skipped")
+
+        required = [
+            "cert_inventory_non_empty",
+            "no_certs_out_of_policy",
+            "rotation_evidence_present",
+        ]
+        if not check_required_tests(self, required, "Certificate rotation tests failed"):
+            return
+
+        certs_inspected = step_output.get("certs_inspected")
+        if type(certs_inspected) is not int or certs_inspected < 1:
+            self.set_failed("Certificate rotation output missing positive 'certs_inspected'")
+            return
+
+        rotation_window_days = step_output.get("rotation_window_days")
+        if type(rotation_window_days) is not int or not 1 <= rotation_window_days <= 60:
+            self.set_failed("Certificate rotation output missing integer 'rotation_window_days' in range 1..60")
+            return
+
+        out_of_policy = step_output.get("out_of_policy")
+        if type(out_of_policy) is not int:
+            self.set_failed("Certificate rotation output missing integer 'out_of_policy'")
+            return
+        if out_of_policy != 0:
+            self.set_failed(f"Certificate rotation found {out_of_policy} out-of-policy certificate(s)")
+            return
+
+        self.set_passed(
+            f"Certificate rotation verified ({certs_inspected} certs inspected, window={rotation_window_days} days)"
+        )
+
+
 class CustomerManagedKeyCheck(BaseValidation):
     """Validate resources can be encrypted with customer-managed keys.
 
@@ -314,6 +417,53 @@ class CustomerManagedKeyCheck(BaseValidation):
             return
 
         self.set_passed(f"Customer-managed key encryption verified (key={key_evidence}, resource={resource_evidence})")
+
+
+class KmsEncryptionOptionCheck(BaseValidation):
+    """Validate provider-managed and customer-managed KMS options exist.
+
+    Config:
+        step_output: The kms_encryption_options_test step output to check
+
+    Step output:
+        provider_managed_key_id: Non-empty provider-managed key evidence
+        customer_managed_key_id: Non-empty CMK evidence
+        skipped: True when scoped provider-managed evidence is unavailable
+        skip_reason: Human-readable skip reason when skipped is True
+        tests: dict with provider_managed_key_available,
+               customer_managed_key_available, both_options_supported
+    """
+
+    description: ClassVar[str] = "Check provider-managed and customer-managed KMS options exist"
+    markers: ClassVar[list[str]] = ["security"]
+
+    def run(self) -> None:
+        """Validate required KMS encryption-option results from step output."""
+        step_output = self.config.get("step_output", {})
+        if step_output.get("skipped") is True:
+            pytest.skip(step_output.get("skip_reason") or "KMS encryption options validation skipped")
+
+        required = [
+            "provider_managed_key_available",
+            "customer_managed_key_available",
+            "both_options_supported",
+        ]
+        if not check_required_tests(self, required, "KMS encryption option tests failed"):
+            return
+
+        provider_key_id = step_output.get("provider_managed_key_id")
+        if not isinstance(provider_key_id, str) or not provider_key_id.strip():
+            self.set_failed("KMS encryption options output missing non-empty provider-managed key evidence")
+            return
+
+        customer_key_id = step_output.get("customer_managed_key_id")
+        if not isinstance(customer_key_id, str) or not customer_key_id.strip():
+            self.set_failed("KMS encryption options output missing non-empty customer-managed key evidence")
+            return
+
+        self.set_passed(
+            f"KMS encryption options verified (provider={provider_key_id.strip()}, customer={customer_key_id.strip()})"
+        )
 
 
 class ApiEndpointIsolationCheck(BaseValidation):

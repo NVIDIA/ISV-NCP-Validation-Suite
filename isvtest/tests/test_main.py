@@ -242,6 +242,49 @@ class TestTransformValidationsForPytest:
 
         assert self._keys(result) == ["K8sNodePoolCheck", "K8sGpuStressWorkload"]
 
+    def test_missing_step_output_skips_validation(
+        self,
+        step_outputs: dict[str, dict[str, Any]],
+        step_phases: dict[str, str],
+    ) -> None:
+        """A step that was registered but never executed does not emit a validation."""
+        step_phases = {**step_phases, "cert_rotation_test": "test"}
+        validations: dict[str, Any] = {
+            "cert_rotation": {
+                "step": "cert_rotation_test",
+                "checks": {"CertRotationCycleCheck": {}},
+            },
+        }
+
+        result = _transform_validations_for_pytest(validations, step_outputs, step_phases, "test")
+
+        assert result == []
+
+    def test_existing_failed_step_output_keeps_validation(
+        self,
+        step_phases: dict[str, str],
+    ) -> None:
+        """Failed command output is still passed through when the step produced JSON."""
+        step_outputs = {"cert_rotation_test": {"success": False, "error": "AWS credentials expired"}}
+        step_phases = {**step_phases, "cert_rotation_test": "test"}
+        validations: dict[str, Any] = {
+            "cert_rotation": {
+                "step": "cert_rotation_test",
+                "checks": {"CertRotationCycleCheck": {}},
+            },
+        }
+
+        result = _transform_validations_for_pytest(validations, step_outputs, step_phases, "test")
+
+        assert result == [
+            {
+                "CertRotationCycleCheck": {
+                    "step_output": step_outputs["cert_rotation_test"],
+                    "_category": "cert_rotation",
+                }
+            }
+        ]
+
     def test_empty_validations(self) -> None:
         """Empty input returns empty list."""
         assert _transform_validations_for_pytest({}, {}, {}, "test") == []

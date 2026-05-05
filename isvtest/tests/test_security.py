@@ -21,7 +21,10 @@ from isvtest.validations.security import (
     BmcBastionAccessCheck,
     BmcManagementNetworkCheck,
     BmcProtocolSecurityCheck,
+    CentralizedKmsCheck,
+    CertRotationCycleCheck,
     CustomerManagedKeyCheck,
+    KmsEncryptionOptionCheck,
     MfaEnforcedCheck,
     OidcUserAuthCheck,
     ShortLivedCredentialsCheck,
@@ -53,6 +56,24 @@ BYOK_REQUIRED_TESTS = {
     "encrypt_decrypt_roundtrip": {"passed": True},
     "resource_encrypted_with_customer_key": {"passed": True},
     "provider_managed_key_not_used": {"passed": True},
+}
+
+CERT_ROTATION_REQUIRED_TESTS = {
+    "cert_inventory_non_empty": {"passed": True},
+    "no_certs_out_of_policy": {"passed": True},
+    "rotation_evidence_present": {"passed": True},
+}
+
+KMS_OPTIONS_REQUIRED_TESTS = {
+    "provider_managed_key_available": {"passed": True},
+    "customer_managed_key_available": {"passed": True},
+    "both_options_supported": {"passed": True},
+}
+
+CENTRALIZED_KMS_REQUIRED_TESTS = {
+    "kms_service_reachable": {"passed": True},
+    "kms_keys_present": {"passed": True},
+    "all_encrypted_resources_use_kms": {"passed": True},
 }
 
 
@@ -432,6 +453,237 @@ def test_customer_managed_key_check_falls_back_from_blank_evidence() -> None:
     assert result["passed"] is True
     assert "fallback-key" in result["output"]
     assert "volume-fallback-123" in result["output"]
+
+
+def _cert_rotation_step_output(**overrides: Any) -> dict[str, Any]:
+    """Return a valid certificate-rotation step output with optional overrides."""
+    output: dict[str, Any] = {
+        "success": True,
+        "platform": "security",
+        "test_name": "cert_rotation_test",
+        "rotation_window_days": 60,
+        "certs_inspected": 2,
+        "out_of_policy": 0,
+        "tests": deepcopy(CERT_ROTATION_REQUIRED_TESTS),
+    }
+    output.update(overrides)
+    return output
+
+
+def test_cert_rotation_cycle_check_passes_with_required_evidence() -> None:
+    """CertRotationCycleCheck passes with rotation evidence and a <=60-day window."""
+    check = CertRotationCycleCheck(config={"step_output": _cert_rotation_step_output()})
+
+    result = check.execute()
+
+    assert result["passed"] is True
+    assert "Certificate rotation verified" in result["output"]
+
+
+def test_cert_rotation_cycle_check_fails_when_required_check_fails() -> None:
+    """CertRotationCycleCheck reports the failed certificate-rotation probe."""
+    tests = deepcopy(CERT_ROTATION_REQUIRED_TESTS)
+    tests["no_certs_out_of_policy"] = {"passed": False, "error": "certificate valid for 365 days"}
+    check = CertRotationCycleCheck(config={"step_output": _cert_rotation_step_output(tests=tests)})
+
+    result = check.execute()
+
+    assert result["passed"] is False
+    assert "no_certs_out_of_policy" in result["error"]
+    assert "365 days" in result["error"]
+
+
+def test_cert_rotation_cycle_check_fails_without_cert_inventory_evidence() -> None:
+    """CertRotationCycleCheck fails when no non-hidden certificate was inspected."""
+    check = CertRotationCycleCheck(config={"step_output": _cert_rotation_step_output(certs_inspected=0)})
+
+    result = check.execute()
+
+    assert result["passed"] is False
+    assert "certs_inspected" in result["error"]
+
+
+def test_cert_rotation_cycle_check_skips_when_no_control_plane_exists() -> None:
+    """A structured skipped result skips SEC09-01."""
+    with pytest.raises(pytest.skip.Exception, match="No managed TLS certificates found"):
+        CertRotationCycleCheck(
+            config={
+                "step_output": _cert_rotation_step_output(
+                    skipped=True,
+                    skip_reason="No managed TLS certificates found on this platform",
+                )
+            }
+        ).execute()
+
+
+@pytest.mark.parametrize("rotation_window_days", [0, -1, 61, "60"])
+def test_cert_rotation_cycle_check_fails_with_invalid_rotation_window(rotation_window_days: Any) -> None:
+    """CertRotationCycleCheck requires a positive window no greater than 60 days."""
+    check = CertRotationCycleCheck(
+        config={"step_output": _cert_rotation_step_output(rotation_window_days=rotation_window_days)}
+    )
+
+    result = check.execute()
+
+    assert result["passed"] is False
+    assert "rotation_window_days" in result["error"]
+
+
+@pytest.mark.parametrize("out_of_policy", [None, "0"])
+def test_cert_rotation_cycle_check_fails_without_integer_out_of_policy(out_of_policy: Any) -> None:
+    """CertRotationCycleCheck requires an integer out_of_policy count."""
+    check = CertRotationCycleCheck(config={"step_output": _cert_rotation_step_output(out_of_policy=out_of_policy)})
+
+    result = check.execute()
+
+    assert result["passed"] is False
+    assert "out_of_policy" in result["error"]
+
+
+def _kms_options_step_output(**overrides: Any) -> dict[str, Any]:
+    """Return a valid KMS options step output with optional overrides."""
+    output: dict[str, Any] = {
+        "success": True,
+        "platform": "security",
+        "test_name": "kms_encryption_options_test",
+        "provider_managed_key_id": "alias/aws/eks",
+        "customer_managed_key_id": "cmk-test-123",
+        "tests": deepcopy(KMS_OPTIONS_REQUIRED_TESTS),
+    }
+    output.update(overrides)
+    return output
+
+
+def test_kms_encryption_option_check_passes_with_both_key_types() -> None:
+    """KmsEncryptionOptionCheck passes with provider and customer key evidence."""
+    check = KmsEncryptionOptionCheck(config={"step_output": _kms_options_step_output()})
+
+    result = check.execute()
+
+    assert result["passed"] is True
+    assert "KMS encryption options verified" in result["output"]
+
+
+def test_kms_encryption_option_check_fails_when_required_check_fails() -> None:
+    """KmsEncryptionOptionCheck reports the failed KMS option probe."""
+    tests = deepcopy(KMS_OPTIONS_REQUIRED_TESTS)
+    tests["provider_managed_key_available"] = {"passed": False, "error": "alias missing"}
+    check = KmsEncryptionOptionCheck(config={"step_output": _kms_options_step_output(tests=tests)})
+
+    result = check.execute()
+
+    assert result["passed"] is False
+    assert "provider_managed_key_available" in result["error"]
+    assert "alias missing" in result["error"]
+
+
+def test_kms_encryption_option_check_fails_without_customer_evidence() -> None:
+    """KmsEncryptionOptionCheck fails when customer-managed key evidence is absent."""
+    check = KmsEncryptionOptionCheck(config={"step_output": _kms_options_step_output(customer_managed_key_id="")})
+
+    result = check.execute()
+
+    assert result["passed"] is False
+    assert "customer-managed key evidence" in result["error"]
+
+
+def test_kms_encryption_option_check_fails_without_provider_evidence() -> None:
+    """KmsEncryptionOptionCheck fails when provider-managed key evidence is absent."""
+    check = KmsEncryptionOptionCheck(config={"step_output": _kms_options_step_output(provider_managed_key_id="")})
+
+    result = check.execute()
+
+    assert result["passed"] is False
+    assert "provider-managed key evidence" in result["error"]
+
+
+def test_kms_encryption_option_check_skips_when_step_marks_skipped() -> None:
+    """KmsEncryptionOptionCheck pytest.skips when scoped provider evidence is unavailable."""
+    with pytest.raises(pytest.skip.Exception, match="only non-control-plane AWS-managed aliases"):
+        KmsEncryptionOptionCheck(
+            config={
+                "step_output": _kms_options_step_output(
+                    skipped=True,
+                    skip_reason=(
+                        "Control-plane provider-managed KMS evidence is not available; "
+                        "only non-control-plane AWS-managed aliases were discovered: alias/aws/ebs"
+                    ),
+                    provider_managed_key_id="",
+                    customer_managed_key_id="",
+                )
+            }
+        ).execute()
+
+
+def _centralized_kms_step_output(**overrides: Any) -> dict[str, Any]:
+    """Return a valid centralized-KMS step output with optional overrides."""
+    output: dict[str, Any] = {
+        "success": True,
+        "platform": "security",
+        "test_name": "centralized_kms_test",
+        "kms_keys_total": 3,
+        "encrypted_resources_inspected": 2,
+        "non_kms_resources": 0,
+        "tests": deepcopy(CENTRALIZED_KMS_REQUIRED_TESTS),
+    }
+    output.update(overrides)
+    return output
+
+
+def test_centralized_kms_check_passes_when_all_resources_use_kms() -> None:
+    """CentralizedKmsCheck passes with KMS keys and zero non-KMS resources."""
+    check = CentralizedKmsCheck(config={"step_output": _centralized_kms_step_output()})
+
+    result = check.execute()
+
+    assert result["passed"] is True
+    assert "Centralized KMS verified" in result["output"]
+
+
+def test_centralized_kms_check_fails_when_required_check_fails() -> None:
+    """CentralizedKmsCheck reports the failed centralized-KMS probe."""
+    tests = deepcopy(CENTRALIZED_KMS_REQUIRED_TESTS)
+    tests["all_encrypted_resources_use_kms"] = {"passed": False, "error": "encrypted volume uses legacy key"}
+    check = CentralizedKmsCheck(config={"step_output": _centralized_kms_step_output(tests=tests)})
+
+    result = check.execute()
+
+    assert result["passed"] is False
+    assert "all_encrypted_resources_use_kms" in result["error"]
+    assert "legacy key" in result["error"]
+
+
+def test_centralized_kms_check_fails_without_kms_key_evidence() -> None:
+    """CentralizedKmsCheck fails when no KMS keys are reported."""
+    check = CentralizedKmsCheck(config={"step_output": _centralized_kms_step_output(kms_keys_total=0)})
+
+    result = check.execute()
+
+    assert result["passed"] is False
+    assert "kms_keys_total" in result["error"]
+
+
+def test_centralized_kms_check_fails_with_non_kms_resources() -> None:
+    """CentralizedKmsCheck fails when encrypted resources do not use KMS."""
+    check = CentralizedKmsCheck(config={"step_output": _centralized_kms_step_output(non_kms_resources=1)})
+
+    result = check.execute()
+
+    assert result["passed"] is False
+    assert "not using KMS" in result["error"]
+
+
+@pytest.mark.parametrize("inspected", [0, None, "2"])
+def test_centralized_kms_check_fails_without_inspected_resource_evidence(inspected: Any) -> None:
+    """CentralizedKmsCheck requires a positive encrypted-resource inspection count."""
+    check = CentralizedKmsCheck(
+        config={"step_output": _centralized_kms_step_output(encrypted_resources_inspected=inspected)}
+    )
+
+    result = check.execute()
+
+    assert result["passed"] is False
+    assert "encrypted_resources_inspected" in result["error"]
 
 
 def _oidc_step_output(**overrides: Any) -> dict[str, Any]:

@@ -363,7 +363,12 @@ def _transform_validations_for_pytest(
             resolved_params = dict(params)
             if "step" in resolved_params:
                 step_name = resolved_params.pop("step")
-                step_output = step_outputs.get(step_name, {})
+                if step_name not in step_outputs:
+                    logger.info(
+                        f"Skipping validation '{name}' in [{category}]: step '{step_name}' did not produce output"
+                    )
+                    continue
+                step_output = step_outputs[step_name]
                 resolved_params["step_output"] = step_output
 
             # Remove phase from params (not needed by validation)

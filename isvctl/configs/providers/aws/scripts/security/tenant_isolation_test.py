@@ -338,12 +338,10 @@ def _provision_tenant(
     kms: Any,
     s3: Any,
     region: str,
-    suffix: str,
-    cidr: str,
+    tenant: Tenant,
     ami_id: str,
 ) -> Tenant:
-    """Provision the full per-tenant fixture. Caller invokes ``_teardown_tenant`` from finally."""
-    tenant = Tenant(suffix=suffix, cidr=cidr)
+    """Provision the full per-tenant fixture into a caller-owned resource ledger."""
     _create_vpc_and_subnet(ec2, tenant)
     _create_s3_bucket(s3, tenant, region)
     _create_kms_key(kms, tenant)
@@ -809,29 +807,32 @@ def main() -> int:
     try:
         try:
             ami_id = _get_amazon_linux_ami(ec2)
+            tenant_a = Tenant(suffix=suffix_a, cidr=TENANT_A_CIDR)
             tenant_a = _provision_tenant(
                 ec2=ec2,
                 iam=iam,
                 kms=kms,
                 s3=s3,
                 region=region,
-                suffix=suffix_a,
-                cidr=TENANT_A_CIDR,
+                tenant=tenant_a,
                 ami_id=ami_id,
             )
+            tenant_b = Tenant(suffix=suffix_b, cidr=TENANT_B_CIDR)
             tenant_b = _provision_tenant(
                 ec2=ec2,
                 iam=iam,
                 kms=kms,
                 s3=s3,
                 region=region,
-                suffix=suffix_b,
-                cidr=TENANT_B_CIDR,
+                tenant=tenant_b,
                 ami_id=ami_id,
             )
         except ClientError as exc:
             code = exc.response.get("Error", {}).get("Code", "")
-            if code in SKIPPABLE_SETUP_ERRORS and tenant_a is None and tenant_b is None:
+            partial_resources_created = any(
+                tenant is not None and any(tenant.created.values()) for tenant in (tenant_a, tenant_b)
+            )
+            if code in SKIPPABLE_SETUP_ERRORS and not partial_resources_created:
                 # Pure-permission denial with NO partial state -- emit a skip
                 # so the validation pytest.skips rather than fabricating a pass.
                 skip_payload = _skipped_result(

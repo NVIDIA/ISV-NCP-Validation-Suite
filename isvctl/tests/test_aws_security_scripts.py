@@ -2975,6 +2975,57 @@ def test_probe_storage_isolation_passes_when_dryrun_denies_snapshot_and_attach(
     assert {p["name"] for p in result["probes"]} == {"ec2_create_snapshot_denied", "ec2_attach_volume_denied"}
 
 
+def test_tenant_isolation_main_cleans_partial_provision_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tenant_isolation_module: ModuleType,
+) -> None:
+    """A setup failure after partial resource creation still reaches teardown."""
+
+    class FakeUuid:
+        """Deterministic UUID stand-in exposing the ``hex`` attribute used by the script."""
+
+        def __init__(self, value: str) -> None:
+            self.hex = value
+
+    def fake_client(service_name: str, **_kwargs: Any) -> object:
+        """Return an opaque fake client for each AWS service."""
+        if service_name in {"ec2", "iam", "kms", "s3"}:
+            return object()
+        msg = f"unexpected service: {service_name}"
+        raise AssertionError(msg)
+
+    cleanup_calls: list[tuple[str, dict[str, bool], str]] = []
+    suffixes = iter([FakeUuid("aaaa1111ffffffff"), FakeUuid("bbbb2222ffffffff")])
+
+    def fake_provision_tenant(*, tenant: Any, **_kwargs: Any) -> Any:
+        """Simulate a helper failing after creating a resource."""
+        tenant.vpc_id = "vpc-partial"
+        tenant.created["vpc"] = True
+        raise _client_error("CreateUser", code="LimitExceeded", message="setup failed")
+
+    def fake_teardown_tenant(*, tenant: Any, **_kwargs: Any) -> list[str]:
+        """Record the tenant ledger passed to cleanup."""
+        cleanup_calls.append((tenant.name, dict(tenant.created), tenant.vpc_id))
+        return []
+
+    monkeypatch.setattr(tenant_isolation_module.boto3, "client", fake_client)
+    monkeypatch.setattr(tenant_isolation_module.uuid, "uuid4", lambda: next(suffixes))
+    monkeypatch.setattr(tenant_isolation_module.sys, "argv", ["tenant_isolation_test.py", "--region", "us-west-2"])
+    monkeypatch.setattr(tenant_isolation_module, "_get_amazon_linux_ami", lambda _ec2: "ami-test")
+    monkeypatch.setattr(tenant_isolation_module, "_provision_tenant", fake_provision_tenant)
+    monkeypatch.setattr(tenant_isolation_module, "_teardown_tenant", fake_teardown_tenant)
+
+    exit_code = tenant_isolation_module.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["success"] is False
+    assert payload.get("skipped") is not True
+    assert "setup failed" in payload["error"]
+    assert cleanup_calls == [("isv-sec11-test-aaaa1111", {"vpc": True}, "vpc-partial")]
+
+
 # --- teardown SEC11 sweep helpers ----------------------------------------
 
 

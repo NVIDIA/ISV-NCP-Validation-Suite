@@ -70,10 +70,11 @@ commands:
       # Scale the same pool to a new target count. Re-applies the
       # terraform-node-pool module with a bumped desired_size; create_node_pool.sh
       # is reused because `terraform apply` is idempotent. The emitted
-      # node_pool payload carries the new replica count, which the second
-      # K8sNodePoolCheck invocation in the suite asserts on.
+      # node_pool payload carries the new replica count. This runs in the test
+      # phase so the create check can assert desired_size=1 before the pool is
+      # scaled to 2 and asserted by the update check.
       - name: update_test_node_pool
-        phase: setup
+        phase: test
         command: "../scripts/eks/create_node_pool.sh"
         output_schema: node_pool
         timeout: 900
@@ -105,6 +106,16 @@ commands:
 
 tests:
   description: "AWS EKS GPU cluster validation"
+
+  validations:
+    kubernetes:
+      checks:
+        K8sNodeCountCheck:
+          # Keep the generic node count scoped to the baseline cluster. The
+          # test phase intentionally scales a temporary CPU node pool before
+          # this check runs; K8sNodePoolCheck validates that pool separately.
+          count: "{{ steps.setup.kubernetes.node_count | default(4, true) }}"
+          exclude_label_selector: "{{ steps.update_test_node_pool.label_selector | default('', true) }}"
 
   exclude:
     tests:

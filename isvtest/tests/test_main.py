@@ -175,6 +175,73 @@ class TestTransformValidationsForPytest:
         # for this phase, it keeps the bare class name.
         assert keys == ["InstanceStateCheck"]
 
+    def test_list_entries_infer_distinct_phases_from_steps(self) -> None:
+        """Repeated checks can validate separate lifecycle operations."""
+        step_outputs = {
+            "create_test_node_pool": {"expected_replicas": 1},
+            "update_test_node_pool": {"expected_replicas": 2},
+        }
+        step_phases = {
+            "create_test_node_pool": "setup",
+            "update_test_node_pool": "test",
+        }
+        validations: dict[str, Any] = {
+            "k8s_node_pools": [
+                {
+                    "K8sNodePoolCheck": {
+                        "step": "create_test_node_pool",
+                        "expected_replicas": 1,
+                    }
+                },
+                {
+                    "K8sNodePoolCheck": {
+                        "step": "update_test_node_pool",
+                        "expected_replicas": 2,
+                    }
+                },
+            ],
+        }
+
+        setup_result = _transform_validations_for_pytest(validations, step_outputs, step_phases, "setup")
+        test_result = _transform_validations_for_pytest(validations, step_outputs, step_phases, "test")
+
+        setup_params = setup_result[0]["K8sNodePoolCheck"]
+        test_params = test_result[0]["K8sNodePoolCheck"]
+        assert setup_params["expected_replicas"] == 1
+        assert setup_params["step_output"] == step_outputs["create_test_node_pool"]
+        assert test_params["expected_replicas"] == 2
+        assert test_params["step_output"] == step_outputs["update_test_node_pool"]
+
+    def test_step_scoped_checks_preserve_order_before_default_test_checks(self) -> None:
+        """A phase-scoped convergence check can gate later default test checks."""
+        step_outputs = {
+            "update_test_node_pool": {"expected_replicas": 2},
+        }
+        step_phases = {
+            "update_test_node_pool": "test",
+        }
+        validations: dict[str, Any] = {
+            "k8s_node_pools": [
+                {
+                    "K8sNodePoolCheck": {
+                        "step": "update_test_node_pool",
+                        "expected_replicas": 2,
+                    }
+                }
+            ],
+            "k8s_workloads": {
+                "checks": {
+                    "K8sGpuStressWorkload": {
+                        "timeout": 300,
+                    }
+                }
+            },
+        }
+
+        result = _transform_validations_for_pytest(validations, step_outputs, step_phases, "test")
+
+        assert self._keys(result) == ["K8sNodePoolCheck", "K8sGpuStressWorkload"]
+
     def test_empty_validations(self) -> None:
         """Empty input returns empty list."""
         assert _transform_validations_for_pytest({}, {}, {}, "test") == []

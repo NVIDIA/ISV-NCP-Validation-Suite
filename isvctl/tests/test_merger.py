@@ -21,6 +21,8 @@ from isvctl.config.merger import (
     merge_yaml_files,
     parse_set_value,
 )
+from isvctl.config.schema import RunConfig
+from isvctl.orchestrator.context import Context
 
 
 class TestDeepMerge:
@@ -411,6 +413,24 @@ class TestImportEndToEnd:
         validations = result["tests"]["validations"]
         assert "kubernetes" in validations
         assert "k8s_workloads" in validations
+        node_count_check = validations["kubernetes"]["checks"]["K8sNodeCountCheck"]
+        node_count = node_count_check["count"]
+        exclude_selector = node_count_check["exclude_label_selector"]
+        assert "steps.update_test_node_pool.label_selector" in exclude_selector
+        config = RunConfig.model_validate(result)
+        context = Context(config)
+        for step in config.get_steps("kubernetes"):
+            context.set_step_phase(step.name, step.phase or "setup")
+        context.set_requested_phases({"setup", "test", "teardown"})
+        context.set_current_phase("test", config.get_phases("kubernetes"))
+        context.set_step_output("setup", {"kubernetes": {"node_count": 3}})
+        context.set_step_output(
+            "update_test_node_pool",
+            {"label_selector": "eks.amazonaws.com/nodegroup=isv-test-pool"},
+        )
+        assert context.render_string(node_count) == "3"
+        assert context.render_string(exclude_selector) == "eks.amazonaws.com/nodegroup=isv-test-pool"
+        assert context.get_warnings() == []
         assert result["tests"]["platform"] == "kubernetes"
 
     def test_aws_bare_metal_overrides_serial_console_retention_check(self) -> None:

@@ -50,6 +50,43 @@ tests:
     show_skipped_tests: false
 
   validations:
+    # Provider-agnostic node-pool CRUD outcome checks. Keep this category
+    # before the regular Kubernetes checks/workloads: update operations can
+    # run in the test phase, and their K8sNodePoolCheck must wait for node
+    # convergence before the rest of the phase exercises the cluster.
+    #
+    # Each provisioning step (EKS: terraform; CAPI: kubectl apply) emits a
+    # `node_pool` JSON payload that seeds the expected shape below; labels,
+    # taints, and instance types come across as JSON strings so Jinja
+    # string rendering doesn't mangle the structure, and K8sNodePoolCheck
+    # json-parses them. The `step` field binds each check to the phase of
+    # the operation it validates, so create can be asserted before update
+    # scales the same pool. The check is listed twice - once per operation -
+    # so list form is required (dict form would collide on the class name).
+    k8s_node_pools:
+      - K8sNodePoolCheck:
+          # Create: pool reaches desired replica count.
+          step: create_test_node_pool
+          label_selector: "{{ steps.create_test_node_pool.label_selector }}"
+          expected_replicas: "{{ steps.create_test_node_pool.expected_replicas | default(1, true) }}"
+          expected_labels: "{{ steps.create_test_node_pool.expected_labels_json | default('{}', true) }}"
+          expected_taints: "{{ steps.create_test_node_pool.expected_taints_json | default('[]', true) }}"
+          expected_instance_types: "{{ steps.create_test_node_pool.expected_instance_types_json | default('[]', true) }}"
+          node_type: "{{ steps.create_test_node_pool.node_type | default('cpu') }}"
+          wait_timeout: 900
+          poll_interval: 10
+      - K8sNodePoolCheck:
+          # Update (scale): same pool converges to the new count.
+          step: update_test_node_pool
+          label_selector: "{{ steps.update_test_node_pool.label_selector }}"
+          expected_replicas: "{{ steps.update_test_node_pool.expected_replicas | default(2, true) }}"
+          expected_labels: "{{ steps.update_test_node_pool.expected_labels_json | default('{}', true) }}"
+          expected_taints: "{{ steps.update_test_node_pool.expected_taints_json | default('[]', true) }}"
+          expected_instance_types: "{{ steps.update_test_node_pool.expected_instance_types_json | default('[]', true) }}"
+          node_type: "{{ steps.update_test_node_pool.node_type | default('cpu') }}"
+          wait_timeout: 900
+          poll_interval: 10
+
     kubernetes:
       checks:
         K8sNodeCountCheck:
@@ -202,35 +239,6 @@ tests:
           timeout: 1800
           genai_perf_requests: 200
           genai_perf_concurrency: 8
-
-    # Provider-agnostic node-pool CRUD outcome checks. Each
-    # provisioning step (EKS: terraform; CAPI: kubectl apply) emits a
-    # `node_pool` JSON payload that seeds the expected shape below; labels,
-    # taints, and instance types come across as JSON strings so Jinja
-    # string rendering doesn't mangle the structure, and K8sNodePoolCheck
-    # json-parses them. The check is listed twice - once per operation -
-    # so list form is required (dict form would collide on the class name).
-    k8s_node_pools:
-      - K8sNodePoolCheck:
-          # Create: pool reaches desired replica count.
-          label_selector: "{{ steps.create_test_node_pool.label_selector }}"
-          expected_replicas: "{{ steps.create_test_node_pool.expected_replicas | default(1, true) }}"
-          expected_labels: "{{ steps.create_test_node_pool.expected_labels_json | default('{}', true) }}"
-          expected_taints: "{{ steps.create_test_node_pool.expected_taints_json | default('[]', true) }}"
-          expected_instance_types: "{{ steps.create_test_node_pool.expected_instance_types_json | default('[]', true) }}"
-          node_type: "{{ steps.create_test_node_pool.node_type | default('cpu') }}"
-          wait_timeout: 900
-          poll_interval: 10
-      - K8sNodePoolCheck:
-          # Update (scale): same pool converges to the new count.
-          label_selector: "{{ steps.update_test_node_pool.label_selector }}"
-          expected_replicas: "{{ steps.update_test_node_pool.expected_replicas | default(2, true) }}"
-          expected_labels: "{{ steps.update_test_node_pool.expected_labels_json | default('{}', true) }}"
-          expected_taints: "{{ steps.update_test_node_pool.expected_taints_json | default('[]', true) }}"
-          expected_instance_types: "{{ steps.update_test_node_pool.expected_instance_types_json | default('[]', true) }}"
-          node_type: "{{ steps.update_test_node_pool.node_type | default('cpu') }}"
-          wait_timeout: 900
-          poll_interval: 10
 
     k8s_observability:
       checks:

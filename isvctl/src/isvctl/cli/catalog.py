@@ -19,6 +19,9 @@ from typing import Annotated
 
 import typer
 from isvtest.catalog import build_catalog, get_catalog_version
+from isvtest.release_manifest import load_released_tests
+from rich.console import Console
+from rich.table import Table
 
 from isvctl.cli import setup_logging
 from isvctl.cli.common import get_output_dir
@@ -30,6 +33,65 @@ app = typer.Typer(
     help="Manage the test catalog for coverage tracking",
     no_args_is_help=True,
 )
+
+console = Console()
+
+
+@app.command("list")
+def list_cmd(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the catalog as JSON instead of a table"),
+    ] = False,
+    unreleased: Annotated[
+        bool,
+        typer.Option("--unreleased", help="Show only tests not present in the release manifest"),
+    ] = False,
+) -> None:
+    """List the tests that would be uploaded by `isvctl catalog push`.
+
+    Released tests only by default. Set ``ISVTEST_INCLUDE_UNRELEASED=1`` to
+    include unreleased validations (matches the gate used at run time and by
+    `catalog push`), or use ``--unreleased`` to list only unreleased tests.
+
+    Examples:
+        isvctl catalog list
+        isvctl catalog list --json
+        isvctl catalog list --unreleased
+        ISVTEST_INCLUDE_UNRELEASED=1 isvctl catalog list
+    """
+    if unreleased:
+        released_tests = load_released_tests()
+        catalog_entries = [entry for entry in build_catalog(released_only=False) if entry["name"] not in released_tests]
+    else:
+        catalog_entries = build_catalog()
+    catalog_version = get_catalog_version()
+
+    if json_output:
+        typer.echo(json.dumps({"isvTestVersion": catalog_version, "entries": catalog_entries}, indent=2))
+        return
+
+    table = Table(
+        title=f"Test Catalog ({len(catalog_entries)} tests, version {catalog_version})",
+        title_justify="left",
+        show_header=True,
+        header_style="bold",
+        padding=(0, 1),
+    )
+    table.add_column("Test", style="green", no_wrap=True)
+    table.add_column("Platforms", style="cyan")
+    table.add_column("Markers", style="dim")
+    table.add_column("Description")
+
+    for entry in sorted(catalog_entries, key=lambda e: e["name"]):
+        table.add_row(
+            entry["name"],
+            ", ".join(entry.get("platforms") or []) or "-",
+            ", ".join(entry.get("markers") or []) or "-",
+            entry.get("description") or "-",
+        )
+
+    console.print(table)
 
 
 @app.command("push")

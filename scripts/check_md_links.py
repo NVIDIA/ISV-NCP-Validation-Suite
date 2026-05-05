@@ -50,10 +50,7 @@ def find_markdown_files(root: Path) -> list[Path]:
         rel = path.relative_to(root)
         if any(part in SKIP_DIRS for part in rel.parts):
             continue
-        if (
-            any(part.startswith(".") for part in rel.parts)
-            and rel.parts[0] != ".github"
-        ):
+        if any(part.startswith(".") for part in rel.parts) and rel.parts[0] != ".github":
             continue
         files.append(path)
     return files
@@ -63,9 +60,7 @@ def check_links(root: Path, md_files: list[Path]) -> list[tuple[Path, int, str]]
     """Return list of (file, line_number, url) for broken relative links."""
     broken: list[tuple[Path, int, str]] = []
     for md in md_files:
-        for lineno, line in enumerate(
-            md.read_text(errors="replace").splitlines(), start=1
-        ):
+        for lineno, line in enumerate(md.read_text(errors="replace").splitlines(), start=1):
             for url in LINK_RE.findall(line):
                 if any(url.startswith(p) for p in SKIP_PREFIXES):
                     continue

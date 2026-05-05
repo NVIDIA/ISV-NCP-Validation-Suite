@@ -23,7 +23,7 @@ import pytest
 
 # Load bump-version.py as a module (filename has a hyphen so normal import won't work)
 _spec = importlib.util.spec_from_file_location(
-    "bump_version", Path(__file__).resolve().parent.parent.parent / "scripts" / "bump-version.py"
+    "bump_version", Path(__file__).resolve().parent.parent / "bump-version.py"
 )
 assert _spec and _spec.loader
 bump_version = importlib.util.module_from_spec(_spec)

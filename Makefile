@@ -73,6 +73,8 @@ test: ## Run tests for all packages
 			(cd $$pkg && uv run pytest) || exit 1; \
 		fi; \
 	done
+	@echo "Testing scripts..."
+	@uv run pytest scripts/tests || exit 1
 	@echo ""
 	@echo "✅ All tests passed!"
 
@@ -166,6 +168,11 @@ clean: ## Clean build artifacts and test outputs
 		find $$pkg -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true; \
 		find $$pkg -type f -name "*.pyc" -delete 2>/dev/null || true; \
 	done
+	@echo "Cleaning scripts..."
+	@rm -f scripts/.coverage
+	@find scripts -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	@find scripts -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
+	@find scripts -type f -name "*.pyc" -delete 2>/dev/null || true
 	@echo "✅ Clean complete!"
 
 update-spdx-headers: ## Update SPDX headers in all packages

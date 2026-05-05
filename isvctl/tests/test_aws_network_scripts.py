@@ -17,6 +17,7 @@ import json
 import os
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -470,6 +471,7 @@ class FakeLogs:
     def __init__(self, events: list[dict[str, Any]] | None = None) -> None:
         """Configure log events."""
         self.events = events or []
+        self.calls: list[str] = []
 
     def filter_log_events(
         self,
@@ -482,6 +484,7 @@ class FakeLogs:
         assert logGroupName == "/aws/vpc/flow-logs"
         assert startTime < endTime
         assert limit == 10
+        self.calls.append(logGroupName)
         return {"events": list(self.events)}
 
 
@@ -527,6 +530,16 @@ def _active_flow_log() -> dict[str, Any]:
         "LogDestinationType": "cloud-watch-logs",
         "LogGroupName": "/aws/vpc/flow-logs",
         "LogDestination": "arn:aws:logs:us-west-2:123456789012:log-group:/aws/vpc/flow-logs",
+    }
+
+
+def _active_s3_flow_log() -> dict[str, Any]:
+    """Return a fake active S3-backed VPC Flow Log."""
+    return {
+        "FlowLogId": "fl-s3",
+        "FlowLogStatus": "ACTIVE",
+        "LogDestinationType": "s3",
+        "LogDestination": "arn:aws:s3:::isv-flow-logs",
     }
 
 
@@ -579,11 +592,7 @@ def test_my_isv_sdn_logging_demo_test_names_match_suite_steps(aspect: str, step_
             timeout=30,
         )
     except subprocess.TimeoutExpired as exc:
-        pytest.fail(
-            f"{script} timed out after {exc.timeout} seconds\n"
-            f"stdout: {exc.stdout!r}\n"
-            f"stderr: {exc.stderr!r}"
-        )
+        pytest.fail(f"{script} timed out after {exc.timeout} seconds\nstdout: {exc.stdout!r}\nstderr: {exc.stderr!r}")
 
     assert completed.returncode == 0, completed.stderr
     result: dict[str, Any] = json.loads(completed.stdout)
@@ -642,6 +651,39 @@ def test_sdn_hardware_fault_logging_marks_absent_flow_logs_provider_hidden() -> 
     assert result["success"] is True
     assert result["log_destination"] == "aws-vpc-flow-logs:not-configured"
     assert result["tests"]["log_destination_configured"]["provider_hidden"] is True
+
+
+def test_sdn_hardware_fault_logging_fails_destination_when_flow_log_query_fails() -> None:
+    """Hardware-fault logging must not report absent Flow Logs when the query failed."""
+    module = _load_network_script("sdn_logging_test.py")
+    ec2 = FakeSdnLoggingEc2(flow_log_error=_client_error("DescribeFlowLogs", "UnauthorizedOperation", "denied"))
+    health = FakeHealth(events=[])
+
+    result = module.check_hardware_fault_logging(ec2, health, "vpc-test", "us-west-2")
+
+    log_destination = result["tests"]["log_destination_configured"]
+    assert result["success"] is False
+    assert result["log_destination"] == "aws-vpc-flow-logs:unknown"
+    assert log_destination["passed"] is False
+    assert "Unable to inspect VPC Flow Logs" in log_destination["error"]
+    assert log_destination["flow_log_query"]["passed"] is False
+    assert "provider_hidden" not in log_destination
+
+
+def test_sdn_hardware_fault_logging_fails_event_schema_when_health_query_fails() -> None:
+    """A non-hidden Health query failure must not be reported as a passing schema check."""
+    module = _load_network_script("sdn_logging_test.py")
+    ec2 = FakeSdnLoggingEc2(flow_logs=[_active_flow_log()])
+    health = FakeHealth(error=_client_error("DescribeEvents", "UnauthorizedOperation", "denied"))
+
+    result = module.check_hardware_fault_logging(ec2, health, "vpc-test", "us-west-2")
+
+    event_schema_valid = result["tests"]["event_schema_valid"]
+    assert result["success"] is False
+    assert result["tests"]["fault_event_source_queryable"]["passed"] is False
+    assert event_schema_valid["passed"] is False
+    assert "provider_hidden" not in event_schema_valid
+    assert event_schema_valid["health_query"]["passed"] is False
 
 
 def test_sdn_latency_perf_logging_happy_path_with_cloudwatch_datapoint() -> None:
@@ -749,6 +791,46 @@ def test_sdn_logging_list_packet_metrics_paginates_and_filters() -> None:
             "Dimensions": [{"Name": "InstanceId", "Value": "i-next"}],
         },
     ]
+
+
+def test_sdn_latency_perf_logging_cloudwatch_metrics_pass_when_flow_log_query_fails() -> None:
+    """CloudWatch packet metrics independently satisfy packet telemetry."""
+    module = _load_network_script("sdn_logging_test.py")
+    ec2 = FakeSdnLoggingEc2(
+        flow_log_error=_client_error("DescribeFlowLogs", "UnauthorizedOperation", "denied"),
+        instances=[
+            {
+                "InstanceId": "i-probe",
+                "NetworkInterfaces": [{"NetworkInterfaceId": "eni-probe"}],
+            }
+        ],
+        network_interfaces=[{"NetworkInterfaceId": "eni-probe"}],
+    )
+    cloudwatch = FakeCloudWatch(
+        metrics=[
+            {
+                "MetricName": "NetworkPacketsIn",
+                "Dimensions": [{"Name": "InstanceId", "Value": "i-probe"}],
+            }
+        ],
+        datapoints=[{"Sum": 42.0}],
+    )
+    logs = FakeLogs(events=[])
+
+    result = module.check_latency_perf_logging(
+        ec2,
+        cloudwatch,
+        logs,
+        "vpc-test",
+        "us-west-2",
+        sample_window_seconds=60,
+    )
+
+    assert result["success"] is True
+    assert result["tests"]["packet_metric_present"]["passed"] is True
+    assert result["tests"]["samples_recent"]["passed"] is True
+    assert result["telemetry_namespace"] == "AWS/EC2"
+    assert result["probe_resource_id"] == "i-probe"
 
 
 def test_sdn_latency_perf_logging_ignores_account_metrics_when_target_vpc_has_no_resources() -> None:
@@ -891,6 +973,33 @@ def test_sdn_latency_perf_logging_uses_recent_flow_log_samples() -> None:
     assert result["tests"]["samples_recent"]["sample_count"] == 1
 
 
+def test_sdn_latency_perf_logging_marks_s3_flow_log_samples_provider_hidden() -> None:
+    """S3-backed Flow Logs are valid telemetry but cannot be sampled through CloudWatch Logs."""
+    module = _load_network_script("sdn_logging_test.py")
+    ec2 = FakeSdnLoggingEc2(flow_logs=[_active_s3_flow_log()])
+    cloudwatch = FakeCloudWatch(metrics=[], datapoints=[])
+    logs = FakeLogs(events=[])
+
+    result = module.check_latency_perf_logging(
+        ec2,
+        cloudwatch,
+        logs,
+        "vpc-test",
+        "us-west-2",
+        sample_window_seconds=60,
+    )
+
+    samples_recent = result["tests"]["samples_recent"]
+    assert result["success"] is True
+    assert result["telemetry_namespace"] == "AWS/VPCFlowLogs"
+    assert result["probe_resource_id"] == "vpc-test"
+    assert result["tests"]["packet_metric_present"]["passed"] is True
+    assert samples_recent["provider_hidden"] is True
+    assert "s3" in samples_recent["message"]
+    assert samples_recent["flow_log_destinations"] == ["arn:aws:s3:::isv-flow-logs"]
+    assert logs.calls == []
+
+
 def test_sdn_audit_trail_logging_happy_path() -> None:
     """Audit trail logging passes when CloudTrail has the SG rule lifecycle."""
     module = _load_network_script("sdn_logging_test.py")
@@ -1001,6 +1110,39 @@ def test_sdn_audit_trail_logging_cleans_up_probe_after_partial_create_failure() 
     assert ec2.deleted_sgs == ["sg-audit"]
 
 
+def test_sdn_audit_trail_logging_ignores_create_security_group_event_without_group_id() -> None:
+    """CreateSecurityGroup events lack groupId in requestParameters and must not fail required-fields."""
+    module = _load_network_script("sdn_logging_test.py")
+    ec2 = FakeSdnLoggingEc2()
+    create_event = {
+        "eventName": "CreateSecurityGroup",
+        "userIdentity": {"type": "AssumedRole", "arn": "arn:aws:sts::123456789012:assumed-role/isv/test"},
+        "eventTime": datetime.now(UTC).isoformat(),
+        "requestParameters": {"groupName": "isv-sdn-audit", "vpcId": "vpc-test"},
+    }
+    cloudtrail = FakeCloudTrail(
+        events=[
+            create_event,
+            module._audit_event("AuthorizeSecurityGroupIngress", "sg-audit"),
+            module._audit_event("RevokeSecurityGroupIngress", "sg-audit"),
+            module._audit_event("AuthorizeSecurityGroupIngress", "sg-audit"),
+            module._audit_event("RevokeSecurityGroupIngress", "sg-audit"),
+        ]
+    )
+
+    result = module.check_audit_trail_logging(
+        ec2,
+        cloudtrail,
+        "vpc-test",
+        "us-west-2",
+        timeout_seconds=0,
+        poll_seconds=0,
+    )
+
+    assert result["success"] is True
+    assert result["tests"]["audit_event_has_required_fields"]["passed"] is True
+
+
 def test_sdn_audit_trail_logging_records_cleanup_failure() -> None:
     """Audit probe cleanup failures must be visible in the cleanup subtest."""
     module = _load_network_script("sdn_logging_test.py")
@@ -1026,4 +1168,4 @@ def test_sdn_audit_trail_logging_records_cleanup_failure() -> None:
 
     assert result["success"] is False
     assert result["tests"]["cleanup"]["passed"] is False
-    assert "DependencyViolation" in result["tests"]["cleanup"]["error"]
+    assert "Failed to delete audit probe security group sg-audit" in result["tests"]["cleanup"]["error"]

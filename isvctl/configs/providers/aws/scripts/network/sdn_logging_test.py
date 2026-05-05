@@ -39,7 +39,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import boto3
 from botocore.exceptions import ClientError
-from common.errors import handle_aws_errors
+from common.errors import delete_with_retry, handle_aws_errors
 
 ASPECT_TESTS: dict[str, list[str]] = {
     "hardware_faults": [
@@ -96,13 +96,15 @@ def _failed(error: str, **extra: Any) -> dict[str, Any]:
     return result
 
 
-def _provider_hidden(test_name: str, message: str) -> dict[str, Any]:
+def _provider_hidden(test_name: str, message: str, **extra: Any) -> dict[str, Any]:
     """Return a passing result for telemetry hidden by AWS provider boundaries."""
-    return {
+    result: dict[str, Any] = {
         "passed": True,
         "provider_hidden": True,
         "message": f"{test_name}: {message}",
     }
+    result.update(extra)
+    return result
 
 
 def _base_result(aspect: str, vpc_id: str, region: str) -> dict[str, Any]:
@@ -141,6 +143,11 @@ def _cloudwatch_log_group(flow_log: dict[str, Any]) -> str | None:
         return None
     suffix = destination.split(marker, 1)[1]
     return suffix.split(":*", 1)[0]
+
+
+def _flow_log_destination_type(flow_log: dict[str, Any]) -> str:
+    """Return the Flow Log destination type with AWS's default made explicit."""
+    return flow_log.get("LogDestinationType") or "cloud-watch-logs"
 
 
 def _describe_flow_logs(ec2: Any, vpc_id: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -209,8 +216,14 @@ def check_hardware_fault_logging(ec2: Any, health: Any, vpc_id: str, region: str
 
     flow_log_query, flow_logs = _describe_flow_logs(ec2, vpc_id)
     result["tests"]["logging_endpoint_reachable"] = flow_log_query
-    active = _active_flow_logs(flow_logs)
-    if active:
+    active = _active_flow_logs(flow_logs) if flow_log_query.get("passed") else []
+    if not flow_log_query.get("passed"):
+        result["log_destination"] = "aws-vpc-flow-logs:unknown"
+        result["tests"]["log_destination_configured"] = _failed(
+            f"Unable to inspect VPC Flow Logs for {vpc_id}",
+            flow_log_query=flow_log_query,
+        )
+    elif active:
         destination = _flow_log_destination(active[0])
         result["log_destination"] = destination
         result["tests"]["log_destination_configured"] = _passed(f"VPC Flow Logs configured: {destination}")
@@ -225,6 +238,11 @@ def check_hardware_fault_logging(ec2: Any, health: Any, vpc_id: str, region: str
         result["tests"]["event_schema_valid"] = _provider_hidden(
             "event_schema_valid",
             "AWS Health event schema cannot be inspected without provider event visibility",
+        )
+    elif not health_query.get("passed"):
+        result["tests"]["event_schema_valid"] = _failed(
+            "AWS Health event schema could not be validated because the event query failed",
+            health_query=health_query,
         )
     else:
         result["tests"]["event_schema_valid"] = _health_events_have_schema(health_events)
@@ -407,7 +425,7 @@ def check_latency_perf_logging(
     except ClientError as e:
         result["tests"]["metrics_endpoint_reachable"] = _failed(str(e))
 
-    packet_metric_present = flow_log_error is None and bool(metrics or active_flow_logs)
+    packet_metric_present = bool(metrics) or bool(active_flow_logs)
     if packet_metric_present:
         result["tests"]["packet_metric_present"] = _passed("Packet telemetry source is configured")
     elif flow_log_error:
@@ -445,8 +463,12 @@ def check_latency_perf_logging(
         except ClientError:
             continue
 
+    cloudwatch_flow_logs = [flow_log for flow_log in active_flow_logs if _cloudwatch_log_group(flow_log)]
+    non_cloudwatch_flow_logs = [
+        flow_log for flow_log in active_flow_logs if _flow_log_destination_type(flow_log) != "cloud-watch-logs"
+    ]
     flow_log_samples, log_group, flow_log_lookup_error = _count_recent_flow_log_events(
-        logs, active_flow_logs, start_time, end_time
+        logs, cloudwatch_flow_logs, start_time, end_time
     )
     if datapoint_metric:
         result["telemetry_namespace"] = datapoint_metric["Namespace"]
@@ -466,7 +488,18 @@ def check_latency_perf_logging(
             "samples_recent",
             "No target VPC packet telemetry source is currently configured to produce samples",
         )
-    elif flow_log_lookup_error and active_flow_logs:
+    elif non_cloudwatch_flow_logs:
+        destination_types = sorted({_flow_log_destination_type(flow_log) for flow_log in non_cloudwatch_flow_logs})
+        result["telemetry_namespace"] = "AWS/VPCFlowLogs"
+        result["probe_resource_id"] = vpc_id
+        result["tests"]["samples_recent"] = _provider_hidden(
+            "samples_recent",
+            "VPC Flow Logs target non-CloudWatch destination(s) "
+            f"{', '.join(destination_types)}; CloudWatch Logs samples cannot be validated",
+            flow_log_destinations=[_flow_log_destination(flow_log) for flow_log in non_cloudwatch_flow_logs],
+            flow_log_lookup_error=flow_log_lookup_error,
+        )
+    elif flow_log_lookup_error and cloudwatch_flow_logs:
         result["telemetry_namespace"] = "AWS/VPCFlowLogs"
         result["probe_resource_id"] = vpc_id
         result["tests"]["samples_recent"] = _failed(
@@ -594,13 +627,24 @@ def _poll_cloudtrail_events(
         time.sleep(poll_seconds)
 
 
+def _is_rule_mutation_event(event: dict[str, Any]) -> bool:
+    """Return True for CloudTrail events that mutate security group rules."""
+    name = str(event.get("eventName", ""))
+    return (
+        name.startswith("AuthorizeSecurityGroup")
+        or name.startswith("RevokeSecurityGroup")
+        or name == "ModifySecurityGroupRules"
+    )
+
+
 def _audit_events_have_required_fields(events: list[dict[str, Any]], group_id: str) -> dict[str, Any]:
-    """Validate CloudTrail events contain actor, timestamp, and target rule fields."""
-    if not events:
-        return _failed("No audit events available to validate required fields")
+    """Validate CloudTrail rule-mutation events contain actor, timestamp, and target rule fields."""
+    rule_events = [event for event in events if _is_rule_mutation_event(event)]
+    if not rule_events:
+        return _failed("No rule-mutation audit events available to validate required fields")
 
     missing = []
-    for event in events:
+    for event in rule_events:
         request = event.get("requestParameters")
         if not event.get("userIdentity") or not event.get("eventTime") or not isinstance(request, dict):
             missing.append(event.get("eventName", "<unknown>"))
@@ -609,7 +653,7 @@ def _audit_events_have_required_fields(events: list[dict[str, Any]], group_id: s
             missing.append(event.get("eventName", "<unknown>"))
     if missing:
         return _failed(f"CloudTrail event(s) missing userIdentity/eventTime/requestParameters.groupId: {missing}")
-    return _passed(f"{len(events)} CloudTrail event(s) contain required audit fields")
+    return _passed(f"{len(rule_events)} CloudTrail event(s) contain required audit fields")
 
 
 def _create_audit_probe_security_group(ec2: Any, vpc_id: str) -> str:
@@ -658,11 +702,13 @@ def _delete_security_group(ec2: Any, group_id: str | None) -> dict[str, Any]:
     """Best-effort cleanup for the audit probe security group."""
     if not group_id:
         return _failed("Security group was not created")
-    try:
-        ec2.delete_security_group(GroupId=group_id)
-    except ClientError as e:
-        return _failed(str(e))
-    return _passed(f"Deleted audit probe security group {group_id}")
+    if delete_with_retry(
+        ec2.delete_security_group,
+        GroupId=group_id,
+        resource_desc=f"security group {group_id}",
+    ):
+        return _passed(f"Deleted audit probe security group {group_id}")
+    return _failed(f"Failed to delete audit probe security group {group_id} after retries")
 
 
 def _audit_test_results(events: list[dict[str, Any]], group_id: str) -> dict[str, dict[str, Any]]:

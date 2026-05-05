@@ -764,6 +764,133 @@ def _run_sg_scoping_check(
     validation.set_passed(f"SG rules correctly scoped at {scope} level")
 
 
+def _is_evidence_present(step_output: dict[str, object], key: str) -> bool:
+    """Return True when a required SDN logging evidence field is populated."""
+    value = step_output.get(key)
+    if isinstance(value, str):
+        return bool(value.strip())
+    return value is not None
+
+
+def _run_sdn_logging_check(
+    validation: BaseValidation,
+    required_keys: list[str],
+    evidence_keys: list[str],
+    label: str,
+) -> None:
+    """Shared logic for SDN logging validations."""
+    if not check_required_tests(validation, required_keys, f"{label} logging tests failed"):
+        return
+
+    step_output = validation.config.get("step_output", {})
+    missing_evidence = [key for key in evidence_keys if not _is_evidence_present(step_output, key)]
+    if missing_evidence:
+        validation.set_failed(f"Missing SDN logging evidence: {', '.join(missing_evidence)}")
+        return
+
+    summary = ", ".join(f"{key}={step_output.get(key)}" for key in evidence_keys)
+    validation.set_passed(f"{label} logging validated ({summary})")
+
+
+class SdnHardwareFaultLoggingCheck(BaseValidation):
+    """Validate logging is available for network hardware faults.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        tests: dict with logging_endpoint_reachable,
+               fault_event_source_queryable, log_destination_configured,
+               event_schema_valid
+        log_destination: Customer-visible log destination identifier
+        recent_event_count: Number of recent provider hardware-fault events
+    """
+
+    description: ClassVar[str] = "Check SDN hardware fault logging"
+    markers: ClassVar[list[str]] = ["network"]
+
+    def run(self) -> None:
+        """Check hardware-fault logging from step output."""
+        _run_sdn_logging_check(
+            self,
+            [
+                "logging_endpoint_reachable",
+                "fault_event_source_queryable",
+                "log_destination_configured",
+                "event_schema_valid",
+            ],
+            ["log_destination", "recent_event_count"],
+            "SDN hardware fault",
+        )
+
+
+class SdnLatencyPerfLoggingCheck(BaseValidation):
+    """Validate logging captures latency/performance fluctuations.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        tests: dict with metrics_endpoint_reachable, performance_metric_present,
+               packet_metric_present, samples_recent
+        telemetry_namespace: Telemetry namespace used for the metric/log samples
+        sample_window_seconds: Recent sample lookback window
+        probe_resource_id: Resource whose telemetry was sampled
+    """
+
+    description: ClassVar[str] = "Check SDN latency/performance logging"
+    markers: ClassVar[list[str]] = ["network"]
+
+    def run(self) -> None:
+        """Check latency/performance logging from step output."""
+        _run_sdn_logging_check(
+            self,
+            [
+                "metrics_endpoint_reachable",
+                "performance_metric_present",
+                "packet_metric_present",
+                "samples_recent",
+            ],
+            ["telemetry_namespace", "sample_window_seconds", "probe_resource_id"],
+            "SDN latency/performance",
+        )
+
+
+class SdnFilterAuditTrailCheck(BaseValidation):
+    """Validate audit trails for network filtering rule changes.
+
+    Config:
+        step_output: The step output to check
+
+    Step output:
+        tests: dict with audit_endpoint_reachable, create_rule_logged,
+               modify_rule_logged, delete_rule_logged,
+               audit_event_has_required_fields, cleanup
+        trail_id: Audit trail identifier or source
+        actor_field: Actor field used by the audit event
+        target_rule_id: Rule/security-group identifier modified by the probe
+    """
+
+    description: ClassVar[str] = "Check SDN filtering rule audit trail"
+    markers: ClassVar[list[str]] = ["network", "security"]
+
+    def run(self) -> None:
+        """Check filtering-rule audit logging from step output."""
+        _run_sdn_logging_check(
+            self,
+            [
+                "audit_endpoint_reachable",
+                "create_rule_logged",
+                "modify_rule_logged",
+                "delete_rule_logged",
+                "audit_event_has_required_fields",
+                "cleanup",
+            ],
+            ["trail_id", "actor_field", "target_rule_id"],
+            "SDN filtering audit trail",
+        )
+
+
 class SgWorkloadScopingCheck(BaseValidation):
     """Validate security group rules can be scoped at workload level.
 

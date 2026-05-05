@@ -82,6 +82,15 @@ tests:
         SgServiceScopingCheck:
           step: sg_service_scoping
 
+    sdn_logging:
+      checks:
+        SdnHardwareFaultLoggingCheck:
+          step: sdn_hardware_fault_logging
+        SdnLatencyPerfLoggingCheck:
+          step: sdn_latency_perf_logging
+        SdnFilterAuditTrailCheck:
+          step: sdn_filter_audit_trail
+
     sdn:
       checks:
         ByoipCheck:

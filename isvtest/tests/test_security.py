@@ -463,8 +463,6 @@ def _cert_rotation_step_output(**overrides: Any) -> dict[str, Any]:
         "test_name": "cert_rotation_test",
         "rotation_window_days": 60,
         "certs_inspected": 2,
-        "auto_rotated": 1,
-        "short_validity": 1,
         "out_of_policy": 0,
         "tests": deepcopy(CERT_ROTATION_REQUIRED_TESTS),
     }

@@ -1254,6 +1254,16 @@ class FakeCertRotationEks:
         return {"cluster": cluster}
 
 
+class PartiallyFailingCertRotationEks(FakeCertRotationEks):
+    """Fake EKS client that can list clusters but cannot describe one of them."""
+
+    def describe_cluster(self, name: str) -> dict[str, dict[str, Any]]:
+        """Raise AccessDenied for one cluster and return metadata for the rest."""
+        if name == "denied":
+            raise _client_error("DescribeCluster")
+        return super().describe_cluster(name)
+
+
 def test_cert_rotation_accepts_eks_control_plane_endpoint_certs(
     cert_rotation_module: ModuleType,
 ) -> None:
@@ -1307,6 +1317,33 @@ def test_cert_rotation_treats_private_eks_endpoint_certs_as_provider_managed(
     assert record["rotation_evidence_hidden"] is True
     assert "out_of_policy" not in record
     assert record["endpoint_private_access"] is True
+
+
+def test_cert_rotation_reports_inspection_errors_without_policy_fallback(
+    cert_rotation_module: ModuleType,
+) -> None:
+    """Partial EKS inspection failures are reported directly, not evaluated as certificate-policy failures."""
+    eks = PartiallyFailingCertRotationEks(
+        {
+            "cluster-a": "https://eks.test.local",
+            "denied": "https://denied.eks.test.local",
+        }
+    )
+
+    result = cert_rotation_module._run_cert_rotation_test(eks, "us-west-2")
+
+    assert result["success"] is False
+    assert "skipped" not in result
+    assert result["certs_inspected"] == 1
+    assert result["auto_rotated"] == 0
+    assert result["short_validity"] == 0
+    assert result["out_of_policy"] == 0
+    assert len(result["inspection_errors"]) == 1
+    assert "denied" in result["inspection_errors"][0]
+    assert result["tests"]["cert_inventory_non_empty"]["passed"] is True
+    assert result["tests"]["no_certs_out_of_policy"]["passed"] is False
+    assert result["tests"]["rotation_evidence_present"]["passed"] is False
+    assert "inspection errors prevented" in result["tests"]["rotation_evidence_present"]["error"]
 
 
 def test_cert_rotation_reports_skipped_when_no_eks_clusters(cert_rotation_module: ModuleType) -> None:
@@ -1533,6 +1570,14 @@ class FakeCentralizedKms:
         return {"KeyMetadata": {"KeyId": KeyId, "KeyState": "Enabled"}}
 
 
+class FailingCentralizedKms(FakeCentralizedKms):
+    """Fake KMS client whose key inventory call fails."""
+
+    def list_keys(self) -> dict[str, list[dict[str, str]]]:
+        """Raise a fake KMS list_keys failure."""
+        raise _client_error("ListKeys")
+
+
 class FakeCentralizedEc2:
     """Fake EC2 client for SEC09-03 tests."""
 
@@ -1611,6 +1656,25 @@ def test_centralized_kms_flags_encrypted_volume_without_kms_key(centralized_kms_
     assert result["success"] is False
     assert result["non_kms_resources"] == 1
     assert "ec2:vol-no-key" in result["non_kms_details"][0]
+
+
+def test_centralized_kms_marks_kms_unreachable_when_key_listing_fails(
+    centralized_kms_module: ModuleType,
+) -> None:
+    """SEC09-03 reports KMS reachability failure before inspecting dependent resources."""
+    result = centralized_kms_module._run_centralized_kms_test(
+        FailingCentralizedKms(),
+        FakeCentralizedEc2(),
+        FakeCentralizedEks(),
+        "us-west-2",
+    )
+
+    assert result["success"] is False
+    assert result["encrypted_resources_inspected"] == 0
+    assert result["tests"]["kms_service_reachable"]["passed"] is False
+    assert result["tests"]["kms_keys_present"]["passed"] is False
+    assert result["tests"]["all_encrypted_resources_use_kms"]["passed"] is False
+    assert "KMS list_keys failed" in result["tests"]["kms_service_reachable"]["error"]
 
 
 def test_centralized_kms_separates_inspection_errors_from_non_kms_count(

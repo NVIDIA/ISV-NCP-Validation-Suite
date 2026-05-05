@@ -155,12 +155,21 @@ def _run_centralized_kms_test(kms: Any, ec2: Any, eks: Any, region: str) -> dict
     result = _base_result(region)
     details: list[str] = []
     inspection_errors: list[str] = []
+    kms_error: str | None = None
 
     try:
         keys = _list_kms_keys(kms)
     except Exception as e:
-        result["error"] = str(e)
-        result["tests"] = _failed_tests(str(e))
+        keys = []
+        kms_error = f"KMS list_keys failed: {e}"
+
+    if kms_error is not None:
+        result["error"] = kms_error
+        result["tests"] = {
+            "kms_service_reachable": {"passed": False, "error": kms_error},
+            "kms_keys_present": {"passed": False, "error": kms_error},
+            "all_encrypted_resources_use_kms": {"passed": False, "error": kms_error},
+        }
         return result
 
     result["kms_keys_total"] = len(keys)
@@ -177,7 +186,6 @@ def _run_centralized_kms_test(kms: Any, ec2: Any, eks: Any, region: str) -> dict
     result["non_kms_details"] = details
     result["non_kms_resources"] = len(details)
     result["inspection_errors"] = inspection_errors
-    kms_reachable = True
     kms_present = bool(keys)
     all_kms = not details and not inspection_errors
     if all_kms:
@@ -191,7 +199,7 @@ def _run_centralized_kms_test(kms: Any, ec2: Any, eks: Any, region: str) -> dict
     else:
         all_kms_message = f"Inspection errors prevented full KMS verification: {inspection_errors}"
     result["tests"] = {
-        "kms_service_reachable": {"passed": kms_reachable, "message": "KMS list_keys succeeded"},
+        "kms_service_reachable": {"passed": kms_error is None, "message": "KMS list_keys succeeded"},
         "kms_keys_present": {
             "passed": kms_present,
             "message" if kms_present else "error": (

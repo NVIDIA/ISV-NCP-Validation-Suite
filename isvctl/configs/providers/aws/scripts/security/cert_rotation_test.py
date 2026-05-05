@@ -159,6 +159,29 @@ def _provider_hidden_rotation_skip_result(result: dict[str, Any], records: list[
     return result
 
 
+def _inspection_error_result(
+    result: dict[str, Any], records: list[dict[str, Any]], inspection_errors: list[str]
+) -> dict[str, Any]:
+    """Mark certificate verification failed because AWS inventory could not be fully inspected."""
+    error = f"Certificate inspection errors prevented SEC09-01 verification: {inspection_errors}"
+    result["certificates"] = records
+    result["certs_inspected"] = len(records)
+    result["inspection_errors"] = inspection_errors
+    result["tests"] = {
+        "cert_inventory_non_empty": {
+            "passed": bool(records),
+            "message" if records else "error": (
+                f"Inspected {len(records)} EKS control-plane certificate endpoint(s)"
+                if records
+                else "No EKS control-plane certificates were inspected"
+            ),
+        },
+        "no_certs_out_of_policy": {"passed": False, "error": error},
+        "rotation_evidence_present": {"passed": False, "error": error},
+    }
+    return result
+
+
 def _run_cert_rotation_test(eks: Any, region: str) -> dict[str, Any]:
     """Run SEC09-01 EKS control-plane certificate checks with injected AWS clients."""
     result = _base_result(region)
@@ -175,49 +198,17 @@ def _run_cert_rotation_test(eks: Any, region: str) -> dict[str, Any]:
     if not records and not inspection_errors:
         return _skipped_result(result)
 
-    if records and not inspection_errors and all(record.get("rotation_evidence_hidden") is True for record in records):
+    if inspection_errors:
+        return _inspection_error_result(result, records, inspection_errors)
+
+    if all(record.get("rotation_evidence_hidden") is True for record in records):
         return _provider_hidden_rotation_skip_result(result, records)
 
-    auto_rotated = sum(1 for record in records if record.get("auto_rotated") is True)
-    short_validity = sum(1 for record in records if record.get("short_validity") is True)
-    out_of_policy = [record for record in records if record.get("out_of_policy") is True]
-
-    result["certificates"] = records
-    result["certs_inspected"] = len(records)
-    result["auto_rotated"] = auto_rotated
-    result["short_validity"] = short_validity
-    result["out_of_policy"] = len(out_of_policy)
-    if inspection_errors:
-        result["inspection_errors"] = inspection_errors
-
-    result["tests"] = {
-        "cert_inventory_non_empty": {
-            "passed": bool(records),
-            "message" if records else "error": (
-                f"Inspected {len(records)} EKS control-plane certificate endpoint(s)"
-                if records
-                else "No EKS control-plane certificates were inspected"
-            ),
-        },
-        "no_certs_out_of_policy": {
-            "passed": not out_of_policy and not inspection_errors,
-            "message" if not out_of_policy and not inspection_errors else "error": (
-                f"All {len(records)} certificate(s) are within the rotation policy"
-                if not out_of_policy and not inspection_errors
-                else f"Out-of-policy certificates or inspection errors: {out_of_policy}; {inspection_errors}"
-            ),
-        },
-        "rotation_evidence_present": {
-            "passed": auto_rotated + short_validity > 0,
-            "message" if auto_rotated + short_validity > 0 else "error": (
-                f"Rotation evidence found on {auto_rotated + short_validity} certificate(s)"
-                if auto_rotated + short_validity > 0
-                else "No certificate had short validity or auto-renewal evidence"
-            ),
-        },
-    }
-    result["success"] = all(test.get("passed") for test in result["tests"].values())
-    return result
+    return _inspection_error_result(
+        result,
+        records,
+        ["Certificate records included customer-visible rotation evidence, but no AWS policy evaluator is wired"],
+    )
 
 
 @handle_aws_errors

@@ -40,6 +40,18 @@ Config (YAML) → Script (any language) → JSON output → Validations (asserti
    `"{{region}}"`. The orchestrator warns when a template references a missing step or
    field (catches `ChainableUndefined` silent fallbacks).
 
+### JSON contract discipline
+
+- Test stdout JSON is the provider-neutral contract between scripts and
+  validations. Use ISV-agnostic names and avoid AWS-specific resource concepts
+  unless a validation or later step consumes them.
+- Keep output minimal: `success`, `platform`, `test_name`, and
+  `tests.<check>.passed/message/probes` are usually enough. Omit IDs, regions,
+  endpoint inventories, and other fields that do not affect behavior.
+- Failure/skip diagnostics are allowed, but keep them concise and generic:
+  top-level `error`/`error_type`, `tests.<check>.error`, `skip_reason`, or
+  `cleanup_errors`. Avoid raw provider responses and resource dumps.
+
 ### Lifecycle invariants (non-obvious)
 
 - Phases run in order: `setup → test → teardown`.

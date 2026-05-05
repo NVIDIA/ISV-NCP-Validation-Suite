@@ -25,6 +25,7 @@ from isvtest.validations.security import (
     MfaEnforcedCheck,
     OidcUserAuthCheck,
     ShortLivedCredentialsCheck,
+    TenantIsolationCheck,
 )
 
 REQUIRED_BMC_PROTOCOL_TESTS = [
@@ -595,3 +596,103 @@ def test_short_lived_credentials_check_skips_when_step_marks_skipped() -> None:
 
     with pytest.raises(pytest.skip.Exception, match="GetSessionToken not available"):
         ShortLivedCredentialsCheck(config={"step_output": step_output}).execute()
+
+
+TENANT_ISOLATION_REQUIRED_TESTS = {
+    "network_isolated": {"passed": True},
+    "data_isolated": {"passed": True},
+    "compute_isolated": {"passed": True},
+    "storage_isolated": {"passed": True},
+}
+
+
+def _tenant_isolation_step_output(**overrides: Any) -> dict[str, Any]:
+    """Return a valid tenant-isolation step output with optional overrides."""
+    output: dict[str, Any] = {
+        "success": True,
+        "platform": "security",
+        "test_name": "tenant_isolation_test",
+        "tenant_a_id": "isv-sec11-test-aaaa1111",
+        "tenant_b_id": "isv-sec11-test-bbbb2222",
+        "tests": deepcopy(TENANT_ISOLATION_REQUIRED_TESTS),
+    }
+    output.update(overrides)
+    return output
+
+
+class TestTenantIsolationCheck:
+    """Tests for SEC11-01 hard tenant-isolation validation."""
+
+    def test_passes_when_all_four_dimensions_isolated(self) -> None:
+        """Pass when all four sub-claims are reported isolated."""
+        result = TenantIsolationCheck(config={"step_output": _tenant_isolation_step_output()}).execute()
+
+        assert result["passed"] is True
+        assert "Hard tenant isolation verified" in result["output"]
+        assert "isv-sec11-test-aaaa1111" in result["output"]
+        assert "isv-sec11-test-bbbb2222" in result["output"]
+
+    def test_fails_when_data_isolation_breached(self) -> None:
+        """Fail with the specific contract key when cross-tenant KMS/S3 access leaks."""
+        tests = deepcopy(TENANT_ISOLATION_REQUIRED_TESTS)
+        tests["data_isolated"] = {"passed": False, "error": "kms:Decrypt unexpectedly allowed across tenants"}
+        result = TenantIsolationCheck(config={"step_output": _tenant_isolation_step_output(tests=tests)}).execute()
+
+        assert result["passed"] is False
+        assert "data_isolated" in result["error"]
+        assert "kms:Decrypt unexpectedly allowed" in result["error"]
+
+    def test_fails_when_compute_isolation_breached(self) -> None:
+        """Fail when tenant A can act on tenant B's compute resources."""
+        tests = deepcopy(TENANT_ISOLATION_REQUIRED_TESTS)
+        tests["compute_isolated"] = {"passed": False, "error": "ec2:DescribeInstances unexpectedly succeeded"}
+        result = TenantIsolationCheck(config={"step_output": _tenant_isolation_step_output(tests=tests)}).execute()
+
+        assert result["passed"] is False
+        assert "compute_isolated" in result["error"]
+
+    def test_fails_when_required_sub_claim_missing(self) -> None:
+        """Fail when one of the four required sub-claims is absent from tests."""
+        tests = {name: result for name, result in TENANT_ISOLATION_REQUIRED_TESTS.items() if name != "storage_isolated"}
+        result = TenantIsolationCheck(config={"step_output": _tenant_isolation_step_output(tests=tests)}).execute()
+
+        assert result["passed"] is False
+        assert "storage_isolated" in result["error"]
+
+    def test_fails_when_tenant_a_id_missing(self) -> None:
+        """Fail when the source tenant identifier is empty -- guards against silent fixture failures."""
+        result = TenantIsolationCheck(config={"step_output": _tenant_isolation_step_output(tenant_a_id="")}).execute()
+
+        assert result["passed"] is False
+        assert "tenant_a_id" in result["error"]
+
+    def test_fails_when_tenant_b_id_missing(self) -> None:
+        """Fail when the target tenant identifier is empty."""
+        result = TenantIsolationCheck(
+            config={"step_output": _tenant_isolation_step_output(tenant_b_id="   ")}
+        ).execute()
+
+        assert result["passed"] is False
+        assert "tenant_b_id" in result["error"]
+
+    def test_fails_when_tests_dict_missing(self) -> None:
+        """Fail when the step output does not include any tests."""
+        result = TenantIsolationCheck(config={"step_output": {"tenant_a_id": "a", "tenant_b_id": "b"}}).execute()
+
+        assert result["passed"] is False
+        assert "tests" in result["error"].lower()
+
+    def test_skips_when_step_marks_skipped(self) -> None:
+        """TenantIsolationCheck pytest.skips through both run() and execute() when flagged."""
+        step_output = {
+            "success": True,
+            "skipped": True,
+            "skip_reason": "tenant isolation fixture not provisionable (AccessDenied)",
+            "tests": {},
+        }
+
+        with pytest.raises(pytest.skip.Exception, match="tenant isolation fixture not provisionable"):
+            TenantIsolationCheck(config={"step_output": step_output}).run()
+
+        with pytest.raises(pytest.skip.Exception, match="tenant isolation fixture not provisionable"):
+            TenantIsolationCheck(config={"step_output": step_output}).execute()

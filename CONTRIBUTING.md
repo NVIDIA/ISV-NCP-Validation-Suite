@@ -154,6 +154,14 @@ uv run isvctl test run -f isvctl/configs/providers/k3s.yaml
 
 See the [Local Development Guide](docs/guides/local-development.md) for MicroK8s, Minikube, and k3s setup.
 
+### Validating an Unreleased Test Locally
+
+New validations are gated by `released_tests.json` until the next release
+bump. To exercise a new check end-to-end before that, set
+`ISVTEST_INCLUDE_UNRELEASED=1` (see [Releasing](#releasing) for the full
+workflow). Without it the orchestrator logs `Skipping unreleased validation
+'<Name>'` and the check is a no-op.
+
 ## Pull Request Process
 
 1. **Fork** the [upstream repository](https://github.com/NVIDIA/ISV-NCP-Validation-Suite) and create a branch from `main`.

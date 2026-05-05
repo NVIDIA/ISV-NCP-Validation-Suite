@@ -29,10 +29,20 @@ from isvreporter.version import get_version
 from isvtest.config.loader import ConfigLoader
 from isvtest.core import runners as reframe_runner
 from isvtest.core.logger import setup_logger
-from isvtest.release_manifest import INCLUDE_UNRELEASED_ENV, load_released_test_filter
-from isvtest.tests.test_validations import ADAPTER_HANDLED_CATEGORIES
+from isvtest.release_manifest import INCLUDE_UNRELEASED_ENV, load_released_test_filter, load_released_tests
+from isvtest.tests.test_validations import (
+    ADAPTER_HANDLED_CATEGORIES,
+    clear_validation_results,
+    get_validation_results,
+)
 
 logger = setup_logger()
+
+# Process-level dedup so manifest-gate logs fire once per invocation
+# rather than once per phase (run_validations_via_pytest is called for
+# setup/test/teardown).
+_MANIFEST_GATE_ANNOUNCED = False
+_SKIPPED_UNRELEASED_LOGGED: set[str] = set()
 
 
 def run_validations_via_pytest(
@@ -77,14 +87,37 @@ def run_validations_via_pytest(
         exit_code: 0 if all validations passed, non-zero otherwise.
         validation_results: List of validation result dicts with name, passed, message, category.
     """
-    # Import result storage from test_validations
-    from isvtest.tests.test_validations import clear_validation_results, get_validation_results
-
     # Transform validations into the format expected by test_validations.py
     # The test_validations.py expects a "validations" dict at config root
     released_tests = load_released_test_filter()
-    if released_tests is None:
-        logger.info("Including unreleased validations because %s is enabled", INCLUDE_UNRELEASED_ENV)
+    global _MANIFEST_GATE_ANNOUNCED
+    if not _MANIFEST_GATE_ANNOUNCED:
+        if released_tests is None:
+            # Env override is set: enumerate which configured validations are being included that would
+            # otherwise be gated, so it's obvious in the log which unreleased checks are actually running.
+            logger.info(f"Including unreleased validations because {INCLUDE_UNRELEASED_ENV} is enabled")
+            # Manifest read is for log diffing only; failure must not abort the unreleased run since
+            # that's the path that exists precisely to bypass the gate.
+            try:
+                manifest = load_released_tests()
+            except (FileNotFoundError, ValueError) as exc:
+                logger.warning(f"Could not diff against released_tests.json: {exc}")
+                manifest = set()
+            for name in _iter_configured_validation_names(validations):
+                if name not in manifest:
+                    logger.info(f"Including unreleased validation '{name}' (not in manifest)")
+        else:
+            # Env override is not set: announce the gate (with a count of unreleased configured validations)
+            # so it's obvious why newly-added validations may show up as 'Skipping unreleased ...' below.
+            unreleased_count = sum(
+                1 for name in _iter_configured_validation_names(validations) if name not in released_tests
+            )
+            logger.info(
+                f"Release manifest gate active: {unreleased_count} configured validation(s) unreleased "
+                f"(set {INCLUDE_UNRELEASED_ENV}=1 to include them)"
+            )
+        _MANIFEST_GATE_ANNOUNCED = True
+
     transformed_validations = _transform_validations_for_pytest(
         validations,
         step_outputs,
@@ -203,6 +236,30 @@ def run_validations_via_pytest(
             pass
 
 
+def _iter_configured_validation_names(
+    validations: dict[str, list[dict[str, Any]] | dict[str, Any]],
+) -> list[str]:
+    """Return the validation class names referenced by ``validations``.
+
+    Used purely for logging: walks both supported config shapes (group
+    defaults with ``checks`` key, and flat list-of-dicts) and yields the
+    class name of every configured check.
+    """
+    names: list[str] = []
+    for category, category_config in validations.items():
+        if category in ADAPTER_HANDLED_CATEGORIES:
+            continue
+        if isinstance(category_config, dict) and "checks" in category_config:
+            checks_val = category_config.get("checks", {})
+            if isinstance(checks_val, dict):
+                names.extend(checks_val.keys())
+            else:
+                names.extend(n for item in checks_val for n in item)
+        elif isinstance(category_config, list):
+            names.extend(n for item in category_config for n in item)
+    return names
+
+
 def _transform_validations_for_pytest(
     validations: dict[str, list[dict[str, Any]] | dict[str, Any]],
     step_outputs: dict[str, dict[str, Any]],
@@ -270,7 +327,10 @@ def _transform_validations_for_pytest(
 
         for name, params in checks_iter:
             if released_tests is not None and name not in released_tests:
-                logger.info(f"Skipping unreleased validation '{name}' in [{category}]")
+                key = f"{category}:{name}"
+                if key not in _SKIPPED_UNRELEASED_LOGGED:
+                    logger.info(f"Skipping unreleased validation '{name}' in [{category}]")
+                    _SKIPPED_UNRELEASED_LOGGED.add(key)
                 continue
 
             if params is None:

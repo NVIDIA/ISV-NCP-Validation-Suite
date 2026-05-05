@@ -108,6 +108,15 @@ Entry point: `isvreporter/src/isvreporter/main.py` (Typer).
 jumphost (`remote/transfer.py`) → `install.sh` on target → `isvctl test run` with
 forwarded env vars → optional isvreporter upload.
 
+## Files agents must not edit
+
+- `isvtest/src/isvtest/released_tests.json` - release-gating manifest owned
+  by the release process (bumped via `chore: update package versions`). New
+  checks ship unreleased and land here in a separate release commit, not in
+  feature PRs. To exercise an unreleased check end-to-end against a config,
+  run with `ISVTEST_INCLUDE_UNRELEASED=1` (the orchestrator otherwise logs
+  `Skipping unreleased validation '<Name>'` and the new check is a no-op).
+
 ## Directory Layout
 
 - Workspace root `pyproject.toml` defines members; each package has its own

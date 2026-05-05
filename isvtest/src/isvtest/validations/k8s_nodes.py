@@ -9,6 +9,7 @@
 # its affiliates is strictly prohibited.
 
 import json
+import shlex
 from typing import ClassVar
 
 from isvtest.core.k8s import get_kubectl_base_shell
@@ -16,43 +17,133 @@ from isvtest.core.validation import BaseValidation
 
 
 class K8sNodeCountCheck(BaseValidation):
+    """Verify the cluster has the expected number of nodes.
+
+    Config keys:
+    * ``count`` - exact expected count. Optional when ``min_count`` is set.
+    * ``min_count`` - minimum accepted count. Optional when ``count`` is set.
+    * ``label_selector`` - optional kubectl selector limiting counted nodes.
+    * ``exclude_label_selector`` - optional kubectl selector for nodes to
+      subtract from the count. When ``label_selector`` is also set, only nodes
+      matching both selectors are subtracted.
+    """
+
     description = "Verify the cluster has the expected number of nodes."
     markers: ClassVar[list[str]] = ["kubernetes"]
 
     def run(self) -> None:
         expected_count = self.config.get("count")
-        if expected_count is None:
-            self.log.info("Skipping: expected count not configured")
-            self.set_passed("Skipped: expected count not configured")
+        min_count = self.config.get("min_count")
+        if expected_count is None and min_count is None:
+            self.log.info("Skipping: expected count/min_count not configured")
+            self.set_passed("Skipped: expected count/min_count not configured")
+            return
+        if expected_count is not None and min_count is not None:
+            self.set_failed("Configure only one of 'count' or 'min_count'")
             return
 
-        # Convert to int (Jinja2 templating may produce strings)
+        expected = self._coerce_non_negative_int(expected_count, "count") if expected_count is not None else None
+        minimum = self._coerce_non_negative_int(min_count, "min_count") if min_count is not None else None
+        if self._error:
+            return
+
         try:
-            expected_count = int(expected_count)
-        except (ValueError, TypeError):
-            self.set_failed(f"Invalid expected count: {expected_count}")
+            label_selector = _optional_selector(self.config.get("label_selector"), "label_selector")
+            exclude_selector = _optional_selector(self.config.get("exclude_label_selector"), "exclude_label_selector")
+        except ValueError as exc:
+            self.set_failed(str(exc))
             return
 
-        kubectl_base = get_kubectl_base_shell()
-        cmd = f"{kubectl_base} get nodes --no-headers | wc -l"
+        node_names = self._get_node_names(label_selector)
+        if node_names is None:
+            return
+
+        counted_nodes = set(node_names)
+        if exclude_selector:
+            subtract_selector = _combine_label_selectors(label_selector, exclude_selector)
+            excluded_names = self._get_node_names(subtract_selector)
+            if excluded_names is None:
+                return
+            counted_nodes -= set(excluded_names)
+
+        actual_count = len(counted_nodes)
+        scope = _scope_description(label_selector, exclude_selector)
+
+        if expected is not None:
+            if actual_count != expected:
+                self.set_failed(f"Node count mismatch{scope}: expected {expected}, found {actual_count}")
+                return
+            self.set_passed(f"Node count matched{scope}: {actual_count}")
+            return
+
+        if minimum is not None and actual_count < minimum:
+            self.set_failed(f"Node count below minimum{scope}: expected at least {minimum}, found {actual_count}")
+            return
+        self.set_passed(f"Node count matched{scope}: {actual_count} >= {minimum}")
+
+    def _coerce_non_negative_int(self, value: object, field: str) -> int:
+        """Coerce config values from YAML/Jinja strings to a non-negative integer."""
+        if isinstance(value, bool):
+            self.set_failed(f"Invalid {field}: {value!r}")
+            return 0
+        try:
+            parsed = int(value)
+        except (ValueError, TypeError):
+            self.set_failed(f"Invalid {field}: {value}")
+            return 0
+        if parsed < 0:
+            self.set_failed(f"Invalid {field}: {parsed} (must be >= 0)")
+            return 0
+        return parsed
+
+    def _get_node_names(self, label_selector: str | None) -> list[str] | None:
+        """Return node names matching ``label_selector`` or set failure."""
+        selector_args = f" -l {shlex.quote(label_selector)}" if label_selector else ""
+        cmd = f"{get_kubectl_base_shell()} get nodes{selector_args} -o name"
 
         result = self.run_command(cmd)
-
         if result.exit_code != 0:
             self.set_failed(f"Failed to get node count: {result.stderr}")
-            return
+            return None
 
-        try:
-            actual_count = int(result.stdout.strip())
-        except ValueError:
-            self.set_failed(f"Invalid node count output: {result.stdout}")
-            return
+        return _parse_kubectl_name_output(result.stdout)
 
-        if actual_count != expected_count:
-            self.set_failed(f"Node count mismatch: expected {expected_count}, found {actual_count}")
-            return
 
-        self.set_passed(f"Node count matched: {actual_count}")
+def _optional_selector(value: object, field: str) -> str | None:
+    """Return a stripped label selector or ``None`` for unset/blank values."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"Invalid {field}: expected string, got {type(value).__name__}")
+    stripped = value.strip()
+    return stripped or None
+
+
+def _combine_label_selectors(*selectors: str | None) -> str | None:
+    """Combine label selectors with Kubernetes AND semantics."""
+    parts = [selector.strip().strip(",") for selector in selectors if selector and selector.strip().strip(",")]
+    return ",".join(parts) if parts else None
+
+
+def _parse_kubectl_name_output(stdout: str) -> list[str]:
+    """Parse ``kubectl get nodes -o name`` output into bare node names."""
+    names: list[str] = []
+    for line in stdout.splitlines():
+        item = line.strip()
+        if not item:
+            continue
+        names.append(item.split("/", 1)[1] if "/" in item else item)
+    return names
+
+
+def _scope_description(label_selector: str | None, exclude_selector: str | None) -> str:
+    """Format selector scope for pass/fail messages."""
+    parts: list[str] = []
+    if label_selector:
+        parts.append(f"selector={label_selector!r}")
+    if exclude_selector:
+        parts.append(f"excluding={exclude_selector!r}")
+    return f" ({', '.join(parts)})" if parts else ""
 
 
 class K8sNodeReadyCheck(BaseValidation):

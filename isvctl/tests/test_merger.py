@@ -433,6 +433,15 @@ class TestImportEndToEnd:
         assert context.get_warnings() == []
         assert result["tests"]["platform"] == "kubernetes"
 
+    def test_aws_eks_does_not_hardcode_world_open_endpoint_allowlist(self) -> None:
+        """EKS setup must not create clusters that make the security suite fail."""
+        result = merge_yaml_files([self.CONFIGS_DIR / "providers" / "aws" / "config" / "eks.yaml"])
+        setup_step = next(step for step in result["commands"]["kubernetes"]["steps"] if step["name"] == "setup")
+        setup_env = setup_step.get("env", {})
+
+        assert "TF_VAR_cluster_endpoint_public_access_cidrs" not in setup_env
+        assert "0.0.0.0/0" not in str(setup_step)
+
     def test_aws_bare_metal_overrides_serial_console_retention_check(self) -> None:
         """AWS BM must not inherit the retention check until archive evidence exists."""
         result = merge_yaml_files([self.CONFIGS_DIR / "providers" / "aws" / "config" / "bare_metal.yaml"])

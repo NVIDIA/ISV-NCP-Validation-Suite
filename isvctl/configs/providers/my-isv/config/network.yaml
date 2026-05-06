@@ -175,6 +175,42 @@ commands:
         args: ["--region", "{{region}}", "--scope", "service"]
         timeout: 300
 
+      - name: sdn_hardware_fault_logging
+        phase: test
+        command: "python ../scripts/network/sdn_logging_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--vpc-id"
+          - "{{steps.create_network.network_id}}"
+          - "--aspect"
+          - "hardware_faults"
+        timeout: 60
+
+      - name: sdn_latency_perf_logging
+        phase: test
+        command: "python ../scripts/network/sdn_logging_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--vpc-id"
+          - "{{steps.create_network.network_id}}"
+          - "--aspect"
+          - "latency_perf"
+        timeout: 60
+
+      - name: sdn_filter_audit_trail
+        phase: test
+        command: "python ../scripts/network/sdn_logging_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--vpc-id"
+          - "{{steps.create_network.network_id}}"
+          - "--aspect"
+          - "audit_trail"
+        timeout: 60
+
       - name: byoip_test
         phase: test
         command: "python ../scripts/network/byoip_test.py"

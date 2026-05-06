@@ -154,6 +154,45 @@ commands:
         args: ["--region", "{{region}}", "--scope", "service"]
         timeout: 300
 
+      # Test 4g: SDN hardware fault logging (AWS Health + VPC Flow Logs)
+      - name: sdn_hardware_fault_logging
+        phase: test
+        command: "python3 ../scripts/network/sdn_logging_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--vpc-id"
+          - "{{steps.create_network.network_id}}"
+          - "--aspect"
+          - "hardware_faults"
+        timeout: 120
+
+      # Test 4h: SDN latency/performance logging (CloudWatch + VPC Flow Logs)
+      - name: sdn_latency_perf_logging
+        phase: test
+        command: "python3 ../scripts/network/sdn_logging_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--vpc-id"
+          - "{{steps.create_network.network_id}}"
+          - "--aspect"
+          - "latency_perf"
+        timeout: 180
+
+      # Test 4i: Filtering rule audit trail (CloudTrail propagation can lag)
+      - name: sdn_filter_audit_trail
+        phase: test
+        command: "python3 ../scripts/network/sdn_logging_test.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--vpc-id"
+          - "{{steps.create_network.network_id}}"
+          - "--aspect"
+          - "audit_trail"
+        timeout: 900
+
       # Test 5: Connectivity Test (~3 min)
       - name: connectivity_test
         phase: test

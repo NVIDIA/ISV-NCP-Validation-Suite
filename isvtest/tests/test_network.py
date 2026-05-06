@@ -15,7 +15,15 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from isvtest.validations.network import DhcpIpManagementCheck, VpcIpConfigCheck
+import pytest
+
+from isvtest.validations.network import (
+    DhcpIpManagementCheck,
+    SdnFilterAuditTrailCheck,
+    SdnHardwareFaultLoggingCheck,
+    SdnLatencyPerfLoggingCheck,
+    VpcIpConfigCheck,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -86,6 +94,67 @@ def _vpc_config(extra: dict[str, Any] | None = None) -> dict[str, Any]:
     return cfg
 
 
+SDN_CASES = [
+    (
+        SdnHardwareFaultLoggingCheck,
+        {
+            "logging_endpoint_reachable": {"passed": True},
+            "fault_event_source_queryable": {"passed": True},
+            "log_destination_configured": {"passed": True},
+            "event_schema_valid": {"passed": True},
+        },
+        {"log_destination": "arn:aws:logs:us-west-2:123:log-group:vpc-flow", "recent_event_count": 1},
+        "event_schema_valid",
+        "log_destination",
+    ),
+    (
+        SdnLatencyPerfLoggingCheck,
+        {
+            "metrics_endpoint_reachable": {"passed": True},
+            "performance_metric_present": {"passed": True},
+            "packet_metric_present": {"passed": True},
+            "samples_recent": {"passed": True},
+        },
+        {
+            "telemetry_namespace": "AWS/VPCFlowLogs",
+            "sample_window_seconds": 600,
+            "probe_resource_id": "vpc-123",
+        },
+        "samples_recent",
+        "telemetry_namespace",
+    ),
+    (
+        SdnFilterAuditTrailCheck,
+        {
+            "audit_endpoint_reachable": {"passed": True},
+            "create_rule_logged": {"passed": True},
+            "modify_rule_logged": {"passed": True},
+            "delete_rule_logged": {"passed": True},
+            "audit_event_has_required_fields": {"passed": True},
+            "cleanup": {"passed": True},
+        },
+        {
+            "trail_id": "cloudtrail",
+            "actor_field": "userIdentity",
+            "target_rule_id": "sg-123",
+        },
+        "delete_rule_logged",
+        "target_rule_id",
+    ),
+]
+
+
+def _sdn_config(tests: dict[str, dict[str, Any]], evidence: dict[str, Any]) -> dict[str, Any]:
+    """Build a minimal SDN logging validation config."""
+    step_output: dict[str, Any] = {
+        "success": True,
+        "platform": "network",
+        "tests": tests,
+    }
+    step_output.update(evidence)
+    return {"step_output": step_output}
+
+
 # Mock SSH command outputs
 DHCP_PROC_AND_LEASE = (
     "---DHCP_PROC---\n"
@@ -125,6 +194,64 @@ RESOLV_WITH_DNS = (
 )
 
 RESOLV_NO_DNS = "---RESOLV---\nNO_RESOLV_CONF\n---DHCP_OPTS---\nDONE"
+
+
+@pytest.mark.parametrize(
+    ("validation_cls", "tests", "evidence", "_missing_test", "_missing_evidence"),
+    SDN_CASES,
+)
+def test_sdn_logging_checks_pass_with_required_tests_and_evidence(
+    validation_cls: type[SdnHardwareFaultLoggingCheck | SdnLatencyPerfLoggingCheck | SdnFilterAuditTrailCheck],
+    tests: dict[str, dict[str, Any]],
+    evidence: dict[str, Any],
+    _missing_test: str,
+    _missing_evidence: str,
+) -> None:
+    """SDN logging checks pass when all required probes and evidence are present."""
+    result = validation_cls(config=_sdn_config(tests, evidence)).execute()
+
+    assert result["passed"] is True
+    assert "logging validated" in result["output"]
+
+
+@pytest.mark.parametrize(
+    ("validation_cls", "tests", "evidence", "missing_test", "_missing_evidence"),
+    SDN_CASES,
+)
+def test_sdn_logging_checks_fail_on_missing_required_test(
+    validation_cls: type[SdnHardwareFaultLoggingCheck | SdnLatencyPerfLoggingCheck | SdnFilterAuditTrailCheck],
+    tests: dict[str, dict[str, Any]],
+    evidence: dict[str, Any],
+    missing_test: str,
+    _missing_evidence: str,
+) -> None:
+    """SDN logging checks fail when a required subtest key is absent."""
+    incomplete_tests = {key: value for key, value in tests.items() if key != missing_test}
+
+    result = validation_cls(config=_sdn_config(incomplete_tests, evidence)).execute()
+
+    assert result["passed"] is False
+    assert missing_test in result["error"]
+
+
+@pytest.mark.parametrize(
+    ("validation_cls", "tests", "evidence", "_missing_test", "missing_evidence"),
+    SDN_CASES,
+)
+def test_sdn_logging_checks_fail_on_missing_evidence(
+    validation_cls: type[SdnHardwareFaultLoggingCheck | SdnLatencyPerfLoggingCheck | SdnFilterAuditTrailCheck],
+    tests: dict[str, dict[str, Any]],
+    evidence: dict[str, Any],
+    _missing_test: str,
+    missing_evidence: str,
+) -> None:
+    """SDN logging checks fail when the script omits required evidence."""
+    incomplete_evidence = {key: value for key, value in evidence.items() if key != missing_evidence}
+
+    result = validation_cls(config=_sdn_config(tests, incomplete_evidence)).execute()
+
+    assert result["passed"] is False
+    assert missing_evidence in result["error"]
 
 
 # ---------------------------------------------------------------------------

@@ -55,12 +55,14 @@ from typing import Any
 from isvctl.config.output_schemas import get_schema_for_step, validate_output
 from isvctl.config.schema import StepConfig
 from isvctl.orchestrator.context import Context, _create_jinja_env
-from isvctl.redaction import mask_sensitive_args
+from isvctl.redaction import mask_sensitive_args, redact_text
 
 logger = logging.getLogger(__name__)
 
 
 _STEP_PATH_RE = re.compile(r"steps\.([\w.]+)")
+_STDERR_EXCERPT_HEAD_LINES = 20
+_STDERR_EXCERPT_TAIL_LINES = 80
 
 
 class MissingStepRefError(Exception):
@@ -79,6 +81,35 @@ class MissingStepRefError(Exception):
         super().__init__(
             f"template arg {arg!r} references undefined step output 'steps.{path}' with no `| default(...)` fallback"
         )
+
+
+def _format_stderr_excerpt(
+    stderr: str,
+    *,
+    head_lines: int = _STDERR_EXCERPT_HEAD_LINES,
+    tail_lines: int = _STDERR_EXCERPT_TAIL_LINES,
+) -> str:
+    """Return a redacted, line-based stderr excerpt for CLI error summaries."""
+    redacted = redact_text(stderr.strip())
+    if not redacted:
+        return ""
+
+    lines = redacted.splitlines()
+    max_lines = head_lines + tail_lines
+    if len(lines) <= max_lines:
+        return redacted
+
+    head = lines[:head_lines]
+    tail = lines[-tail_lines:] if tail_lines else []
+    omitted = len(lines) - len(head) - len(tail)
+    marker = f"... stderr truncated; omitted {omitted} lines (showing first {len(head)} and last {len(tail)}) ..."
+    return "\n".join(head + [marker] + tail)
+
+
+def _write_full_stderr(step_name: str, stderr: str) -> None:
+    """Write full redacted stderr for a failed step when verbose logging is enabled."""
+    redacted = redact_text(stderr.rstrip())
+    sys.stderr.write(f"\n--- stderr from step '{step_name}' ---\n{redacted}\n--- end stderr ---\n")
 
 
 def _find_missing_step_path(arg: str, steps_data: dict[str, Any]) -> str | None:
@@ -452,7 +483,9 @@ class StepExecutor:
                 else:
                     step_result.error = f"Command exited with code {result.returncode}"
                     if result.stderr:
-                        step_result.error += f": {result.stderr.strip()[:200]}"
+                        step_result.error += f": {_format_stderr_excerpt(result.stderr)}"
+                if result.stderr and logger.isEnabledFor(logging.DEBUG):
+                    _write_full_stderr(step.name, result.stderr)
                 return step_result
 
             # Validate against explicit or auto-detected schema

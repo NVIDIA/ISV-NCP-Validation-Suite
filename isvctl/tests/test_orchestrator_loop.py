@@ -21,6 +21,7 @@ from isvctl.orchestrator.step_executor import (
     MissingStepRefError,
     StepExecutor,
     _find_missing_step_path,
+    _format_stderr_excerpt,
 )
 
 
@@ -479,6 +480,69 @@ class TestStepExecutorBestEffort:
 
         executed = [s.name for s in results.steps]
         assert executed == ["fail_step", "ok_step"]
+
+
+_NOISY_FAILING_SCRIPT = """#!/bin/sh
+i=0
+while [ "$i" -le 104 ]; do
+  echo "stderr line $i" >&2
+  i=$((i + 1))
+done
+echo "AWS_SECRET_ACCESS_KEY=super-secret" >&2
+exit 7
+"""
+
+
+class TestStderrExcerpt:
+    """Tests for failed-step stderr excerpts."""
+
+    def test_short_excerpt_preserves_lines_and_redacts_secrets(self) -> None:
+        """Short stderr is preserved while sensitive key/value pairs are masked."""
+        excerpt = _format_stderr_excerpt(
+            "first line\nAWS_SECRET_ACCESS_KEY=super-secret\nlast line\n",
+            head_lines=2,
+            tail_lines=2,
+        )
+
+        assert "first line" in excerpt
+        assert "last line" in excerpt
+        assert "AWS_SECRET_ACCESS_KEY=***" in excerpt
+        assert "super-secret" not in excerpt
+
+    def test_long_excerpt_keeps_head_and_tail_lines(self) -> None:
+        """Long stderr keeps early context and trailing root-cause lines."""
+        stderr = "\n".join(f"stderr line {i}" for i in range(10))
+
+        excerpt = _format_stderr_excerpt(stderr, head_lines=2, tail_lines=3)
+
+        assert "stderr line 0" in excerpt
+        assert "stderr line 1" in excerpt
+        assert "stderr line 2" not in excerpt
+        assert "stderr line 6" not in excerpt
+        assert "stderr line 7" in excerpt
+        assert "stderr line 9" in excerpt
+        assert "omitted 5 lines" in excerpt
+
+    def test_failed_step_error_uses_redacted_head_tail_stderr(self, tmp_path: Path) -> None:
+        """Failed command summaries use the redacted line-based stderr excerpt."""
+        script_path = tmp_path / "noisy_fail.sh"
+        script_path.write_text(_NOISY_FAILING_SCRIPT)
+        script_path.chmod(0o755)
+
+        executor = StepExecutor()
+        context = Context(RunConfig())
+        steps = [StepConfig(name="fail_step", command=str(script_path), phase="setup")]
+
+        results = executor.execute_steps(steps, context)
+
+        error = results.steps[0].error or ""
+        assert "Command exited with code 7" in error
+        assert "stderr line 0" in error
+        assert "stderr line 20" not in error
+        assert "stderr line 104" in error
+        assert "AWS_SECRET_ACCESS_KEY=***" in error
+        assert "super-secret" not in error
+        assert "stderr truncated" in error
 
 
 class TestMissingStepRefDetection:

@@ -26,6 +26,9 @@ terraform --version
 # kubectl (or set KUBECTL env var to use an alternative CLI, e.g., "oc")
 kubectl version --client
 
+# curl (used to auto-detect your public IP for the EKS API allowlist)
+curl --version
+
 # Helm (v3)
 helm version
 
@@ -131,6 +134,11 @@ TF_VAR_gpu_node_desired_size=2 \
   uv run isvctl test run -f isvctl/configs/providers/aws/config/eks.yaml --phase setup
 ```
 
+By default, setup auto-detects the caller's public IPv4 address and passes
+`TF_VAR_cluster_endpoint_public_access_cidrs='["<detected-ip>/32"]'` to Terraform.
+Set `TF_VAR_cluster_endpoint_public_access_cidrs` yourself when running from a
+known VPN, proxy, or CI egress range.
+
 Or create a custom config file:
 
 ```yaml
@@ -164,7 +172,7 @@ uv run isvctl test run -f isvctl/configs/providers/aws/config/eks.yaml -f my-aws
 | `TF_VAR_gpu_node_desired_size` | 1 | Number of GPU nodes |
 | `TF_VAR_system_node_instance_types` | ["m5.large"] | System node instance types |
 | `TF_VAR_system_node_desired_size` | 2 | Number of system nodes |
-| `TF_VAR_cluster_endpoint_public_access_cidrs` | ["203.0.113.0/24"] | **Required**: Your IP allowlist for EKS API |
+| `TF_VAR_cluster_endpoint_public_access_cidrs` | Auto-detected caller IPv4 `/32` | EKS API allowlist; override for VPN/proxy/CI egress ranges |
 | `TF_VAR_enable_efs` | true | Enable EFS for NIM cache |
 
 #### Supported GPU Instance Types
@@ -347,13 +355,17 @@ echo "=== VALIDATION COMPLETE ==="
 If you can't connect to the cluster:
 
 ```bash
-# Check your IP is in the allowlist
-curl ifconfig.me
+# Check the public IP your shell is using
+curl https://checkip.amazonaws.com
 
 # Update allowlist
 TF_VAR_cluster_endpoint_public_access_cidrs='["YOUR.IP/32"]' \
   terraform apply
 ```
+
+Clusters created with older versions of this config may still have
+`0.0.0.0/0` in the EKS API allowlist. Re-apply Terraform with a restricted
+CIDR, or run the EKS teardown phase and create the cluster again.
 
 ### Test Failures
 

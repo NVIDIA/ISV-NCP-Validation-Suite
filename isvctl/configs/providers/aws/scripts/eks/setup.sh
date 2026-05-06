@@ -19,15 +19,80 @@
 #   - AWS CLI configured with appropriate credentials
 #   - kubectl
 #   - jq
+#   - curl (unless TF_VAR_cluster_endpoint_public_access_cidrs is set)
 #
 # Environment Variables:
 #   - TF_VAR_*: Terraform variables (e.g., TF_VAR_region, TF_VAR_gpu_node_instance_types)
+#   - TF_VAR_cluster_endpoint_public_access_cidrs: Optional EKS API allowlist.
+#     Defaults to the caller's auto-detected public IPv4 /32.
 #   - TF_AUTO_APPROVE: Set to "true" to skip Terraform approval prompt (default: false)
 #   - SKIP_PREFLIGHT: Set to "true" to skip infrastructure validation (default: false)
 #
 # Output: JSON inventory conforming to isvctl schema
 
 set -eo pipefail
+
+is_ipv4_address() {
+    local ip="$1"
+    local IFS=.
+    local -a octets
+
+    [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || return 1
+    read -r -a octets <<< "$ip"
+    [ "${#octets[@]}" -eq 4 ] || return 1
+
+    for octet in "${octets[@]}"; do
+        if ((10#$octet > 255)); then
+            return 1
+        fi
+    done
+
+    return 0
+}
+
+detect_public_ipv4() {
+    local url
+    local ip
+
+    for url in \
+        "https://checkip.amazonaws.com" \
+        "https://api.ipify.org" \
+        "https://ifconfig.me/ip"; do
+        ip="$(curl -fsS --max-time 5 "$url" 2>/dev/null | tr -d '[:space:]' || true)"
+        if is_ipv4_address "$ip"; then
+            echo "$ip"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+configure_eks_endpoint_allowlist() {
+    if [ -n "${TF_VAR_cluster_endpoint_public_access_cidrs:-}" ]; then
+        echo "Configured EKS API allowlist for Terraform: ${TF_VAR_cluster_endpoint_public_access_cidrs}" >&2
+        return
+    fi
+
+    if ! command -v curl &> /dev/null; then
+        echo "Error: curl not found - required to auto-detect the EKS API allowlist." >&2
+        echo "Set TF_VAR_cluster_endpoint_public_access_cidrs='[\"YOUR.IP.ADDRESS/32\"]' to bypass detection." >&2
+        exit 1
+    fi
+
+    echo "Detecting caller public IPv4 for EKS API allowlist..." >&2
+
+    local public_ip
+    public_ip="$(detect_public_ipv4 || true)"
+    if [ -z "$public_ip" ]; then
+        echo "Error: Could not auto-detect caller public IPv4 for the EKS API allowlist." >&2
+        echo "Set TF_VAR_cluster_endpoint_public_access_cidrs='[\"YOUR.IP.ADDRESS/32\"]' and retry." >&2
+        exit 1
+    fi
+
+    export TF_VAR_cluster_endpoint_public_access_cidrs="[\"${public_ip}/32\"]"
+    echo "Configured EKS API allowlist for Terraform: ${TF_VAR_cluster_endpoint_public_access_cidrs}" >&2
+}
 
 # Get script directory for relative paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -68,6 +133,8 @@ if ! aws sts get-caller-identity &> /dev/null 2>&1; then
     echo "Error: AWS credentials not configured" >&2
     exit 1
 fi
+
+configure_eks_endpoint_allowlist
 
 # -----------------------------------------------------------------------------
 # Terraform Provisioning
@@ -163,6 +230,10 @@ aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION" >&2
 
 if ! kubectl cluster-info &> /dev/null 2>&1; then
     echo "Error: Cannot connect to EKS cluster" >&2
+    echo "Hint: re-running setup against a pre-existing cluster does not push the configured" >&2
+    echo "      EKS API allowlist (TF_VAR_cluster_endpoint_public_access_cidrs). If you are" >&2
+    echo "      running from a different IP than the original apply, run 'terraform apply' in" >&2
+    echo "      $TERRAFORM_DIR or run the teardown phase and re-create the cluster." >&2
     exit 1
 fi
 

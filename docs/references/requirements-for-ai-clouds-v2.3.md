@@ -387,7 +387,7 @@ The purpose of this API is to expose sufficient information about the cluster ne
 | :---------------------- | :---------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | <strong>NET04</strong>  | Connection to NVIDIA CorpIT Network | <strong>Bandwidth</strong>: Low bandwidth (Up to 10Gbps).<br /><br /><strong>Transport</strong>: Private Cloud interconnect + VIF + BGP (preferred for better performance/security). DGXC will establish connectivity to NCP through a mutually agreed Point of Presence (POP) using Private Cloud Interconnect, functionally equivalent to AWS Direct Connect, GCP Dedicated Interconnect, Azure ExpressRoute, and OCI FastConnect. Connectivity will be provisioned with a Virtual Interface (VIF) and routing established via BGP. The interconnect will be used to exchange private IP space (RFC1918, as well as 7.0.0.0/8) between DGXC and NCP. |
 
-![Corporate network connectivity diagram](/dsx/_files/nvidia-dsx.docs.buildwithfern.com/e7322e7d82e5937f2a765bd5e0508182c5f9e243dfe061efed6860d55b44b667/_dot_dot_/docs/ncp/nvidia-requirements-for-ai-clouds/assets/images/nrac-corpnet-connectivity.png)
+![Corporate network connectivity diagram](./images/nrac-corpnet-connectivity.png)
 
 Figure: Private Cloud Interconnect + VIF + BGP for CorpIT access
 
@@ -399,7 +399,7 @@ Figure: Private Cloud Interconnect + VIF + BGP for CorpIT access
 | :---------------------- | :-------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | <strong>NET05</strong>  | Connection to DGXC Storage        | <strong>Transport</strong>:  Private Cloud interconnect + VIF + BGP (preferred for better performance/security). DGXC will establish connectivity to NCP through a mutually agreed Point of Presence (POP) using Private Cloud Interconnect, functionally equivalent to AWS Direct Connect, GCP Dedicated Interconnect, Azure ExpressRoute, and OCI FastConnect. Connectivity will be provisioned with a Virtual Interface (VIF) and routing established via BGP. The interconnect will be used to exchange private IP space (RFC1918, as well as 7.0.0.0/8) between DGXC and NCP. |
 
-![Storage connectivity diagram](/dsx/_files/nvidia-dsx.docs.buildwithfern.com/0c11277ecbd40cd31720af6e99ca3d9b1e444b95edb55292e6601c9f8fbfcee8/_dot_dot_/docs/ncp/nvidia-requirements-for-ai-clouds/assets/images/nrac-storage-connectivity.png)
+![Storage connectivity diagram](./images/nrac-storage-connectivity.png)
 
 ### Cluster Local Internet Access
 
@@ -409,7 +409,7 @@ Figure: Private Cloud Interconnect + VIF + BGP for CorpIT access
 | :---------------------- | :-------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | <strong>NET06</strong>  | Cluster Local Internet Access     | <strong>Cluster Internet access:  </strong>Egress NAT IPs should be a static pool dedicated to only Nvidia Cluster/Tenancy/VPC. These persistent IP addresses must be used exclusively for DGXC traffic and shall not be shared with or carry traffic from other NCP tenants.<br /><br /><strong>Availability</strong>: Must support redundant upstream paths to ensure connectivity under failure. |
 
-![Internet access diagram](/dsx/_files/nvidia-dsx.docs.buildwithfern.com/d7d229f4a7197a319251575483a0b8c7a441987f3d9b809a2f0f7eb099b3e9ae/_dot_dot_/docs/ncp/nvidia-requirements-for-ai-clouds/assets/images/nrac-internet-access.png)
+![Internet access diagram](./images/nrac-internet-access.png)
 
 Figure: Public internet access for DGXC-hosted services
 

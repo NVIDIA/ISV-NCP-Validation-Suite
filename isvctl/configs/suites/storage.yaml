@@ -236,15 +236,6 @@ tests:
           requires: [vm, bare_metal]
           step: multipath
 
-    # ─── Teardown ────────────────────────────────────────────────────
-    teardown_checks:
-      step: teardown_volume
-      checks:
-        StepSuccessCheck:
-          test_id: "N/A"
-          labels: ["storage"]
-          requires: [vm, bare_metal]
-
     # Kubernetes storage checks use a normal provider-owned cluster fixture.
     k8s_storage:
       step: setup_cluster
@@ -463,6 +454,15 @@ tests:
           # tests_subdir: ""  # optional: scope to a single tests/ subdir (e.g. "chmod")
           namespace_prefix: "isvtest-fs-posix"
           timeout: 3600
+
+    # ─── Teardown tests ──────────────────────────────────────────────
+    teardown_checks:
+      step: teardown_volume
+      checks:
+        StepSuccessCheck:
+          test_id: "N/A"
+          labels: ["storage"]
+          requires: [vm, bare_metal]
 
   exclude:
     labels: []

@@ -114,11 +114,13 @@ demo-all: ## Run all my-isv living examples (or demo-<suite> for one, e.g. demo-
 	@echo "✅ All my-isv living examples passed in demo mode!"
 	@echo "Suites: $(MY_ISV_SUITES)"
 
-$(DEMO_TARGETS): demo-%:
+# image-registry is excluded here because it has its own rule below; leaving it
+# in would make every make invocation warn about an overridden recipe.
+$(filter-out demo-image-registry,$(DEMO_TARGETS)): demo-%:
 	$(call run_demo,$*,$(DEMO_CAP_$*))
 
 # image-registry splits its gated checks between vm and bare_metal, so one run
-# cannot reach both. This explicit rule overrides the pattern rule above.
+# cannot reach both.
 demo-image-registry:
 	$(call run_demo,image-registry,vm)
 	$(call run_demo,image-registry,bare_metal)

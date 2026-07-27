@@ -92,6 +92,15 @@ def create_fsx_network(ec2: Any, cidr: str, suffix: str, created: dict[str, Any]
         GroupName=f"isv-fsx-{suffix}",
         Description="FSx for Lustre validation (intra-VPC Lustre ports)",
         VpcId=vpc_id,
+        TagSpecifications=[
+            {
+                "ResourceType": "security-group",
+                "Tags": [
+                    {"Key": "Name", "Value": f"isv-fsx-{suffix}"},
+                    {"Key": "CreatedBy", "Value": "isvtest"},
+                ],
+            }
+        ],
     )
     sg_id = sg["GroupId"]
     created.setdefault("sg_ids", []).append(sg_id)

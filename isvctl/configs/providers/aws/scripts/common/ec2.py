@@ -254,6 +254,34 @@ def get_default_vpc_and_subnets(
 _ISV_CREATED_BY_TAG = {"Key": "CreatedBy", "Value": "isvtest"}
 
 
+def owned_tag_specifications(
+    name: str,
+    *,
+    extra_tags: list[dict[str, str]] | None = None,
+    resource_types: tuple[str, ...] = ("instance", "volume"),
+) -> list[dict[str, Any]]:
+    """Return ``RunInstances`` tag specifications marking suite ownership.
+
+    ``volume`` is tagged alongside ``instance`` because RunInstances does not
+    copy instance tags onto the root volume. A root volume that outlives its
+    instance - detached by the bare-metal root-volume swap, or left behind
+    when DeleteOnTermination does not apply - is then invisible to every
+    ``CreatedBy=isvtest`` cleanup sweep and bills indefinitely.
+
+    Args:
+        name: Value for the ``Name`` tag.
+        extra_tags: Additional tags to apply to every resource type.
+        resource_types: RunInstances resource types to tag.
+
+    Returns:
+        A TagSpecifications list ready to pass to ``run_instances``.
+    """
+    tags = [{"Key": "Name", "Value": name}, _ISV_CREATED_BY_TAG]
+    if extra_tags:
+        tags.extend(extra_tags)
+    return [{"ResourceType": resource_type, "Tags": list(tags)} for resource_type in resource_types]
+
+
 def _has_isv_tag(tags: list[dict[str, str]] | None) -> bool:
     """Return True if ``tags`` includes the ``CreatedBy=isvtest`` marker.
 

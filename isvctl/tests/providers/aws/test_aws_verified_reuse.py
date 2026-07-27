@@ -38,6 +38,7 @@ if str(_COMMON_DIR) not in sys.path:
 from common.ec2 import (  # noqa: E402
     create_key_pair,
     create_security_group,
+    owned_tag_specifications,
     sanitize_key_name,
     wait_for_public_ip,
 )
@@ -305,6 +306,30 @@ class TestWaitForPublicIp:
             {"Reservations": [{"Instances": [{"PublicIpAddress": "34.5.5.5"}]}]},
         ]
         assert wait_for_public_ip(ec2, "i-1", timeout=10, interval=0) == "34.5.5.5"
+
+
+class TestOwnedTagSpecifications:
+    """Root volumes must carry the ownership tag, not just the instance."""
+
+    def test_tags_instance_and_volume(self) -> None:
+        """RunInstances does not copy instance tags to the root volume."""
+        specs = owned_tag_specifications("isv-test-block")
+        assert [spec["ResourceType"] for spec in specs] == ["instance", "volume"]
+        for spec in specs:
+            assert {"Key": "CreatedBy", "Value": "isvtest"} in spec["Tags"]
+            assert {"Key": "Name", "Value": "isv-test-block"} in spec["Tags"]
+
+    def test_extra_tags_apply_to_every_resource_type(self) -> None:
+        """Callers adding their own tags get them on the volume too."""
+        specs = owned_tag_specifications("bm", extra_tags=[{"Key": "Platform", "Value": "bare-metal"}])
+        for spec in specs:
+            assert {"Key": "Platform", "Value": "bare-metal"} in spec["Tags"]
+
+    def test_tag_lists_are_independent_per_resource_type(self) -> None:
+        """Mutating one entry's tags must not leak into the others."""
+        specs = owned_tag_specifications("iso")
+        specs[0]["Tags"].append({"Key": "Extra", "Value": "1"})
+        assert {"Key": "Extra", "Value": "1"} not in specs[1]["Tags"]
 
 
 if __name__ == "__main__":

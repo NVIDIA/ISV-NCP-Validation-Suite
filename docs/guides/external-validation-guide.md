@@ -126,7 +126,6 @@ commands:
         timeout: 300
 
 tests:
-  platform: myplatform
   cluster_name: "my-validation"
 
   settings:

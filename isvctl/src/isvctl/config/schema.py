@@ -377,8 +377,8 @@ class ValidationConfig(BaseModel):
     platform: str | None = Field(
         default=None,
         description=(
-            "Platform type: KUBERNETES, SLURM, BARE_METAL, CONTROL_PLANE, IAM, NETWORK, "
-            "SECURITY, VM, IMAGE_REGISTRY, OBSERVABILITY, STORAGE"
+            "Capability a platform suite declares: vm, bare_metal, kubernetes, slurm. "
+            "Plain suites omit it and gate each check with requires."
         ),
     )
     settings: dict[str, Any] = Field(default_factory=dict, description="Test settings")

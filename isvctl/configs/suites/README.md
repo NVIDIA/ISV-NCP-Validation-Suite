@@ -11,8 +11,8 @@ commands (steps + scripts) that produce JSON for the validations to check.
 
 ## What runs, and when
 
-A **platform suite** (`platform: <capability>` — `vm`, `bare_metal`, `k8s`,
-`slurm`) is the obligation attached to declaring that capability. Its checks
+A **platform suite** (`tests.platform: <capability>` — `vm`, `bare_metal`,
+`kubernetes`, `slurm`) is the obligation attached to declaring that capability. Its checks
 declare no `requires:`; they all run.
 
 A **plain suite** (everything else — `storage`, `network`, ...) mixes checks

@@ -149,7 +149,6 @@ commands:
         timeout: 60
 
 tests:
-  platform: network
   cluster_name: "local-test"
   settings:
     region: "us-west-2"

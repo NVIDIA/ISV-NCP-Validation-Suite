@@ -124,7 +124,6 @@ commands:
         timeout: 300
 
 tests:
-  platform: network
   cluster_name: "aws-network-test"
 
   settings:

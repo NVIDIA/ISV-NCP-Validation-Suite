@@ -242,7 +242,7 @@
             }
           ],
           "default": null,
-          "description": "Platform type: KUBERNETES, SLURM, BARE_METAL, CONTROL_PLANE, IAM, NETWORK, SECURITY, VM, IMAGE_REGISTRY, OBSERVABILITY, STORAGE",
+          "description": "Capability a platform suite declares: vm, bare_metal, kubernetes, slurm. Plain suites omit it and gate each check with requires.",
           "title": "Platform"
         },
         "settings": {

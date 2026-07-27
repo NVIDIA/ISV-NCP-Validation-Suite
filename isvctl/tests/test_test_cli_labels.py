@@ -16,6 +16,7 @@
 """Tests for isvctl test CLI label filtering."""
 
 import json
+import re
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -26,6 +27,8 @@ import isvctl.cli.test as test_cli
 from isvctl.orchestrator.loop import OrchestratorResult, Phase, PhaseResult
 
 runner = CliRunner()
+
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def _write_config(tmp_path: Path) -> Path:
@@ -574,9 +577,13 @@ def test_unknown_option_before_separator_is_rejected(monkeypatch: pytest.MonkeyP
         ["run", "-f", str(config), "--platform", "k8s", "--no-upload", "--dry-run"],
     )
 
-    assert result.exit_code != 0, result.output
-    assert "No such option" in result.output or "no such option" in result.output.lower()
-    assert "--platform" in result.output
+    # Typer forces rich styling under GITHUB_ACTIONS, which splices escape
+    # codes into the middle of the reported option name.
+    output = _ANSI_ESCAPE.sub("", result.output)
+
+    assert result.exit_code != 0, output
+    assert "No such option" in output or "no such option" in output.lower()
+    assert "--platform" in output
     assert _FakeOrchestrator.calls == []
 
 

@@ -33,7 +33,7 @@ import yaml
 from isvreporter.version import get_version
 
 from isvtest.core.discovery import discover_all_tests
-from isvtest.core.resolution import DECLARABLE_CAPABILITIES, resolve_class_key
+from isvtest.core.resolution import DECLARABLE_CAPABILITIES, canonical_suite_name, resolve_class_key
 from isvtest.release_manifest import INCLUDE_UNRELEASED_ENV, load_released_test_filter
 
 logger = logging.getLogger(__name__)
@@ -68,37 +68,40 @@ def iter_config_checks(config_path: Path) -> Iterator[tuple[str, dict[str, Any]]
         data = yaml.safe_load(config_path.read_text())
     except Exception:
         return
-    yield from iter_checks_from_data(data)
+    for _, name, params in iter_checks_from_data(data):
+        yield name, params
 
 
-def iter_checks_from_data(data: Any) -> Iterator[tuple[str, dict[str, Any]]]:
-    """Yield ``(check_name, params)`` from an already-parsed config document.
+def iter_checks_from_data(data: Any) -> Iterator[tuple[str, str, dict[str, Any]]]:
+    """Yield ``(category, check_name, params)`` from an already-parsed document.
 
     Lets callers that have parsed the YAML for other reasons avoid a second
-    read and parse of the same file.
+    read and parse of the same file. This is the only walker of the wiring
+    shape - the catalog, the suite map, and the wiring validator all read it
+    here, so a new nesting form is taught to the codebase once.
     """
     validations = (data or {}).get("tests", {}).get("validations", {})
     if not isinstance(validations, dict):
         return
 
-    def _from_mapping(mapping: Any) -> Iterator[tuple[str, dict[str, Any]]]:
+    def _from_mapping(category: str, mapping: Any) -> Iterator[tuple[str, str, dict[str, Any]]]:
         if isinstance(mapping, dict):
             for name, params in mapping.items():
-                yield name, params if isinstance(params, dict) else {}
+                yield category, name, params if isinstance(params, dict) else {}
 
-    for cat_config in validations.values():
+    for category, cat_config in validations.items():
         if isinstance(cat_config, dict) and "checks" in cat_config:
             checks_val = cat_config["checks"]
             if isinstance(checks_val, dict):
-                yield from _from_mapping(checks_val)
+                yield from _from_mapping(category, checks_val)
             elif isinstance(checks_val, list):
                 for check in checks_val:
-                    yield from _from_mapping(check)
+                    yield from _from_mapping(category, check)
         elif isinstance(cat_config, dict):
-            yield from _from_mapping(cat_config)
+            yield from _from_mapping(category, cat_config)
         elif isinstance(cat_config, list):
             for check in cat_config:
-                yield from _from_mapping(check)
+                yield from _from_mapping(category, check)
 
 
 def _extract_checks_from_config(config_path: Path) -> list[str]:
@@ -200,25 +203,35 @@ def build_label_file_map() -> dict[str, set[str]]:
     return label_files
 
 
+def _iter_suite_docs() -> Iterator[tuple[Path, dict[str, Any]]]:
+    """Yield ``(path, document)`` for each canonical suite YAML, parsed once."""
+    configs_dir = _find_configs_dir()
+    if not configs_dir:
+        logger.warning("Could not locate isvctl/configs/ directory")
+        return
+    for config_path in sorted((configs_dir / "suites").glob("*.yaml")):
+        yield config_path, yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+
+
+def _declared_platform(data: dict[str, Any]) -> str | None:
+    """Return the platform key a suite document declares, or None for a plain suite."""
+    tests = data.get("tests") or {}
+    platform = tests.get("platform") if isinstance(tests, dict) else None
+    return platform if isinstance(platform, str) and platform else None
+
+
 def _build_suite_map() -> dict[str, dict[str, Any]]:
     """Map suite wiring names to suite placement and requirements.
 
     Duplicate wiring names currently last-wins. Global uniqueness enforcement
     is deferred to a follow-up PR (``ISVCTL_ENFORCE_UNIQUE_WIRING=1``).
     """
-    configs_dir = _find_configs_dir()
-    if not configs_dir:
-        logger.warning("Could not locate isvctl/configs/ directory")
-        return {}
-
     enforce_unique = os.environ.get("ISVCTL_ENFORCE_UNIQUE_WIRING") == "1"
     suite_map: dict[str, dict[str, Any]] = {}
-    for config_path in sorted((configs_dir / "suites").glob("*.yaml")):
-        data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-        tests = data.get("tests") or {}
-        platform = tests.get("platform") if isinstance(tests, dict) else None
-        suite = str(platform) if isinstance(platform, str) and platform else config_path.stem.replace("-", "_")
-        for check_name, params in iter_checks_from_data(data):
+    for config_path, data in _iter_suite_docs():
+        platform = _declared_platform(data)
+        suite = platform if platform else canonical_suite_name(config_path.stem)
+        for _, check_name, params in iter_checks_from_data(data):
             if check_name in suite_map and enforce_unique:
                 raise ValueError(f"Suite wiring name {check_name!r} is not globally unique")
             requires = params.get("requires", [])
@@ -314,31 +327,33 @@ def build_catalog(*, released_only: bool = True) -> list[dict[str, Any]]:
     return catalog
 
 
+def suite_vocabularies() -> tuple[list[str], list[str]]:
+    """Return ``(capabilities, plain_suites)`` from one pass over the suite YAML.
+
+    A suite file is either a platform suite (it declares a declarable
+    capability) or a plain suite named after its file - one classification, so
+    the two vocabularies are read off a single parse of the directory rather
+    than a scan each.
+    """
+    capabilities: set[str] = set()
+    suites: set[str] = set()
+    for config_path, data in _iter_suite_docs():
+        platform = _declared_platform(data)
+        if platform in DECLARABLE_CAPABILITIES:
+            capabilities.add(str(platform))
+        else:
+            suites.add(canonical_suite_name(config_path.stem))
+    return sorted(capabilities), sorted(suites)
+
+
 def build_capability_vocabulary() -> list[str]:
     """Return declarable capabilities derived from platform suite YAML."""
-    suite_map = _build_suite_map()
-    return sorted(
-        platform
-        for platform in {entry["platform"] for entry in suite_map.values() if entry["platform"]}
-        if platform in DECLARABLE_CAPABILITIES
-    )
+    return suite_vocabularies()[0]
 
 
 def build_suite_vocabulary() -> list[str]:
     """Return plain suite names declared by canonical suite YAML."""
-    configs_dir = _find_configs_dir()
-    if not configs_dir:
-        return []
-
-    suites: set[str] = set()
-    for config_path in sorted((configs_dir / "suites").glob("*.yaml")):
-        data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-        tests = data.get("tests") or {}
-        platform = tests.get("platform") if isinstance(tests, dict) else None
-        if isinstance(platform, str) and platform in DECLARABLE_CAPABILITIES:
-            continue
-        suites.add(config_path.stem.replace("-", "_"))
-    return sorted(suites)
+    return suite_vocabularies()[1]
 
 
 def _assert_disjoint_vocabulary(platforms: list[str], suites: list[str]) -> None:
@@ -369,8 +384,7 @@ def catalog_document(entries: list[dict[str, Any]], version: str) -> dict[str, A
     ``labels`` are intentionally not summarized at the top level - a consumer
     can derive the label universe from the entries when needed.
     """
-    platforms = build_capability_vocabulary()
-    suites = build_suite_vocabulary()
+    platforms, suites = suite_vocabularies()
     _assert_disjoint_vocabulary(platforms, suites)
     return {
         "schemaVersion": CATALOG_SCHEMA_VERSION,

@@ -9,8 +9,14 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from isvtest.core.resolution import canonical_suite_name as _normalize_name
 
 from isvctl.config.merger import merge_yaml_files
+
+# The canonical suite/provider config tree shipped with isvctl. Lives here
+# rather than on a CLI command module so every entry point (test, deploy, ...)
+# sources it from the config layer that consumes it.
+CONFIGS_ROOT = Path(__file__).resolve().parents[3] / "configs"
 
 
 class SuiteResolutionError(Exception):
@@ -24,12 +30,6 @@ class ResolvedSuite:
     config_path: Path
     name: str
     platform: str | None
-
-
-def _normalize_name(value: str) -> str:
-    """Normalize CLI and filename spellings to catalog suite names."""
-    normalized = value.strip().lower().replace("-", "_")
-    return "kubernetes" if normalized == "k8s" else normalized
 
 
 @cache
@@ -97,8 +97,14 @@ def _raw_imports(config_path: Path) -> list[str]:
     return []
 
 
+@cache
 def _suite_name(config_path: Path, declarable: frozenset[str]) -> tuple[str, str | None]:
-    """Return the logical suite name and optional platform key for a config."""
+    """Return the logical suite name and optional platform key for a config.
+
+    Cached: classifying a config merges it with the suite it imports, and a
+    single ``isvctl test run`` asks for the same config's identity from both
+    ``resolve_suite`` and ``resolve_suite_name``.
+    """
     merged = merge_yaml_files([config_path])
     tests = merged.get("tests") or {}
     platform = tests.get("platform") if isinstance(tests, dict) else None

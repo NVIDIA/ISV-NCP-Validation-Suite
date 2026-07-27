@@ -107,7 +107,7 @@ class TestStepConfig:
 
     def test_step_rejects_unknown_or_duplicate_requires(self) -> None:
         """Step requirements use the declarable capability vocabulary."""
-        with pytest.raises(ValidationError, match="requires must contain only"):
+        with pytest.raises(ValidationError, match="requires must be a list containing only"):
             StepConfig(name="setup", command="echo", requires=["compute"])
         with pytest.raises(ValidationError, match="requires must not contain duplicates"):
             StepConfig(name="setup", command="echo", requires=["vm", "vm"])

@@ -49,6 +49,7 @@ from isvctl.config.label_discovery import (
 from isvctl.config.merger import merge_yaml_files
 from isvctl.config.schema import RunConfig
 from isvctl.config.suite_resolution import (
+    CONFIGS_ROOT,
     SuiteResolutionError,
     parse_capability,
     resolve_suite,
@@ -58,7 +59,6 @@ from isvctl.orchestrator.loop import Orchestrator, Phase
 from isvctl.reporting import check_upload_credentials, create_test_run, get_environment_config, update_test_run
 
 logger = logging.getLogger(__name__)
-CONFIGS_ROOT = Path(__file__).resolve().parents[3] / "configs"
 CORE_REQUIREMENT_CONTEXT = "core"
 
 

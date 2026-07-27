@@ -24,7 +24,7 @@ JSON that matches these schemas, which then become the inventory for tests.
 
 from typing import Any
 
-from isvtest.core.resolution import DECLARABLE_CAPABILITIES, parse_validations
+from isvtest.core.resolution import DECLARABLE_CAPABILITIES, parse_validations, requires_error
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
@@ -118,10 +118,9 @@ class StepConfig(BaseModel):
     @classmethod
     def validate_requires(cls, requires: list[str]) -> list[str]:
         """Keep step requirements in the same vocabulary as validation requirements."""
-        if any(requirement not in DECLARABLE_CAPABILITIES for requirement in requires):
-            raise ValueError(f"requires must contain only: {', '.join(sorted(DECLARABLE_CAPABILITIES))}")
-        if len(requires) != len(set(requires)):
-            raise ValueError("requires must not contain duplicates")
+        message = requires_error(requires)
+        if message:
+            raise ValueError(message)
         return requires
 
 
@@ -409,14 +408,9 @@ class ValidationConfig(BaseModel):
                 raw_requires = entry.params_template.get("requires")
                 if raw_requires is None:
                     continue
-                if not isinstance(raw_requires, list) or any(
-                    not isinstance(value, str) or value not in DECLARABLE_CAPABILITIES for value in raw_requires
-                ):
-                    raise ValueError(
-                        f"requires must be a list containing only: {', '.join(sorted(DECLARABLE_CAPABILITIES))}"
-                    )
-                if len(raw_requires) != len(set(raw_requires)):
-                    raise ValueError("requires must not contain duplicates")
+                message = requires_error(raw_requires)
+                if message:
+                    raise ValueError(message)
         return self
 
 

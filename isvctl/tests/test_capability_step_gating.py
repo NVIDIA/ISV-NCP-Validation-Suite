@@ -23,12 +23,12 @@ from isvtest.core.resolution import (
     DECLARABLE_CAPABILITIES,
     ValidationEntry,
     parse_validations,
-    requirements_satisfied,
 )
 
 from isvctl.cli.test import CORE_REQUIREMENT_CONTEXT
 from isvctl.config.merger import merge_yaml_files
 from isvctl.config.schema import RunConfig
+from isvctl.orchestrator.loop import _apply_capability_step_gates
 
 CONFIGS_ROOT = Path(__file__).resolve().parents[1] / "configs"
 PROVIDERS = ("aws", "my-isv")
@@ -53,16 +53,13 @@ def _plain_suite_configs() -> list[tuple[str, Path]]:
 
 
 def _gated_step_names(steps: list[Any], entries: list[ValidationEntry], context: str) -> set[str]:
-    """Return the steps `_apply_capability_step_gates` would skip in a context."""
-    gated: set[str] = set()
-    for step in steps:
-        if step.requires and not requirements_satisfied(step.requires, context):
-            gated.add(step.name)
-            continue
-        bound = [entry for entry in entries if entry.step == step.name]
-        if bound and all(not requirements_satisfied(entry.requires, context) for entry in bound):
-            gated.add(step.name)
-    return gated
+    """Return the steps `_apply_capability_step_gates` skips in a context.
+
+    Asks the real gate rather than restating its rules, so a change to what
+    gets skipped is exercised here instead of silently passing against a copy.
+    """
+    gated = _apply_capability_step_gates(steps, entries, context)
+    return {after.name for before, after in zip(steps, gated, strict=True) if after.skip and not before.skip}
 
 
 def _unguarded_references(value: Any) -> set[str]:

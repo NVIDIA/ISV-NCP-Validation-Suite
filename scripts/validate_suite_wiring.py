@@ -42,7 +42,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from isvtest.core.resolution import DECLARABLE_CAPABILITIES
+from isvtest.catalog import iter_checks_from_data
+from isvtest.core.resolution import DECLARABLE_CAPABILITIES, canonical_suite_name, requires_error
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SUITES_DIR = REPO_ROOT / "isvctl" / "configs" / "suites"
@@ -96,9 +97,7 @@ def _normalize_test_id(value: Any) -> str | None:
 
 def required_suite_label(config_path: Path) -> str | None:
     """Return the label every check in a known canonical suite must carry."""
-    if config_path.stem == "k8s":
-        return "kubernetes"
-    return config_path.stem.replace("-", "_")
+    return canonical_suite_name(config_path.stem)
 
 
 def iter_suite_checks(config_path: Path) -> Iterator[tuple[str, str, dict[str, Any]]]:
@@ -108,31 +107,6 @@ def iter_suite_checks(config_path: Path) -> Iterator[tuple[str, str, dict[str, A
     except (OSError, yaml.YAMLError) as exc:
         raise ValueError(f"failed to read/parse {config_path}: {exc}") from exc
     yield from iter_checks_from_data(data)
-
-
-def iter_checks_from_data(data: Any) -> Iterator[tuple[str, str, dict[str, Any]]]:
-    """Yield ``(category, check_name, params)`` from an already-parsed suite doc."""
-    validations = (data or {}).get("tests", {}).get("validations", {})
-    if not isinstance(validations, dict):
-        return
-
-    def _from_mapping(category: str, mapping: Any) -> Iterator[tuple[str, str, dict[str, Any]]]:
-        """Yield wired checks from a dict- or list-form ``checks`` mapping."""
-        if isinstance(mapping, dict):
-            for name, params in mapping.items():
-                yield category, name, params if isinstance(params, dict) else {}
-
-    for category, cat_config in validations.items():
-        if isinstance(cat_config, dict) and "checks" in cat_config:
-            checks_val = cat_config["checks"]
-            if isinstance(checks_val, dict):
-                yield from _from_mapping(category, checks_val)
-            elif isinstance(checks_val, list):
-                for check in checks_val:
-                    yield from _from_mapping(category, check)
-        elif isinstance(cat_config, list):
-            for check in cat_config:
-                yield from _from_mapping(category, check)
 
 
 def _format_location(config_path: Path, category: str, check_name: str, line_number: int | None) -> str:
@@ -188,7 +162,7 @@ def wiring_errors(suites_dir: Path = SUITES_DIR) -> list[str]:
             errors.append(f"{path}: tests.platform must be one of: {', '.join(sorted(DECLARABLE_CAPABILITIES))}")
         suite_is_platform = isinstance(platform, str) and platform in DECLARABLE_CAPABILITIES
         if not suite_is_platform:
-            suite_name = path.stem.replace("-", "_")
+            suite_name = canonical_suite_name(path.stem)
             if suite_name in DECLARABLE_CAPABILITIES:
                 errors.append(
                     f"{path}: plain suite name {suite_name!r} collides with a declarable "
@@ -227,15 +201,8 @@ def wiring_errors(suites_dir: Path = SUITES_DIR) -> list[str]:
                 requires = params.get("requires")
                 if not isinstance(requires, list):
                     errors.append(f"{location}: missing requires (use [] for core checks)")
-                elif any(
-                    not isinstance(requirement, str) or requirement not in DECLARABLE_CAPABILITIES
-                    for requirement in requires
-                ):
-                    errors.append(
-                        f"{location}: requires must contain only: {', '.join(sorted(DECLARABLE_CAPABILITIES))}"
-                    )
-                elif len(requires) != len(set(requires)):
-                    errors.append(f"{location}: requires must not contain duplicates")
+                elif message := requires_error(requires):
+                    errors.append(f"{location}: {message}")
                 else:
                     dead = sorted(set(requires) - declared_platforms)
                     if dead:

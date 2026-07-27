@@ -136,7 +136,7 @@ tests:
 
     errors = validate_suite_wiring.wiring_errors(tmp_path)
     assert any("MissingCheck" in error and "missing requires" in error for error in errors)
-    assert any("InvalidCheck" in error and "requires must contain only" in error for error in errors)
+    assert any("InvalidCheck" in error and "requires must be a list containing only" in error for error in errors)
 
 
 def test_wiring_errors_rejects_plain_suite_named_after_capability(tmp_path: Path) -> None:

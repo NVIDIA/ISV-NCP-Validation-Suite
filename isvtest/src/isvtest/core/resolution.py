@@ -36,6 +36,34 @@ DEFAULT_VALIDATION_PHASE = "test"
 DECLARABLE_CAPABILITIES = frozenset({"vm", "bare_metal", "kubernetes", "slurm"})
 
 
+def requires_error(values: Any) -> str | None:
+    """Return why ``values`` is not a valid ``requires`` list, or None when it is.
+
+    One statement of the rule for every place that enforces it - the pydantic
+    step and suite validators, the runtime entry-shape check, and the suite
+    wiring script - so adding a capability or relaxing the rule is a single
+    edit and the four call sites cannot report different verdicts.
+    """
+    if not isinstance(values, list) or any(
+        not isinstance(value, str) or value not in DECLARABLE_CAPABILITIES for value in values
+    ):
+        return f"requires must be a list containing only: {', '.join(sorted(DECLARABLE_CAPABILITIES))}"
+    if len(values) != len(set(values)):
+        return "requires must not contain duplicates"
+    return None
+
+
+def canonical_suite_name(value: str) -> str:
+    """Normalize a CLI spelling, filename stem, or platform key to a suite name.
+
+    Suite name is the join key between a test run and its catalog entries, so
+    the producer, the CLI resolver, and the wiring validator all have to spell
+    it the same way - including the ``k8s`` filename alias.
+    """
+    normalized = value.strip().lower().replace("-", "_")
+    return "kubernetes" if normalized == "k8s" else normalized
+
+
 class State(StrEnum):
     """Terminal state of a validation in the report."""
 
@@ -455,15 +483,9 @@ def _validate_entry_shape(entry: ValidationEntry) -> str | None:
         return str(invalid_message)
     raw_requires = entry.params_template.get("requires")
     if raw_requires is not None:
-        if not isinstance(raw_requires, list) or any(
-            not isinstance(value, str) or value not in DECLARABLE_CAPABILITIES for value in raw_requires
-        ):
-            return (
-                f"validation '{entry.name}' requires must be a list containing only: "
-                f"{', '.join(sorted(DECLARABLE_CAPABILITIES))}"
-            )
-        if len(raw_requires) != len(set(raw_requires)):
-            return f"validation '{entry.name}' requires must not contain duplicates"
+        message = requires_error(raw_requires)
+        if message:
+            return f"validation '{entry.name}' {message}"
     return None
 
 

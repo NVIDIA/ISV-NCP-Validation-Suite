@@ -32,8 +32,7 @@ from isvreporter.platform import get_platform_from_config
 
 from isvctl.cli import setup_logging
 from isvctl.cli.common import get_output_dir, print_error, print_progress, print_step, print_warning
-from isvctl.cli.test import CONFIGS_ROOT
-from isvctl.config.suite_resolution import resolve_suite_name
+from isvctl.config.suite_resolution import CONFIGS_ROOT, resolve_suite_name
 from isvctl.orchestrator.loop import Phase
 from isvctl.remote import SCPTransfer, SSHClient, TarArchive
 from isvctl.remote.archive import DEFAULT_EXCLUDES as DEFAULT_ARCHIVE_EXCLUDES

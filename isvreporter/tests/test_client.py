@@ -17,6 +17,7 @@
 
 import json
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from isvreporter.client import calculate_duration, create_test_run, load_test_run_id
@@ -95,12 +96,14 @@ class TestCreateTestRunPayload:
     """The create payload has to carry both axes of what the run exercised."""
 
     @staticmethod
-    def _posted_payload(mock_urlopen: MagicMock) -> dict:
+    def _posted_payload(mock_urlopen: MagicMock) -> dict[str, Any]:
+        """Return the JSON body of the request the client posted."""
         request = mock_urlopen.call_args[0][0]
         return json.loads(request.data.decode())
 
     @staticmethod
     def _response() -> MagicMock:
+        """Return a context-manager response yielding a created test run id."""
         response = MagicMock()
         response.read.return_value = json.dumps({"data": {"testRunId": 42}}).encode()
         response.__enter__ = lambda self: self
@@ -109,6 +112,7 @@ class TestCreateTestRunPayload:
 
     @patch("isvreporter.client.urlopen")
     def test_sends_suite_and_capability(self, mock_urlopen: MagicMock, tmp_path: Path) -> None:
+        """Both axes of the run reach the service in the create payload."""
         mock_urlopen.return_value = self._response()
 
         with (

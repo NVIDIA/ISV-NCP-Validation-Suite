@@ -31,7 +31,7 @@ from isvctl.config.schema import RunConfig
 from isvctl.orchestrator.loop import _apply_capability_step_gates
 
 CONFIGS_ROOT = Path(__file__).resolve().parents[1] / "configs"
-PROVIDERS = ("aws", "my-isv")
+PROVIDERS_ROOT = CONFIGS_ROOT / "providers"
 # Every context a plain suite can be run under, including the core-only default
 # that `--suite NAME` (no `--capability`) selects.
 CONTEXTS = (CORE_REQUIREMENT_CONTEXT, *sorted(DECLARABLE_CAPABILITIES))
@@ -41,8 +41,10 @@ STEP_REFERENCE = re.compile(r"steps\.([A-Za-z0-9_]+)")
 def _plain_suite_configs() -> list[tuple[str, Path]]:
     """Return (provider, config path) for every plain-suite provider config."""
     configs: list[tuple[str, Path]] = []
-    for provider in PROVIDERS:
-        for path in sorted((CONFIGS_ROOT / "providers" / provider / "config").glob("*.yaml")):
+    # Discovered rather than listed so a new provider inherits the guarantee.
+    for config_dir in sorted(PROVIDERS_ROOT.glob("*/config")):
+        provider = config_dir.parent.name
+        for path in sorted(config_dir.glob("*.yaml")):
             config = RunConfig.model_validate(merge_yaml_files([str(path)]))
             # Platform suites carry no `requires:` on their checks, so nothing
             # is ever gated inside them.

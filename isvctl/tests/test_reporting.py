@@ -16,6 +16,7 @@
 """Tests for reporting module."""
 
 import os
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from isvctl.cli.test import CORE_REQUIREMENT_CONTEXT, _reported_capability
@@ -186,7 +187,8 @@ class TestReportedCapability:
 
     @staticmethod
     def _config(platform: str | None) -> RunConfig:
-        raw: dict = {"commands": {}, "tests": {"validations": {}}}
+        """Return a minimal config, declaring `platform` only for a platform suite."""
+        raw: dict[str, Any] = {"commands": {}, "tests": {"validations": {}}}
         if platform:
             raw["tests"]["platform"] = platform
         return RunConfig.model_validate(raw)
@@ -206,6 +208,7 @@ class TestReportedCapability:
         assert _reported_capability(config, None) == "vm"
 
     def test_explicit_capability_wins(self) -> None:
+        """An explicit `--capability` is reported as-is, whatever the suite declares."""
         config = self._config(None)
         assert _reported_capability(config, "vm") == "vm"
         assert _reported_capability(self._config("vm"), "kubernetes") == "kubernetes"

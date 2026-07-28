@@ -51,27 +51,36 @@ tests:
     setup_checks:
       step: launch_instance
       checks:
-        InstanceStateCheck:
+        BareMetalHostRunningCheck:
           test_id: "N/A"
           labels: ["bare_metal"]
           expected_state: "running"
+          description: "Check the bare metal host reaches the running state after launch"
+          compose:
+            - InstanceStateCheck
 
     list_instances:
       step: list_instances
       checks:
-        InstanceListCheck:
+        BareMetalHostListedCheck:
           # CNP01-11 (list nodes) is a VMaaS plan item; the BMaaS plan has no equivalent list-nodes item.
           test_id: "N/A"
           labels: ["bare_metal"]
           min_count: 1
+          description: "Check the bare metal host appears when hosts are listed"
+          compose:
+            - InstanceListCheck
 
     tag_checks:
       step: verify_tags
       checks:
-        InstanceTagCheck:
+        BareMetalHostTaggedCheck:
           test_id: "CNP05-01"
           labels: ["bare_metal", "min_req"]
           required_keys: ["Name", "CreatedBy"]
+          description: "Check the bare metal host carries the required tags"
+          compose:
+            - InstanceTagCheck
 
     topology_placement:
       step: topology_placement
@@ -83,9 +92,12 @@ tests:
     serial_console:
       step: serial_console
       checks:
-        SerialConsoleCheck:
+        BareMetalSerialConsoleCheck:
           test_id: "CNP06-01"
           labels: ["bare_metal", "min_req"]
+          description: "Check the bare metal host's serial console is reachable"
+          compose:
+            - SerialConsoleCheck
         SerialConsoleRetentionCheck:
           test_id: "CNP06-02"
           labels: ["bare_metal", "min_req"]
@@ -93,53 +105,75 @@ tests:
     cloud_init:
       step: launch_instance
       checks:
-        CloudInitCheck:
+        BareMetalCloudInitCheck:
           test_id: "BOOT02-01"
           labels: ["bare_metal", "min_req", "ssh"]
+          description: "Check cloud-init completed on the bare metal host"
+          compose:
+            - CloudInitCheck
 
     instance_info:
       step: describe_instance
       checks:
-        InstanceStateCheck:
+        BareMetalHostStateReportedCheck:
           test_id: "N/A"
           labels: ["bare_metal"]
           expected_state: "running"
+          description: "Check the platform reports the bare metal host as running when described"
+          compose:
+            - InstanceStateCheck
 
     ssh:
       step: describe_instance
       checks:
-        ConnectivityCheck:
+        # No BMaaS plan item for a host-OS image check (VMAAS-XX-05 is VM-only),
+        # so the OS assertion rides along with the reachability one.
+        BareMetalHostReadyCheck:
           test_id: "BMAAS03-01"
           labels: ["bare_metal", "ssh"]
-        OsCheck:
-          # No BMaaS plan item for a host-OS image check (VMAAS-XX-05 is VM-only).
-          test_id: "N/A"
-          labels: ["bare_metal", "ssh"]
-          expected_os: "ubuntu"
+          description: "Check the bare metal host answers SSH and reports the expected OS"
+          compose:
+            - ConnectivityCheck
+            - OsCheck:
+                expected_os: "ubuntu"
 
     gpu:
       step: describe_instance
       checks:
-        GpuCheck:
+        BareMetalGpusPresentCheck:
           test_id: "BMAAS08-01"
           labels: ["bare_metal", "ssh", "gpu"]
           expected_gpus: 8
+          description: "Check the bare metal host exposes the expected number of GPUs"
+          compose:
+            - GpuCheck
 
     host_os:
       step: describe_instance
       checks:
         # vCPU pinning / PCI passthrough / host-software are VMAAS plan items;
         # the BMaaS plan has no equivalent, so these are intentional gaps here.
-        VcpuPinningCheck:
+        # They stay three tests because their labels differ: only the PCI one is
+        # gpu-scoped, and merging would drag the other two into gpu filtering.
+        BareMetalVcpuPinningCheck:
           test_id: "N/A"
           labels: ["bare_metal", "ssh"]
-        PciBusCheck:
+          description: "Check the bare metal host reports its vCPU pinning layout"
+          compose:
+            - VcpuPinningCheck
+        BareMetalPciBusCheck:
           test_id: "N/A"
           labels: ["bare_metal", "ssh", "gpu"]
           expected_gpus: 8
-        HostSoftwareCheck:
+          description: "Check the expected GPUs are visible on the bare metal host's PCI bus"
+          compose:
+            - PciBusCheck
+        BareMetalHostSoftwareCheck:
           test_id: "N/A"
           labels: ["bare_metal", "ssh"]
+          description: "Check the expected host software is installed on the bare metal host"
+          compose:
+            - HostSoftwareCheck
 
     # Per-host status log sampling: verify journalctl/dmesg
     # are emitting fresh entries within max_age_minutes. Pass if at least
@@ -205,41 +239,59 @@ tests:
       step: describe_instance
       checks:
         # No BMaaS plan item for a host driver/kernel check (VMAAS-XX-07 is VM-only).
-        DriverCheck:
+        BareMetalGpuDriverCheck:
           test_id: "N/A"
           labels: ["bare_metal", "ssh", "gpu"]
+          description: "Check the bare metal host reports a usable GPU driver and kernel"
+          compose:
+            - DriverCheck
 
     cpu_info:
       step: describe_instance
       checks:
-        CpuInfoCheck:
+        BareMetalCpuInfoCheck:
           test_id: "N/A"
           labels: ["bare_metal", "ssh"]
+          description: "Check the bare metal host reports its CPU topology"
+          compose:
+            - CpuInfoCheck
 
     container_runtime:
       step: describe_instance
       checks:
-        ContainerRuntimeCheck:
+        BareMetalContainerRuntimeCheck:
           test_id: "N/A"
           labels: ["bare_metal", "ssh", "gpu", "workload", "slow"]
+          description: "Check the bare metal host runs a GPU-enabled container"
+          compose:
+            - ContainerRuntimeCheck
 
     stop_checks:
       step: stop_instance
       checks:
-        InstanceStopCheck:
+        BareMetalHostStoppedCheck:
           test_id: "CNP01-07"
           labels: ["bare_metal", "min_req"]
+          description: "Check the bare metal host stops on request"
+          compose:
+            - InstanceStopCheck
 
     start_checks:
       step: start_instance
       checks:
-        InstanceStartCheck:
+        BareMetalHostStartedCheck:
           test_id: "CNP01-08"
           labels: ["bare_metal", "min_req"]
-        StableIdentifierCheck:
+          description: "Check the bare metal host starts again after being stopped"
+          compose:
+            - InstanceStartCheck
+        BareMetalIdentifierStableAfterStartCheck:
           test_id: "CNP08-01"
           labels: ["bare_metal", "min_req"]
           reference_id: "{{steps.launch_instance.instance_id}}"
+          description: "Check the bare metal host keeps its identifier across a start"
+          compose:
+            - StableIdentifierCheck
 
     # SSH/GPU checks bound to start_instance / reboot_instance use the IP
     # captured by describe_instance (which runs last, post-power-cycle) - the
@@ -248,76 +300,84 @@ tests:
     start_ssh:
       step: start_instance
       checks:
-        # ConnectivityCheck -> BMAAS-XX-03, OsCheck -> N/A (declared in the "ssh" section)
-        ConnectivityCheck:
+        BareMetalHostReadyAfterStartCheck:
           test_id: "BMAAS03-01"
           labels: ["bare_metal", "ssh"]
           host: "{{steps.describe_instance.public_ip}}"
           key_file: "{{steps.describe_instance.key_file}}"
-        OsCheck:
-          test_id: "N/A"
-          labels: ["bare_metal", "ssh"]
-          host: "{{steps.describe_instance.public_ip}}"
-          key_file: "{{steps.describe_instance.key_file}}"
-          expected_os: "ubuntu"
+          description: "Check the bare metal host answers SSH with the expected OS after a start"
+          compose:
+            - ConnectivityCheck
+            - OsCheck:
+                expected_os: "ubuntu"
 
     start_gpu:
       step: start_instance
       checks:
-        # GpuCheck -> BMAAS-XX-08 (declared in the "gpu" section)
-        GpuCheck:
+        BareMetalGpusPresentAfterStartCheck:
           test_id: "BMAAS08-01"
           labels: ["bare_metal", "ssh", "gpu"]
           host: "{{steps.describe_instance.public_ip}}"
           key_file: "{{steps.describe_instance.key_file}}"
+          description: "Check the GPUs are still present after a start"
+          compose:
+            - GpuCheck
 
     reboot_checks:
       step: reboot_instance
       checks:
-        InstanceRebootCheck:
+        BareMetalHostRebootedCheck:
           test_id: "CNP01-05"
           labels: ["bare_metal", "min_req"]
           max_uptime: 600
-        # StableIdentifierCheck -> CNP08-01 (declared in the "start_checks" section)
-        StableIdentifierCheck:
+          description: "Check the bare metal host reboots on request"
+          compose:
+            - InstanceRebootCheck
+        BareMetalIdentifierStableAfterRebootCheck:
           test_id: "CNP08-01"
           labels: ["bare_metal", "min_req"]
           reference_id: "{{steps.launch_instance.instance_id}}"
+          description: "Check the bare metal host keeps its identifier across a reboot"
+          compose:
+            - StableIdentifierCheck
 
     reboot_state:
       step: reboot_instance
       checks:
-        InstanceStateCheck:
+        BareMetalHostRunningAfterRebootCheck:
           test_id: "N/A"
           labels: ["bare_metal"]
           expected_state: "running"
+          description: "Check the bare metal host returns to the running state after a reboot"
+          compose:
+            - InstanceStateCheck
 
     reboot_ssh:
       step: reboot_instance
       checks:
-        # ConnectivityCheck -> BMAAS-XX-03, OsCheck -> N/A (declared in the "ssh" section)
-        ConnectivityCheck:
+        BareMetalHostReadyAfterRebootCheck:
           test_id: "BMAAS03-01"
           labels: ["bare_metal", "ssh"]
           host: "{{steps.describe_instance.public_ip}}"
           key_file: "{{steps.describe_instance.key_file}}"
-        OsCheck:
-          test_id: "N/A"
-          labels: ["bare_metal", "ssh"]
-          host: "{{steps.describe_instance.public_ip}}"
-          key_file: "{{steps.describe_instance.key_file}}"
-          expected_os: "ubuntu"
+          description: "Check the bare metal host answers SSH with the expected OS after a reboot"
+          compose:
+            - ConnectivityCheck
+            - OsCheck:
+                expected_os: "ubuntu"
 
     reboot_gpu:
       step: reboot_instance
       checks:
-        # GpuCheck -> BMAAS-XX-08 (declared in the "gpu" section)
-        GpuCheck:
+        BareMetalGpusPresentAfterRebootCheck:
           test_id: "BMAAS08-01"
           labels: ["bare_metal", "ssh", "gpu"]
           host: "{{steps.describe_instance.public_ip}}"
           key_file: "{{steps.describe_instance.key_file}}"
           expected_gpus: 8
+          description: "Check the GPUs are still present after a reboot"
+          compose:
+            - GpuCheck
 
     power_cycle_checks:
       step: power_cycle_instance
@@ -326,96 +386,120 @@ tests:
           test_id: "CNP01-06"
           labels: ["bare_metal", "min_req"]
           max_recovery_time: 900
-        # StableIdentifierCheck -> CNP08-01 (declared in the "start_checks" section)
-        StableIdentifierCheck:
+        BareMetalIdentifierStableAfterPowerCycleCheck:
           test_id: "CNP08-01"
           labels: ["bare_metal", "min_req"]
           reference_id: "{{steps.launch_instance.instance_id}}"
+          description: "Check the bare metal host keeps its identifier across a power cycle"
+          compose:
+            - StableIdentifierCheck
 
     power_cycle_state:
       step: power_cycle_instance
       checks:
-        InstanceStateCheck:
+        BareMetalHostRunningAfterPowerCycleCheck:
           test_id: "N/A"
           labels: ["bare_metal"]
           expected_state: "running"
+          description: "Check the bare metal host returns to the running state after a power cycle"
+          compose:
+            - InstanceStateCheck
 
     power_cycle_ssh:
       step: power_cycle_instance
       checks:
-        # ConnectivityCheck -> BMAAS-XX-03, OsCheck -> N/A (declared in the "ssh" section)
-        ConnectivityCheck:
+        BareMetalHostReadyAfterPowerCycleCheck:
           test_id: "BMAAS03-01"
           labels: ["bare_metal", "ssh"]
-        OsCheck:
-          test_id: "N/A"
-          labels: ["bare_metal", "ssh"]
-          expected_os: "ubuntu"
+          description: "Check the bare metal host answers SSH with the expected OS after a power cycle"
+          compose:
+            - ConnectivityCheck
+            - OsCheck:
+                expected_os: "ubuntu"
 
     power_cycle_gpu:
       step: power_cycle_instance
       checks:
-        # GpuCheck -> BMAAS-XX-08 (declared in the "gpu" section)
-        GpuCheck:
+        BareMetalGpusPresentAfterPowerCycleCheck:
           test_id: "BMAAS08-01"
           labels: ["bare_metal", "ssh", "gpu"]
           expected_gpus: 8
+          description: "Check the GPUs are still present after a power cycle"
+          compose:
+            - GpuCheck
 
     # Reinstall validations (skipped when reinstall_instance step is skipped)
     reinstall_state:
       step: reinstall_instance
       checks:
-        InstanceStateCheck:
+        BareMetalHostRunningAfterReinstallCheck:
           test_id: "N/A"
           labels: ["bare_metal"]
           expected_state: "running"
-        StableIdentifierCheck:
+          description: "Check the bare metal host returns to the running state after a reinstall"
+          compose:
+            - InstanceStateCheck
+        BareMetalIdentifierStableAfterReinstallCheck:
           test_id: "CNP08-01"
           labels: ["bare_metal", "min_req"]
           reference_id: "{{steps.launch_instance.instance_id}}"
+          description: "Check the bare metal host keeps its identifier across a reinstall"
+          compose:
+            - StableIdentifierCheck
 
     reinstall_ssh:
       step: reinstall_instance
       checks:
-        # ConnectivityCheck -> BMAAS-XX-03, OsCheck -> N/A (declared in the "ssh" section)
-        ConnectivityCheck:
+        BareMetalHostReadyAfterReinstallCheck:
           test_id: "BMAAS03-01"
           labels: ["bare_metal", "ssh"]
-        OsCheck:
-          test_id: "N/A"
-          labels: ["bare_metal", "ssh"]
-          expected_os: "ubuntu"
+          description: "Check the bare metal host answers SSH with the expected OS after a reinstall"
+          compose:
+            - ConnectivityCheck
+            - OsCheck:
+                expected_os: "ubuntu"
 
     reinstall_gpu:
       step: reinstall_instance
       checks:
-        # GpuCheck -> BMAAS-XX-08 (declared in the "gpu" section)
-        GpuCheck:
+        BareMetalGpusPresentAfterReinstallCheck:
           test_id: "BMAAS08-01"
           labels: ["bare_metal", "ssh", "gpu"]
+          description: "Check the GPUs are still present after a reinstall"
+          compose:
+            - GpuCheck
 
     nim_health:
       step: deploy_nim
       checks:
-        NimHealthCheck:
+        BareMetalNimHealthCheck:
           test_id: "BMAAS10-01"
           labels: ["bare_metal", "gpu", "min_req", "slow", "ssh", "workload"]
+          description: "Check the NIM deployed on the bare metal host reports healthy"
+          compose:
+            - NimHealthCheck
 
     nim_models:
       step: deploy_nim
       checks:
-        NimModelCheck:
+        BareMetalNimModelCheck:
           test_id: "BMAAS10-01"
           labels: ["bare_metal", "gpu", "min_req", "slow", "ssh", "workload"]
+          description: "Check the NIM deployed on the bare metal host lists its model"
+          compose:
+            - NimModelCheck
 
     nim_inference:
       step: deploy_nim
       checks:
-        NimInferenceCheck:
+        BareMetalNimInferenceCheck:
           test_id: "BMAAS10-01"
           labels: ["bare_metal", "gpu", "min_req", "slow", "ssh", "workload"]
           prompt: "What is CUDA?"
           max_tokens: 50
+          description: "Check the NIM deployed on the bare metal host answers an inference request"
+          compose:
+            - NimInferenceCheck
 
     nim_teardown:
       step: teardown_nim

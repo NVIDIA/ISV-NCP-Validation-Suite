@@ -49,7 +49,7 @@ tests:
     bare_metal:
       checks:
         # On-host NVIDIA-stack checks (BMAAS-XX-08 "Verify NVIDIA hardware",
-        # already covered by the bare_metal suite's GpuCheck); N/A here.
+        # already covered by the bare_metal suite's GPU checks); N/A here.
         BmDriverInstalled:
           test_id: "N/A"
           labels: ["bare_metal"]

@@ -22,14 +22,16 @@
 #
 # Coverage:
 #   This example exercises only the pure JSON-contract validations
-#   (InstanceStateCheck, InstanceListCheck, InstanceTagCheck,
-#    TopologyPlacementCheck, SerialConsoleCheck, InstanceStopCheck,
-#    InstanceStartCheck, InstanceRebootCheck, InstancePowerCycleCheck,
-#    StableIdentifierCheck, BareMetalResourcesDeletedCheck,
-#    TenantDataSanitizedCheck). SSH-based host checks
-#    (Connectivity, Os, Gpu, Driver, CpuInfo, HostSoftware, GpuStress,
-#    Nccl, Training, Nvlink, InfiniBand, Ethernet, ContainerRuntime,
-#    CloudInit, NIM*) are excluded via `exclude.labels: [ssh]` because
+#   (BareMetalHostRunningCheck, BareMetalHostListedCheck,
+#    BareMetalHostTaggedCheck, TopologyPlacementCheck,
+#    BareMetalSerialConsoleCheck, BareMetalHostStoppedCheck,
+#    BareMetalHostStartedCheck, BareMetalHostRebootedCheck,
+#    InstancePowerCycleCheck, the BareMetalIdentifierStableAfter* checks,
+#    BareMetalResourcesDeletedCheck, TenantDataSanitizedCheck). SSH-based
+#    host checks (BareMetalHostReady*, BareMetalGpusPresent*, GpuStress,
+#    Nccl, Training, Nvlink, InfiniBand, Ethernet, the host OS/driver/CPU
+#    and container-runtime checks, cloud-init, NIM) are excluded via
+#    `exclude.labels: [ssh]` because
 #    a dummy stub cannot spin up a real host to SSH into. The
 #    deploy_nim / teardown_nim / reinstall_instance steps are also
 #    skipped for the same reason.

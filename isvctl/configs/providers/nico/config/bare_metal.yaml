@@ -63,7 +63,8 @@
 #     This is a read-only step (like the other checks here); the auto-provisioning
 #     variant that mints a throwaway key lives in the dedicated key_access.yaml.
 #   - list_instances.py / describe_instance.py query existing instances;
-#     InstanceListCheck and InstanceStateCheck validate the JSON contract.
+#     BareMetalHostListedCheck and BareMetalHostStateReportedCheck validate
+#     the JSON contract.
 #
 # Prerequisites:
 #   - NICO_API_BASE set to the NICo API base URL
@@ -392,18 +393,17 @@ tests:
   exclude:
     labels: []
     tests:
-      - ConnectivityCheck
-      - OsCheck
-      - GpuCheck
-      - VcpuPinningCheck
-      - PciBusCheck
-      - HostSoftwareCheck
+      - BareMetalHostReadyCheck
+      - BareMetalGpusPresentCheck
+      - BareMetalVcpuPinningCheck
+      - BareMetalPciBusCheck
+      - BareMetalHostSoftwareCheck
       - GpuStressCheck
       - NcclCheck
       - TrainingCheck
       - NvlinkCheck
       - InfiniBandCheck
       - EthernetCheck
-      - DriverCheck
-      - CpuInfoCheck
-      - ContainerRuntimeCheck
+      - BareMetalGpuDriverCheck
+      - BareMetalCpuInfoCheck
+      - BareMetalContainerRuntimeCheck

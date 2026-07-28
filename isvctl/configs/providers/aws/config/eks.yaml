@@ -150,8 +150,8 @@ commands:
           TF_VAR_test_pool_taints_json: '[{"key":"isv.ncp.validation/dedicated","value":"test","effect":"NoSchedule"}]'
           TF_VAR_test_pool_node_type: "cpu"
 
-      # Delete the throwaway pool (K8S06-03). In the test phase so the matching
-      # K8sNodePoolCheck can assert it reaches zero nodes after all test steps.
+      # Delete the throwaway pool (K8S06-03). In the test phase so
+      # K8sNodePoolDeletedCheck can assert it drains after all test steps.
       - name: delete_test_node_pool
         phase: test
         command: "../scripts/eks/destroy_node_pool.sh"
@@ -220,8 +220,8 @@ tests:
         K8sNodeCountCheck:
           # Keep the generic node count scoped to the baseline cluster. Setup
           # adds temporary CPU and GPU test pools (and the test phase scales
-          # the CPU one) before this check runs; K8sNodePoolCheck validates
-          # those pools separately. Every test-pool node carries the stable
+          # the CPU one) before this check runs; the k8s_node_pools checks
+          # validate those pools separately. Every test-pool node carries the stable
           # `isv.ncp.validation/pool=test` marker, so one selector excludes
           # both pools at once.
           count: "{{ steps.setup.kubernetes.node_count | default(4, true) }}"

@@ -152,6 +152,23 @@ class TestCompositeCheck:
         assert result["passed"] is True
         assert "username=u" in result["output"]
 
+    def test_composite_params_reach_a_bare_member(self) -> None:
+        """Params on the composite reach a member listed without any of its own.
+
+        A composite wrapping a single purpose-built check declares that check's
+        params at the composite level, so this forwarding is what makes the
+        one-member form work at all.
+        """
+        result = CompositeCheck(
+            config=_config(
+                ["FieldExistsCheck"],
+                fields=["username"],
+            )
+        ).execute()
+
+        assert result["passed"] is True
+        assert "username" in result["output"]
+
     def test_member_params_override_shared_config(self) -> None:
         """A member's inline params win over the shared composite config."""
         result = CompositeCheck(

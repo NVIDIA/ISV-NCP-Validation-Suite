@@ -70,17 +70,19 @@ tests:
     # string rendering doesn't mangle the structure, and K8sNodePoolCheck
     # json-parses them. The `step` field binds each check to the phase of
     # the operation it validates, so create can be asserted before update
-    # scales the same pool. The check is listed once per operation/pool, so
-    # list form is required (dict form would collide on the class name).
+    # scales the same pool. List form keeps that ordering explicit.
     # The separate CPU and GPU create checks prove distinct pools, each with
     # its own instance type and node count, coexist in the same cluster.
     k8s_node_pools:
-      - K8sNodePoolCheck:
+      - K8sCpuNodePoolCreatedCheck:
           # Create (CPU pool): pool reaches desired replica count with its
           # specified CPU instance type.
           test_id: "K8S06-01"
           labels: ["kubernetes", "min_req", "slow"]
           step: create_test_node_pool
+          description: "Check a CPU node pool reaches its requested node count and instance type"
+          compose:
+            - K8sNodePoolCheck
           label_selector: "{{ steps.create_test_node_pool.label_selector }}"
           expected_replicas: "{{ steps.create_test_node_pool.expected_replicas | default(1, true) }}"
           expected_labels: "{{ steps.create_test_node_pool.expected_labels_json | default('{}', true) }}"
@@ -89,12 +91,15 @@ tests:
           node_type: "{{ steps.create_test_node_pool.node_type | default('cpu') }}"
           wait_timeout: 900
           poll_interval: 10
-      - K8sNodePoolCheck:
+      - K8sGpuNodePoolCreatedCheck:
           # Create (GPU pool): a separate pool reaches its own node count with
           # its specified GPU instance type, coexisting with the CPU pool.
           test_id: "K8S06-01"
           labels: ["kubernetes", "min_req", "slow"]
           step: create_test_gpu_node_pool
+          description: "Check a GPU node pool coexists with the CPU pool at its own node count and instance type"
+          compose:
+            - K8sNodePoolCheck
           label_selector: "{{ steps.create_test_gpu_node_pool.label_selector }}"
           expected_replicas: "{{ steps.create_test_gpu_node_pool.expected_replicas | default(1, true) }}"
           expected_labels: "{{ steps.create_test_gpu_node_pool.expected_labels_json | default('{}', true) }}"
@@ -103,11 +108,14 @@ tests:
           node_type: "{{ steps.create_test_gpu_node_pool.node_type | default('gpu') }}"
           wait_timeout: 900
           poll_interval: 10
-      - K8sNodePoolCheck:
+      - K8sNodePoolScaledCheck:
           # Update (scale): same pool converges to the new count.
           test_id: "K8S06-02"
           labels: ["kubernetes", "min_req", "slow"]
           step: update_test_node_pool
+          description: "Check a node pool converges to a new node count after being scaled"
+          compose:
+            - K8sNodePoolCheck
           label_selector: "{{ steps.update_test_node_pool.label_selector }}"
           expected_replicas: "{{ steps.update_test_node_pool.expected_replicas | default(2, true) }}"
           expected_labels: "{{ steps.update_test_node_pool.expected_labels_json | default('{}', true) }}"
@@ -116,13 +124,16 @@ tests:
           node_type: "{{ steps.update_test_node_pool.node_type | default('cpu') }}"
           wait_timeout: 900
           poll_interval: 10
-      - K8sNodePoolCheck:
+      - K8sNodePoolDeletedCheck:
           # Delete: assert the throwaway pool reaches zero nodes after the
           # delete step. Selector comes from its create step; the label/taint/
           # instance-type assertions are omitted (no nodes to check).
           test_id: "K8S06-03"
           labels: ["kubernetes", "min_req", "slow"]
           step: delete_test_node_pool
+          description: "Check a deleted node pool drains to zero nodes"
+          compose:
+            - K8sNodePoolCheck
           label_selector: "{{ steps.create_test_delete_node_pool.label_selector }}"
           expected_replicas: 0
           node_type: "{{ steps.create_test_delete_node_pool.node_type | default('cpu') }}"

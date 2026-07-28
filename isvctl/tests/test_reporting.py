@@ -152,7 +152,7 @@ class TestUpdateTestRun:
         document = {
             "schemaVersion": 2,
             "isvTestVersion": "1.2.3",
-            "platforms": ["kubernetes", "vm"],
+            "capabilities": ["kubernetes", "vm"],
             "suites": ["storage", "iam"],
             "entries": [{"name": "TestA"}],
         }
@@ -172,9 +172,29 @@ class TestUpdateTestRun:
             isv_test_version="1.2.3",
             entries=[{"name": "TestA"}],
             schema_version=2,
-            platforms=["kubernetes", "vm"],
+            capabilities=["kubernetes", "vm"],
             suites=["storage", "iam"],
         )
+
+    def test_envelope_fixture_matches_the_real_catalog_document(self) -> None:
+        """Pin the hand-built fixture above to what the producer actually emits.
+
+        The fixture is a literal, so it can drift from ``catalog_document`` and
+        keep passing while the real upload raises. That is exactly what happened
+        to the platform -> capability rename: the fixture kept the old
+        ``platforms`` key, this suite stayed green, and ``update_test_run`` was
+        raising KeyError against every real envelope - swallowed by its own
+        ``except Exception`` into a warning, so nothing surfaced.
+        """
+        from isvtest.catalog import catalog_document
+
+        assert set(catalog_document([], "1.2.3")) == {
+            "schemaVersion",
+            "isvTestVersion",
+            "capabilities",
+            "suites",
+            "entries",
+        }
 
 
 class TestReportedCapability:

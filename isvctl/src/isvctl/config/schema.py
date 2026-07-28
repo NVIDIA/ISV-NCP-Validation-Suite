@@ -127,10 +127,12 @@ class StepConfig(BaseModel):
 class PlatformCommands(BaseModel):
     """Lifecycle commands for a specific test target.
 
-    Groups commands for a test target (kubernetes, slurm, bare_metal, network, vm, iam, image_registry, security, observability).
-    The keys span both capabilities and plain suites, which is why this axis is
-    "test target" and not "capability".
-    Supports skip at both target level (skips all phases) and phase level.
+    Groups commands for a test target (kubernetes, slurm, bare_metal, network,
+    vm, iam, image_registry, security, observability). The keys span both
+    capabilities and plain suites, which is why this axis is "test target" and
+    not "capability".
+
+    Supports skip at both target level (skips all phases) and step level.
 
     The `phases` field defines the execution order. Steps are grouped by their `phase`
     field and executed in the order defined by `phases`. Validations run after each phase.
@@ -438,7 +440,10 @@ class RunConfig(BaseModel):
     lab: LabConfig | None = Field(default=None, description="Lab configuration")
     commands: dict[str, PlatformCommands] = Field(
         default_factory=dict,
-        description="Lifecycle commands by test target (kubernetes, slurm, bare_metal, network, vm, iam, image_registry, security, observability)",
+        description=(
+            "Lifecycle commands by test target (kubernetes, slurm, bare_metal, "
+            "network, vm, iam, image_registry, security, observability)"
+        ),
     )
     context: dict[str, Any] = Field(default_factory=dict, description="Context variables for templating")
     tests: ValidationConfig | None = Field(default=None, description="Test configuration")

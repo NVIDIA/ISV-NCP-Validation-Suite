@@ -216,8 +216,8 @@ def _iter_suite_docs() -> Iterator[tuple[Path, dict[str, Any]]]:
 def _declared_platform(data: dict[str, Any]) -> str | None:
     """Return the capability a suite document declares, or None for a plain suite.
 
-    Reads ``tests.capability``; the value still travels to the service as the
-    catalog entry's ``platform`` field, which is the wire name.
+    Reads ``tests.capability`` and travels to the service as the catalog
+    entry's ``capability`` field.
     """
     tests = data.get("tests") or {}
     platform = tests.get("capability") if isinstance(tests, dict) else None
@@ -266,7 +266,7 @@ def build_catalog(*, released_only: bool = True) -> list[dict[str, Any]]:
               excluded (e.g. ["SEC07-01"]); empty when only intentional gaps
             - source: Fully qualified Python source module
             - suite: Logical suite name
-            - platform: Declared platform key for platform suites, otherwise null
+            - capability: Declared capability for platform suites, otherwise null
             - requires: Capability prerequisites for plain suites
     """
     suite_map = _build_suite_map()

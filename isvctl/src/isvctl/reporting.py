@@ -225,7 +225,7 @@ def update_test_run(
                     isv_test_version=catalog_document["isvTestVersion"],
                     entries=catalog_document["entries"],
                     schema_version=catalog_document["schemaVersion"],
-                    platforms=catalog_document["platforms"],
+                    capabilities=catalog_document["capabilities"],
                     suites=catalog_document["suites"],
                 )
             except SystemExit:

@@ -317,7 +317,9 @@ def update(
                 isv_test_version=catalog_version,
                 entries=catalog_entries,
                 schema_version=catalog_data.get("schemaVersion", 1),
-                platforms=catalog_data.get("platforms", []),
+                # Saved catalog files outlive the rename: v2 documents write
+                # `capabilities`, v1 files on disk still say `platforms`.
+                capabilities=catalog_data.get("capabilities") or catalog_data.get("platforms", []),
                 suites=catalog_data.get("suites", []),
             )
         except FileNotFoundError:

@@ -154,11 +154,8 @@ def resolve_suite(provider: str, suite: str, *, configs_root: Path) -> ResolvedS
 
     requested = _normalize_name(suite)
     declarable = platform_vocabulary(configs_root)
-    # Classifying is per-file and best-effort: a config this run does not want
-    # must not decide whether the requested suite resolves. `_suite_name` raises
-    # on a config importing several suites, so without this one malformed file
-    # in the directory would fail `--suite <anything>` for the whole provider.
-    # `resolve_suite_name` already skips such files; match it.
+    # Best-effort per file: one malformed config must not fail `--suite` for the
+    # whole provider. Matches `resolve_suite_name`, which already skips them.
     classified = []
     for path in sorted(config_dir.glob("*.yaml")):
         try:

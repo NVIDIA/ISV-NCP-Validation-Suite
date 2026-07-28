@@ -132,8 +132,6 @@ class PlatformCommands(BaseModel):
     capabilities and plain suites, which is why this axis is "test target" and
     not "capability".
 
-    Supports skip at both target level (skips all phases) and step level.
-
     The `phases` field defines the execution order. Steps are grouped by their `phase`
     field and executed in the order defined by `phases`. Validations run after each phase.
 
@@ -400,9 +398,8 @@ class ValidationConfig(BaseModel):
         """Reject legacy axes and requirements on platform suite checks."""
         if self.model_extra and "module" in self.model_extra:
             raise ValueError("tests.module is no longer supported; plain suites have no axis key")
-        # This model allows extras, so a config still saying `tests.platform:` would be
-        # silently ignored and the suite would demote to a plain suite - every check
-        # gated on a capability it no longer declares. Name the rename instead.
+        # Extras are allowed, so an unmigrated `tests.platform:` would be ignored
+        # and silently demote the suite to a plain one. Name the rename instead.
         if self.model_extra and "platform" in self.model_extra:
             raise ValueError("tests.platform was renamed to tests.capability")
         if self.capability and self.capability not in DECLARABLE_CAPABILITIES:

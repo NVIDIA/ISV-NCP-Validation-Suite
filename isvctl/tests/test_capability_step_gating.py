@@ -36,6 +36,7 @@ PROVIDERS_ROOT = CONFIGS_ROOT / "providers"
 # that `--suite NAME` (no `--capability`) selects.
 CONTEXTS = (CORE_REQUIREMENT_CONTEXT, *sorted(DECLARABLE_CAPABILITIES))
 STEP_REFERENCE = re.compile(r"steps\.([A-Za-z0-9_]+)")
+JINJA_EXPRESSION = re.compile(r"\{\{.*?\}\}", re.DOTALL)
 
 
 def _plain_suite_configs() -> list[tuple[str, Path]]:
@@ -65,12 +66,17 @@ def _gated_step_names(steps: list[Any], entries: list[ValidationEntry], context:
 
 
 def _unguarded_references(value: Any) -> set[str]:
-    """Return step names referenced without a `default(...)` fallback."""
+    """Return step names referenced without a `default(...)` fallback.
+
+    Scoped per `{{ ... }}`: one guarded expression does not vouch for its
+    neighbours in the same string.
+    """
     referenced: set[str] = set()
     if isinstance(value, str):
-        if "default(" in value:
-            return referenced
-        return set(STEP_REFERENCE.findall(value))
+        for expression in JINJA_EXPRESSION.findall(value):
+            if "default(" not in expression:
+                referenced |= set(STEP_REFERENCE.findall(expression))
+        return referenced
     if isinstance(value, dict):
         for item in value.values():
             referenced |= _unguarded_references(item)
@@ -105,3 +111,25 @@ def test_surviving_steps_never_depend_on_gated_steps(provider: str, config_path:
         + "; ".join(violations)
         + ". Gate the step with `requires:` or give the reference a `default(...)`."
     )
+
+
+class TestUnguardedReferences:
+    """The guard is per `{{ ... }}`, not per string."""
+
+    def test_guarded_reference_is_ignored(self) -> None:
+        assert _unguarded_references("{{ steps.setup.id | default('') }}") == set()
+
+    def test_bare_reference_is_reported(self) -> None:
+        assert _unguarded_references("{{ steps.setup.id }}") == {"setup"}
+
+    def test_a_guarded_expression_does_not_cover_its_neighbour(self) -> None:
+        """The bug this guards: one `default(` used to blank the whole string."""
+        value = "{{ steps.a.id | default('') }} {{ steps.b.id }}"
+        assert _unguarded_references(value) == {"b"}
+
+    def test_reference_outside_an_expression_is_not_a_dependency(self) -> None:
+        assert _unguarded_references("see steps.setup in the docs") == set()
+
+    def test_nested_structures_are_walked(self) -> None:
+        value = {"args": ["{{ steps.a.id }}", {"k": "{{ steps.b.id | default('') }}"}]}
+        assert _unguarded_references(value) == {"a"}

@@ -66,6 +66,8 @@ def test_platform_suites_reject_requires_and_unknown_platforms() -> None:
         RunConfig.model_validate({"tests": {"capability": "kubernetes", "validations": validation}})
     with pytest.raises(ValidationError, match=r"tests\.capability must be one of"):
         RunConfig.model_validate({"tests": {"capability": "compute", "validations": {}}})
+    with pytest.raises(ValidationError, match=r"tests\.capability must be one of"):
+        RunConfig.model_validate({"tests": {"capability": "", "validations": validation}})
 
 
 def test_plain_suite_rejects_unknown_requires_vocabulary() -> None:

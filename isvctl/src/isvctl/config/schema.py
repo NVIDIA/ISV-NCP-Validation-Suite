@@ -402,7 +402,7 @@ class ValidationConfig(BaseModel):
         # and silently demote the suite to a plain one. Name the rename instead.
         if self.model_extra and "platform" in self.model_extra:
             raise ValueError("tests.platform was renamed to tests.capability")
-        if self.capability and self.capability not in DECLARABLE_CAPABILITIES:
+        if self.capability is not None and self.capability not in DECLARABLE_CAPABILITIES:
             raise ValueError(f"tests.capability must be one of: {', '.join(sorted(DECLARABLE_CAPABILITIES))}")
         entries = parse_validations(self.validations)
         if self.capability and any("requires" in entry.params_template for entry in entries):

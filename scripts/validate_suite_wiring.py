@@ -138,14 +138,14 @@ def wiring_errors(suites_dir: Path = SUITES_DIR) -> list[str]:
 
     # A `requires` value is only satisfiable if an ISV can declare that
     # capability, which requires a platform suite to exist for it. Collect the
-    # platform capabilities that actually have a suite so unreachable (dead)
+    # capabilities that actually have a suite so unreachable (dead)
     # requirements can be flagged below.
-    declared_platforms: set[str] = set()
+    declared_capabilities: set[str] = set()
     for _, _, data in parsed:
         tests = data.get("tests") if isinstance(data, dict) else None
-        platform = tests.get("capability") if isinstance(tests, dict) else None
-        if isinstance(platform, str) and platform in DECLARABLE_CAPABILITIES:
-            declared_platforms.add(platform)
+        capability = tests.get("capability") if isinstance(tests, dict) else None
+        if isinstance(capability, str) and capability in DECLARABLE_CAPABILITIES:
+            declared_capabilities.add(capability)
 
     for path, lines, data in parsed:
         try:
@@ -154,15 +154,15 @@ def wiring_errors(suites_dir: Path = SUITES_DIR) -> list[str]:
             errors.append(f"failed to read/parse {path}: {exc}")
             continue
         tests = data.get("tests") or {}
-        platform = tests.get("capability") if isinstance(tests, dict) else None
+        capability = tests.get("capability") if isinstance(tests, dict) else None
         module = tests.get("module") if isinstance(tests, dict) else None
         if module is not None:
             errors.append(f"{path}: tests.module is no longer supported")
         if isinstance(tests, dict) and tests.get("platform") is not None:
             errors.append(f"{path}: tests.platform was renamed to tests.capability")
-        if platform is not None and platform not in DECLARABLE_CAPABILITIES:
+        if capability is not None and capability not in DECLARABLE_CAPABILITIES:
             errors.append(f"{path}: tests.capability must be one of: {', '.join(sorted(DECLARABLE_CAPABILITIES))}")
-        suite_is_platform = isinstance(platform, str) and platform in DECLARABLE_CAPABILITIES
+        suite_is_platform = isinstance(capability, str) and capability in DECLARABLE_CAPABILITIES
         if not suite_is_platform:
             suite_name = canonical_suite_name(path.stem)
             if suite_name in DECLARABLE_CAPABILITIES:
@@ -196,7 +196,7 @@ def wiring_errors(suites_dir: Path = SUITES_DIR) -> list[str]:
                 errors.append(f"{location}: missing suite label {required_label!r}")
             if "platforms" in params:
                 errors.append(f"{location}: legacy platforms is not supported; use requires in plain suites")
-            if platform:
+            if capability:
                 if "requires" in params:
                     errors.append(f"{location}: requires is not allowed in platform suites")
             else:
@@ -206,7 +206,7 @@ def wiring_errors(suites_dir: Path = SUITES_DIR) -> list[str]:
                 elif message := requires_error(requires):
                     errors.append(f"{location}: {message}")
                 else:
-                    dead = sorted(set(requires) - declared_platforms)
+                    dead = sorted(set(requires) - declared_capabilities)
                     if dead:
                         errors.append(
                             f"{location}: requires names {', '.join(dead)} which has no platform "

@@ -213,15 +213,15 @@ def _iter_suite_docs() -> Iterator[tuple[Path, dict[str, Any]]]:
         yield config_path, yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
 
 
-def _declared_platform(data: dict[str, Any]) -> str | None:
+def _declared_capability(data: dict[str, Any]) -> str | None:
     """Return the capability a suite document declares, or None for a plain suite.
 
     Reads ``tests.capability`` and travels to the service as the catalog
     entry's ``capability`` field.
     """
     tests = data.get("tests") or {}
-    platform = tests.get("capability") if isinstance(tests, dict) else None
-    return platform if isinstance(platform, str) and platform else None
+    capability = tests.get("capability") if isinstance(tests, dict) else None
+    return capability if isinstance(capability, str) and capability else None
 
 
 def _build_suite_map() -> dict[str, dict[str, Any]]:
@@ -233,15 +233,15 @@ def _build_suite_map() -> dict[str, dict[str, Any]]:
     enforce_unique = os.environ.get("ISVCTL_ENFORCE_UNIQUE_WIRING") == "1"
     suite_map: dict[str, dict[str, Any]] = {}
     for config_path, data in _iter_suite_docs():
-        platform = _declared_platform(data)
-        suite = platform if platform else canonical_suite_name(config_path.stem)
+        capability = _declared_capability(data)
+        suite = capability if capability else canonical_suite_name(config_path.stem)
         for _, check_name, params in iter_checks_from_data(data):
             if check_name in suite_map and enforce_unique:
                 raise ValueError(f"Suite wiring name {check_name!r} is not globally unique")
             requires = params.get("requires", [])
             suite_map[check_name] = {
                 "suite": suite,
-                "capability": platform,
+                "capability": capability,
                 "requires": list(requires) if isinstance(requires, list) else [],
             }
     return suite_map
@@ -251,7 +251,7 @@ def build_catalog(*, released_only: bool = True) -> list[dict[str, Any]]:
     """Discover all validation tests and return structured catalog entries.
 
     Each entry is one suite wiring name. Plain suites carry ``requires`` while
-    platform suites carry their ``platform`` key.
+    platform suites carry their ``capability`` key.
 
     Args:
         released_only: When True, omit tests that are not in the committed
@@ -342,9 +342,9 @@ def suite_vocabularies() -> tuple[list[str], list[str]]:
     capabilities: set[str] = set()
     suites: set[str] = set()
     for config_path, data in _iter_suite_docs():
-        platform = _declared_platform(data)
-        if platform in DECLARABLE_CAPABILITIES:
-            capabilities.add(str(platform))
+        capability = _declared_capability(data)
+        if capability in DECLARABLE_CAPABILITIES:
+            capabilities.add(str(capability))
         else:
             suites.add(canonical_suite_name(config_path.stem))
     return sorted(capabilities), sorted(suites)
@@ -360,18 +360,18 @@ def build_suite_vocabulary() -> list[str]:
     return suite_vocabularies()[1]
 
 
-def _assert_disjoint_vocabulary(platforms: list[str], suites: list[str]) -> None:
+def _assert_disjoint_vocabulary(capabilities: list[str], suites: list[str]) -> None:
     """Reject a plain suite named after a declarable capability.
 
     Capabilities and plain suites share one uppercased namespace downstream: the
-    frontend merges ``platforms`` and ``suites`` into a single selectable
+    frontend merges ``capabilities`` and ``suites`` into a single selectable
     "test target" list, and the backend re-splits a flat selection by
-    intersecting it with the declared ``platforms``. Both are unambiguous only
+    intersecting it with the declared ``capabilities``. Both are unambiguous only
     while the two namespaces are disjoint, so enforce it at the upload
     chokepoint (checked against the full reserved set, not just declared
-    platforms, so an undeclared capability word like ``slurm`` is caught too).
+    capabilities, so an undeclared capability word like ``slurm`` is caught too).
     """
-    collisions = sorted(set(suites) & (set(platforms) | DECLARABLE_CAPABILITIES))
+    collisions = sorted(set(suites) & (set(capabilities) | DECLARABLE_CAPABILITIES))
     if collisions:
         raise ValueError(
             "plain suite names collide with declarable capabilities: "

@@ -86,13 +86,18 @@ def list_cmd(
     )
     table.add_column("Test", style="green", no_wrap=True)
     table.add_column("Test IDs", style="magenta", max_width=32)
-    table.add_column("Suite / Requirements", style="dim", max_width=40)
+    table.add_column("Suite / Capability", style="dim", max_width=40)
     table.add_column("Description")
 
     for entry in sorted(catalog_entries, key=lambda e: e["name"]):
         suite = entry.get("suite") or "-"
-        requirement = entry.get("capability") or ", ".join(entry.get("requires") or []) or "core"
-        suite_requirement = f"{suite} / {requirement}"
+        # Platform-suite checks carry capability (always-on for that platform) and
+        # have no requires axis. Plain-suite checks use requires; empty means core.
+        if entry.get("capability"):
+            suite_requirement = suite
+        else:
+            requirement = ", ".join(entry.get("requires") or []) or "core"
+            suite_requirement = f"{suite} / {requirement}"
         table.add_row(
             entry["name"],
             ", ".join(entry.get("test_ids") or []) or "-",

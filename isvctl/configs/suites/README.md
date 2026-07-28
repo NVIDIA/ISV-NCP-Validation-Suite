@@ -9,6 +9,38 @@ commands (steps + scripts) that produce JSON for the validations to check.
 - **New to the framework?** See the [External Validation Guide](../../../docs/guides/external-validation-guide.md).
 - **Try it without cloud credentials:** `make demo-test`.
 
+## What runs, and when
+
+A **platform suite** (`tests.capability: <capability>` — `vm`, `bare_metal`,
+`kubernetes`, `slurm`) is the obligation attached to declaring that capability. Its checks
+declare no `requires:`; they all run.
+
+A **plain suite** (everything else — `storage`, `network`, ...) mixes checks
+that need no infrastructure with checks that do. Each declares what it
+presupposes:
+
+```yaml
+requires: []                # core - runs in every context
+requires: [kubernetes]      # runs only under --capability kubernetes
+requires: [vm, bare_metal]  # any-match: either context satisfies it
+```
+
+One rule decides what runs, and it does not depend on how you named the
+config — `--suite`, `-f`, and `--label` discovery all behave identically:
+
+> **A plain suite with no `--capability` runs its core checks.** Name a
+> capability to add the checks gated on it.
+
+```bash
+isvctl test run --provider aws --suite storage                        # core only
+isvctl test run --provider aws --suite storage --capability vm        # core + vm checks
+```
+
+There is no "run everything" context: no ISV runs on `vm` and `kubernetes`
+at once, so a run always carries exactly one context. Steps follow the same
+rule — give a step `requires:` when it builds or tears down a fixture only
+some contexts need, so a core run neither provisions nor leaks it.
+
 Suites:
 [`iam`](iam.yaml),
 [`network`](network.yaml),
@@ -141,7 +173,7 @@ volume. The three test-phase steps all reuse that fixture.
 
 | Step | Phase | Script | Key JSON Fields |
 |------|-------|--------|-----------------|
-| `launch_instance` | setup | `providers/my-isv/scripts/vm/launch_instance.py` | `instance_id`, `state`, `public_ip`, `key_file` (reuses VM script) |
+| `launch_instance` | setup | `providers/my-isv/scripts/vm/launch_instance.py` | `instance_id`, `state`, `public_ip`, `key_file` (reuses VM script; only under `vm`/`bare_metal`) |
 | `create_volume` | setup | `providers/my-isv/scripts/storage/create_volume.py` | `volume_id`, `mount_point`, `sentinel_content`, `operations.{create,attach,format,mount,write_sentinel}` |
 | `snapshot_lifecycle` | test | `providers/my-isv/scripts/storage/snapshot_lifecycle.py` | `volume_id`, `snapshot_id`, `operations.{create_snapshot,restore_volume,verify_data}` (verify_data includes `content_matches`) |
 | `volume_resize` | test | `providers/my-isv/scripts/storage/volume_resize.py` | `volume_id`, `operations.{modify_volume,grow_partition,resize_filesystem,verify_size}` |
@@ -193,7 +225,8 @@ Validations use `sinfo`/`srun` directly: partitions, GPU allocation, job schedul
 | `crud_install_config` | test | `providers/my-isv/scripts/image-registry/crud_install_config.py` | `config_id`, `config_name`, `operations` |
 | `install_image_bm` | test | `providers/my-isv/scripts/image-registry/install_image_bm.py` | `instance_id`, `image_id`, `instance_state` |
 | `install_config_bm` | test | `providers/my-isv/scripts/image-registry/install_config_bm.py` | `instance_id`, `config_id`, `instance_state`, `state` |
-| `teardown` | teardown | `providers/my-isv/scripts/image-registry/teardown.py` | `resources_deleted`, `message` |
+| `teardown_instance` | teardown | `providers/my-isv/scripts/image-registry/teardown.py` | `resources_deleted`, `message` (instance, key pair, security group, instance profile — only under `vm`) |
+| `teardown_image` | teardown | `providers/my-isv/scripts/image-registry/teardown.py` | `resources_deleted`, `message` (image, disks, bucket — always) |
 
 ### Security (`security.yaml`)
 

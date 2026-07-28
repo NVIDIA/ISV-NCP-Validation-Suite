@@ -124,7 +124,6 @@ commands:
         timeout: 300
 
 tests:
-  platform: network
   cluster_name: "aws-network-test"
 
   settings:
@@ -195,6 +194,28 @@ Each step defines a command to execute:
 | `skip` | No | Skip this step |
 | `continue_on_failure` | No | Continue even if this step fails |
 | `output_schema` | No | Schema name for output validation |
+| `requires` | No | Capability contexts this step runs in (see [Capabilities](#capabilities-and-requires)) |
+
+#### Gating a step with `requires`
+
+A step is skipped automatically when **every** validation bound to it is
+filtered out by the run's capability. That inference covers most steps, but it
+cannot reach a step no validation binds to — typically a teardown step:
+
+```yaml
+# Runs only under --capability kubernetes. Without the gate, a core run would
+# try to tear down a cluster it never created.
+- name: teardown_cluster
+  phase: teardown
+  command: "./scripts/teardown_cluster.sh"
+  requires: [kubernetes]
+```
+
+Rule of thumb: **if a step builds or destroys a fixture that only some contexts
+need, give it an explicit `requires:`** — and give both halves of the fixture the
+same one, so setup and teardown always move together. A step that survives the
+gate must not reference a gated-off step's output; use `default(...)` if it
+legitimately might be absent.
 
 ### Validation Configuration
 
@@ -266,6 +287,64 @@ The part before the dash must match an existing validation class name (e.g., `K8
 - Validation class names **cannot** contain dashes, so the first dash always marks the start of a variant suffix.
 - The suffix is free-form: `K8sNimHelmWorkload-small`, `SlurmPartition-cpu`, `SlurmGpuAllocation-1gpu` are all valid.
 - Each variant is a distinct test entry in coverage tracking.
+
+## Capabilities and `requires`
+
+An ISV declares which **capabilities** it supports. There are exactly four, and
+they are mutually exclusive execution environments — you run on one at a time,
+never a combination:
+
+`vm` · `bare_metal` · `kubernetes` · `slurm`
+
+Each has a **platform suite** (`suites/vm.yaml`, `suites/k8s.yaml`, ...) carrying
+the checks you owe by declaring it. Its `tests.capability:` key names the
+capability, and its checks declare no `requires:` — they all run.
+
+Everything else is a **plain suite** (`storage`, `network`, `iam`, ...), named by
+its filename. A plain suite mixes checks that need no particular infrastructure
+with checks that presuppose some. Each check says which:
+
+```yaml
+requires: []                # core - runs in every context
+requires: [kubernetes]      # runs only under --capability kubernetes
+requires: [vm, bare_metal]  # any-match: either context satisfies it
+```
+
+`requires` is **any-match**, not a set to satisfy simultaneously: a check runs
+when its list is empty, or when the run's capability appears in it. There is
+deliberately no way to express "needs vm AND kubernetes" — no check needs it,
+and the mutual exclusivity above means such a check could never run.
+
+### What runs, and when
+
+One rule, and it does not depend on how you named the config — `--suite`, `-f`,
+and `--label` discovery behave identically:
+
+> **A plain suite with no `--capability` runs its core checks.** Name a
+> capability to add the checks gated on it.
+
+```bash
+isvctl test run --provider acme --suite storage                         # core only
+isvctl test run --provider acme --suite storage --capability vm         # core + vm checks
+isvctl test run --provider acme --suite kubernetes                      # the platform suite
+```
+
+There is no "run everything" context: a plain suite always carries exactly one.
+Passing a capability no check in the suite requires is allowed but warns, since
+a flag that silently does nothing is usually a typo.
+
+Two consequences worth internalising:
+
+- **Nothing is mandatory.** A check is in scope only if you declared the suite
+  that contains it. 100% is always relative to what you declared, so declaring
+  a subset legitimately yields zero checks from the suites you left out.
+- **A capability and a plain suite compose.** The 15 CSI checks in `storage`
+  need `storage` *and* `kubernetes`. Declaring `kubernetes` alone runs the
+  Kubernetes platform suite but no storage CSI checks.
+
+Capability names and plain-suite names share one namespace, so a plain suite may
+not be named after a capability. `catalog_document` and
+`scripts/validate_suite_wiring.py` both reject the collision.
 
 ## Import and Override
 

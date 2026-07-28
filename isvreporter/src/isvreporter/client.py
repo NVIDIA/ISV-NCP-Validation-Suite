@@ -39,6 +39,8 @@ def create_test_run(
     start_time: str,
     isv_software_version: str | None = None,
     isv_test_version: str | None = None,
+    suite: str | None = None,
+    capability: str | None = None,
 ) -> dict[str, Any]:
     """
     Create a new test run record.
@@ -54,6 +56,10 @@ def create_test_run(
         start_time: Test run start time (ISO 8601 format)
         isv_software_version: ISV software stack version (opaque string from ISV)
         isv_test_version: ISV test tool version (e.g., "1.12.3")
+        suite: Suite that was run (e.g. "network", "vm")
+        capability: Capability context the suite ran under (e.g. "vm"); None
+            means the run was core-only, which is a different signal than the
+            same suite run under a capability
 
     Returns:
         API response dictionary containing test run ID
@@ -75,6 +81,12 @@ def create_test_run(
         payload["isvSoftwareVersion"] = isv_software_version
     if isv_test_version:
         payload["isvTestVersion"] = isv_test_version
+    if suite:
+        payload["suite"] = suite
+    # Sent only when set: a core-only run carries no capability, and null is
+    # the signal for that rather than a sentinel value.
+    if capability:
+        payload["capability"] = capability
 
     headers = {
         "Content-Type": "application/json",
@@ -88,6 +100,8 @@ def create_test_run(
             test_run_id = result["data"]["testRunId"]
             print("Test run created successfully")
             print(f"  Test Run ID: {test_run_id}")
+            if suite:
+                print(f"  Suite: {suite} ({capability or 'core only'})")
             print(f"  URL: {endpoint}/v1/labs/{lab_id}/test-runs/{test_run_id}")
 
             # Save test run ID to file for later use in after_script
@@ -282,8 +296,9 @@ def upload_test_catalog(
     isv_test_version: str,
     entries: list[dict[str, Any]],
     *,
-    schema_version: int = 1,
-    platforms: list[str] | None = None,
+    schema_version: int,
+    capabilities: list[str],
+    suites: list[str],
 ) -> bool:
     """Upload test catalog for a suite version (idempotent per version).
 
@@ -296,10 +311,10 @@ def upload_test_catalog(
         jwt_token: JWT access token
         isv_test_version: Test suite version string (e.g. "1.2.3")
         entries: List of catalog entry dicts with keys:
-            name, description, labels, module, platforms, test_ids
+            name, description, labels, source, suite, capability, requires, test_ids
         schema_version: Catalog document schema version.
-        platforms: Platform axis labels (e.g. ["KUBERNETES", "VM"]) - the
-            matrix columns; empty list when unknown.
+        capabilities: Declarable capability vocabulary (platform suites).
+        suites: Plain suite names declared by the catalog.
 
     Returns:
         True if catalog was uploaded or already exists, False on error
@@ -321,14 +336,17 @@ def upload_test_catalog(
     payload = {
         "schemaVersion": schema_version,
         "isvTestVersion": isv_test_version,
-        "platforms": platforms or [],
+        "capabilities": capabilities,
+        "suites": suites,
         "entries": [
             {
                 "name": e["name"],
                 "description": e.get("description", ""),
                 "labels": e.get("labels", []),
-                "module": e.get("module", ""),
-                "platforms": e.get("platforms", []),
+                "source": e.get("source", ""),
+                "suite": e.get("suite", ""),
+                "capability": e.get("capability"),
+                "requires": e.get("requires", []),
                 "test_ids": e.get("test_ids", []),
             }
             for e in entries

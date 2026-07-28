@@ -16,6 +16,7 @@
 """Tests for isvctl test CLI label filtering."""
 
 import json
+import re
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -26,6 +27,8 @@ import isvctl.cli.test as test_cli
 from isvctl.orchestrator.loop import OrchestratorResult, Phase, PhaseResult
 
 runner = CliRunner()
+
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def _write_config(tmp_path: Path) -> Path:
@@ -42,7 +45,7 @@ commands:
         args: ['{"success": true}']
         phase: test
 tests:
-  platform: kubernetes
+  capability: kubernetes
   validations: {}
 """,
         encoding="utf-8",
@@ -62,8 +65,6 @@ commands:
   {platform}:
     phases: [test]
     steps: []
-tests:
-  platform: {platform}
 """,
         encoding="utf-8",
     )
@@ -105,7 +106,7 @@ class _FakeOrchestrator:
         type(self).captured.update(kwargs)
         type(self).calls.append(
             {
-                "platform": self.config.tests.platform,
+                "platform": self.config.tests.capability,
                 "working_dir": self.kwargs.get("working_dir"),
                 "run_kwargs": kwargs,
             }
@@ -127,6 +128,49 @@ def test_test_run_forwards_label_filters(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
     assert result.exit_code == 0, result.output
     assert _FakeOrchestrator.captured["include_labels"] == ["gpu", "slow"]
+
+
+def test_test_run_uploads_the_complete_catalog_document(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The automatic result path forwards the same complete catalog it saves."""
+    config = _write_config(tmp_path)
+    output_dir = tmp_path / "_output"
+    output_dir.mkdir()
+    document = {
+        "schemaVersion": 2,
+        "isvTestVersion": "1.2.3",
+        "platforms": ["kubernetes", "vm"],
+        "suites": ["storage"],
+        "entries": [{"name": "TestA"}],
+    }
+    captured: dict[str, Any] = {}
+
+    monkeypatch.setattr(test_cli, "Orchestrator", _FakeOrchestrator)
+    monkeypatch.setattr(test_cli, "get_output_dir", lambda: output_dir)
+    monkeypatch.setattr(test_cli, "check_upload_credentials", lambda: (True, "client-id", "client-secret"))
+    monkeypatch.setattr(
+        test_cli,
+        "get_environment_config",
+        lambda: ("https://api.example.com", "https://ssa.example.com"),
+    )
+    monkeypatch.setattr(test_cli, "create_test_run", lambda **_kwargs: "run-123")
+    monkeypatch.setattr(test_cli, "build_catalog", lambda: document["entries"])
+    monkeypatch.setattr(test_cli, "get_catalog_version", lambda: document["isvTestVersion"])
+    monkeypatch.setattr(test_cli, "catalog_document", lambda _entries, _version: document)
+
+    def capture_update(**kwargs: Any) -> bool:
+        captured.update(kwargs)
+        return True
+
+    monkeypatch.setattr(test_cli, "update_test_run", capture_update)
+
+    result = runner.invoke(test_cli.app, ["run", "-f", str(config), "--lab-id", "7"])
+
+    assert result.exit_code == 0, result.output
+    assert captured["catalog_document"] == document
+    assert json.loads((output_dir / "test_catalog.json").read_text()) == document
 
 
 def test_short_l_flag_binds_to_label_not_lab_id(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -224,7 +268,7 @@ def test_provider_label_discovery_dispatches_each_matching_config(
     result = runner.invoke(test_cli.app, ["run", "--provider", "aws", "--label", "network", "--no-upload"])
 
     assert result.exit_code == 0, result.output
-    assert [call["platform"] for call in _FakeOrchestrator.calls] == ["network", "observability"]
+    assert [call["platform"] for call in _FakeOrchestrator.calls] == [None, None]
     assert [call["working_dir"] for call in _FakeOrchestrator.calls] == [
         network_config.parent,
         observability_config.parent,
@@ -258,3 +302,340 @@ def test_provider_label_discovery_dry_run_prints_plan_without_running(
     assert plan["labels"] == ["network"]
     assert [Path(item["config"]).name for item in plan["configs"]] == ["network.yaml", "observability.yaml"]
     assert [item["matched_checks"][0]["name"] for item in plan["configs"]] == ["NetworkCheck", "VpcFlowLogsCheck"]
+
+
+def test_provider_without_suite_or_label_mentions_both_options(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`--provider` alone tells the user to pick `--suite` or `--label`."""
+    _FakeOrchestrator.calls = []
+    monkeypatch.setattr(test_cli, "Orchestrator", _FakeOrchestrator)
+
+    result = runner.invoke(test_cli.app, ["run", "--provider", "aws", "--dry-run", "--no-upload"])
+
+    assert result.exit_code == 1, result.output
+    assert "--suite NAME" in result.output
+    assert "--label/-l" in result.output
+    assert _FakeOrchestrator.calls == []
+
+
+def test_plain_suite_without_capability_defaults_to_core(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A declared plain suite runs core checks unless a capability is selected."""
+    configs_root = tmp_path / "configs"
+    suite_path = configs_root / "suites" / "storage.yaml"
+    suite_path.parent.mkdir(parents=True)
+    suite_path.write_text(
+        """\
+tests:
+  validations:
+    core:
+      checks:
+        CoreCheck:
+          test_id: "N/A"
+          labels: ["storage"]
+          requires: []
+    vm:
+      checks:
+        VmCheck:
+          test_id: "N/A"
+          labels: ["storage"]
+          requires: [vm]
+""",
+        encoding="utf-8",
+    )
+    (configs_root / "suites" / "vm.yaml").write_text(
+        "tests:\n  capability: vm\n  validations: {}\n",
+        encoding="utf-8",
+    )
+    _write_provider_config(configs_root, "aws", "storage.yaml", "storage.yaml", "storage")
+    monkeypatch.setattr(test_cli, "CONFIGS_ROOT", configs_root)
+
+    core_result = runner.invoke(
+        test_cli.app,
+        ["run", "--provider", "aws", "--suite", "storage", "--dry-run", "--no-upload"],
+    )
+    vm_result = runner.invoke(
+        test_cli.app,
+        [
+            "run",
+            "--provider",
+            "aws",
+            "--suite",
+            "storage",
+            "--capability",
+            "vm",
+            "--dry-run",
+            "--no-upload",
+        ],
+    )
+
+    assert core_result.exit_code == 0, core_result.output
+    assert "Capability: core" in core_result.stdout
+    assert "[RUN]  CoreCheck" in core_result.stdout
+    assert "[SKIP] VmCheck" in core_result.stdout
+    assert vm_result.exit_code == 0, vm_result.output
+    assert "Capability: vm" in vm_result.stdout
+    assert "[RUN]  CoreCheck" in vm_result.stdout
+    assert "[RUN]  VmCheck" in vm_result.stdout
+
+
+def test_every_entry_path_resolves_the_same_capability_context(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """One config runs the same checks whether reached via --suite or -f.
+
+    The context models what an ISV declared, which cannot depend on how the
+    config was named on the command line.
+    """
+    configs_root = tmp_path / "configs"
+    suite_path = configs_root / "suites" / "storage.yaml"
+    suite_path.parent.mkdir(parents=True)
+    suite_path.write_text(
+        """\
+tests:
+  validations:
+    core:
+      checks:
+        CoreCheck:
+          test_id: "N/A"
+          labels: ["storage"]
+          requires: []
+    vm:
+      checks:
+        VmCheck:
+          test_id: "N/A"
+          labels: ["storage"]
+          requires: [vm]
+""",
+        encoding="utf-8",
+    )
+    (configs_root / "suites" / "vm.yaml").write_text(
+        "tests:\n  capability: vm\n  validations: {}\n",
+        encoding="utf-8",
+    )
+    provider_config = _write_provider_config(configs_root, "aws", "storage.yaml", "storage.yaml", "storage")
+    monkeypatch.setattr(test_cli, "CONFIGS_ROOT", configs_root)
+
+    via_suite = runner.invoke(
+        test_cli.app,
+        ["run", "--provider", "aws", "--suite", "storage", "--dry-run", "--no-upload"],
+    )
+    via_file = runner.invoke(
+        test_cli.app,
+        ["run", "-f", str(provider_config), "--dry-run", "--no-upload"],
+    )
+
+    assert via_suite.exit_code == 0, via_suite.output
+    assert via_file.exit_code == 0, via_file.output
+    for output in (via_suite.stdout, via_file.stdout):
+        assert "Capability: core" in output
+        assert "[RUN]  CoreCheck" in output
+        assert "[SKIP] VmCheck" in output
+
+
+def test_platform_suite_keeps_the_unfiltered_context(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Platform suites declare no requires, so the core default must not apply."""
+    configs_root = tmp_path / "configs"
+    suites = configs_root / "suites"
+    suites.mkdir(parents=True)
+    (suites / "vm.yaml").write_text(
+        """\
+tests:
+  capability: vm
+  validations:
+    vm:
+      checks:
+        PlatformCheck:
+          test_id: "N/A"
+          labels: ["vm"]
+""",
+        encoding="utf-8",
+    )
+    _write_provider_config(configs_root, "aws", "vm.yaml", "vm.yaml", "vm")
+    monkeypatch.setattr(test_cli, "CONFIGS_ROOT", configs_root)
+
+    result = runner.invoke(
+        test_cli.app,
+        ["run", "--provider", "aws", "--suite", "vm", "--dry-run", "--no-upload"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Capability: not filtered" in result.stdout
+    assert "[RUN]  PlatformCheck" in result.stdout
+
+
+def test_platform_suite_rejects_explicit_capability(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A platform suite cannot be relabeled with an explicit capability."""
+    configs_root = tmp_path / "configs"
+    suites = configs_root / "suites"
+    suites.mkdir(parents=True)
+    (suites / "vm.yaml").write_text(
+        "tests:\n  capability: vm\n  validations: {}\n",
+        encoding="utf-8",
+    )
+    (suites / "k8s.yaml").write_text(
+        "tests:\n  capability: kubernetes\n  validations: {}\n",
+        encoding="utf-8",
+    )
+    _write_provider_config(configs_root, "aws", "vm.yaml", "vm.yaml", "vm")
+    monkeypatch.setattr(test_cli, "CONFIGS_ROOT", configs_root)
+
+    result = runner.invoke(
+        test_cli.app,
+        [
+            "run",
+            "--provider",
+            "aws",
+            "--suite",
+            "vm",
+            "--capability",
+            "kubernetes",
+            "--dry-run",
+            "--no-upload",
+        ],
+    )
+
+    assert result.exit_code == 1, result.output
+    assert "--capability cannot be used with platform suite 'vm'" in result.output
+
+
+def test_capability_with_no_matching_check_warns(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A capability no check in the suite requires is a likely mistake."""
+    configs_root = tmp_path / "configs"
+    suite_path = configs_root / "suites" / "iam.yaml"
+    suite_path.parent.mkdir(parents=True)
+    suite_path.write_text(
+        """\
+tests:
+  validations:
+    iam:
+      checks:
+        CoreCheck:
+          test_id: "N/A"
+          labels: ["iam"]
+          requires: []
+""",
+        encoding="utf-8",
+    )
+    (configs_root / "suites" / "kubernetes.yaml").write_text(
+        "tests:\n  capability: kubernetes\n  validations: {}\n",
+        encoding="utf-8",
+    )
+    _write_provider_config(configs_root, "aws", "iam.yaml", "iam.yaml", "iam")
+    monkeypatch.setattr(test_cli, "CONFIGS_ROOT", configs_root)
+
+    result = runner.invoke(
+        test_cli.app,
+        ["run", "--provider", "aws", "--suite", "iam", "--capability", "kubernetes", "--dry-run", "--no-upload"],
+    )
+
+    assert result.exit_code == 0, result.output
+    # print_warning goes to stderr; the dry-run body to stdout.
+    assert "No check in 'iam' requires kubernetes" in result.stderr
+    assert "[RUN]  CoreCheck" in result.stdout
+
+
+def test_suite_and_label_filters_compose(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A suite selects one lifecycle while labels narrow its checks."""
+    configs_root = tmp_path / "configs"
+    suite_path = configs_root / "suites" / "storage.yaml"
+    suite_path.parent.mkdir(parents=True)
+    suite_path.write_text(
+        """\
+tests:
+  validations:
+    storage:
+      checks:
+        FastCheck:
+          test_id: "N/A"
+          labels: ["storage"]
+        SlowCheck:
+          test_id: "N/A"
+          labels: ["storage", "slow"]
+        DestructiveSlowCheck:
+          test_id: "N/A"
+          labels: ["storage", "slow", "destructive"]
+""",
+        encoding="utf-8",
+    )
+    _write_provider_config(configs_root, "aws", "storage.yaml", "storage.yaml", "storage")
+    _FakeOrchestrator.captured = {}
+    _FakeOrchestrator.calls = []
+    monkeypatch.setattr(test_cli, "CONFIGS_ROOT", configs_root)
+    monkeypatch.setattr(test_cli, "Orchestrator", _FakeOrchestrator)
+
+    command = [
+        "run",
+        "--provider",
+        "aws",
+        "--suite",
+        "storage",
+        "--label",
+        "slow",
+        "--exclude-label",
+        "destructive",
+        "--no-upload",
+    ]
+    run_result = runner.invoke(test_cli.app, command)
+    dry_run_result = runner.invoke(test_cli.app, [*command, "--dry-run"])
+
+    assert run_result.exit_code == 0, run_result.output
+    assert _FakeOrchestrator.captured["include_labels"] == ["slow"]
+    assert _FakeOrchestrator.captured["exclude_labels"] == ["destructive"]
+    assert dry_run_result.exit_code == 0, dry_run_result.output
+    assert "Labels: slow (all required)" in dry_run_result.stdout
+    assert "Excluded labels: destructive" in dry_run_result.stdout
+    assert "[SKIP] FastCheck: does not match all selected labels: slow" in dry_run_result.stdout
+    assert "[RUN]  SlowCheck" in dry_run_result.stdout
+    assert "[SKIP] DestructiveSlowCheck: excluded by label: destructive" in dry_run_result.stdout
+
+
+def test_unknown_option_before_separator_is_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Stale flags like `--platform` fail before they can be forwarded to pytest."""
+    config = _write_config(tmp_path)
+    _FakeOrchestrator.calls = []
+    monkeypatch.setattr(test_cli, "Orchestrator", _FakeOrchestrator)
+
+    result = runner.invoke(
+        test_cli.app,
+        ["run", "-f", str(config), "--platform", "k8s", "--no-upload", "--dry-run"],
+    )
+
+    # Typer forces rich styling under GITHUB_ACTIONS, which splices escape
+    # codes into the middle of the reported option name.
+    output = _ANSI_ESCAPE.sub("", result.output)
+
+    assert result.exit_code != 0, output
+    assert "No such option" in output or "no such option" in output.lower()
+    assert "--platform" in output
+    assert _FakeOrchestrator.calls == []
+
+
+def test_pytest_args_after_separator_are_forwarded(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Args after `--` still reach the orchestrator as pytest extras."""
+    config = _write_config(tmp_path)
+    _FakeOrchestrator.captured = {}
+    _FakeOrchestrator.calls = []
+    monkeypatch.setattr(test_cli, "Orchestrator", _FakeOrchestrator)
+
+    result = runner.invoke(
+        test_cli.app,
+        ["run", "-f", str(config), "--no-upload", "--", "-k", "K8sNodeCountCheck"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert _FakeOrchestrator.captured["extra_pytest_args"] == ["-k", "K8sNodeCountCheck"]

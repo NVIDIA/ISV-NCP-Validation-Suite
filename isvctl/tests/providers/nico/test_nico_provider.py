@@ -461,11 +461,12 @@ def _assert_steps_use_nico_api_base(steps: dict[str, dict[str, Any]]) -> None:
         assert "{{nico_api_base}}" in step["args"]
 
 
-def test_nico_control_plane_config_platform_matches_command_group() -> None:
-    """The orchestrator uses tests.platform to look up the control-plane commands group."""
+def test_nico_control_plane_plain_suite_has_one_command_group() -> None:
+    """A plain suite derives execution identity from its sole command group."""
     merged, _steps = _merged_nico_config_steps("control-plane.yaml", "control_plane")
 
-    assert merged["tests"]["platform"] == "control_plane"
+    assert "platform" not in merged["tests"]
+    assert list(merged["commands"]) == ["control_plane"]
 
 
 def test_nico_control_plane_config_wires_api_health() -> None:
@@ -551,11 +552,12 @@ def test_nico_check_api_reads_site_and_site_list(
     ]
 
 
-def test_nico_iam_config_platform_matches_command_group() -> None:
-    """The orchestrator uses tests.platform to look up the IAM commands group."""
+def test_nico_iam_plain_suite_has_one_command_group() -> None:
+    """A plain suite derives execution identity from its sole command group."""
     merged, _steps = _merged_nico_config_steps("iam.yaml", "iam")
 
-    assert merged["tests"]["platform"] == "iam"
+    assert "platform" not in merged["tests"]
+    assert list(merged["commands"]) == ["iam"]
 
 
 def test_nico_iam_config_wires_credential_readiness() -> None:
@@ -654,10 +656,10 @@ def test_nico_check_credentials_reports_identity_shape_on_auth_failure(
 
 
 def test_nico_bare_metal_config_platform_matches_command_group() -> None:
-    """The orchestrator uses tests.platform to look up the bare-metal commands group."""
+    """The orchestrator uses tests.capability to look up the bare-metal commands group."""
     merged, _steps = _merged_nico_config_steps("bare_metal.yaml", "bare_metal")
 
-    assert merged["tests"]["platform"] == "bare_metal"
+    assert merged["tests"]["capability"] == "bare_metal"
 
 
 def test_nico_bare_metal_config_wires_instance_inventory_probes() -> None:
@@ -836,11 +838,12 @@ def test_nico_instance_inventory_scripts_skip_when_site_has_no_instances(
     assert "No instances found" in describe_payload["skip_reason"]
 
 
-def test_nico_network_config_platform_matches_command_group() -> None:
-    """The orchestrator uses tests.platform to look up the network commands group."""
+def test_nico_network_plain_suite_has_one_command_group() -> None:
+    """A plain suite derives execution identity from its sole command group."""
     merged, _steps = _merged_nico_config_steps("network.yaml", "network")
 
-    assert merged["tests"]["platform"] == "network"
+    assert "platform" not in merged["tests"]
+    assert list(merged["commands"]) == ["network"]
 
 
 def test_nico_network_config_wires_network_inventory_probes() -> None:

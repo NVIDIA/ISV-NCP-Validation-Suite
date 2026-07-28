@@ -334,9 +334,13 @@ commands:
       # its finally block; this teardown step reclaims resources left behind
       # when AWS_CAPACITY_SKIP_DESTROY=true (a no-op while that flag is set, so
       # a later standalone `--phase teardown` without it does the cleanup).
+      # Mirrors the gate inferred on topology_block_atomic_allocation (its only
+      # check is vm/bare_metal): a core run allocates no block, so it must not
+      # try to release one.
       - name: topology_block_teardown
         phase: teardown
         command: "python3 ../scripts/capacity/topology_block_atomic_allocation.py"
+        requires: [vm, bare_metal]
         requires_available_validations:
           - CapacityTopologyBlockAtomicAllocationCheck
         args:
@@ -365,6 +369,7 @@ commands:
       - name: capacity_teardown
         phase: teardown
         command: "python3 ../scripts/capacity/reservation_grouping.py"
+        requires: [vm, bare_metal]
         requires_available_validations:
           - CapacityReservationGroupingCheck
         args:

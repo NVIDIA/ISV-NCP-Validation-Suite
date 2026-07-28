@@ -17,10 +17,14 @@
 
 from unittest.mock import patch
 
+import pytest
+
 from isvtest.catalog import (
     CATALOG_SCHEMA_VERSION,
+    _assert_disjoint_vocabulary,
+    build_capability_vocabulary,
     build_catalog,
-    build_platform_axis,
+    build_suite_vocabulary,
     catalog_document,
     get_catalog_version,
 )
@@ -38,79 +42,73 @@ class ExplicitLabelCatalogCheck(BaseValidation):
 
 
 class TestCatalogDocument:
-    """Tests for the platform axis and the versioned catalog envelope."""
+    """Tests for capability vocabulary and the versioned catalog envelope."""
 
-    def test_derives_platform_axis_from_configs(self) -> None:
-        """The platform axis lists every platform in PLATFORM_CONFIGS, sorted."""
-        assert build_platform_axis() == [
-            "BARE_METAL",
-            "CONTROL_PLANE",
-            "IAM",
-            "IMAGE_REGISTRY",
-            "KUBERNETES",
-            "NETWORK",
-            "OBSERVABILITY",
-            "SECURITY",
-            "SLURM",
-            "STORAGE",
-            "VM",
-        ]
+    def test_derives_capabilities_from_platform_suites(self) -> None:
+        """Only real platform suite keys are declarable capabilities."""
+        assert build_capability_vocabulary() == ["bare_metal", "kubernetes", "slurm", "vm"]
+
+    def test_derives_suite_vocabulary_from_plain_suites(self) -> None:
+        """Plain suite YAML files are listed separately from platform suites."""
+        suites = build_suite_vocabulary()
+        assert "iam" in suites
+        assert "storage" in suites
+        assert "kubernetes" not in suites
+        assert "vm" not in suites
 
     def test_catalog_document_wraps_entries_with_metadata(self) -> None:
-        """The envelope carries schema version, package version, and the platform axis."""
+        """The envelope carries schema version, package version, and axis lists."""
         entries = [{"name": "X", "labels": ["iam"]}]
         doc = catalog_document(entries, "1.2.3")
         assert doc["schemaVersion"] == CATALOG_SCHEMA_VERSION
         assert doc["isvTestVersion"] == "1.2.3"
         assert doc["entries"] == entries
-        assert doc["platforms"] == build_platform_axis()
+        assert doc["capabilities"] == build_capability_vocabulary()
+        assert doc["suites"] == build_suite_vocabulary()
+        # The axis is named `capabilities`; the former `platforms` spelling is gone.
+        assert "platforms" not in doc
         # The label universe is intentionally not summarized at the top level.
         assert "labels" not in doc
+
+    def test_disjoint_vocabulary_accepts_distinct_namespaces(self) -> None:
+        """Plain suite names that are not capability words pass the guard."""
+        _assert_disjoint_vocabulary(["vm", "kubernetes"], ["storage", "iam", "network"])
+
+    def test_disjoint_vocabulary_rejects_suite_named_after_capability(self) -> None:
+        """A plain suite named after any declarable capability is a namespace collision."""
+        with pytest.raises(ValueError, match="kubernetes"):
+            _assert_disjoint_vocabulary(["vm", "kubernetes"], ["storage", "kubernetes"])
+
+    def test_disjoint_vocabulary_rejects_undeclared_capability_word(self) -> None:
+        """Collision is checked against the full reserved set, not just declared platforms."""
+        with pytest.raises(ValueError, match="slurm"):
+            _assert_disjoint_vocabulary(["vm"], ["slurm"])
 
 
 class TestBuildCatalog:
     """Tests for build_catalog function."""
 
-    def test_returns_list_of_dicts(self) -> None:
-        """Test that build_catalog returns a list of dicts."""
-        catalog = build_catalog()
-        assert isinstance(catalog, list)
-        assert len(catalog) > 0
-        for entry in catalog:
-            assert isinstance(entry, dict)
-
-    def test_entries_have_required_keys(self) -> None:
-        """Test that each entry has the required keys."""
-        catalog = build_catalog()
-        for entry in catalog:
-            assert "name" in entry
-            assert "description" in entry
-            assert "labels" in entry
-            assert "test_ids" in entry
-            assert "module" in entry
-            assert "markers" not in entry
-
-    def test_entries_have_correct_types(self) -> None:
-        """Test that entry values have the correct types."""
-        catalog = build_catalog()
-        for entry in catalog:
-            assert isinstance(entry["name"], str)
-            assert isinstance(entry["description"], str)
-            assert isinstance(entry["labels"], list)
-            assert isinstance(entry["module"], str)
-
-    def test_no_duplicate_names(self) -> None:
-        """Test that there are no duplicate test names in the catalog."""
-        catalog = build_catalog()
-        names = [e["name"] for e in catalog]
+    def test_entries_have_suite_contract(self) -> None:
+        """Catalog rows expose suite placement and requirement metadata."""
+        catalog = build_catalog(released_only=False)
+        names = [entry["name"] for entry in catalog]
+        assert catalog
         assert len(names) == len(set(names))
-
-    def test_known_tests_present(self) -> None:
-        """Test that some known validation tests appear in the catalog."""
-        catalog = build_catalog()
-        names = {e["name"] for e in catalog}
-        assert "StepSuccessCheck" in names
-        assert "FieldExistsCheck" in names
+        for entry in catalog:
+            assert set(entry) == {
+                "name",
+                "description",
+                "labels",
+                "test_ids",
+                "source",
+                "suite",
+                "capability",
+                "requires",
+            }
+            assert isinstance(entry["source"], str)
+            assert isinstance(entry["requires"], list)
+            if entry["capability"]:
+                assert entry["requires"] == []
 
     def test_extract_checks_supports_direct_dict_category_form(self, tmp_path) -> None:
         """Direct dict category wiring is included in catalog config scans."""
@@ -166,24 +164,18 @@ tests:
             assert all(isinstance(tid, str) for tid in entry["test_ids"])
             assert "N/A" not in entry["test_ids"]
 
-        # Single mapping, and a duality unioned across the bm/vm suites.
+        # Single mappings retain their requirement and suite placement.
         assert by_name["MfaEnforcedCheck"]["test_ids"] == ["SEC07-01"]
-        assert by_name["GpuCheck"]["test_ids"] == ["BMAAS08-01", "VMAAS06-01"]
-
-    def test_variant_test_ids_propagate_to_base(self) -> None:
-        """A variant's wired test_id surfaces on its base-class catalog entry."""
-        catalog = build_catalog(released_only=False)
-        by_name = {e["name"]: e for e in catalog}
-
-        assert by_name["StepSuccessCheck-delete_tenant"]["test_ids"] == ["CP10-01"]
-        assert "CP10-01" in by_name["StepSuccessCheck"]["test_ids"]
+        assert by_name["MfaEnforcedCheck"]["suite"] == "security"
+        assert by_name["MfaEnforcedCheck"]["requires"] == []
 
     def test_released_only_filters_catalog(self) -> None:
         """Default catalog generation excludes tests not in the release manifest."""
         with patch("isvtest.catalog.load_released_test_filter", return_value={"StepSuccessCheck"}):
             catalog = build_catalog()
 
-        assert {e["name"] for e in catalog} == {"StepSuccessCheck"}
+        assert catalog
+        assert all(entry["name"].startswith("StepSuccessCheck") for entry in catalog)
 
     def test_unreleased_env_includes_full_catalog(self) -> None:
         """When the release filter is disabled, default catalog generation includes all tests."""
@@ -205,7 +197,16 @@ tests:
         """Per-wiring YAML labels are surfaced as catalog tag metadata."""
         with (
             patch("isvtest.catalog.discover_all_tests", return_value=[ExplicitLabelCatalogCheck]),
-            patch("isvtest.catalog._build_platform_map", return_value={}),
+            patch(
+                "isvtest.catalog._build_suite_map",
+                return_value={
+                    "ExplicitLabelCatalogCheck": {
+                        "suite": "demo",
+                        "capability": None,
+                        "requires": ["vm", "bare_metal"],
+                    }
+                },
+            ),
             patch(
                 "isvtest.catalog.build_label_map",
                 return_value={"ExplicitLabelCatalogCheck": {"accelerator", "long_running"}},
@@ -221,97 +222,19 @@ tests:
                 "description": "Explicit labels",
                 "labels": ["accelerator", "long_running"],
                 "test_ids": [],
-                "module": __name__,
-                "platforms": [],
+                "source": __name__,
+                "suite": "demo",
+                "capability": None,
+                "requires": ["vm", "bare_metal"],
             }
         ]
 
-    def test_modules_are_valid_python_paths(self) -> None:
-        """Test that module paths look like valid Python module paths."""
+    def test_sources_are_valid_python_paths(self) -> None:
+        """Source paths remain useful implementation metadata, not a suite axis."""
         catalog = build_catalog()
         for entry in catalog:
-            assert "." in entry["module"]
-            assert entry["module"].startswith("isvtest.")
-
-    def test_suite_membership_overrides_label_platforms(self) -> None:
-        """Regression: trait labels must not add extra platform ownership.
-
-        A check can carry labels like ``("security", "network")`` for pytest
-        filtering AND appear in a single suite YAML (e.g. ``security.yaml``).
-        ``_build_platform_map`` must use the suite as the source of truth and
-        skip label-derived platform inference in that case - otherwise the
-        UI shows phantom platform badges.
-
-        DO NOT add per-check asserts to this test. It is a property test
-        that already covers every check in the catalog. If a new validation
-        breaks the invariant, the failure message names it.
-        """
-        from isvtest.catalog import (
-            LABEL_TO_PLATFORM,
-            PLATFORM_CONFIGS,
-            _extract_checks_from_config,
-            _find_configs_dir,
-        )
-
-        configs_dir = _find_configs_dir()
-        assert configs_dir is not None, "isvctl/configs/ not found"
-
-        suite_platforms: dict[str, set[str]] = {}
-        for platform, files in PLATFORM_CONFIGS.items():
-            for relpath in files:
-                for name in _extract_checks_from_config(configs_dir / relpath):
-                    suite_platforms.setdefault(name, set()).add(platform)
-
-        for entry in build_catalog(released_only=False):
-            name = entry["name"]
-            if name not in suite_platforms:
-                continue
-            label_platforms = {LABEL_TO_PLATFORM[label] for label in entry["labels"] if label in LABEL_TO_PLATFORM}
-            expected = suite_platforms[name]
-            actual = set(entry["platforms"])
-            phantom = (label_platforms - expected) & actual
-            assert not phantom, (
-                f"{name}: label-derived platforms {sorted(phantom)} leaked "
-                f"into catalog; expected exactly {sorted(expected)}, "
-                f"got {sorted(actual)}"
-            )
-            assert actual == expected, (
-                f"{name}: platforms should equal suite assignment {sorted(expected)}, got {sorted(actual)}"
-            )
-
-    def test_observability_label_infers_platform_for_unlisted_checks(self) -> None:
-        """Checks labelled with `observability` are tagged OBSERVABILITY when not in any suite."""
-
-        class ObservabilityLabelledCheck(BaseValidation):
-            description = "Observability check labelled but not in any suite"
-
-            def run(self) -> None:
-                self.set_passed()
-
-        ObservabilityLabelledCheck.__module__ = "isvtest.validations.fake"
-
-        with (
-            patch("isvtest.catalog.discover_all_tests", return_value=[ObservabilityLabelledCheck]),
-            patch("isvtest.catalog._build_platform_map", return_value={}),
-            patch(
-                "isvtest.catalog.build_label_map",
-                return_value={"ObservabilityLabelledCheck": {"observability"}},
-            ),
-            patch("isvtest.catalog.build_test_id_map", return_value={}),
-            patch("isvtest.catalog.load_released_test_filter", return_value=None),
-        ):
-            catalog = build_catalog()
-
-        assert catalog == [
-            {
-                "name": "ObservabilityLabelledCheck",
-                "description": "Observability check labelled but not in any suite",
-                "labels": ["observability"],
-                "test_ids": [],
-                "module": "isvtest.validations.fake",
-                "platforms": ["OBSERVABILITY"],
-            }
-        ]
+            assert "." in entry["source"]
+            assert entry["source"].startswith("isvtest.")
 
 
 class TestGetCatalogVersion:

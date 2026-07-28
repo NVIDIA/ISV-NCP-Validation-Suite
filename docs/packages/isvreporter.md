@@ -180,8 +180,8 @@ Create a new test run record.
 
 **Optional Arguments:**
 
-- `--config`: Path to isvctl config YAML file (auto-detects platform from `tests.platform`)
-- `--platform`: Platform type (kubernetes, slurm, bare_metal). Required only if `--config` is not provided; otherwise auto-detected from config.
+- `--config`: Path to isvctl config YAML file (auto-detects capability from `tests.capability`)
+- `--platform`: Capability the run executed under (`vm`, `bare_metal`, `kubernetes`, `slurm`). Required only if `--config` is not provided; otherwise auto-detected from config. The flag keeps its `--platform` spelling because it maps to the service's deprecated `test_target_type` field.
 
 **Returns:**
 

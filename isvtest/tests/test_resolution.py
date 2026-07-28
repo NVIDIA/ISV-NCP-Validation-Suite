@@ -64,6 +64,7 @@ def _entry(
     step: str | None = None,
     phase: str | None = None,
     labels: tuple[str, ...] = (),
+    requires: tuple[str, ...] = (),
 ) -> ValidationEntry:
     """Build a minimal validation entry."""
     return ValidationEntry(
@@ -73,6 +74,7 @@ def _entry(
         step=step,
         phase=phase,
         labels=labels,
+        requires=requires,
     )
 
 
@@ -87,6 +89,7 @@ def _resolve(
     exclude_tests: set[str] | None = None,
     released_tests: set[str] | None = None,
     render_context: dict[str, Any] | None = None,
+    capability: str | None = None,
 ) -> ResolvedEntry:
     """Resolve one entry and return the single result."""
     results = resolve_entries(
@@ -99,9 +102,33 @@ def _resolve(
         exclude_tests=set() if exclude_tests is None else exclude_tests,
         released_tests=released_tests,
         render_context={} if render_context is None else render_context,
+        capability=capability,
     )
     assert len(results) == 1
     return results[0]
+
+
+def test_any_declared_requirement_satisfies_capability_filter() -> None:
+    """Orthogonal platform requirements use OR semantics."""
+    entry = _entry(requires=("vm", "bare_metal"))
+
+    assert _resolve(entry, capability="vm").is_ready
+    assert _resolve(entry, capability="bare_metal").is_ready
+    assert _resolve(_entry(requires=()), capability="kubernetes").is_ready
+
+
+def test_capability_filter_has_explicit_skip_reason() -> None:
+    """An unmet prerequisite reports both the requirement and active context."""
+    resolved = _resolve(_entry(requires=("vm", "bare_metal")), capability="kubernetes")
+
+    assert resolved.state == State.SKIPPED
+    assert resolved.skip_reason == SkipReason.CAPABILITY_REQUIREMENT
+    assert resolved.message == "requires vm, bare_metal (context: kubernetes)"
+
+
+def test_omitted_capability_disables_requirement_filtering() -> None:
+    """Local development without a capability context runs every check."""
+    assert _resolve(_entry(requires=("kubernetes",)), capability=None).is_ready
 
 
 @pytest.mark.parametrize(

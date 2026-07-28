@@ -111,24 +111,41 @@ commands:
           - "{{region}}"
         timeout: 60
 
-      - name: teardown
+      # Teardown is split by owner so each half can be gated independently.
+      # This half cleans up what launch_instance created, so it carries the
+      # same `requires: [vm]` gate and is skipped whole in other contexts.
+      # Declared first: terminate the instance before deregistering the image
+      # it was launched from.
+      - name: teardown_instance
         phase: teardown
         command: "python ../scripts/image-registry/teardown.py"
+        requires: [vm]
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
-          - "--image-id"
-          - "{{steps.upload_image.image_id}}"
-          - "--disk-ids"
-          - "{{steps.upload_image.disk_ids | join(',')}}"
-          - "--bucket-name"
-          - "{{steps.upload_image.storage_bucket}}"
           - "--key-name"
           - "{{steps.launch_instance.key_name}}"
           - "--security-group-id"
           - "{{steps.launch_instance.security_group_id}}"
           - "--instance-profile"
           - "{{steps.launch_instance.instance_profile}}"
+          - "--region"
+          - "{{region}}"
+          - "{{teardown_flag}}"
+        timeout: 60
+
+      # This half cleans up what the core upload_image step created, so it is
+      # ungated and runs in every capability context.
+      - name: teardown_image
+        phase: teardown
+        command: "python ../scripts/image-registry/teardown.py"
+        args:
+          - "--image-id"
+          - "{{steps.upload_image.image_id}}"
+          - "--disk-ids"
+          - "{{steps.upload_image.disk_ids | join(',')}}"
+          - "--bucket-name"
+          - "{{steps.upload_image.storage_bucket}}"
           - "--region"
           - "{{region}}"
           - "{{teardown_flag}}"

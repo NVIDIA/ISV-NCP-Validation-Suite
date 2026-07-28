@@ -36,7 +36,6 @@ version: "1.0"
 tests:
   cluster_name: "security-validation"
   description: "Infrastructure security hardening validation"
-  platform: security
 
   settings:
     region: ""
@@ -55,6 +54,7 @@ tests:
         BmcManagementNetworkCheck:
           test_id: "SEC12-01"
           labels: ["min_req", "network", "security"]
+          requires: []
           step: bmc_management_network
 
     bmc_isolation:
@@ -62,6 +62,7 @@ tests:
         BmcTenantIsolationCheck:
           test_id: "SEC12-02"
           labels: ["min_req", "network", "security"]
+          requires: []
           step: bmc_tenant_isolation
 
     bmc_protocol_security:
@@ -69,6 +70,7 @@ tests:
         BmcProtocolSecurityCheck:
           test_id: "CNP10-01"
           labels: ["min_req", "network", "security"]
+          requires: []
           step: bmc_protocol_security
 
     bmc_bastion_access:
@@ -76,6 +78,7 @@ tests:
         BmcBastionAccessCheck:
           test_id: "SEC12-03"
           labels: ["min_req", "network", "security"]
+          requires: []
           step: bmc_bastion_access
 
     api_security:
@@ -83,6 +86,7 @@ tests:
         ApiEndpointIsolationCheck:
           test_id: "SEC14-01"
           labels: ["min_req", "network", "security"]
+          requires: []
           step: api_endpoint_isolation
 
     mutual_tls:
@@ -90,6 +94,7 @@ tests:
         MutualTlsCheck:
           test_id: "SEC13-01"
           labels: ["min_req", "network", "security"]
+          requires: []
           step: mutual_tls_test
 
     insecure_protocols:
@@ -97,6 +102,7 @@ tests:
         InsecureProtocolsCheck:
           test_id: "SEC13-02"
           labels: ["min_req", "network", "security"]
+          requires: []
           step: insecure_protocols_test
 
     mfa_enforcement:
@@ -104,6 +110,7 @@ tests:
         MfaEnforcedCheck:
           test_id: "SEC07-01"
           labels: ["iam", "min_req", "security"]
+          requires: []
           step: mfa_enforcement
 
     cert_rotation:
@@ -111,6 +118,7 @@ tests:
         CertRotationCycleCheck:
           test_id: "SEC09-01"
           labels: ["min_req", "security"]
+          requires: []
           step: cert_rotation_test
 
     kms_encryption_options:
@@ -118,6 +126,7 @@ tests:
         KmsEncryptionOptionCheck:
           test_id: "SEC09-02"
           labels: ["min_req", "security"]
+          requires: []
           step: kms_encryption_options_test
 
     centralized_kms:
@@ -125,6 +134,7 @@ tests:
         CentralizedKmsCheck:
           test_id: "SEC09-03"
           labels: ["min_req", "security"]
+          requires: []
           step: centralized_kms_test
 
     customer_managed_key:
@@ -132,6 +142,7 @@ tests:
         CustomerManagedKeyCheck:
           test_id: "SEC09-04"
           labels: ["min_req", "security", "slow", "workload"]
+          requires: []
           step: customer_managed_key_test
 
     service_account_auth:
@@ -139,6 +150,7 @@ tests:
         ServiceAccountCredentialCheck:
           test_id: "SEC03-01"
           labels: ["iam", "min_req", "security"]
+          requires: []
           step: sa_credential_test
 
     user_auth_oidc:
@@ -146,6 +158,7 @@ tests:
         OidcUserAuthCheck:
           test_id: "SEC01-01"
           labels: ["iam", "min_req", "security"]
+          requires: []
           step: oidc_user_auth_test
 
     short_lived_credentials:
@@ -153,6 +166,7 @@ tests:
         ShortLivedCredentialsCheck:
           test_id: "SEC06-01"
           labels: ["iam", "min_req", "security"]
+          requires: []
           step: short_lived_credentials_test
 
     least_privilege_policy:
@@ -160,6 +174,7 @@ tests:
         LeastPrivilegePolicyCheck:
           test_id: "SEC04-01"
           labels: ["iam", "min_req", "security"]
+          requires: []
           step: least_privilege_test
 
     minimal_role_enforcement:
@@ -167,6 +182,7 @@ tests:
         MinimalRoleEnforcementCheck:
           test_id: "SEC04-02"
           labels: ["iam", "min_req", "security"]
+          requires: []
           step: least_privilege_test
 
     audit_log_entry:
@@ -174,6 +190,7 @@ tests:
         AuditLogEntryCheck:
           test_id: "SEC08-01"
           labels: ["min_req", "security"]
+          requires: []
           step: audit_logging_test
 
     audit_log_retention:
@@ -181,6 +198,7 @@ tests:
         AuditLogRetentionCheck:
           test_id: "SEC08-02"
           labels: ["min_req", "security"]
+          requires: []
           step: audit_logging_test
 
     tenant_isolation:
@@ -188,6 +206,7 @@ tests:
         TenantIsolationCheck:
           test_id: "SEC11-01"
           labels: ["iam", "min_req", "network", "security"]
+          requires: [vm, bare_metal]
           step: tenant_isolation_test
 
     # Verify capacity is logically grouped and pinned to one tenant/account
@@ -197,6 +216,7 @@ tests:
         CapacityReservationGroupingCheck:
           test_id: "CAP04-01"
           labels: ["bare_metal", "capacity", "min_req", "security"]
+          requires: [vm, bare_metal]
           step: capacity_reservation_grouping
           min_resources: "{{min_resources}}"
 
@@ -208,6 +228,7 @@ tests:
         CapacityTopologyBlockAtomicAllocationCheck:
           test_id: "CAP04-02"
           labels: ["bare_metal", "capacity", "min_req", "security"]
+          requires: [vm, bare_metal]
           min_resources: 2
 
     teardown_checks:
@@ -216,6 +237,7 @@ tests:
         StepSuccessCheck:
           test_id: "N/A"
           labels: ["security"]
+          requires: []
 
   exclude:
     labels: []

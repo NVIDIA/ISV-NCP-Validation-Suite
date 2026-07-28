@@ -255,7 +255,6 @@ commands:
         timeout: 60
 
 tests:
-  platform: observability
   cluster_name: "my-isv-observability-validation"
   description: "my-isv observability validation (generic stubs, dummy overrides)"
 

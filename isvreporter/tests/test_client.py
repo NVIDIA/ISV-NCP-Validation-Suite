@@ -15,10 +15,12 @@
 
 """Tests for the ISV Lab Service API client."""
 
+import json
 from pathlib import Path
-from unittest.mock import patch
+from typing import Any
+from unittest.mock import MagicMock, patch
 
-from isvreporter.client import calculate_duration, load_test_run_id
+from isvreporter.client import calculate_duration, create_test_run, load_test_run_id
 
 
 class TestCalculateDuration:
@@ -88,3 +90,78 @@ class TestLoadTestRunId:
         with patch("isvreporter.client.TEST_RUN_ID_FILE", test_run_file):
             result = load_test_run_id()
             assert result == ""
+
+
+class TestCreateTestRunPayload:
+    """The create payload has to carry both axes of what the run exercised."""
+
+    @staticmethod
+    def _posted_payload(mock_urlopen: MagicMock) -> dict[str, Any]:
+        """Return the JSON body of the request the client posted."""
+        request = mock_urlopen.call_args[0][0]
+        return json.loads(request.data.decode())
+
+    @staticmethod
+    def _response() -> MagicMock:
+        """Return a context-manager response yielding a created test run id."""
+        response = MagicMock()
+        response.read.return_value = json.dumps({"data": {"testRunId": 42}}).encode()
+        response.__enter__ = lambda self: self
+        response.__exit__ = lambda *args: False
+        return response
+
+    @patch("isvreporter.client.urlopen")
+    def test_sends_suite_and_capability(self, mock_urlopen: MagicMock, tmp_path: Path) -> None:
+        """Both axes of the run reach the service in the create payload."""
+        mock_urlopen.return_value = self._response()
+
+        with (
+            patch("isvreporter.client.OUTPUT_DIR", tmp_path),
+            patch("isvreporter.client.TEST_RUN_ID_FILE", tmp_path / "testrun_id.txt"),
+        ):
+            create_test_run(
+                endpoint="https://api.example.com",
+                lab_id=1,
+                jwt_token="jwt",
+                test_target_type="VM",
+                tags=[],
+                executed_by="isvctl",
+                ci_reference="local-run",
+                start_time="2026-07-24T12:00:00Z",
+                suite="network",
+                capability="vm",
+            )
+
+        payload = self._posted_payload(mock_urlopen)
+        assert payload["suite"] == "network"
+        assert payload["capability"] == "vm"
+
+    @patch("isvreporter.client.urlopen")
+    def test_core_only_run_omits_capability(self, mock_urlopen: MagicMock, tmp_path: Path) -> None:
+        """A core-only run sends no capability - the absence is the signal.
+
+        Sending a sentinel instead would make it indistinguishable from a real
+        capability in every downstream filter and column.
+        """
+        mock_urlopen.return_value = self._response()
+
+        with (
+            patch("isvreporter.client.OUTPUT_DIR", tmp_path),
+            patch("isvreporter.client.TEST_RUN_ID_FILE", tmp_path / "testrun_id.txt"),
+        ):
+            create_test_run(
+                endpoint="https://api.example.com",
+                lab_id=1,
+                jwt_token="jwt",
+                test_target_type="NETWORK",
+                tags=[],
+                executed_by="isvctl",
+                ci_reference="local-run",
+                start_time="2026-07-24T12:00:00Z",
+                suite="network",
+                capability=None,
+            )
+
+        payload = self._posted_payload(mock_urlopen)
+        assert payload["suite"] == "network"
+        assert "capability" not in payload

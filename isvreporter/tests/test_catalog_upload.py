@@ -20,11 +20,23 @@ from http import HTTPStatus
 from unittest.mock import MagicMock, patch
 from urllib.error import HTTPError, URLError
 
+import pytest
+
 from isvreporter.client import upload_test_catalog
 
 
 class TestUploadTestCatalog:
     """Tests for upload_test_catalog function."""
+
+    def test_requires_the_complete_catalog_envelope(self) -> None:
+        """Callers cannot silently upload a v2 catalog without its axes."""
+        with pytest.raises(TypeError):
+            upload_test_catalog(
+                endpoint="https://api.example.com",
+                jwt_token="test-token",
+                isv_test_version="1.2.3",
+                entries=[{"name": "TestA"}],
+            )
 
     @patch("isvreporter.client.urlopen")
     def test_successful_upload(self, mock_urlopen: MagicMock) -> None:
@@ -47,10 +59,21 @@ class TestUploadTestCatalog:
                 "name": "TestA",
                 "description": "Test A",
                 "labels": ["k8s"],
-                "module": "mod.a",
+                "source": "mod.a",
+                "suite": "kubernetes",
+                "capability": "kubernetes",
+                "requires": [],
                 "test_ids": ["K8S06-01"],
             },
-            {"name": "TestB", "description": "Test B", "labels": [], "module": "mod.b"},
+            {
+                "name": "TestB",
+                "description": "Test B",
+                "labels": [],
+                "source": "mod.b",
+                "suite": "storage",
+                "capability": None,
+                "requires": ["vm", "bare_metal"],
+            },
         ]
 
         result = upload_test_catalog(
@@ -58,6 +81,9 @@ class TestUploadTestCatalog:
             jwt_token="test-token",
             isv_test_version="1.2.3",
             entries=entries,
+            schema_version=2,
+            capabilities=["kubernetes", "vm"],
+            suites=["storage"],
         )
 
         assert result is True
@@ -70,9 +96,9 @@ class TestUploadTestCatalog:
 
         payload = json.loads(request.data.decode())
         assert payload["isvTestVersion"] == "1.2.3"
-        # Envelope defaults when axis metadata is not supplied.
-        assert payload["schemaVersion"] == 1
-        assert payload["platforms"] == []
+        assert payload["schemaVersion"] == 2
+        assert payload["capabilities"] == ["kubernetes", "vm"]
+        assert payload["suites"] == ["storage"]
         assert len(payload["entries"]) == 2
         assert payload["entries"][0]["name"] == "TestA"
         assert payload["entries"][0]["labels"] == ["k8s"]
@@ -95,6 +121,9 @@ class TestUploadTestCatalog:
             jwt_token="test-token",
             isv_test_version="1.2.3",
             entries=[{"name": "TestA"}],
+            schema_version=2,
+            capabilities=["kubernetes"],
+            suites=["storage"],
         )
 
         assert result is True
@@ -116,6 +145,9 @@ class TestUploadTestCatalog:
             jwt_token="test-token",
             isv_test_version="1.2.3",
             entries=[{"name": "TestA"}],
+            schema_version=2,
+            capabilities=["kubernetes"],
+            suites=["storage"],
         )
 
         assert result is True
@@ -136,6 +168,9 @@ class TestUploadTestCatalog:
             jwt_token="test-token",
             isv_test_version="1.2.3",
             entries=[{"name": "TestA"}],
+            schema_version=2,
+            capabilities=["kubernetes"],
+            suites=["storage"],
         )
 
         assert result is False
@@ -150,6 +185,9 @@ class TestUploadTestCatalog:
             jwt_token="test-token",
             isv_test_version="1.2.3",
             entries=[{"name": "TestA"}],
+            schema_version=2,
+            capabilities=["kubernetes"],
+            suites=["storage"],
         )
 
         assert result is False
@@ -170,6 +208,9 @@ class TestUploadTestCatalog:
             jwt_token="test-token",
             isv_test_version="1.0.0",
             entries=entries,
+            schema_version=2,
+            capabilities=["kubernetes"],
+            suites=["storage"],
         )
 
         call_args = mock_urlopen.call_args
@@ -181,12 +222,15 @@ class TestUploadTestCatalog:
         assert entry["description"] == ""
         assert entry["labels"] == []
         assert "markers" not in entry
-        assert entry["module"] == ""
+        assert entry["source"] == ""
+        assert entry["suite"] == ""
+        assert entry["capability"] is None
+        assert entry["requires"] == []
         assert entry["test_ids"] == []
 
     @patch("isvreporter.client.urlopen")
-    def test_forwards_platform_axis_metadata(self, mock_urlopen: MagicMock) -> None:
-        """schema_version/platforms are sent in the top-level envelope."""
+    def test_forwards_catalog_axis_vocabulary(self, mock_urlopen: MagicMock) -> None:
+        """Schema version and catalog axis lists are sent in the envelope."""
         get_response = MagicMock()
         get_response.read.return_value = json.dumps([]).encode()
         get_response.__enter__ = MagicMock(return_value=get_response)
@@ -202,14 +246,16 @@ class TestUploadTestCatalog:
             jwt_token="test-token",
             isv_test_version="1.2.3",
             entries=[{"name": "TestA"}],
-            schema_version=1,
-            platforms=["KUBERNETES", "VM"],
+            schema_version=2,
+            capabilities=["kubernetes", "vm"],
+            suites=["storage", "iam"],
         )
 
         request = mock_urlopen.call_args_list[1][0][0]
         payload = json.loads(request.data.decode())
-        assert payload["schemaVersion"] == 1
-        assert payload["platforms"] == ["KUBERNETES", "VM"]
+        assert payload["schemaVersion"] == 2
+        assert payload["capabilities"] == ["kubernetes", "vm"]
+        assert payload["suites"] == ["storage", "iam"]
 
     @patch("isvreporter.client.urlopen")
     def test_markers_field_is_not_forwarded(self, mock_urlopen: MagicMock) -> None:
@@ -225,6 +271,9 @@ class TestUploadTestCatalog:
             jwt_token="test-token",
             isv_test_version="1.0.0",
             entries=[{"name": "TestA", "labels": ["gpu"], "markers": ["gpu"]}],
+            schema_version=2,
+            capabilities=["kubernetes"],
+            suites=["storage"],
         )
 
         request = mock_urlopen.call_args[0][0]

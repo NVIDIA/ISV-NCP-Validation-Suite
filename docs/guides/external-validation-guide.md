@@ -126,7 +126,6 @@ commands:
         timeout: 300
 
 tests:
-  platform: myplatform
   cluster_name: "my-validation"
 
   settings:
@@ -186,9 +185,64 @@ For validation timing and phase control, see the [Configuration Guide](configura
 
 ---
 
+## Capabilities and check requirements
+
+You declare which **capabilities** you support. There are four, and they are
+mutually exclusive execution environments — you run on one at a time:
+
+`vm` · `bare_metal` · `kubernetes` · `slurm`
+
+Each has a **platform suite** you owe by declaring it (`vm`, `bare_metal`,
+`kubernetes`, `slurm`). Everything else is a **plain suite** (`storage`,
+`network`, `iam`, ...) that mixes checks needing no particular infrastructure
+with checks that presuppose some. Each check declares which:
+
+```yaml
+requires: []                # core - runs in every context
+requires: [kubernetes]      # runs only under --capability kubernetes
+requires: [vm, bare_metal]  # any-match: either context satisfies it
+```
+
+**Nothing is mandatory.** A check is in scope only if you declared the suite
+containing it, so 100% is always relative to what you declared. Declaring a
+subset legitimately yields zero checks from the suites you left out — that is
+the design, not a gap.
+
+One rule decides what runs, and it does not depend on how you named the config
+(`--suite`, `-f` and `--label` behave identically):
+
+> **A plain suite with no `--capability` runs its core checks.** Name a
+> capability to add the checks gated on it.
+
+If a step builds or destroys a fixture only some contexts need, gate it the same
+way so a core run neither provisions nor leaks it:
+
+```yaml
+- name: teardown_cluster
+  phase: teardown
+  command: "./scripts/teardown_cluster.sh"
+  requires: [kubernetes]
+```
+
+See the [Configuration Guide](configuration.md#capabilities-and-requires) for the
+full model.
+
+---
+
 ## Running Validations
 
 ```bash
+# One suite for your provider - the form the UI emits
+isvctl test run --provider acme --suite storage                         # core checks
+isvctl test run --provider acme --suite storage --capability kubernetes # + k8s checks
+isvctl test run --provider acme --suite kubernetes                      # a platform suite
+
+# See what would run, without executing anything
+isvctl test run --provider acme --suite storage --capability vm --dry-run
+
+# Point at a config file directly (same capability rule applies)
+isvctl test run -f config.yaml
+
 # Run all phases
 isvctl test run -f config.yaml
 
@@ -209,9 +263,19 @@ isvctl test run -f config.yaml -- -k "ConnectivityCheck"
 isvctl test run -f config.yaml --label gpu
 isvctl test run -f config.yaml -- -m "not slow"
 
+# Labels compose with suite selection
+isvctl test run --provider acme --suite storage --capability vm --label min_req
+
+# Re-run one failed check in its lifecycle context (pytest passthrough)
+isvctl test run --provider acme --suite storage --capability kubernetes -- -k K8sCsiPvcExpandCheck
+
 # Debug: full output on failure
 isvctl test run -f config.yaml -v -- -s --tb=long
 ```
+
+Re-running a single failed check is pytest passthrough after `--`; there are no
+dedicated rerun flags. Setup steps re-run, which is the deliberate trade for not
+maintaining a dependency graph.
 
 > **Teardown behavior:** By default, teardown runs even when setup or test validations fail, ensuring cloud resources are cleaned up. Individual teardown step failures don't block remaining teardown steps (best-effort execution).
 
@@ -266,8 +330,12 @@ Preview the whole pipeline with no cloud:
 
 ```bash
 make demo-test   # sets ISVCTL_DEMO_MODE=1 and runs all my-isv configs (~10s)
-# Domains are listed in the Makefile MY_ISV_DOMAINS variable.
+# Suites are listed in the Makefile MY_ISV_SUITES variable; DEMO_CAP_<suite>
+# names the capability a suite runs under so its gated checks are exercised.
 ```
+
+The k8s and Slurm examples are excluded: they drive a real cluster, so a
+dummy-success stub has nothing to return for them.
 
 ---
 

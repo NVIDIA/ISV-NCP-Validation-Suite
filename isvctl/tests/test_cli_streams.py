@@ -38,8 +38,10 @@ _FAKE_ENTRIES = [
         "name": "AlphaCheck",
         "description": "Alpha description",
         "labels": ["kubernetes"],
-        "module": "isvtest.validations.alpha",
-        "platforms": ["KUBERNETES"],
+        "source": "isvtest.validations.alpha",
+        "suite": "kubernetes",
+        "platform": "kubernetes",
+        "requires": [],
     },
 ]
 
@@ -58,7 +60,7 @@ commands:
         args: ['{"success": true}']
         phase: test
 tests:
-  platform: kubernetes
+  capability: kubernetes
   validations: {}
 """,
         encoding="utf-8",
@@ -66,20 +68,18 @@ tests:
     return config
 
 
-def test_dry_run_stdout_is_pure_json(tmp_path: Path) -> None:
-    """`test run --dry-run` emits only JSON on stdout; progress goes to stderr."""
+def test_dry_run_stdout_is_human_readable(tmp_path: Path) -> None:
+    """`test run --dry-run` summarizes the execution plan for operators."""
     config = _write_config(tmp_path)
 
     result = runner.invoke(test_cli.app, ["run", "-f", str(config), "--no-upload", "--dry-run"])
 
     assert result.exit_code == 0, result.output
-    # stdout must be parseable JSON with nothing else mixed in.
-    payload = json.loads(result.stdout)
-    assert payload["tests"]["platform"] == "kubernetes"
-    # Progress lives on stderr, never on the machine-readable stdout stream.
+    assert "Dry-run plan" in result.stdout
+    assert "Suite type: platform (kubernetes)" in result.stdout
+    assert "Checks: 0" in result.stdout
     assert "Validating configuration" in result.stderr
     assert "Validating configuration" not in result.stdout
-    assert "--- Dry Run: Configuration ---" not in result.stdout
 
 
 def test_catalog_list_json_stdout_is_pure_json() -> None:

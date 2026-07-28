@@ -1,5 +1,5 @@
-MY_ISV_DOMAINS := bare_metal control-plane iam image-registry network observability security storage vm
-DEMO_TARGETS := $(addprefix demo-,$(MY_ISV_DOMAINS))
+MY_ISV_SUITES := bare_metal control-plane iam image-registry network observability security storage vm
+DEMO_TARGETS := $(addprefix demo-,$(MY_ISV_SUITES))
 
 .PHONY: help pre-commit build test coverage clean lint format install bump-patch bump-fix bump-minor bump-feat bump-major bump bump-check \
 	security-trivy security-trivy-detail security-trufflehog ci-security demo-test demo-all $(DEMO_TARGETS) plan plan-coverage validate-suites \
@@ -84,29 +84,46 @@ test: ## Run tests for all packages
 	@echo ""
 	@echo "✅ All tests passed!"
 
+# run_demo,<suite>[,<capability>] - a plain suite with no capability runs only
+# its core checks, so suites holding gated checks name one to exercise those
+# stubs. Unlisted suites are core-only or platform suites.
+DEMO_CAP_network       := vm
+DEMO_CAP_observability := vm
+DEMO_CAP_security      := vm
+DEMO_CAP_storage       := vm
+
 define run_demo
 	@echo ""
 	@echo "=========================================="
-	@echo "Demo test: $(1)"
+	@echo "Demo test: $(1)$(if $(2), --capability $(2),)"
 	@echo "=========================================="
-	@echo "Running cmd: ISVCTL_DEMO_MODE=1 uv run isvctl test run -f isvctl/configs/providers/my-isv/config/$(1).yaml"
+	@echo "Running cmd: ISVCTL_DEMO_MODE=1 uv run isvctl test run -f isvctl/configs/providers/my-isv/config/$(1).yaml$(if $(2), --capability $(2),)"
 	@ISVCTL_DEMO_MODE=1 uv run isvctl test run \
-		-f isvctl/configs/providers/my-isv/config/$(1).yaml
+		-f isvctl/configs/providers/my-isv/config/$(1).yaml \
+		$(if $(2),--capability $(2),)
 endef
 
 demo-test: demo-all ## Alias for demo-all (backward compat)
 
-demo-all: ## Run all my-isv living examples (or demo-<domain> for one, e.g. demo-security)
+demo-all: ## Run all my-isv living examples (or demo-<suite> for one, e.g. demo-security)
 	@echo "Running my-isv living examples in demo mode..."
-	@for domain in $(MY_ISV_DOMAINS); do \
-		$(MAKE) --no-print-directory demo-$$domain || exit 1; \
+	@for suite in $(MY_ISV_SUITES); do \
+		$(MAKE) --no-print-directory demo-$$suite || exit 1; \
 	done
 	@echo ""
 	@echo "✅ All my-isv living examples passed in demo mode!"
-	@echo "Domains: $(MY_ISV_DOMAINS)"
+	@echo "Suites: $(MY_ISV_SUITES)"
 
-$(DEMO_TARGETS): demo-%:
-	$(call run_demo,$*)
+# image-registry is excluded here because it has its own rule below; leaving it
+# in would make every make invocation warn about an overridden recipe.
+$(filter-out demo-image-registry,$(DEMO_TARGETS)): demo-%:
+	$(call run_demo,$*,$(DEMO_CAP_$*))
+
+# image-registry splits its gated checks between vm and bare_metal, so one run
+# cannot reach both.
+demo-image-registry:
+	$(call run_demo,image-registry,vm)
+	$(call run_demo,image-registry,bare_metal)
 
 coverage: ## Run tests with coverage and generate combined report
 	@echo "Running tests with coverage..."

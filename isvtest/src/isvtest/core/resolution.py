@@ -33,6 +33,35 @@ logger = logging.getLogger(__name__)
 
 ADAPTER_HANDLED_CATEGORIES = {"reframe"}
 DEFAULT_VALIDATION_PHASE = "test"
+DECLARABLE_CAPABILITIES = frozenset({"vm", "bare_metal", "kubernetes", "slurm"})
+
+
+def requires_error(values: Any) -> str | None:
+    """Return why ``values`` is not a valid ``requires`` list, or None when it is.
+
+    One statement of the rule for every place that enforces it - the pydantic
+    step and suite validators, the runtime entry-shape check, and the suite
+    wiring script - so adding a capability or relaxing the rule is a single
+    edit and the four call sites cannot report different verdicts.
+    """
+    if not isinstance(values, list) or any(
+        not isinstance(value, str) or value not in DECLARABLE_CAPABILITIES for value in values
+    ):
+        return f"requires must be a list containing only: {', '.join(sorted(DECLARABLE_CAPABILITIES))}"
+    if len(values) != len(set(values)):
+        return "requires must not contain duplicates"
+    return None
+
+
+def canonical_suite_name(value: str) -> str:
+    """Normalize a CLI spelling, filename stem, or platform key to a suite name.
+
+    Suite name is the join key between a test run and its catalog entries, so
+    the producer, the CLI resolver, and the wiring validator all have to spell
+    it the same way - including the ``k8s`` filename alias.
+    """
+    normalized = value.strip().lower().replace("-", "_")
+    return "kubernetes" if normalized == "k8s" else normalized
 
 
 class State(StrEnum):
@@ -53,6 +82,7 @@ class SkipReason(StrEnum):
     STEP_NO_OUTPUT = "step_no_output"  # step ran but produced no JSON output
     STEP_NOT_CONFIGURED = "step_not_configured"  # step the entry binds to isn't in the platform's step list
     UNRELEASED = "unreleased"  # not in released_tests.json (gated until release)
+    CAPABILITY_REQUIREMENT = "capability_requirement"  # declared capabilities do not satisfy ``requires``
 
 
 class ErrorReason(StrEnum):
@@ -73,6 +103,7 @@ class ValidationEntry:
     step: str | None = None
     phase: str | None = None
     labels: tuple[str, ...] = ()
+    requires: tuple[str, ...] = ()
 
 
 @dataclass
@@ -110,6 +141,25 @@ def _wiring_labels(params_template: Any) -> tuple[str, ...]:
     return tuple(labels)
 
 
+def _wiring_requires(params_template: Any) -> tuple[str, ...]:
+    """Return the capability prerequisites declared on a check's YAML wiring."""
+    value = params_template.get("requires") if isinstance(params_template, dict) else None
+    if not isinstance(value, list):
+        return ()
+    return tuple(item for item in value if isinstance(item, str))
+
+
+def requirements_satisfied(requires: Iterable[str], capability: str) -> bool:
+    """Return whether the single capability context satisfies a check's requirements.
+
+    The four capabilities are mutually exclusive execution environments, so a run
+    carries exactly one. A core check (empty ``requires``) always runs; otherwise
+    the check runs when the context capability is among its any-match prerequisites.
+    """
+    required = set(requires)
+    return not required or capability in required
+
+
 def parse_validations(raw_config: Mapping[str, Any]) -> list[ValidationEntry]:
     """Parse raw validation config into ordered validation entries.
 
@@ -144,6 +194,7 @@ def parse_validations(raw_config: Mapping[str, Any]) -> list[ValidationEntry]:
                 params_template = copy.deepcopy(params_template)
 
             labels = _wiring_labels(params_template)
+            requires = _wiring_requires(params_template)
             entries.append(
                 ValidationEntry(
                     name=name,
@@ -152,6 +203,7 @@ def parse_validations(raw_config: Mapping[str, Any]) -> list[ValidationEntry]:
                     step=entry_step if isinstance(entry_step, str) else None,
                     phase=entry_phase if isinstance(entry_phase, str) else None,
                     labels=labels,
+                    requires=requires,
                 )
             )
 
@@ -169,6 +221,7 @@ def resolve_entries(
     exclude_tests: AbstractSet[str],
     released_tests: AbstractSet[str] | None,
     render_context: Mapping[str, Any],
+    capability: str | None = None,
 ) -> list[ResolvedEntry]:
     """Resolve validation entries into ready or terminal outcomes.
 
@@ -182,6 +235,7 @@ def resolve_entries(
         exclude_tests: Validation names excluded by config.
         released_tests: Released test manifest, or None when unreleased checks are included.
         render_context: Jinja context for validation parameter rendering.
+        capability: Declared capability context (a single platform), or None to disable requirement filtering.
 
     Returns:
         A resolved entry for every input entry, in input order.
@@ -210,6 +264,18 @@ def resolve_entries(
 
         if entry.name in exclude_tests:
             resolved.append(_skip(entry, SkipReason.EXCLUDED, f"validation '{entry.name}' is excluded by name"))
+            continue
+
+        if capability is not None and not requirements_satisfied(entry.requires, capability):
+            requirement_list = ", ".join(entry.requires) or "(none)"
+            context_list = capability
+            resolved.append(
+                _skip(
+                    entry,
+                    SkipReason.CAPABILITY_REQUIREMENT,
+                    f"requires {requirement_list} (context: {context_list})",
+                )
+            )
             continue
 
         missing_include_labels = sorted(set(include_labels).difference(entry.labels))
@@ -293,6 +359,7 @@ def resolve_entries(
             rendered_params.pop("step", None)
             rendered_params["step_output"] = copy.deepcopy(step_outputs[entry.step])
         rendered_params.pop("phase", None)
+        rendered_params.pop("requires", None)
         rendered_params["_category"] = entry.category
 
         resolved.append(ResolvedEntry(entry=entry, rendered_params=rendered_params))
@@ -414,6 +481,11 @@ def _validate_entry_shape(entry: ValidationEntry) -> str | None:
     invalid_message = entry.params_template.get("_invalid_config")
     if invalid_message:
         return str(invalid_message)
+    raw_requires = entry.params_template.get("requires")
+    if raw_requires is not None:
+        message = requires_error(raw_requires)
+        if message:
+            return f"validation '{entry.name}' {message}"
     return None
 
 

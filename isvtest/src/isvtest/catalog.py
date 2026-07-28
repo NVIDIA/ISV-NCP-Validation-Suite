@@ -19,16 +19,12 @@ Builds a structured catalog of all available validation tests by calling
 discover_all_tests() and serializing each BaseValidation subclass's metadata.
 The catalog is version-keyed by the installed isvtest package version.
 
-Platform tagging uses two sources (union of both):
-  1. Config files - which checks appear in each isvctl/configs/suites/*.yaml
-  2. Wiring labels - e.g. a check wired with labels: [bare_metal] implies the
-     BARE_METAL platform
-
-This ensures checks get a platform badge in the UI even when they only appear
-in provider configs (e.g. Bm* checks that run on-host, not via SSH).
+Suite placement and capability requirements come only from canonical
+``isvctl/configs/suites/*.yaml`` wiring.
 """
 
 import logging
+import os
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
@@ -36,8 +32,8 @@ from typing import Any
 import yaml
 from isvreporter.version import get_version
 
-from isvtest.catalog_platforms import LABEL_TO_PLATFORM, PLATFORM_CONFIGS
 from isvtest.core.discovery import discover_all_tests
+from isvtest.core.resolution import DECLARABLE_CAPABILITIES, canonical_suite_name, resolve_class_key
 from isvtest.release_manifest import INCLUDE_UNRELEASED_ENV, load_released_test_filter
 
 logger = logging.getLogger(__name__)
@@ -45,7 +41,7 @@ logger = logging.getLogger(__name__)
 # Version of the catalog document envelope (schemaVersion field), bumped only
 # when the top-level shape changes - independent of the isvtest package version
 # (isvTestVersion), which tracks the test content.
-CATALOG_SCHEMA_VERSION = 1
+CATALOG_SCHEMA_VERSION = 2
 
 
 def _find_configs_dir() -> Path | None:
@@ -72,29 +68,40 @@ def iter_config_checks(config_path: Path) -> Iterator[tuple[str, dict[str, Any]]
         data = yaml.safe_load(config_path.read_text())
     except Exception:
         return
+    for _, name, params in iter_checks_from_data(data):
+        yield name, params
 
+
+def iter_checks_from_data(data: Any) -> Iterator[tuple[str, str, dict[str, Any]]]:
+    """Yield ``(category, check_name, params)`` from an already-parsed document.
+
+    Lets callers that have parsed the YAML for other reasons avoid a second
+    read and parse of the same file. This is the only walker of the wiring
+    shape - the catalog, the suite map, and the wiring validator all read it
+    here, so a new nesting form is taught to the codebase once.
+    """
     validations = (data or {}).get("tests", {}).get("validations", {})
     if not isinstance(validations, dict):
         return
 
-    def _from_mapping(mapping: Any) -> Iterator[tuple[str, dict[str, Any]]]:
+    def _from_mapping(category: str, mapping: Any) -> Iterator[tuple[str, str, dict[str, Any]]]:
         if isinstance(mapping, dict):
             for name, params in mapping.items():
-                yield name, params if isinstance(params, dict) else {}
+                yield category, name, params if isinstance(params, dict) else {}
 
-    for cat_config in validations.values():
+    for category, cat_config in validations.items():
         if isinstance(cat_config, dict) and "checks" in cat_config:
             checks_val = cat_config["checks"]
             if isinstance(checks_val, dict):
-                yield from _from_mapping(checks_val)
+                yield from _from_mapping(category, checks_val)
             elif isinstance(checks_val, list):
                 for check in checks_val:
-                    yield from _from_mapping(check)
+                    yield from _from_mapping(category, check)
         elif isinstance(cat_config, dict):
-            yield from _from_mapping(cat_config)
+            yield from _from_mapping(category, cat_config)
         elif isinstance(cat_config, list):
             for check in cat_config:
-                yield from _from_mapping(check)
+                yield from _from_mapping(category, check)
 
 
 def _extract_checks_from_config(config_path: Path) -> list[str]:
@@ -196,42 +203,55 @@ def build_label_file_map() -> dict[str, set[str]]:
     return label_files
 
 
-def _build_platform_map() -> dict[str, set[str]]:
-    """Build a mapping from test name to set of platform strings.
-
-    Scans the canonical config files to determine which tests belong to
-    which platforms.
-    """
+def _iter_suite_docs() -> Iterator[tuple[Path, dict[str, Any]]]:
+    """Yield ``(path, document)`` for each canonical suite YAML, parsed once."""
     configs_dir = _find_configs_dir()
     if not configs_dir:
         logger.warning("Could not locate isvctl/configs/ directory")
-        return {}
+        return
+    for config_path in sorted((configs_dir / "suites").glob("*.yaml")):
+        yield config_path, yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
 
-    test_to_platforms: dict[str, set[str]] = {}
 
-    for platform, config_files in PLATFORM_CONFIGS.items():
-        for config_file in config_files:
-            config_path = configs_dir / config_file
-            if not config_path.exists():
-                logger.debug("Config not found: %s", config_path)
-                continue
+def _declared_capability(data: dict[str, Any]) -> str | None:
+    """Return the capability a suite document declares, or None for a plain suite.
 
-            checks = _extract_checks_from_config(config_path)
-            for check_name in checks:
-                if check_name not in test_to_platforms:
-                    test_to_platforms[check_name] = set()
-                test_to_platforms[check_name].add(platform)
+    Reads ``tests.capability`` and travels to the service as the catalog
+    entry's ``capability`` field.
+    """
+    tests = data.get("tests") or {}
+    capability = tests.get("capability") if isinstance(tests, dict) else None
+    return capability if isinstance(capability, str) and capability else None
 
-    return test_to_platforms
+
+def _build_suite_map() -> dict[str, dict[str, Any]]:
+    """Map suite wiring names to suite placement and requirements.
+
+    Duplicate wiring names currently last-wins. Global uniqueness enforcement
+    is deferred to a follow-up PR (``ISVCTL_ENFORCE_UNIQUE_WIRING=1``).
+    """
+    enforce_unique = os.environ.get("ISVCTL_ENFORCE_UNIQUE_WIRING") == "1"
+    suite_map: dict[str, dict[str, Any]] = {}
+    for config_path, data in _iter_suite_docs():
+        capability = _declared_capability(data)
+        suite = capability if capability else canonical_suite_name(config_path.stem)
+        for _, check_name, params in iter_checks_from_data(data):
+            if check_name in suite_map and enforce_unique:
+                raise ValueError(f"Suite wiring name {check_name!r} is not globally unique")
+            requires = params.get("requires", [])
+            suite_map[check_name] = {
+                "suite": suite,
+                "capability": capability,
+                "requires": list(requires) if isinstance(requires, list) else [],
+            }
+    return suite_map
 
 
 def build_catalog(*, released_only: bool = True) -> list[dict[str, Any]]:
     """Discover all validation tests and return structured catalog entries.
 
-    Each entry includes a 'platforms' field derived from the config files,
-    indicating which platforms the test belongs to. Variant entries from
-    configs (e.g. K8sNimHelmWorkload-1b) are included as separate entries
-    inheriting metadata from their base class.
+    Each entry is one suite wiring name. Plain suites carry ``requires`` while
+    platform suites carry their ``capability`` key.
 
     Args:
         released_only: When True, omit tests that are not in the committed
@@ -244,10 +264,12 @@ def build_catalog(*, released_only: bool = True) -> list[dict[str, Any]]:
             - labels: List of public label strings (e.g. ["kubernetes", "gpu"])
             - test_ids: List of test-plan ids declared on the wiring, "N/A"
               excluded (e.g. ["SEC07-01"]); empty when only intentional gaps
-            - module: Fully qualified module path
-            - platforms: List of platform strings (e.g. ["KUBERNETES"])
+            - source: Fully qualified Python source module
+            - suite: Logical suite name
+            - capability: Declared capability for platform suites, otherwise null
+            - requires: Capability prerequisites for plain suites
     """
-    platform_map = _build_platform_map()
+    suite_map = _build_suite_map()
     label_map = build_label_map()
     test_id_map = build_test_id_map()
 
@@ -262,44 +284,19 @@ def build_catalog(*, released_only: bool = True) -> list[dict[str, Any]]:
         class_meta[cls.__name__] = {
             "description": getattr(cls, "description", "") or "",
             "labels": labels,
-            "module": cls.__module__,
+            "source": cls.__module__,
         }
-        # Infer platforms from labels only for checks not already covered by
-        # canonical configs. Some labels (for example "security") are useful
-        # pytest filters but are not reliable platform ownership signals once a
-        # check appears in a suite file.
-        if cls.__name__ not in platform_map:
-            for label in labels:
-                platform = LABEL_TO_PLATFORM.get(label)
-                if platform:
-                    platform_map.setdefault(cls.__name__, set()).add(platform)
 
     catalog: list[dict[str, Any]] = []
-    seen: set[str] = set()
 
-    # Add all discovered classes
-    for name, meta in class_meta.items():
-        seen.add(name)
-        catalog.append(
-            {
-                "name": name,
-                "description": meta["description"],
-                "labels": meta["labels"],
-                "test_ids": sorted(test_id_map.get(name, set())),
-                "module": meta["module"],
-                "platforms": sorted(platform_map.get(name, [])),
-            }
-        )
-
-    # Add variant entries from configs that aren't base classes
-    for name, platforms in platform_map.items():
-        if name in seen:
+    for name, placement in suite_map.items():
+        base = resolve_class_key(name, class_meta)
+        if base is None:
+            logger.warning("Omitting suite wiring %s because no validation class resolves it", name)
             continue
-        base = name.split("-")[0] if "-" in name else name
         if name in excluded_names or base in excluded_names:
             continue
-        seen.add(name)
-        meta = class_meta.get(base, {})
+        meta = class_meta[base]
         variant_suffix = name[len(base) :] if base != name else ""
         desc = meta.get("description", "")
         if variant_suffix:
@@ -312,8 +309,8 @@ def build_catalog(*, released_only: bool = True) -> list[dict[str, Any]]:
                 "description": desc,
                 "labels": labels,
                 "test_ids": test_ids,
-                "module": meta.get("module", ""),
-                "platforms": sorted(platforms),
+                "source": meta.get("source", ""),
+                **placement,
             }
         )
 
@@ -322,8 +319,10 @@ def build_catalog(*, released_only: bool = True) -> list[dict[str, Any]]:
         if released_tests is None:
             logger.info("Including unreleased tests in catalog because %s is enabled", INCLUDE_UNRELEASED_ENV)
         else:
-            omitted_names = sorted(entry["name"] for entry in catalog if entry["name"] not in released_tests)
-            catalog = [entry for entry in catalog if entry["name"] in released_tests]
+            omitted_names = sorted(
+                entry["name"] for entry in catalog if resolve_class_key(entry["name"], released_tests) is None
+            )
+            catalog = [entry for entry in catalog if resolve_class_key(entry["name"], released_tests) is not None]
             if omitted_names:
                 logger.info("Omitted %d unreleased tests from catalog", len(omitted_names))
                 logger.debug("Unreleased tests omitted from catalog: %s", ", ".join(omitted_names))
@@ -332,29 +331,70 @@ def build_catalog(*, released_only: bool = True) -> list[dict[str, Any]]:
     return catalog
 
 
-def build_platform_axis() -> list[str]:
-    """Return the sorted platform-axis labels (the catalog's capability columns).
+def suite_vocabularies() -> tuple[list[str], list[str]]:
+    """Return ``(capabilities, plain_suites)`` from one pass over the suite YAML.
 
-    Derived from :data:`PLATFORM_CONFIGS`, the canonical per-platform suite
-    mapping, so adding a platform there extends the axis automatically. The
-    values match each entry's ``platforms`` field (e.g. ``KUBERNETES``), so a
-    consumer can build the platform matrix straight from the catalog.
+    A suite file is either a platform suite (it declares a declarable
+    capability) or a plain suite named after its file - one classification, so
+    the two vocabularies are read off a single parse of the directory rather
+    than a scan each.
     """
-    return sorted(PLATFORM_CONFIGS.keys())
+    capabilities: set[str] = set()
+    suites: set[str] = set()
+    for config_path, data in _iter_suite_docs():
+        capability = _declared_capability(data)
+        if capability in DECLARABLE_CAPABILITIES:
+            capabilities.add(str(capability))
+        else:
+            suites.add(canonical_suite_name(config_path.stem))
+    return sorted(capabilities), sorted(suites)
+
+
+def build_capability_vocabulary() -> list[str]:
+    """Return declarable capabilities derived from platform suite YAML."""
+    return suite_vocabularies()[0]
+
+
+def build_suite_vocabulary() -> list[str]:
+    """Return plain suite names declared by canonical suite YAML."""
+    return suite_vocabularies()[1]
+
+
+def _assert_disjoint_vocabulary(capabilities: list[str], suites: list[str]) -> None:
+    """Reject a plain suite named after a declarable capability.
+
+    Capabilities and plain suites share one uppercased namespace downstream: the
+    frontend merges ``capabilities`` and ``suites`` into a single selectable
+    "test target" list, and the backend re-splits a flat selection by
+    intersecting it with the declared ``capabilities``. Both are unambiguous only
+    while the two namespaces are disjoint, so enforce it at the upload
+    chokepoint (checked against the full reserved set, not just declared
+    capabilities, so an undeclared capability word like ``slurm`` is caught too).
+    """
+    collisions = sorted(set(suites) & (set(capabilities) | DECLARABLE_CAPABILITIES))
+    if collisions:
+        raise ValueError(
+            "plain suite names collide with declarable capabilities: "
+            f"{', '.join(collisions)}; rename the suite file(s) so the capability "
+            "and suite namespaces stay disjoint"
+        )
 
 
 def catalog_document(entries: list[dict[str, Any]], version: str) -> dict[str, Any]:
     """Wrap catalog ``entries`` in the versioned upload/artifact envelope.
 
-    Adds the schema version, the isvtest package version, and the platform axis
-    list (see :func:`build_platform_axis`). The per-entry ``labels`` are
-    intentionally not summarized at the top level - a consumer can derive the
-    label universe from the entries when needed.
+    Adds the schema version, the isvtest package version, and the catalog axis
+    vocabulary expected by the backend upload contract. The per-entry
+    ``labels`` are intentionally not summarized at the top level - a consumer
+    can derive the label universe from the entries when needed.
     """
+    capabilities, suites = suite_vocabularies()
+    _assert_disjoint_vocabulary(capabilities, suites)
     return {
         "schemaVersion": CATALOG_SCHEMA_VERSION,
         "isvTestVersion": version,
-        "platforms": build_platform_axis(),
+        "capabilities": capabilities,
+        "suites": suites,
         "entries": entries,
     }
 

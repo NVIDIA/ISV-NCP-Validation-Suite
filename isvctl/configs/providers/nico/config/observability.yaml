@@ -84,7 +84,6 @@ commands:
         timeout: 60
 
 tests:
-  platform: observability
   cluster_name: "nico-observability-validation"
   description: "NICo observability validation for UFM event logs and switch log evidence"
 

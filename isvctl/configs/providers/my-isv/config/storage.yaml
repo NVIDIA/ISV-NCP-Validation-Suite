@@ -49,6 +49,21 @@ commands:
   storage:
     phases: ["setup", "test", "teardown"]
     steps:
+      # Only the kubernetes CSI checks need a cluster, so both sides of the
+      # fixture carry the same gate: a `--capability vm` run never provisions
+      # one. Acquire is idempotent - reuse an existing cluster if you have one.
+      - name: setup_cluster
+        phase: setup
+        command: "python ../scripts/storage/setup_cluster.py"
+        requires: [kubernetes]
+        # The step name auto-detects the platform-suite `cluster` schema, which
+        # demands cluster_name/node_count. This fixture has its own, smaller
+        # contract - kubeconfig + StorageClass names, the only fields the
+        # k8s_storage checks read - so opt out rather than make every ISV
+        # report inventory no check consumes.
+        output_schema: generic
+        timeout: 60
+
       - name: launch_instance
         phase: setup
         command: "python ../scripts/vm/launch_instance.py"
@@ -235,6 +250,7 @@ commands:
       - name: teardown_volume
         phase: teardown
         command: "python ../scripts/storage/teardown_volume.py"
+        requires: [vm, bare_metal]
         args:
           - "--region"
           - "{{region}}"
@@ -246,6 +262,7 @@ commands:
       - name: teardown
         phase: teardown
         command: "python ../scripts/vm/teardown.py"
+        requires: [vm, bare_metal]
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -253,6 +270,20 @@ commands:
           - "{{region}}"
           - "--delete-key-pair"
           - "--delete-security-group"
+        timeout: 60
+
+      # The other half of the setup_cluster fixture. Teardown may be a no-op if
+      # you reuse a long-lived cluster, but the step must exist so a standalone
+      # storage run does not leak a cluster it provisioned. STORAGE_SKIP_TEARDOWN
+      # keeps it alive for cheap reruns (mirrors AWS_SKIP_TEARDOWN in aws/).
+      - name: teardown_cluster
+        phase: teardown
+        command: "python ../scripts/storage/teardown_cluster.py"
+        requires: [kubernetes]
+        args:
+          - "--kubeconfig"
+          - "{{steps.setup_cluster.kubeconfig_path}}"
+          - "{{cluster_teardown_flag}}"
         timeout: 60
 
 tests:
@@ -264,3 +295,4 @@ tests:
     instance_type: "my-isv.standard.1x"
     volume_size_gib: "10"
     teardown_flag: "{{(env.BLOCK_STORAGE_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"
+    cluster_teardown_flag: "{{(env.STORAGE_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"

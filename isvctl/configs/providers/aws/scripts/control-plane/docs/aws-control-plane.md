@@ -247,7 +247,6 @@ commands:
       # ... more steps ...
 
 tests:
-  platform: control_plane
   settings:
     region: "us-west-2"
     services: "ec2,s3,iam,sts"

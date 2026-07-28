@@ -117,7 +117,7 @@ def create(
         typer.Option(
             "--config",
             "-f",
-            help="Path to isvctl config YAML file (auto-detects platform from 'tests.platform')",
+            help="Path to isvctl config YAML file (auto-detects capability from 'tests.capability')",
             exists=True,
         ),
     ] = None,
@@ -133,6 +133,20 @@ def create(
         typer.Option(
             "--isv-test-version",
             help="ISV test tool version (e.g., '1.12.3')",
+        ),
+    ] = None,
+    suite: Annotated[
+        str | None,
+        typer.Option(
+            "--suite",
+            help="Suite that was run (e.g. 'network', 'vm')",
+        ),
+    ] = None,
+    capability: Annotated[
+        str | None,
+        typer.Option(
+            "--capability",
+            help="Capability context the suite ran under (e.g. 'vm'). Omit for a core-only run.",
         ),
     ] = None,
 ) -> None:
@@ -167,6 +181,8 @@ def create(
         start_time=start_time,
         isv_software_version=isv_software_version,
         isv_test_version=isv_test_version,
+        suite=suite,
+        capability=capability,
     )
 
 
@@ -300,6 +316,10 @@ def update(
                 jwt_token=jwt_token,
                 isv_test_version=catalog_version,
                 entries=catalog_entries,
+                schema_version=catalog_data.get("schemaVersion", 1),
+                # v1 files on disk still say `platforms`.
+                capabilities=catalog_data.get("capabilities") or catalog_data.get("platforms", []),
+                suites=catalog_data.get("suites", []),
             )
         except FileNotFoundError:
             typer.echo(f"Warning: Test catalog file not found: {test_catalog}", err=True)

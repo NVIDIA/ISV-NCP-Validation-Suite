@@ -23,6 +23,7 @@ import logging
 import os
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from isvctl.redaction import redact_text
 
@@ -79,6 +80,8 @@ def create_test_run(
     executed_by: str = "isvctl",
     ci_reference: str = "local-run",
     isv_software_version: str | None = None,
+    suite: str | None = None,
+    capability: str | None = None,
 ) -> str | None:
     """Create a test run in ISV Lab Service.
 
@@ -90,6 +93,9 @@ def create_test_run(
         executed_by: Tool that executed the test
         ci_reference: CI/CD reference identifier
         isv_software_version: ISV software stack version (opaque string from ISV)
+        suite: Suite that was run (e.g. "network", "vm")
+        capability: Capability context resolved from ``--capability``; None for
+            a core-only run
 
     Returns:
         Test run ID if successful, None otherwise
@@ -124,6 +130,8 @@ def create_test_run(
             start_time=start_time,
             isv_software_version=isv_software_version,
             isv_test_version=isv_test_version,
+            suite=suite,
+            capability=capability,
         )
         return result.get("data", {}).get("testRunId")
     except SystemExit:
@@ -144,8 +152,7 @@ def update_test_run(
     junit_xml: Path | None = None,
     log_content: str | None = None,
     isv_software_version: str | None = None,
-    catalog_entries: list[dict] | None = None,
-    catalog_version: str | None = None,
+    catalog_document: dict[str, Any] | None = None,
 ) -> bool:
     """Update a test run in ISV Lab Service.
 
@@ -158,8 +165,7 @@ def update_test_run(
         junit_xml: Path to JUnit XML file (optional)
         log_content: Direct log content string (optional, alternative to log_file)
         isv_software_version: ISV software stack version (opaque string from ISV)
-        catalog_entries: Test catalog entries for coverage tracking (optional)
-        catalog_version: Test suite version for the catalog (optional)
+        catalog_document: Complete test catalog document for coverage tracking (optional)
 
     Returns:
         True if successful, False otherwise
@@ -209,15 +215,18 @@ def update_test_run(
         jwt_token = get_jwt_token(ssa_issuer, client_id, client_secret)
 
         # Upload test catalog for coverage tracking (if provided)
-        if catalog_entries and catalog_version:
+        if catalog_document:
             try:
                 from isvreporter.client import upload_test_catalog as client_upload_catalog
 
                 client_upload_catalog(
                     endpoint=endpoint,
                     jwt_token=jwt_token,
-                    isv_test_version=catalog_version,
-                    entries=catalog_entries,
+                    isv_test_version=catalog_document["isvTestVersion"],
+                    entries=catalog_document["entries"],
+                    schema_version=catalog_document["schemaVersion"],
+                    capabilities=catalog_document["capabilities"],
+                    suites=catalog_document["suites"],
                 )
             except SystemExit:
                 logger.warning("Failed to upload test catalog to ISV Lab Service")

@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Require ``test_id`` and ``labels`` on every check wired in suite YAML.
+"""Validate suite identity and per-check metadata in canonical YAML.
 
 Suite configs under ``isvctl/configs/suites/`` are the source of truth for
 validation metadata on this branch. Each wired check must declare:
@@ -25,13 +25,6 @@ validation metadata on this branch. Each wired check must declare:
   Each canonical suite check must include its suite label, for example checks in
   ``bare_metal.yaml`` must include ``bare_metal``.
 
-Every suite file must also be registered in
-``isvtest.catalog_platforms.PLATFORM_CONFIGS``: an unregistered suite is
-silently dropped from the pushed catalog's platform axis and its tests carry no
-platform, so the capability never shows up in the catalog UI. Registered
-platforms must in turn be recognized by ``isvreporter.platform`` — an unknown
-platform is silently reported as the default on test-run upload.
-
 Usage:
     python3 scripts/validate_suite_wiring.py
     python3 scripts/validate_suite_wiring.py --check   # exit 1 on violations
@@ -40,6 +33,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 from collections import defaultdict
@@ -48,17 +42,14 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from isvreporter.platform import normalize_platform
-from isvtest.catalog_platforms import PLATFORM_CONFIGS
+from isvtest.catalog import iter_checks_from_data
+from isvtest.core.resolution import DECLARABLE_CAPABILITIES, canonical_suite_name, requires_error
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SUITES_DIR = REPO_ROOT / "isvctl" / "configs" / "suites"
 _NEXT_CATEGORY_LINE = re.compile(r"^    \S")
-# The label every check in a canonical suite must carry, derived from the
-# platform registry: suite file stem -> lowercase platform name.
-SUITE_REQUIRED_LABELS: dict[str, str] = {
-    Path(config).stem: platform.lower() for platform, configs in PLATFORM_CONFIGS.items() for config in configs
-}
+# Opt-in until unique wiring names land in a dedicated PR.
+ENFORCE_UNIQUE_WIRING = os.environ.get("ISVCTL_ENFORCE_UNIQUE_WIRING") == "1"
 
 
 def _check_line_patterns(check_name: str) -> tuple[re.Pattern[str], ...]:
@@ -106,7 +97,7 @@ def _normalize_test_id(value: Any) -> str | None:
 
 def required_suite_label(config_path: Path) -> str | None:
     """Return the label every check in a known canonical suite must carry."""
-    return SUITE_REQUIRED_LABELS.get(config_path.stem)
+    return canonical_suite_name(config_path.stem)
 
 
 def iter_suite_checks(config_path: Path) -> Iterator[tuple[str, str, dict[str, Any]]]:
@@ -115,28 +106,7 @@ def iter_suite_checks(config_path: Path) -> Iterator[tuple[str, str, dict[str, A
         data = yaml.safe_load(config_path.read_text())
     except (OSError, yaml.YAMLError) as exc:
         raise ValueError(f"failed to read/parse {config_path}: {exc}") from exc
-
-    validations = (data or {}).get("tests", {}).get("validations", {})
-    if not isinstance(validations, dict):
-        return
-
-    def _from_mapping(category: str, mapping: Any) -> Iterator[tuple[str, str, dict[str, Any]]]:
-        """Yield wired checks from a dict- or list-form ``checks`` mapping."""
-        if isinstance(mapping, dict):
-            for name, params in mapping.items():
-                yield category, name, params if isinstance(params, dict) else {}
-
-    for category, cat_config in validations.items():
-        if isinstance(cat_config, dict) and "checks" in cat_config:
-            checks_val = cat_config["checks"]
-            if isinstance(checks_val, dict):
-                yield from _from_mapping(category, checks_val)
-            elif isinstance(checks_val, list):
-                for check in checks_val:
-                    yield from _from_mapping(category, check)
-        elif isinstance(cat_config, list):
-            for check in cat_config:
-                yield from _from_mapping(category, check)
+    yield from iter_checks_from_data(data)
 
 
 def _format_location(config_path: Path, category: str, check_name: str, line_number: int | None) -> str:
@@ -154,14 +124,52 @@ def wiring_errors(suites_dir: Path = SUITES_DIR) -> list[str]:
     """Return human-readable errors for incomplete suite check wiring."""
     errors: list[str] = []
     occurrence: dict[tuple[Path, str, str], int] = defaultdict(int)
+    wiring_locations: dict[str, str] = {}
 
+    # Read and parse each suite once; both the dead-requirement pre-pass and the
+    # per-check loop below work off these parsed documents.
+    parsed: list[tuple[Path, list[str], dict[str, Any]]] = []
     for path in sorted(suites_dir.glob("*.yaml")):
         try:
-            lines = path.read_text().splitlines()
-            checks = list(iter_suite_checks(path))
-        except ValueError as exc:
-            errors.append(str(exc))
+            text = path.read_text()
+            parsed.append((path, text.splitlines(), yaml.safe_load(text) or {}))
+        except (OSError, yaml.YAMLError) as exc:
+            errors.append(f"failed to read/parse {path}: {exc}")
+
+    # A `requires` value is only satisfiable if an ISV can declare that
+    # capability, which requires a platform suite to exist for it. Collect the
+    # capabilities that actually have a suite so unreachable (dead)
+    # requirements can be flagged below.
+    declared_capabilities: set[str] = set()
+    for _, _, data in parsed:
+        tests = data.get("tests") if isinstance(data, dict) else None
+        capability = tests.get("capability") if isinstance(tests, dict) else None
+        if isinstance(capability, str) and capability in DECLARABLE_CAPABILITIES:
+            declared_capabilities.add(capability)
+
+    for path, lines, data in parsed:
+        try:
+            checks = list(iter_checks_from_data(data))
+        except (ValueError, AttributeError) as exc:
+            errors.append(f"failed to read/parse {path}: {exc}")
             continue
+        tests = data.get("tests") or {}
+        capability = tests.get("capability") if isinstance(tests, dict) else None
+        module = tests.get("module") if isinstance(tests, dict) else None
+        if module is not None:
+            errors.append(f"{path}: tests.module is no longer supported")
+        if isinstance(tests, dict) and tests.get("platform") is not None:
+            errors.append(f"{path}: tests.platform was renamed to tests.capability")
+        if capability is not None and capability not in DECLARABLE_CAPABILITIES:
+            errors.append(f"{path}: tests.capability must be one of: {', '.join(sorted(DECLARABLE_CAPABILITIES))}")
+        suite_is_platform = isinstance(capability, str) and capability in DECLARABLE_CAPABILITIES
+        if not suite_is_platform:
+            suite_name = canonical_suite_name(path.stem)
+            if suite_name in DECLARABLE_CAPABILITIES:
+                errors.append(
+                    f"{path}: plain suite name {suite_name!r} collides with a declarable "
+                    "capability; rename the file so capability and suite namespaces stay disjoint"
+                )
         for category, name, params in checks:
             key = (path, category, name)
             line_numbers = find_check_line_numbers(lines, category, name)
@@ -172,39 +180,39 @@ def wiring_errors(suites_dir: Path = SUITES_DIR) -> list[str]:
             test_id = _normalize_test_id(params.get("test_id"))
             labels = _normalize_labels(params.get("labels"))
             required_label = required_suite_label(path)
+            previous_location = wiring_locations.get(name)
+            # Uniqueness enforcement is intentionally deferred to a follow-up
+            # PR. Keep the check so it can be re-enabled without rediscovery.
+            if previous_location:
+                if ENFORCE_UNIQUE_WIRING:
+                    errors.append(f"{location}: wiring name is not globally unique (also at {previous_location})")
+            else:
+                wiring_locations[name] = location
             if test_id is None:
                 errors.append(f'{location}: missing test_id (use a plan id or "N/A")')
             if not labels:
                 errors.append(f"{location}: missing labels (non-empty list required)")
             elif required_label and required_label not in labels:
                 errors.append(f"{location}: missing suite label {required_label!r}")
+            if "platforms" in params:
+                errors.append(f"{location}: legacy platforms is not supported; use requires in plain suites")
+            if capability:
+                if "requires" in params:
+                    errors.append(f"{location}: requires is not allowed in platform suites")
+            else:
+                requires = params.get("requires")
+                if not isinstance(requires, list):
+                    errors.append(f"{location}: missing requires (use [] for core checks)")
+                elif message := requires_error(requires):
+                    errors.append(f"{location}: {message}")
+                else:
+                    dead = sorted(set(requires) - declared_capabilities)
+                    if dead:
+                        errors.append(
+                            f"{location}: requires names {', '.join(dead)} which has no platform "
+                            "suite; no ISV can declare it, so the check is unreachable"
+                        )
     return errors
-
-
-def platform_registration_errors(suites_dir: Path = SUITES_DIR) -> list[str]:
-    """Return errors for suite files not registered in the catalog platform axis."""
-    registered = {config for configs in PLATFORM_CONFIGS.values() for config in configs}
-    return [
-        f"{suite}: not registered in isvtest.catalog_platforms.PLATFORM_CONFIGS (catalog platform axis)"
-        for suite in (f"suites/{path.name}" for path in sorted(suites_dir.glob("*.yaml")))
-        if suite not in registered
-    ]
-
-
-def registry_consistency_errors() -> list[str]:
-    """Return errors for catalog platforms that isvreporter cannot round-trip.
-
-    Suite configs declare ``tests.platform`` as the lowercase platform name;
-    ``normalize_platform`` silently coerces unknown values to the default
-    platform when reporting test runs, so a platform registered in the catalog
-    but missing from isvreporter's constants misattributes every test run.
-    """
-    return [
-        f"platform {platform}: not recognized by isvreporter.platform.normalize_platform "
-        "(add it to ALL_PLATFORMS and PLATFORM_ALIASES)"
-        for platform in sorted(PLATFORM_CONFIGS)
-        if normalize_platform(platform.lower()) != platform
-    ]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -220,7 +228,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    errors = wiring_errors() + platform_registration_errors() + registry_consistency_errors()
+    errors = wiring_errors()
     if errors:
         header = f"suite wiring validation failed ({len(errors)} issue(s)):"
         message = header + "\n  " + "\n  ".join(errors)
@@ -230,10 +238,7 @@ def main(argv: list[str] | None = None) -> int:
         print(message)
         return 0
 
-    ok = (
-        f"OK: all wired checks in {SUITES_DIR.relative_to(REPO_ROOT)} declare test_id, labels, "
-        "and suite labels, and every suite is registered as a catalog platform."
-    )
+    ok = f"OK: all wired checks in {SUITES_DIR.relative_to(REPO_ROOT)} declare valid suite metadata."
     print(ok)
     return 0
 

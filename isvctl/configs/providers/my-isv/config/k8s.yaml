@@ -1,0 +1,58 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# my-isv Kubernetes Platform Suite - Living Example
+#
+# This is the obligation attached to declaring the `kubernetes` capability.
+# It imports the provider-agnostic Kubernetes validation contract and wires
+# the lifecycle to the generic scripts in scripts/k8s/*.
+#
+# Usage:
+#   uv run isvctl test run --provider my-isv --suite kubernetes
+#
+# Unlike the other my-isv examples this one talks to a REAL cluster: the
+# validations run kubectl directly, so there is nothing for a dummy-success
+# stub to return. That is why it is not part of `make demo-test`.
+#
+# ACTION: point KUBECTL at your cluster (or make `kubectl` resolve to it),
+#   then replace scripts/k8s/setup.sh with your own provisioning if you want
+#   isvctl to create the cluster rather than reuse an existing one.
+#
+# Environment Variables:
+#   - KUBECTL: kubectl-compatible CLI prefix (defaults to kubectl, then microk8s kubectl)
+#   - NGC_API_KEY: NGC API key for NIM workloads
+
+import: ../../../suites/k8s.yaml
+
+version: "1.0"
+
+# Steps are overridden (not inherited) so the script paths resolve from this
+# provider's config directory. Lists are replaced wholesale on merge.
+commands:
+  kubernetes:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: setup
+        phase: setup
+        command: "../scripts/k8s/setup.sh"
+        timeout: 120
+
+      - name: teardown
+        phase: teardown
+        command: "../scripts/k8s/teardown.sh"
+        timeout: 30
+
+tests:
+  description: "my-isv Kubernetes platform suite (real cluster required)"

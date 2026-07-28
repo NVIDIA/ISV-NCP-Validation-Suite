@@ -27,7 +27,8 @@ from typing import Annotated, Any, TextIO
 
 import typer
 import yaml
-from isvtest.catalog import build_catalog, get_catalog_version
+from isvtest.catalog import build_catalog, catalog_document, get_catalog_version
+from isvtest.core.resolution import parse_validations, requirements_satisfied
 from isvtest.release_manifest import load_released_test_filter
 
 from isvctl.cli import setup_logging
@@ -47,12 +48,18 @@ from isvctl.config.label_discovery import (
 )
 from isvctl.config.merger import merge_yaml_files
 from isvctl.config.schema import RunConfig
+from isvctl.config.suite_resolution import (
+    CONFIGS_ROOT,
+    SuiteResolutionError,
+    parse_capability,
+    resolve_suite,
+    resolve_suite_name,
+)
 from isvctl.orchestrator.loop import Orchestrator, Phase
-from isvctl.redaction import redact_dict
 from isvctl.reporting import check_upload_credentials, create_test_run, get_environment_config, update_test_run
 
 logger = logging.getLogger(__name__)
-CONFIGS_ROOT = Path(__file__).resolve().parents[3] / "configs"
+CORE_REQUIREMENT_CONTEXT = "core"
 
 
 class TeeWriter:
@@ -115,7 +122,96 @@ def _junitxml_for_discovered_config(junitxml: Path, match: ProviderConfigMatch, 
     return junitxml.with_name(f"{junitxml.stem}-{match.config_path.stem}{junitxml.suffix}")
 
 
-@app.command("run", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def _resolve_capability_context(config: RunConfig, capability: str | None, suite_label: str) -> str | None:
+    """Return the requirement context a run should execute under.
+
+    One rule for every entry path: a plain suite with no ``--capability`` runs
+    its core checks. "Unfiltered" corresponds to no real ISV situation - nobody
+    runs on vm and kubernetes at once - so a plain suite always has a context.
+    Platform suites declare no ``requires:``, so they are left alone and reject
+    an explicit capability context.
+    """
+    if config.tests and config.tests.capability:
+        if capability is not None:
+            raise SuiteResolutionError(
+                f"--capability cannot be used with platform suite {suite_label!r}; "
+                f"it already runs under capability {config.tests.capability!r}."
+            )
+        return None
+
+    if capability is None:
+        print_progress(f"No capability selected; running {suite_label!r} core checks.")
+        return CORE_REQUIREMENT_CONTEXT
+
+    entries = parse_validations(config.tests.validations if config.tests else {})
+    if not any(capability in entry.requires for entry in entries):
+        print_warning(f"No check in {suite_label!r} requires {capability}; running core checks only.")
+    return capability
+
+
+def _reported_capability(config: RunConfig, capability_context: str | None) -> str | None:
+    """Return the capability to record on the uploaded test run.
+
+    Two client-side spellings have to be translated before they leave the process.
+    ``CORE_REQUIREMENT_CONTEXT`` is this module's word for "no capability", which
+    the service records as NULL. A platform suite is left with no explicit context
+    because the capability it declares *is* the one it runs under, so report that
+    rather than losing the axis for every platform-suite run.
+    """
+    if config.tests and config.tests.capability:
+        return config.tests.capability
+    if capability_context == CORE_REQUIREMENT_CONTEXT:
+        return None
+    return capability_context
+
+
+def _human_readable_dry_run(
+    config: RunConfig,
+    capability: str | None,
+    include_labels: list[str] | None = None,
+    exclude_labels: list[str] | None = None,
+) -> str:
+    """Render the validation requirement plan without executing lifecycle steps."""
+    declared = config.tests.capability if config.tests and config.tests.capability else None
+    suite_type = f"platform ({declared})" if declared else "plain"
+    context = "not filtered" if capability is None else capability
+    selected_labels = set(include_labels or [])
+    rejected_labels = set(exclude_labels or [])
+    validations = config.tests.validations if config.tests else {}
+    entries = parse_validations(validations)
+
+    lines = [
+        "Dry-run plan",
+        f"  Suite type: {suite_type}",
+        f"  Capability: {context}",
+        f"  Checks: {len(entries)}",
+    ]
+    if selected_labels:
+        lines.append(f"  Labels: {', '.join(sorted(selected_labels))} (all required)")
+    if rejected_labels:
+        lines.append(f"  Excluded labels: {', '.join(sorted(rejected_labels))}")
+
+    for entry in entries:
+        if capability is not None and not requirements_satisfied(entry.requires, capability):
+            requirement = ", ".join(entry.requires)
+            lines.append(f"  [SKIP] {entry.name}: requires {requirement} (context: {capability})")
+        elif missing_labels := sorted(selected_labels.difference(entry.labels)):
+            lines.append(f"  [SKIP] {entry.name}: does not match all selected labels: {', '.join(missing_labels)}")
+        elif matched_labels := sorted(rejected_labels.intersection(entry.labels)):
+            lines.append(f"  [SKIP] {entry.name}: excluded by label: {', '.join(matched_labels)}")
+        elif entry.requires:
+            lines.append(f"  [RUN]  {entry.name}: requires {', '.join(entry.requires)}")
+        else:
+            lines.append(f"  [RUN]  {entry.name}")
+    return "\n".join(lines)
+
+
+@app.command(
+    "run",
+    # Allow pytest args after `--`, but reject unknown options before it so
+    # stale flags like `--platform` fail loudly instead of being forwarded.
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": False},
+)
 def run(
     ctx: typer.Context,
     config_files: Annotated[
@@ -134,7 +230,24 @@ def run(
         str | None,
         typer.Option(
             "--provider",
-            help="Provider name for label discovery when no --config/-f files are supplied.",
+            help="Provider name for --suite selection or --label discovery when no --config/-f is supplied.",
+        ),
+    ] = None,
+    suite: Annotated[
+        str | None,
+        typer.Option(
+            "--suite",
+            help="Run one platform or plain suite from the selected provider.",
+        ),
+    ] = None,
+    capability: Annotated[
+        str | None,
+        typer.Option(
+            "--capability",
+            help=(
+                "Capability context used to filter check requirements (one of the platform suites). "
+                "Omit it and a plain suite runs its core checks -- the same rule for --suite, -f and --label."
+            ),
         ),
     ] = None,
     set_values: Annotated[
@@ -158,6 +271,13 @@ def run(
             "--label",
             "-l",
             help="Label to filter validations (can be repeated; all selected labels must match)",
+        ),
+    ] = None,
+    exclude_labels: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--exclude-label",
+            help="Exclude validations carrying this label (can be repeated).",
         ),
     ] = None,
     dry_run: Annotated[
@@ -243,6 +363,9 @@ def run(
     Use -- to pass additional arguments to pytest/isvtest.
 
     Examples:
+        isvctl test run --provider aws --suite k8s
+        isvctl test run --provider aws --suite storage --label min_req
+        isvctl test run --provider aws --label network
         isvctl test run -f lab.yaml -f commands.yaml -f suites/k8s.yaml
         isvctl test run -f config.yaml --set context.node_count=8
         isvctl test run -f config.yaml --phase setup
@@ -252,12 +375,37 @@ def run(
     setup_logging(verbose)
     apply_user_config(no_user_config)
 
+    try:
+        capability_context = parse_capability(capability, CONFIGS_ROOT)
+    except SuiteResolutionError as exc:
+        print_error(str(exc))
+        raise typer.Exit(code=1)
+
+    suite_label: str | None = None
+
+    if suite:
+        if not provider:
+            print_error("--suite requires --provider.")
+            raise typer.Exit(code=1)
+        if config_files:
+            print_error("--suite cannot be combined with --config/-f.")
+            raise typer.Exit(code=1)
+        try:
+            selected_suite = resolve_suite(provider, suite, configs_root=CONFIGS_ROOT)
+        except SuiteResolutionError as exc:
+            print_error(str(exc))
+            raise typer.Exit(code=1)
+        print_progress(f"Selected {selected_suite.name!r} suite for provider {provider!r}.")
+        suite_label = selected_suite.name
+        config_files = [selected_suite.config_path]
+        provider = None
+
     if provider:
         if config_files:
             print_error("--provider discovery cannot be combined with --config/-f.")
             raise typer.Exit(code=1)
         if not labels:
-            print_error("--provider requires at least one --label/-l for discovery.")
+            print_error("--provider requires either --suite NAME or at least one --label/-l.")
             raise typer.Exit(code=1)
 
         known_providers = list_providers(CONFIGS_ROOT)
@@ -289,9 +437,12 @@ def run(
                 ctx,
                 config_files=[match.config_path],
                 provider=None,
+                suite=None,
+                capability=capability,
                 set_values=set_values,
                 phase=phase,
                 labels=labels,
+                exclude_labels=exclude_labels,
                 dry_run=False,
                 working_dir=working_dir,
                 verbose=verbose,
@@ -350,12 +501,23 @@ def run(
         print_error(f"Configuration validation failed: {e}")
         raise typer.Exit(code=1)
 
+    # Resolve the requirement context here rather than per entry path, so the
+    # same config behaves identically whether it was reached via --suite, -f,
+    # or --label discovery. Platform suites carry no `requires:`, so they keep
+    # the unfiltered context (filtering there would be a no-op anyway).
+    suite_name = suite_label or resolve_suite_name(config_files, CONFIGS_ROOT)
+    try:
+        capability_context = _resolve_capability_context(
+            config,
+            capability_context,
+            suite_name or config_files[0].stem,
+        )
+    except SuiteResolutionError as exc:
+        print_error(str(exc))
+        raise typer.Exit(code=1)
+
     if dry_run:
-        # Keep stdout as pure JSON so it can be consumed with `json.loads`;
-        # decorative headers and extra args go to stderr.
-        print_progress("\n--- Dry Run: Configuration ---")
-        redacted_config = redact_dict(config.model_dump(mode="json"))
-        typer.echo(json.dumps(redacted_config, indent=2))
+        typer.echo(_human_readable_dry_run(config, capability_context, labels, exclude_labels))
         if extra_pytest_args:
             print_progress(f"\n--- Extra pytest args ---\n{extra_pytest_args}")
         return
@@ -400,13 +562,19 @@ def run(
     # Create test run before running tests
     if upload_results and lab_id:
         print_progress("Creating test run in ISV Lab Service...")
-        platform = config.tests.platform if config.tests and config.tests.platform else "kubernetes"
+        platform = (
+            config.tests.capability
+            if config.tests and config.tests.capability
+            else next(iter(config.commands), "unknown")
+        )
         test_run_id = create_test_run(
             lab_id=lab_id,
             platform=platform,
             tags=tags or ["validation-test", "isvctl"],
             start_time=start_time,
             isv_software_version=isv_software_version,
+            suite=suite_name,
+            capability=_reported_capability(config, capability_context),
         )
         if not test_run_id:
             print_warning("Failed to create test run, continuing without upload")
@@ -419,8 +587,7 @@ def run(
 
     # Build test catalog early so it runs inside the TeeWriter context
     # (avoids logging errors from stale stream references after the log file closes)
-    catalog_entries: list[dict] | None = None
-    catalog_version: str | None = None
+    test_catalog_document: dict[str, Any] | None = None
 
     # Always capture output to log file while still displaying (like `tee`)
     with open(log_file_path, "w") as log_file:
@@ -432,6 +599,8 @@ def run(
                 phases=phases,
                 extra_pytest_args=extra_pytest_args,
                 include_labels=labels,
+                exclude_labels=exclude_labels,
+                capability=capability_context,
                 verbose=verbose,
                 junitxml=str(junitxml),
             )
@@ -439,11 +608,10 @@ def run(
                 try:
                     catalog_entries = build_catalog()
                     catalog_version = get_catalog_version()
+                    test_catalog_document = catalog_document(catalog_entries, catalog_version)
                     print_progress(f"Built test catalog: {len(catalog_entries)} tests (version: {catalog_version})")
                     catalog_path = output_dir / "test_catalog.json"
-                    catalog_path.write_text(
-                        json.dumps({"isvTestVersion": catalog_version, "entries": catalog_entries}, indent=2)
-                    )
+                    catalog_path.write_text(json.dumps(test_catalog_document, indent=2))
                     print_progress(f"  Saved test catalog to: {catalog_path}")
                 except Exception as e:
                     logger.warning("Failed to build test catalog: %s", e)
@@ -471,8 +639,7 @@ def run(
             junit_xml=junit_path if junit_path.exists() else None,
             log_file=log_file_path if log_file_path.exists() else None,
             isv_software_version=isv_software_version,
-            catalog_entries=catalog_entries,
-            catalog_version=catalog_version,
+            catalog_document=test_catalog_document,
         ):
             print_progress(typer.style("[OK]", fg=typer.colors.GREEN) + " Test results uploaded successfully")
         else:
@@ -613,7 +780,8 @@ def validate(
         run_config = RunConfig.model_validate(merged_config)
         ok_status = typer.style("[OK]", fg=typer.colors.GREEN)
         typer.echo(f"{ok_status} Configuration is valid")
-        typer.echo(f"\nPlatform: {run_config.tests.platform if run_config.tests else 'not specified'}")
+        declared = run_config.tests.capability if run_config.tests else None
+        typer.echo(f"\nCapability: {declared or 'not specified (plain suite)'}")
         if run_config.commands:
             typer.echo(f"Commands defined: {list(run_config.commands.keys())}")
         if run_config.context:

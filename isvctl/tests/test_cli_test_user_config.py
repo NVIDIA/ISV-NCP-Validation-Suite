@@ -50,7 +50,7 @@ commands:
         args: ['{"success": true}']
         phase: test
 tests:
-  platform: kubernetes
+  capability: kubernetes
   validations: {}
 """
 

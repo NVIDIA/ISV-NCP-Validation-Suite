@@ -16,6 +16,7 @@
 # AWS Storage Validation Configuration
 #
 # Imports suites/storage.yaml and wires AWS implementations for:
+#   - Kubernetes CSI (EKS): setup_cluster / teardown_cluster via eks scripts
 #   - Block volume (EBS): launch/create/snapshot/resize/persistence/teardown
 #   - Home directory (FSx for OpenZFS): NFSv4, volume quota, uid/gid accounting
 #   - High-speed storage (FSx for Lustre): provisioning, multiple filesystems,
@@ -25,6 +26,9 @@
 # Block-volume steps reuse the VM scripts for launch/teardown; volume steps
 # live in scripts/storage/. FSx steps are self-contained (create → assert →
 # cleanup) and create real PERSISTENT_2 filesystems (~10-15 min each, cost).
+# The EKS fixture reuses Terraform state when present but will provision a
+# cluster when none exists; teardown_cluster always runs so that path cannot
+# leak. Set AWS_SKIP_TEARDOWN=true to preserve the cluster across runs.
 # HSS checks ship unreleased; run with ISVTEST_INCLUDE_UNRELEASED=1.
 #
 # Usage:
@@ -51,6 +55,24 @@ commands:
   storage:
     phases: ["setup", "test", "teardown"]
     steps:
+      # Kubernetes CSI fixture: provisions (or reuses) the shared EKS Terraform
+      # stack and emits kubeconfig + CSI StorageClass names. Paired with
+      # teardown_cluster below so a standalone storage run does not leak the
+      # cluster. Honors AWS_SKIP_TEARDOWN like eks.yaml.
+      - name: setup_cluster
+        phase: setup
+        command: "../scripts/eks/setup.sh"
+        requires: [kubernetes]
+        # Same contract as my-isv's stub: kubeconfig + StorageClass names. The
+        # EKS script happens to emit full cluster inventory too, but storage
+        # must not require that of an ISV, so both providers validate the
+        # fixture against its own contract, not the platform `cluster` schema.
+        output_schema: generic
+        timeout: 5400
+        env:
+          TF_AUTO_APPROVE: "true"
+          TF_VAR_region: "{{region}}"
+
       # ─── Block volume (EBS) ────────────────────────────────────────
       - name: launch_instance
         phase: setup
@@ -191,6 +213,7 @@ commands:
       - name: teardown_volume
         phase: teardown
         command: "python3 ../scripts/storage/teardown_volume.py"
+        requires: [vm, bare_metal]
         args:
           - "--region"
           - "{{region}}"
@@ -202,6 +225,7 @@ commands:
       - name: teardown
         phase: teardown
         command: "python3 ../scripts/vm/teardown.py"
+        requires: [vm, bare_metal]
         args:
           - "--instance-id"
           - "{{steps.launch_instance.instance_id}}"
@@ -211,6 +235,17 @@ commands:
           - "--delete-security-group"
           - "{{teardown_flag}}"
         timeout: 600
+
+      # Destroy the EKS stack from setup_cluster (including the out-of-band
+      # static-CSI EBS volume tagged by setup.sh). Keep this last so CSI
+      # checks finish before the cluster disappears.
+      - name: teardown_cluster
+        phase: teardown
+        command: "../scripts/eks/teardown.sh"
+        requires: [kubernetes]
+        timeout: 1800
+        env:
+          TF_AUTO_APPROVE: "true"
 
 tests:
   cluster_name: "aws-storage-validation"

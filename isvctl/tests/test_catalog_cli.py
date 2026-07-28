@@ -16,8 +16,10 @@
 """Unit tests for the catalog CLI subcommand."""
 
 import json
+from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from typer.testing import CliRunner
 
 from isvctl.cli.catalog import app
@@ -29,15 +31,19 @@ _FAKE_ENTRIES = [
         "name": "AlphaCheck",
         "description": "Alpha description",
         "labels": ["kubernetes"],
-        "module": "isvtest.validations.alpha",
-        "platforms": ["KUBERNETES"],
+        "source": "isvtest.validations.alpha",
+        "suite": "kubernetes",
+        "capability": "kubernetes",
+        "requires": [],
     },
     {
         "name": "BetaCheck",
         "description": "",
         "labels": [],
-        "module": "isvtest.validations.beta",
-        "platforms": [],
+        "source": "isvtest.validations.beta",
+        "suite": "storage",
+        "capability": None,
+        "requires": ["vm", "bare_metal"],
     },
 ]
 
@@ -73,11 +79,11 @@ def test_catalog_list_json() -> None:
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert payload["schemaVersion"] == 1
+    assert payload["schemaVersion"] == 2
     assert payload["isvTestVersion"] == "1.2.3"
     assert payload["entries"] == _FAKE_ENTRIES
-    # The platform axis is derived from the real configs and drives the UI matrix.
-    assert "KUBERNETES" in payload["platforms"]
+    assert "kubernetes" in payload["capabilities"]
+    assert "storage" in payload["suites"]
 
 
 def test_catalog_labels_table() -> None:
@@ -156,3 +162,23 @@ def test_catalog_list_unreleased_json() -> None:
     build_catalog.assert_called_once_with(released_only=False)
     payload = json.loads(result.output)
     assert payload["entries"] == [_FAKE_ENTRIES[1]]
+
+
+@pytest.mark.parametrize("flag", ["--dry-run", "--no-upload"])
+def test_catalog_push_dry_run_saves_without_upload(flag: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`catalog push --dry-run` / `--no-upload` saves locally and skips upload."""
+    monkeypatch.setattr("isvctl.cli.catalog.get_output_dir", lambda: tmp_path)
+    with (
+        patch("isvctl.cli.catalog.build_catalog", return_value=_FAKE_ENTRIES),
+        patch("isvctl.cli.catalog.get_catalog_version", return_value="1.2.3"),
+        patch("isvctl.reporting.check_upload_credentials") as check_creds,
+    ):
+        result = runner.invoke(app, ["push", flag])
+
+    assert result.exit_code == 0, result.output
+    check_creds.assert_not_called()
+    catalog_path = tmp_path / "test_catalog.json"
+    assert catalog_path.exists()
+    payload = json.loads(catalog_path.read_text(encoding="utf-8"))
+    assert payload["entries"] == _FAKE_ENTRIES
+    assert "Dry run: saved catalog locally" in result.output

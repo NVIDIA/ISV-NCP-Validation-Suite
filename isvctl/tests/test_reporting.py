@@ -16,12 +16,16 @@
 """Tests for reporting module."""
 
 import os
+from typing import Any
 from unittest.mock import MagicMock, patch
 
+from isvctl.cli.test import CORE_REQUIREMENT_CONTEXT, _reported_capability
+from isvctl.config.schema import RunConfig
 from isvctl.reporting import (
     check_upload_credentials,
     get_environment_config,
     get_isv_test_version,
+    update_test_run,
 )
 
 
@@ -124,3 +128,107 @@ class TestGetIsvTestVersion:
             result = get_isv_test_version()
             # Result depends on whether __version__ is available
             assert result is None or isinstance(result, str)
+
+
+class TestUpdateTestRun:
+    """Tests for result and catalog upload orchestration."""
+
+    @patch("isvreporter.client.update_test_run")
+    @patch("isvreporter.client.upload_test_catalog")
+    @patch("isvreporter.auth.get_jwt_token", return_value="jwt-token")
+    @patch(
+        "isvctl.reporting.get_environment_config", return_value=("https://api.example.com", "https://ssa.example.com")
+    )
+    @patch("isvctl.reporting.check_upload_credentials", return_value=(True, "client-id", "client-secret"))
+    def test_forwards_complete_catalog_document(
+        self,
+        _mock_credentials: MagicMock,
+        _mock_environment: MagicMock,
+        _mock_token: MagicMock,
+        mock_upload_catalog: MagicMock,
+        _mock_update_run: MagicMock,
+    ) -> None:
+        """Automatic result upload preserves all catalog envelope metadata."""
+        document = {
+            "schemaVersion": 2,
+            "isvTestVersion": "1.2.3",
+            "capabilities": ["kubernetes", "vm"],
+            "suites": ["storage", "iam"],
+            "entries": [{"name": "TestA"}],
+        }
+
+        result = update_test_run(
+            lab_id=7,
+            test_run_id="run-123",
+            success=True,
+            start_time="2026-07-24T12:00:00Z",
+            catalog_document=document,
+        )
+
+        assert result is True
+        mock_upload_catalog.assert_called_once_with(
+            endpoint="https://api.example.com",
+            jwt_token="jwt-token",
+            isv_test_version="1.2.3",
+            entries=[{"name": "TestA"}],
+            schema_version=2,
+            capabilities=["kubernetes", "vm"],
+            suites=["storage", "iam"],
+        )
+
+    def test_envelope_fixture_matches_the_real_catalog_document(self) -> None:
+        """Pin the hand-built fixture above to what the producer actually emits.
+
+        A literal fixture can drift from ``catalog_document`` and keep passing
+        while the real upload raises - which is how the capability rename broke
+        uploads with this suite green.
+        """
+        from isvtest.catalog import catalog_document
+
+        assert set(catalog_document([], "1.2.3")) == {
+            "schemaVersion",
+            "isvTestVersion",
+            "capabilities",
+            "suites",
+            "entries",
+        }
+
+
+class TestReportedCapability:
+    """The capability recorded on a test run, translated out of client spellings.
+
+    A run's signal is the (suite, capability) pair: `network` and
+    `network --capability vm` execute different checks, so the capability has to
+    survive the trip to the service in a form the service understands.
+    """
+
+    @staticmethod
+    def _config(platform: str | None) -> RunConfig:
+        """Return a minimal config, declaring `platform` only for a platform suite."""
+        raw: dict[str, Any] = {"commands": {}, "tests": {"validations": {}}}
+        if platform:
+            raw["tests"]["capability"] = platform
+        return RunConfig.model_validate(raw)
+
+    def test_core_context_is_reported_as_no_capability(self) -> None:
+        """`core` is this client's word for "no capability", not a fifth one."""
+        config = self._config(None)
+        assert _reported_capability(config, CORE_REQUIREMENT_CONTEXT) is None
+
+    def test_platform_suite_reports_its_own_platform(self) -> None:
+        """A platform suite gets no explicit context because its platform is one.
+
+        Passing the resolved context straight through would record NULL for
+        every platform-suite run and lose the axis entirely.
+        """
+        config = self._config("vm")
+        assert _reported_capability(config, None) == "vm"
+
+    def test_plain_suite_reports_explicit_capability(self) -> None:
+        """A plain suite reports its explicit capability context."""
+        config = self._config(None)
+        assert _reported_capability(config, "vm") == "vm"
+
+    def test_platform_suite_declaration_wins_defensively(self) -> None:
+        """A platform suite cannot be mislabeled if an invalid context reaches reporting."""
+        assert _reported_capability(self._config("vm"), "kubernetes") == "vm"

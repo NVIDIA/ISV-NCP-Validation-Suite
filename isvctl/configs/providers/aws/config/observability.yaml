@@ -61,9 +61,13 @@ commands:
           - "isv-observability"
         timeout: 300
 
+      # The host fixture only serves the vm/bare_metal telemetry checks; no
+      # bound validation can infer that (nothing validates the launch itself),
+      # so the gate is explicit. Core runs skip the metal instance entirely.
       - name: launch_host
         phase: setup
         command: "python3 ../scripts/bare_metal/launch_instance.py"
+        requires: [vm, bare_metal]
         args:
           - "--name"
           - "isv-observability-host"
@@ -340,9 +344,12 @@ commands:
           - "switch_kernel_logs"
         timeout: 60
 
+      # Same gate as launch_host: both sides of the fixture move together, so
+      # a core run never tears down a host it never launched.
       - name: teardown_host
         phase: teardown
         command: "python3 ../scripts/bare_metal/teardown.py"
+        requires: [vm, bare_metal]
         args:
           - "--instance-id"
           - "{{steps.launch_host.instance_id}}"
@@ -382,7 +389,6 @@ commands:
         timeout: 900
 
 tests:
-  platform: observability
   cluster_name: "aws-observability-validation"
   description: "AWS observability validation for VPC Flow Logs and host syslogs"
 

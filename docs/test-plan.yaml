@@ -3243,6 +3243,7 @@ domains:
                 labels:
                   - kubernetes
                   - min_req
+                  - storage
                 priority: P0
                 milestone: M5
                 notes: ""
@@ -3255,6 +3256,7 @@ domains:
                 labels:
                   - kubernetes
                   - min_req
+                  - storage
                 priority: P0
                 milestone: M5
                 notes: ""
@@ -3267,6 +3269,7 @@ domains:
                 labels:
                   - kubernetes
                   - min_req
+                  - storage
                 priority: P0
                 milestone: M5
                 notes: ""
@@ -3279,6 +3282,7 @@ domains:
                 labels:
                   - kubernetes
                   - min_req
+                  - storage
                 priority: P0
                 milestone: M5
                 notes: ""

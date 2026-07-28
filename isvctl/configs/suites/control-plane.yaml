@@ -42,7 +42,6 @@
 version: "1.0"
 
 tests:
-  platform: control_plane
   cluster_name: "control-plane-validation"
   description: "Control plane: API health, access key lifecycle, tenant lifecycle"
 
@@ -60,6 +59,7 @@ tests:
         FieldExistsCheck:
           test_id: "N/A"
           labels: ["control_plane"]
+          requires: []
           fields: ["account_id", "tests"]
         # DATASVC-XX-01 (S3-compatible API w/ authenticated endpoints):
         # authenticated-endpoint half - a successful authenticated check_api
@@ -68,6 +68,7 @@ tests:
         FieldValueCheck:
           test_id: "DATASVC01-01"
           labels: ["control_plane", "min_req"]
+          requires: []
           field: "success"
           expected: true
 
@@ -76,10 +77,12 @@ tests:
         AccessKeyCreatedCheck:
           test_id: "CP05-01"
           labels: ["control_plane", "iam"]
+          requires: []
           step: create_access_key
         TenantCreatedCheck:
           test_id: "CP07-01"
           labels: ["control_plane", "iam"]
+          requires: []
           step: create_tenant
 
     access_key_lifecycle:
@@ -87,14 +90,17 @@ tests:
         AccessKeyAuthenticatedCheck:
           test_id: "CP05-01"
           labels: ["control_plane", "iam"]
+          requires: []
           step: test_access_key
         AccessKeyDisabledCheck:
           test_id: "CP06-01"
           labels: ["control_plane", "iam", "min_req"]
+          requires: []
           step: disable_access_key
         AccessKeyRejectedCheck:
           test_id: "CP06-01"
           labels: ["control_plane", "iam", "min_req"]
+          requires: []
           step: verify_key_rejected
 
     tenant_lifecycle:
@@ -102,10 +108,12 @@ tests:
         TenantListedCheck:
           test_id: "CP08-01"
           labels: ["control_plane", "iam"]
+          requires: []
           step: list_tenants
         TenantInfoCheck:
           test_id: "CP09-01"
           labels: ["control_plane", "iam"]
+          requires: []
           step: get_tenant
 
     s3_object_lifecycle:
@@ -116,13 +124,16 @@ tests:
         StepSuccessCheck:
           test_id: "N/A"
           labels: ["control_plane"]
+          requires: []
         FieldExistsCheck:
           test_id: "N/A"
           labels: ["control_plane"]
+          requires: []
           fields: ["bucket_name", "object_key", "operations"]
         CrudOperationsCheck:
           test_id: "DATASVC01-01"
           labels: ["control_plane", "min_req"]
+          requires: []
           operations: ["put", "get", "delete"]
 
     teardown_checks:
@@ -132,10 +143,12 @@ tests:
           # CP05-01 (create) and CP06-01 (disable).
           test_id: "N/A"
           labels: ["control_plane"]
+          requires: []
           step: delete_access_key
         StepSuccessCheck-delete_tenant:
           test_id: "CP10-01"
           labels: ["control_plane"]
+          requires: []
           step: delete_tenant
 
   exclude:

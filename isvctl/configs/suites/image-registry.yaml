@@ -37,7 +37,6 @@ version: "1.0"
 tests:
   cluster_name: "image-registry-validation"
   description: "Image registry validation tests"
-  platform: image_registry
 
   settings:
     # Provider-specific - override in your provider config
@@ -57,9 +56,11 @@ tests:
         StepSuccessCheck:
           test_id: "N/A"
           labels: ["image_registry"]
+          requires: []
         FieldExistsCheck:
           test_id: "BOOT01-01"
           labels: ["image_registry", "min_req"]
+          requires: []
           fields: ["image_id", "storage_bucket", "disk_ids"]
 
     # --- Image CRUD ---
@@ -69,13 +70,16 @@ tests:
         StepSuccessCheck:
           test_id: "N/A"
           labels: ["image_registry"]
+          requires: []
         FieldExistsCheck:
           test_id: "N/A"
           labels: ["image_registry"]
+          requires: []
           fields: ["image_id", "operations"]
         CrudOperationsCheck:
           test_id: "BOOT03-02"
           labels: ["image_registry", "min_req"]
+          requires: []
           operations: ["get", "list", "create", "delete"]
 
     # --- VM Launch from Image ---
@@ -85,13 +89,16 @@ tests:
         StepSuccessCheck:
           test_id: "BOOT01-05"
           labels: ["image_registry", "min_req"]
+          requires: [vm]
         FieldExistsCheck:
           test_id: "N/A"
           labels: ["image_registry"]
+          requires: [vm]
           fields: ["instance_id", "public_ip", "key_path"]
         InstanceStateCheck:
           test_id: "N/A"
           labels: ["image_registry"]
+          requires: [vm]
           expected_state: "running"
 
     vm_ssh:
@@ -100,9 +107,11 @@ tests:
         ConnectivityCheck:
           test_id: "N/A"
           labels: ["image_registry", "ssh"]
+          requires: [vm]
         OsCheck:
           test_id: "N/A"
           labels: ["image_registry", "ssh"]
+          requires: [vm]
           expected_os: "ubuntu"
 
     # --- OS Install Config CRUD ---
@@ -112,9 +121,11 @@ tests:
         StepSuccessCheck:
           test_id: "N/A"
           labels: ["image_registry"]
+          requires: []
         FieldExistsCheck:
           test_id: "BOOT01-02"
           labels: ["image_registry"]
+          requires: []
           fields: ["config_id", "config_name", "operations"]
 
     # --- OS Image on BMaaS ---
@@ -124,13 +135,16 @@ tests:
         StepSuccessCheck:
           test_id: "BOOT01-03"
           labels: ["image_registry", "min_req"]
+          requires: [bare_metal]
         FieldExistsCheck:
           test_id: "N/A"
           labels: ["image_registry"]
+          requires: [bare_metal]
           fields: ["instance_id", "image_id", "instance_state"]
         InstanceStateCheck:
           test_id: "N/A"
           labels: ["image_registry"]
+          requires: [bare_metal]
           expected_state: "running"
 
     # --- OS Install Config on BMaaS ---
@@ -140,21 +154,28 @@ tests:
         StepSuccessCheck:
           test_id: "BOOT01-04"
           labels: ["image_registry", "min_req"]
+          requires: [bare_metal]
         FieldExistsCheck:
           test_id: "N/A"
           labels: ["image_registry"]
+          requires: [bare_metal]
           fields: ["instance_id", "config_id", "instance_state"]
         InstanceStateCheck:
           test_id: "N/A"
           labels: ["image_registry"]
+          requires: [bare_metal]
           expected_state: "running"
 
+    # Bound to the image half of teardown: it is ungated, so this stays a core
+    # check. The instance half (teardown_instance) only runs under vm and owns
+    # nothing an ISV must prove, so it carries no check of its own.
     teardown_checks:
-      step: teardown
+      step: teardown_image
       checks:
         StepSuccessCheck:
           test_id: "N/A"
           labels: ["image_registry"]
+          requires: []
 
   exclude:
     labels: []

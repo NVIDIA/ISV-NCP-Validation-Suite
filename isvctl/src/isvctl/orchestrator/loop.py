@@ -37,6 +37,7 @@ from isvtest.core.resolution import (
     ValidationEntry,
     get_entry_phase,
     parse_validations,
+    requirements_satisfied,
     resolve_class_key,
     resolve_entries,
 )
@@ -334,6 +335,34 @@ def _apply_step_validation_gates(steps: list[Any], released_tests: set[str] | No
     return gated_steps
 
 
+def _apply_capability_step_gates(
+    steps: list[Any],
+    validation_entries: list[ValidationEntry],
+    capability: str | None,
+) -> list[Any]:
+    """Skip a step when its explicit or validation-derived requirements do not match."""
+    if capability is None:
+        return steps
+    gated_steps: list[Any] = []
+    for step in steps:
+        explicit_requires = getattr(step, "requires", [])
+        if explicit_requires and not requirements_satisfied(explicit_requires, capability):
+            logger.info(
+                "Skipping step '%s' because it requires capability: %s",
+                step.name,
+                ", ".join(explicit_requires),
+            )
+            gated_steps.append(step.model_copy(update={"skip": True}))
+            continue
+        bound_entries = [entry for entry in validation_entries if entry.step == step.name]
+        if bound_entries and all(not requirements_satisfied(entry.requires, capability) for entry in bound_entries):
+            logger.info("Skipping step '%s' because all bound validations are capability-filtered", step.name)
+            gated_steps.append(step.model_copy(update={"skip": True}))
+        else:
+            gated_steps.append(step)
+    return gated_steps
+
+
 class Orchestrator:
     """Orchestrates the full test lifecycle using step-based execution.
 
@@ -361,6 +390,8 @@ class Orchestrator:
         self._results: list[PhaseResult] = []
         self._extra_pytest_args: list[str] | None = None
         self._include_labels: list[str] = []
+        self._exclude_labels: list[str] = []
+        self._capability: str | None = None
         self._verbose: bool = False
         self._junitxml: str | None = None
 
@@ -370,6 +401,8 @@ class Orchestrator:
         teardown_on_failure: bool = True,
         extra_pytest_args: list[str] | None = None,
         include_labels: list[str] | None = None,
+        exclude_labels: list[str] | None = None,
+        capability: str | None = None,
         verbose: bool = False,
         junitxml: str | None = None,
     ) -> OrchestratorResult:
@@ -383,6 +416,8 @@ class Orchestrator:
                 - `-m kubernetes`: Run only validations whose labels include "kubernetes"
                   (labels are mirrored as pytest marks)
             include_labels: Labels that selected validations must all contain.
+            exclude_labels: Labels that selected validations must not contain.
+            capability: Single capability context used to filter validation requirements.
             verbose: Enable verbose output for validations
             junitxml: Path to write JUnit XML report for validations
 
@@ -395,6 +430,8 @@ class Orchestrator:
         self._results = []
         self._extra_pytest_args = extra_pytest_args
         self._include_labels = include_labels or []
+        self._exclude_labels = exclude_labels or []
+        self._capability = capability
         self._verbose = verbose
         self._junitxml = junitxml
 
@@ -472,6 +509,11 @@ class Orchestrator:
             logger.info(f"Including unreleased validations because {INCLUDE_UNRELEASED_ENV} is enabled")
 
         steps = _apply_step_validation_gates(steps, released_tests)
+        all_validations = {}
+        if self.config.tests and self.config.tests.validations:
+            all_validations = self.config.tests.validations
+        validation_entries = parse_validations(all_validations)
+        steps = _apply_capability_step_gates(steps, validation_entries, self._capability)
 
         logger.info(f"Configured phases: {config_phases}")
 
@@ -503,10 +545,6 @@ class Orchestrator:
             step_phase = (step.phase or "setup").lower()
             self.context.set_step_phase(step.name, step_phase)
 
-        all_validations = {}
-        if self.config.tests and self.config.tests.validations:
-            all_validations = self.config.tests.validations
-        validation_entries = parse_validations(all_validations)
         resolved_validations_by_index: dict[int, ResolvedEntry] = {}
 
         exclude_labels: list[str] = []
@@ -517,7 +555,9 @@ class Orchestrator:
         skip_config_label_exclusions = bool(self._include_labels) or _has_explicit_pytest_selection(
             self._extra_pytest_args
         )
-        resolution_exclude_labels = [] if skip_config_label_exclusions else exclude_labels
+        resolution_exclude_labels = set(self._exclude_labels)
+        if not skip_config_label_exclusions:
+            resolution_exclude_labels.update(exclude_labels)
 
         phase_results: list[PhaseResult] = []
         overall_success = True
@@ -598,7 +638,7 @@ class Orchestrator:
                     phase_entries,
                     requested_phase_names if Phase.ALL not in requested_phases else set(config_phases),
                     set(self._include_labels),
-                    set(resolution_exclude_labels),
+                    resolution_exclude_labels,
                     set(exclude_tests),
                     released_tests,
                 )
@@ -667,7 +707,7 @@ class Orchestrator:
                     remaining_entries,
                     requested_phase_names if Phase.ALL not in requested_phases else set(config_phases),
                     set(self._include_labels),
-                    set(resolution_exclude_labels),
+                    resolution_exclude_labels,
                     set(exclude_tests),
                     released_tests,
                     config_phases,
@@ -792,6 +832,7 @@ class Orchestrator:
             exclude_tests=exclude_tests,
             released_tests=released_tests,
             render_context=self.context.get_accumulated_context(),
+            capability=self._capability,
         )
 
     def _resolve_remaining_validation_entries(
@@ -860,9 +901,10 @@ class Orchestrator:
     def _detect_platform(self) -> str | None:
         """Detect platform from configuration.
 
-        Checks multiple locations for platform:
-        1. tests.platform (isvctl schema)
+        Checks execution identity without requiring a plain-suite axis key:
+        1. tests.capability (isvctl schema)
         2. Root-level platform (legacy isvtest schema)
+        3. The sole commands mapping key (plain suites)
 
         Returns:
             Platform string (e.g., 'kubernetes', 'slurm', 'bare_metal') or None
@@ -870,11 +912,13 @@ class Orchestrator:
         platform = None
 
         # Check isvctl schema location first
-        if self.config.tests and self.config.tests.platform:
-            platform = self.config.tests.platform
+        if self.config.tests and self.config.tests.capability:
+            platform = self.config.tests.capability
         # Fall back to root-level platform (legacy isvtest configs)
         elif hasattr(self.config, "model_extra") and self.config.model_extra:
             platform = self.config.model_extra.get("platform")
+        if not platform and len(self.config.commands) == 1:
+            platform = next(iter(self.config.commands))
 
         if platform:
             # Normalize 'k8s' to 'kubernetes'

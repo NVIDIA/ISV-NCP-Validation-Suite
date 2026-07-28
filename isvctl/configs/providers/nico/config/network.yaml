@@ -92,7 +92,6 @@ commands:
         timeout: 120
 
 tests:
-  platform: network
   cluster_name: "nico-network-validation"
   description: "Verify NICo VPC and subnet inventory"
 

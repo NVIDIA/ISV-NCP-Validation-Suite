@@ -28,16 +28,20 @@ template, then fill in the TODOs.
 | Domain | Scripts | Contract | Provider YAML | AWS reference |
 |--------|---------|----------|---------------|---------------|
 | `iam/` | 3 | [`suites/iam.yaml`](../../../suites/iam.yaml) | [`config/iam.yaml`](../config/iam.yaml) | [`providers/aws/scripts/iam/`](../../aws/scripts/iam/) |
-| `control-plane/` | 10 | [`suites/control-plane.yaml`](../../../suites/control-plane.yaml) | [`config/control-plane.yaml`](../config/control-plane.yaml) | [`providers/aws/scripts/control-plane/`](../../aws/scripts/control-plane/) |
-| `vm/` | 10 | [`suites/vm.yaml`](../../../suites/vm.yaml) | [`config/vm.yaml`](../config/vm.yaml) | [`providers/aws/scripts/vm/`](../../aws/scripts/vm/) |
-| `bare_metal/` | 12 | [`suites/bare_metal.yaml`](../../../suites/bare_metal.yaml) | [`config/bare_metal.yaml`](../config/bare_metal.yaml) | [`providers/aws/scripts/bare_metal/`](../../aws/scripts/bare_metal/) |
-| `storage/` | 17 | [`suites/storage.yaml`](../../../suites/storage.yaml) | [`config/storage.yaml`](../config/storage.yaml) | [`providers/aws/scripts/storage/`](../../aws/scripts/storage/) |
-| `network/` | 18 | [`suites/network.yaml`](../../../suites/network.yaml) | [`config/network.yaml`](../config/network.yaml) | [`providers/aws/scripts/network/`](../../aws/scripts/network/) |
-| `observability/` | 1 | [`suites/observability.yaml`](../../../suites/observability.yaml) | [`config/observability.yaml`](../config/observability.yaml) | [`providers/aws/scripts/observability/`](../../aws/scripts/observability/) |
+| `control-plane/` | 11 | [`suites/control-plane.yaml`](../../../suites/control-plane.yaml) | [`config/control-plane.yaml`](../config/control-plane.yaml) | [`providers/aws/scripts/control-plane/`](../../aws/scripts/control-plane/) |
+| `vm/` | 12 | [`suites/vm.yaml`](../../../suites/vm.yaml) | [`config/vm.yaml`](../config/vm.yaml) | [`providers/aws/scripts/vm/`](../../aws/scripts/vm/) |
+| `bare_metal/` | 14 | [`suites/bare_metal.yaml`](../../../suites/bare_metal.yaml) | [`config/bare_metal.yaml`](../config/bare_metal.yaml) | [`providers/aws/scripts/bare_metal/`](../../aws/scripts/bare_metal/) |
+| `storage/` | 20 | [`suites/storage.yaml`](../../../suites/storage.yaml) | [`config/storage.yaml`](../config/storage.yaml) | [`providers/aws/scripts/storage/`](../../aws/scripts/storage/) |
+| `network/` | 24 | [`suites/network.yaml`](../../../suites/network.yaml) | [`config/network.yaml`](../config/network.yaml) | [`providers/aws/scripts/network/`](../../aws/scripts/network/) |
+| `observability/` | 5 | [`suites/observability.yaml`](../../../suites/observability.yaml) | [`config/observability.yaml`](../config/observability.yaml) | [`providers/aws/scripts/observability/`](../../aws/scripts/observability/) |
 | `image-registry/` | 7 | [`suites/image-registry.yaml`](../../../suites/image-registry.yaml) | [`config/image-registry.yaml`](../config/image-registry.yaml) | [`providers/aws/scripts/image-registry/`](../../aws/scripts/image-registry/) |
-| `security/` | 19 | [`suites/security.yaml`](../../../suites/security.yaml) | [`config/security.yaml`](../config/security.yaml) | [`providers/aws/scripts/security/`](../../aws/scripts/security/), [`providers/aws/scripts/capacity/`](../../aws/scripts/capacity/) |
-| `k8s/` | 9 shell | [`suites/k8s.yaml`](../../../suites/k8s.yaml) | - | [`providers/aws/scripts/eks/`](../../aws/scripts/eks/) |
-| `slurm/` | 2 shell | [`suites/slurm.yaml`](../../../suites/slurm.yaml) | - | - |
+| `security/` | 17 | [`suites/security.yaml`](../../../suites/security.yaml) | [`config/security.yaml`](../config/security.yaml) | [`providers/aws/scripts/security/`](../../aws/scripts/security/), [`providers/aws/scripts/capacity/`](../../aws/scripts/capacity/) |
+| `k8s/` | 9 shell | [`suites/k8s.yaml`](../../../suites/k8s.yaml) | [`config/k8s.yaml`](../config/k8s.yaml) | [`providers/aws/scripts/eks/`](../../aws/scripts/eks/) |
+| `slurm/` | 2 shell | [`suites/slurm.yaml`](../../../suites/slurm.yaml) | [`config/slurm.yaml`](../config/slurm.yaml) | - |
+
+The `k8s/` and `slurm/` examples drive a **real** cluster (validations shell out
+to `kubectl` / `sinfo`), so they are not part of `make demo-test` — a
+dummy-success stub has nothing to return for them.
 
 See [`suites/README.md`](../../../suites/README.md) for the per-step / per-field breakdown.
 
@@ -63,8 +67,34 @@ to generate outside `isvctl/configs/providers/`.
 **4. Run for real (no demo flag):**
 
 ```bash
+# A platform suite - the obligation attached to declaring that capability
+uv run isvctl test run --provider acme --suite vm
+
+# A plain suite: core checks by default, capability-gated checks when you name one
+uv run isvctl test run --provider acme --suite storage
+uv run isvctl test run --provider acme --suite storage --capability vm
+
+# Or point at the config file directly - the same capability rule applies
 uv run isvctl test run -f isvctl/configs/providers/acme/config/vm.yaml
 ```
+
+Add `--dry-run` to any of these to list what would run and what would be
+skipped, without executing a thing.
+
+### Which checks run
+
+Checks in a plain suite declare what they presuppose. `requires: []` (core) runs
+in every context; `requires: [kubernetes]` runs only under
+`--capability kubernetes`; `requires: [vm, bare_metal]` is any-match — either
+context satisfies it. A plain suite with no `--capability` runs its core checks.
+
+The same applies to your steps: if a step builds or destroys a fixture only some
+contexts need, gate it so a core run neither provisions nor leaks it. Both halves
+of a fixture take the same gate — see `config/storage.yaml`, where
+`setup_cluster` and `teardown_cluster` are both `requires: [kubernetes]`.
+
+Nothing is mandatory. A check is in scope only if you declared the suite holding
+it, so 100% is always relative to what you declared.
 
 ## Private provider repositories
 

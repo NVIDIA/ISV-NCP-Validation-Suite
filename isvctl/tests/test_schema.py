@@ -75,6 +75,7 @@ class TestStepConfig:
         assert step.timeout == 300
         assert step.phase == "setup"
         assert step.skip is False
+        assert step.requires == []
         assert step.requires_available_validations == []
 
     def test_full_step(self) -> None:
@@ -88,6 +89,7 @@ class TestStepConfig:
             working_dir="/tmp",
             phase="setup",
             skip=False,
+            requires=["vm", "bare_metal"],
             requires_available_validations=["NewCheck"],
             continue_on_failure=True,
             output_schema="vpc",
@@ -98,9 +100,17 @@ class TestStepConfig:
         assert step.timeout == 600
         assert step.env == {"AWS_REGION": "us-west-2"}
         assert step.phase == "setup"
+        assert step.requires == ["vm", "bare_metal"]
         assert step.requires_available_validations == ["NewCheck"]
         assert step.continue_on_failure is True
         assert step.output_schema == "vpc"
+
+    def test_step_rejects_unknown_or_duplicate_requires(self) -> None:
+        """Step requirements use the declarable capability vocabulary."""
+        with pytest.raises(ValidationError, match="requires must be a list containing only"):
+            StepConfig(name="setup", command="echo", requires=["compute"])
+        with pytest.raises(ValidationError, match="requires must not contain duplicates"):
+            StepConfig(name="setup", command="echo", requires=["vm", "vm"])
 
 
 class TestCommandOutput:
@@ -258,7 +268,7 @@ class TestRunConfigModel:
                 },
                 "context": {"node_count": 4},
                 "tests": {
-                    "platform": "kubernetes",
+                    "capability": "kubernetes",
                     "validations": {"kubernetes": [{"K8sNodeCountCheck": {"count": 4}}]},
                 },
             }
@@ -266,7 +276,7 @@ class TestRunConfigModel:
         assert config.lab is not None
         assert config.lab.id == "lab-001"
         assert config.tests is not None
-        assert config.tests.platform == "kubernetes"
+        assert config.tests.capability == "kubernetes"
         # Verify step-based command structure
         steps = config.get_steps("kubernetes")
         assert len(steps) == 2

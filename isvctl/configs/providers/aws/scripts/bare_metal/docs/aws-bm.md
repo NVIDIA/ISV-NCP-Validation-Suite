@@ -88,51 +88,51 @@ root volume replacement is slow on AWS metal (~30-45 min).
 
 `SerialConsoleRetentionCheck` requires evidence from a historical serial console
 log archive. The AWS config currently overrides the canonical bare-metal suite
-to run only `BareMetalSerialConsoleCheck` because EC2 `GetConsoleOutput` does not
+to run only `BmSerialConsoleCheck` because EC2 `GetConsoleOutput` does not
 prove one-month retention by itself. Add an external archive integration before
 re-enabling the retention check for AWS.
 
 | Validation Group | Check | Step | Description |
 |------------------|-------|------|-------------|
-| `setup_checks` | `BareMetalHostRunningCheck` | launch_instance | Instance is running |
-| `list_instances` | `BareMetalHostListedCheck` | list_instances | Target instance found in VPC |
-| `tag_checks` | `BareMetalHostTaggedCheck` | verify_tags | Instance has required tags (Name, CreatedBy) |
+| `setup_checks` | `BmHostRunningCheck` | launch_instance | Instance is running |
+| `list_instances` | `BmHostListedCheck` | list_instances | Target instance found in VPC |
+| `tag_checks` | `BmHostTaggedCheck` | verify_tags | Instance has required tags (Name, CreatedBy) |
 | `topology_placement` | `TopologyPlacementCheck` | topology_placement | Placement group CRUD operations |
-| `serial_console` | `BareMetalSerialConsoleCheck` | serial_console | Console output available |
-| `cloud_init` | `BareMetalCloudInitCheck` | launch_instance | Cloud-init completed |
+| `serial_console` | `BmSerialConsoleCheck` | serial_console | Console output available |
+| `cloud_init` | `BmCloudInitCheck` | launch_instance | Cloud-init completed |
 | `image_installed` | `StepSuccessCheck`, `FieldExistsCheck`, `InstanceStateCheck` | verify_image | OS image verified on BM |
 | `config_installable` | `StepSuccessCheck`, `FieldExistsCheck` | verify_config | Install config dry-run passed |
-| `instance_info` | `BareMetalHostStateReportedCheck` | describe_instance | Post-start state is running |
-| `ssh` | `BareMetalHostReadyCheck` | describe_instance | SSH works, OS is ubuntu |
-| `gpu` | `BareMetalGpusPresentCheck` | describe_instance | GPU visibility (8 GPUs) |
-| `host_os` | `BareMetalVcpuPinningCheck`, `BareMetalPciBusCheck`, `BareMetalHostSoftwareCheck` | describe_instance | vCPU pinning, PCI bus, kernel/drivers/BIOS |
+| `instance_info` | `BmHostStateReportedCheck` | describe_instance | Post-start state is running |
+| `ssh` | `BmHostReadyCheck` | describe_instance | SSH works, OS is ubuntu |
+| `gpu` | `BmGpusPresentCheck` | describe_instance | GPU visibility (8 GPUs) |
+| `host_os` | `BmVcpuPinningCheck`, `BmPciBusCheck`, `BmHostSoftwareCheck` | describe_instance | vCPU pinning, PCI bus, kernel/drivers/BIOS |
 | `gpu_stress` | `GpuStressCheck` | describe_instance | PyTorch matrix multiply on all 8 GPUs |
 | `nccl` | `NcclCheck` | describe_instance | NCCL AllReduce (NVLink/NVSwitch) |
 | `training` | `TrainingCheck` | describe_instance | DDP training workload (50 steps) |
 | `nvlink` | `NvlinkCheck` | describe_instance | NVLink topology and bandwidth |
 | `infiniband` | `InfiniBandCheck` | describe_instance | InfiniBand device presence |
 | `ethernet` | `EthernetCheck` | describe_instance | Network connectivity (ping 8.8.8.8) |
-| `stop_checks` | `BareMetalHostStoppedCheck` | stop_instance | Power-off confirmed |
-| `start_checks` | `BareMetalHostStartedCheck`, `BareMetalIdentifierStableAfterStartCheck` | start_instance | Power-on confirmed, instance ID stable |
-| `start_ssh` | `BareMetalHostReadyAfterStartCheck` | start_instance | SSH works after start |
-| `start_gpu` | `BareMetalGpusPresentAfterStartCheck` | start_instance | GPUs visible after start (8 GPUs) |
-| `reboot_checks` | `BareMetalHostRebootedCheck`, `BareMetalIdentifierStableAfterRebootCheck` | reboot_instance | Reboot confirmed, instance ID stable |
-| `reboot_state` | `BareMetalHostRunningAfterRebootCheck` | reboot_instance | Instance running after reboot |
-| `reboot_ssh` | `BareMetalHostReadyAfterRebootCheck` | reboot_instance | SSH works after reboot |
-| `reboot_gpu` | `BareMetalGpusPresentAfterRebootCheck` | reboot_instance | GPUs visible after reboot (8 GPUs) |
+| `stop_checks` | `BmHostStoppedCheck` | stop_instance | Power-off confirmed |
+| `start_checks` | `BmHostStartedCheck`, `BmIdentifierStableAfterStartCheck` | start_instance | Power-on confirmed, instance ID stable |
+| `start_ssh` | `BmHostReadyAfterStartCheck` | start_instance | SSH works after start |
+| `start_gpu` | `BmGpusPresentAfterStartCheck` | start_instance | GPUs visible after start (8 GPUs) |
+| `reboot_checks` | `BmHostRebootedCheck`, `BmIdentifierStableAfterRebootCheck` | reboot_instance | Reboot confirmed, instance ID stable |
+| `reboot_state` | `BmHostRunningAfterRebootCheck` | reboot_instance | Instance running after reboot |
+| `reboot_ssh` | `BmHostReadyAfterRebootCheck` | reboot_instance | SSH works after reboot |
+| `reboot_gpu` | `BmGpusPresentAfterRebootCheck` | reboot_instance | GPUs visible after reboot (8 GPUs) |
 | `reboot_host_os` | `HostSoftwareCheck` | reboot_instance | Host OS persisted after reboot |
-| `power_cycle_checks` | `InstancePowerCycleCheck`, `BareMetalIdentifierStableAfterPowerCycleCheck` | power_cycle_instance | Power-cycle recovery, instance ID stable |
-| `power_cycle_state` | `BareMetalHostRunningAfterPowerCycleCheck` | power_cycle_instance | Instance running after power-cycle |
-| `power_cycle_ssh` | `BareMetalHostReadyAfterPowerCycleCheck` | power_cycle_instance | SSH works after power-cycle |
-| `power_cycle_gpu` | `BareMetalGpusPresentAfterPowerCycleCheck` | power_cycle_instance | GPUs visible after power-cycle |
-| `reinstall_state` | `BareMetalHostRunningAfterReinstallCheck`, `BareMetalIdentifierStableAfterReinstallCheck` | reinstall_instance | Running with a stable ID after reinstall (if enabled) |
-| `reinstall_ssh` | `BareMetalHostReadyAfterReinstallCheck` | reinstall_instance | SSH works after reinstall |
-| `reinstall_gpu` | `BareMetalGpusPresentAfterReinstallCheck` | reinstall_instance | GPUs visible after reinstall |
-| `nim_health` | `BareMetalNimHealthCheck` | deploy_nim | NIM `/v1/health/ready` |
-| `nim_models` | `BareMetalNimModelCheck` | deploy_nim | NIM `/v1/models` returns model |
-| `nim_inference` | `BareMetalNimInferenceCheck` | deploy_nim | Chat completion works |
-| `nim_teardown` | `BareMetalNimDeploymentDeletedCheck` | teardown_nim | NIM container removed |
-| `teardown_checks` | `BareMetalResourcesDeletedCheck` | teardown | Instance terminated |
+| `power_cycle_checks` | `InstancePowerCycleCheck`, `BmIdentifierStableAfterPowerCycleCheck` | power_cycle_instance | Power-cycle recovery, instance ID stable |
+| `power_cycle_state` | `BmHostRunningAfterPowerCycleCheck` | power_cycle_instance | Instance running after power-cycle |
+| `power_cycle_ssh` | `BmHostReadyAfterPowerCycleCheck` | power_cycle_instance | SSH works after power-cycle |
+| `power_cycle_gpu` | `BmGpusPresentAfterPowerCycleCheck` | power_cycle_instance | GPUs visible after power-cycle |
+| `reinstall_state` | `BmHostRunningAfterReinstallCheck`, `BmIdentifierStableAfterReinstallCheck` | reinstall_instance | Running with a stable ID after reinstall (if enabled) |
+| `reinstall_ssh` | `BmHostReadyAfterReinstallCheck` | reinstall_instance | SSH works after reinstall |
+| `reinstall_gpu` | `BmGpusPresentAfterReinstallCheck` | reinstall_instance | GPUs visible after reinstall |
+| `nim_health` | `BmNimHealthCheck` | deploy_nim | NIM `/v1/health/ready` |
+| `nim_models` | `BmNimModelCheck` | deploy_nim | NIM `/v1/models` returns model |
+| `nim_inference` | `BmNimInferenceCheck` | deploy_nim | Chat completion works |
+| `nim_teardown` | `BmNimDeploymentDeletedCheck` | teardown_nim | NIM container removed |
+| `teardown_checks` | `BmResourcesDeletedCheck` | teardown | Instance terminated |
 | `sanitization` | `TenantDataSanitizedCheck` | verify_teardown | SG, key pair confirmed deleted |
 
 ## Dev Workflow (Instance Reuse)

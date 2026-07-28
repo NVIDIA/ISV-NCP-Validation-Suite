@@ -596,7 +596,7 @@ class TestImportEndToEnd:
         result = merge_yaml_files([self.CONFIGS_DIR / "providers" / "aws" / "config" / "bare_metal.yaml"])
 
         checks = result["tests"]["validations"]["serial_console"]["checks"]
-        assert checks == [{"BareMetalSerialConsoleCheck": {}}]
+        assert checks == [{"BmSerialConsoleCheck": {}}]
 
     def test_microk8s_inherits_k8s_validations(self) -> None:
         """providers/microk8s.yaml imports suites/k8s.yaml and adds overrides."""

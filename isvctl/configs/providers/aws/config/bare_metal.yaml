@@ -322,7 +322,7 @@ tests:
     serial_console:
       step: serial_console
       checks:
-        - BareMetalSerialConsoleCheck: {}
+        - BmSerialConsoleCheck: {}
 
     # GPU stress - AWS metal has 8 GPUs
     gpu_stress:
@@ -352,14 +352,14 @@ tests:
     start_gpu:
       step: start_instance
       checks:
-        BareMetalGpusPresentAfterStartCheck:
+        BmGpusPresentAfterStartCheck:
           expected_gpus: 8
 
     # Power-cycle GPU - AWS metal has 8 GPUs
     power_cycle_gpu:
       step: power_cycle_instance
       checks:
-        BareMetalGpusPresentAfterPowerCycleCheck:
+        BmGpusPresentAfterPowerCycleCheck:
           expected_gpus: 8
 
     # NVLink - AWS metal has 8 GPUs

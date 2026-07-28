@@ -22,13 +22,13 @@
 #
 # Coverage:
 #   This example exercises only the pure JSON-contract validations
-#   (BareMetalHostRunningCheck, BareMetalHostListedCheck,
-#    BareMetalHostTaggedCheck, TopologyPlacementCheck,
-#    BareMetalSerialConsoleCheck, BareMetalHostStoppedCheck,
-#    BareMetalHostStartedCheck, BareMetalHostRebootedCheck,
-#    InstancePowerCycleCheck, the BareMetalIdentifierStableAfter* checks,
-#    BareMetalResourcesDeletedCheck, TenantDataSanitizedCheck). SSH-based
-#    host checks (BareMetalHostReady*, BareMetalGpusPresent*, GpuStress,
+#   (BmHostRunningCheck, BmHostListedCheck,
+#    BmHostTaggedCheck, TopologyPlacementCheck,
+#    BmSerialConsoleCheck, BmHostStoppedCheck,
+#    BmHostStartedCheck, BmHostRebootedCheck,
+#    InstancePowerCycleCheck, the BmIdentifierStableAfter* checks,
+#    BmResourcesDeletedCheck, TenantDataSanitizedCheck). SSH-based
+#    host checks (BmHostReady*, BmGpusPresent*, GpuStress,
 #    Nccl, Training, Nvlink, InfiniBand, Ethernet, the host OS/driver/CPU
 #    and container-runtime checks, cloud-init, NIM) are excluded via
 #    `exclude.labels: [ssh]` because

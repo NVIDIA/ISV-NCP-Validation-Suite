@@ -63,7 +63,7 @@
 #     This is a read-only step (like the other checks here); the auto-provisioning
 #     variant that mints a throwaway key lives in the dedicated key_access.yaml.
 #   - list_instances.py / describe_instance.py query existing instances;
-#     BareMetalHostListedCheck and BareMetalHostStateReportedCheck validate
+#     BmHostListedCheck and BmHostStateReportedCheck validate
 #     the JSON contract.
 #
 # Prerequisites:
@@ -393,17 +393,17 @@ tests:
   exclude:
     labels: []
     tests:
-      - BareMetalHostReadyCheck
-      - BareMetalGpusPresentCheck
-      - BareMetalVcpuPinningCheck
-      - BareMetalPciBusCheck
-      - BareMetalHostSoftwareCheck
+      - BmHostReadyCheck
+      - BmGpusPresentCheck
+      - BmVcpuPinningCheck
+      - BmPciBusCheck
+      - BmHostSoftwareCheck
       - GpuStressCheck
       - NcclCheck
       - TrainingCheck
       - NvlinkCheck
       - InfiniBandCheck
       - EthernetCheck
-      - BareMetalGpuDriverCheck
-      - BareMetalCpuInfoCheck
-      - BareMetalContainerRuntimeCheck
+      - BmGpuDriverCheck
+      - BmCpuInfoCheck
+      - BmContainerRuntimeCheck

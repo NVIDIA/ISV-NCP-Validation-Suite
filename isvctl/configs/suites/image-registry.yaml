@@ -126,7 +126,7 @@ tests:
     bm_from_image:
       step: install_image_bm
       checks:
-        BareMetalBootsFromImageCheck:
+        BmBootsFromImageCheck:
           test_id: "BOOT01-03"
           labels: ["image_registry", "min_req"]
           requires: [bare_metal]
@@ -142,7 +142,7 @@ tests:
     bm_from_config:
       step: install_config_bm
       checks:
-        BareMetalBootsFromInstallConfigCheck:
+        BmBootsFromInstallConfigCheck:
           test_id: "BOOT01-04"
           labels: ["image_registry", "min_req"]
           requires: [bare_metal]

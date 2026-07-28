@@ -70,11 +70,14 @@ tests:
     instance_launched:
       step: launch_instance
       checks:
-        InstanceStateCheck:
+        VolumeHostRunningCheck:
           test_id: "N/A"
           labels: ["storage"]
           requires: [vm, bare_metal]
           expected_state: "running"
+          description: "Check the instance that will host the test volume is running"
+          compose:
+            - InstanceStateCheck
 
     fixture_volume:
       step: create_volume

@@ -25,6 +25,10 @@ validation metadata on this branch. Each wired check must declare:
   Each canonical suite check must include its suite label, for example checks in
   ``bare_metal.yaml`` must include ``bare_metal``.
 
+A check wired with ``compose`` is a composite: it names no validation class of
+its own, so it must supply the ``description`` the catalog would otherwise take
+from a class, and every name in its ``compose`` list must be a real check.
+
 Usage:
     python3 scripts/validate_suite_wiring.py
     python3 scripts/validate_suite_wiring.py --check   # exit 1 on violations
@@ -38,11 +42,13 @@ import re
 import sys
 from collections import defaultdict
 from collections.abc import Iterator
+from functools import cache
 from pathlib import Path
 from typing import Any
 
 import yaml
 from isvtest.catalog import iter_checks_from_data
+from isvtest.core.composite import COMPOSE_KEY, composed_members, is_composite
 from isvtest.core.resolution import DECLARABLE_CAPABILITIES, canonical_suite_name, requires_error
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -98,6 +104,43 @@ def _normalize_test_id(value: Any) -> str | None:
 def required_suite_label(config_path: Path) -> str | None:
     """Return the label every check in a known canonical suite must carry."""
     return canonical_suite_name(config_path.stem)
+
+
+@cache
+def discovered_check_names() -> frozenset[str]:
+    """Return the names of every discoverable validation class."""
+    from isvtest.core.discovery import discover_all_tests
+
+    return frozenset(cls.__name__ for cls in discover_all_tests())
+
+
+def composite_errors(location: str, name: str, params: dict[str, Any]) -> list[str]:
+    """Return errors for a check wired with ``compose``.
+
+    A composite borrows nothing from a validation class, so what a class would
+    have supplied - a name of its own and a description - has to be declared and
+    checked here instead.
+    """
+    known = discovered_check_names()
+    errors: list[str] = []
+
+    if name in known:
+        errors.append(f"{location}: composite name shadows validation class {name!r}; give the composite its own name")
+    if not isinstance(params.get("description"), str) or not params["description"].strip():
+        errors.append(f"{location}: composite requires a description (it becomes the catalog description)")
+
+    raw = params[COMPOSE_KEY]
+    if not isinstance(raw, list) or not raw:
+        errors.append(f"{location}: {COMPOSE_KEY} must be a non-empty list of check names")
+        return errors
+
+    members = composed_members(raw)
+    if len(members) != len(raw):
+        errors.append(f"{location}: each {COMPOSE_KEY} item must be 'CheckName' or 'CheckName: {{params}}'")
+    for member_name, _ in members:
+        if member_name not in known:
+            errors.append(f"{location}: {COMPOSE_KEY} names unknown check {member_name!r}")
+    return errors
 
 
 def iter_suite_checks(config_path: Path) -> Iterator[tuple[str, str, dict[str, Any]]]:
@@ -188,6 +231,8 @@ def wiring_errors(suites_dir: Path = SUITES_DIR) -> list[str]:
                     errors.append(f"{location}: wiring name is not globally unique (also at {previous_location})")
             else:
                 wiring_locations[name] = location
+            if is_composite(params):
+                errors.extend(composite_errors(location, name, params))
             if test_id is None:
                 errors.append(f'{location}: missing test_id (use a plan id or "N/A")')
             if not labels:

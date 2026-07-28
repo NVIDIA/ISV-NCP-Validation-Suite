@@ -56,6 +56,42 @@ Suites:
 For the domain / script-count / AWS-reference overview see the
 [my-isv scaffold README](../providers/my-isv/scripts/README.md#domains).
 
+## Naming a check
+
+A wiring name is the test's identity everywhere downstream — the catalog, the
+report, the service — so it has to be globally unique and say what it proves.
+Wiring a generic check under its class name spends that identity on the
+implementation instead, and repeating it produces several rows all called
+`StepSuccessCheck`. Name the property under test and list the generic checks
+that establish it:
+
+```yaml
+    setup_checks:
+      step: create_user
+      checks:
+        IamUserCreatedCheck:
+          test_id: "IAM01-01"
+          labels: ["iam"]
+          requires: []
+          description: "Check the IAM user is created with usable credentials"
+          compose:
+            - StepSuccessCheck
+            - FieldExistsCheck:
+                fields: ["username", "access_key_id"]
+```
+
+That is one catalog entry carrying one `test_id`, and one test. Every member
+runs against the group's step output as a subtest, so a failure still names the
+part that broke, and every member runs even after an earlier one fails. A member
+that needs parameters takes them inline (`- CheckName: {...}`); one that does
+not stays a single line.
+
+Because a composite has no validation class to borrow from, it declares its own
+`description` (the catalog uses it) and its name must not shadow a class name. A
+check that wires one purpose-built class — `SerialConsoleCheck`,
+`IamCredentialAccessCheck` — already has a name that says what it proves and
+keeps it.
+
 ## Test Suite Details
 
 ### IAM (`iam.yaml`)

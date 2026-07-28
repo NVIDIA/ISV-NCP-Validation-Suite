@@ -32,6 +32,7 @@ from typing import Any
 import yaml
 from isvreporter.version import get_version
 
+from isvtest.core.composite import CompositeCheck, is_composite
 from isvtest.core.discovery import discover_all_tests
 from isvtest.core.resolution import DECLARABLE_CAPABILITIES, canonical_suite_name, resolve_class_key
 from isvtest.release_manifest import INCLUDE_UNRELEASED_ENV, load_released_test_filter
@@ -227,6 +228,9 @@ def _declared_capability(data: dict[str, Any]) -> str | None:
 def _build_suite_map() -> dict[str, dict[str, Any]]:
     """Map suite wiring names to suite placement and requirements.
 
+    Composites carry no validation class, so their ``description`` is read off
+    the wiring here and used as the catalog description.
+
     Duplicate wiring names currently last-wins. Global uniqueness enforcement
     is deferred to a follow-up PR (``ISVCTL_ENFORCE_UNIQUE_WIRING=1``).
     """
@@ -243,6 +247,8 @@ def _build_suite_map() -> dict[str, dict[str, Any]]:
                 "suite": suite,
                 "capability": capability,
                 "requires": list(requires) if isinstance(requires, list) else [],
+                "composite": is_composite(params),
+                "description": params.get("description") or "",
             }
     return suite_map
 
@@ -259,8 +265,9 @@ def build_catalog(*, released_only: bool = True) -> list[dict[str, Any]]:
 
     Returns:
         List of catalog entry dicts, each containing:
-            - name: Validation class name or variant name
-            - description: Human-readable description from class metadata
+            - name: Validation class name, variant name, or composite name
+            - description: Human-readable description from class metadata, or
+              from the wiring for a composite
             - labels: List of public label strings (e.g. ["kubernetes", "gpu"])
             - test_ids: List of test-plan ids declared on the wiring, "N/A"
               excluded (e.g. ["SEC07-01"]); empty when only intentional gaps
@@ -290,27 +297,34 @@ def build_catalog(*, released_only: bool = True) -> list[dict[str, Any]]:
     catalog: list[dict[str, Any]] = []
 
     for name, placement in suite_map.items():
-        base = resolve_class_key(name, class_meta)
-        if base is None:
-            logger.warning("Omitting suite wiring %s because no validation class resolves it", name)
-            continue
-        if name in excluded_names or base in excluded_names:
-            continue
-        meta = class_meta[base]
-        variant_suffix = name[len(base) :] if base != name else ""
-        desc = meta.get("description", "")
-        if variant_suffix:
-            desc = f"{desc} ({variant_suffix.lstrip('-')})" if desc else variant_suffix.lstrip("-")
-        labels = sorted(set(meta.get("labels", [])) | label_map.get(name, set()))
-        test_ids = sorted(test_id_map.get(name, set()))
+        if placement["composite"]:
+            desc = placement["description"]
+            source = CompositeCheck.__module__
+            class_labels: set[str] = set()
+        else:
+            base = resolve_class_key(name, class_meta)
+            if base is None:
+                logger.warning("Omitting suite wiring %s because no validation class resolves it", name)
+                continue
+            if name in excluded_names or base in excluded_names:
+                continue
+            meta = class_meta[base]
+            variant_suffix = name[len(base) :] if base != name else ""
+            desc = meta.get("description", "")
+            if variant_suffix:
+                desc = f"{desc} ({variant_suffix.lstrip('-')})" if desc else variant_suffix.lstrip("-")
+            source = meta.get("source", "")
+            class_labels = set(meta.get("labels", []))
         catalog.append(
             {
                 "name": name,
                 "description": desc,
-                "labels": labels,
-                "test_ids": test_ids,
-                "source": meta.get("source", ""),
-                **placement,
+                "labels": sorted(class_labels | label_map.get(name, set())),
+                "test_ids": sorted(test_id_map.get(name, set())),
+                "source": source,
+                "suite": placement["suite"],
+                "capability": placement["capability"],
+                "requires": placement["requires"],
             }
         )
 

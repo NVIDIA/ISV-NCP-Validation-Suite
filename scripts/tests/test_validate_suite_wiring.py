@@ -189,6 +189,99 @@ tests:
     assert any("DeadCheck" in error and "slurm" in error and "no platform suite" in error for error in errors)
 
 
+def test_wiring_errors_accepts_a_well_formed_composite(tmp_path: Path) -> None:
+    """A composite naming real checks and describing itself is valid wiring."""
+    (tmp_path / "demo.yaml").write_text(
+        """\
+tests:
+  validations:
+    example:
+      step: create_user
+      checks:
+        DemoUserCreatedCheck:
+          test_id: "N/A"
+          labels: ["demo"]
+          requires: []
+          description: "Check the demo user is created"
+          compose:
+            - StepSuccessCheck
+            - FieldExistsCheck:
+                fields: ["username"]
+"""
+    )
+
+    assert validate_suite_wiring.wiring_errors(tmp_path) == []
+
+
+def test_wiring_errors_flags_composite_problems(tmp_path: Path) -> None:
+    """A composite must describe itself, name real checks, and own its name."""
+    (tmp_path / "demo.yaml").write_text(
+        """\
+tests:
+  validations:
+    example:
+      step: create_user
+      checks:
+        NoDescriptionCheck:
+          test_id: "N/A"
+          labels: ["demo"]
+          requires: []
+          compose:
+            - StepSuccessCheck
+        UnknownMemberCheck:
+          test_id: "N/A"
+          labels: ["demo"]
+          requires: []
+          description: "Check something"
+          compose:
+            - NoSuchCheck
+        StepSuccessCheck:
+          test_id: "N/A"
+          labels: ["demo"]
+          requires: []
+          description: "Check something"
+          compose:
+            - StepSuccessCheck
+        EmptyComposeCheck:
+          test_id: "N/A"
+          labels: ["demo"]
+          requires: []
+          description: "Check something"
+          compose: []
+"""
+    )
+
+    errors = validate_suite_wiring.wiring_errors(tmp_path)
+    assert any("NoDescriptionCheck" in err and "requires a description" in err for err in errors)
+    assert any("UnknownMemberCheck" in err and "unknown check 'NoSuchCheck'" in err for err in errors)
+    assert any("StepSuccessCheck" in err and "shadows validation class" in err for err in errors)
+    assert any("EmptyComposeCheck" in err and "non-empty list" in err for err in errors)
+
+
+def test_wiring_errors_flags_malformed_compose_items(tmp_path: Path) -> None:
+    """A ``compose`` item in neither supported form would silently be dropped."""
+    (tmp_path / "demo.yaml").write_text(
+        """\
+tests:
+  validations:
+    example:
+      step: create_user
+      checks:
+        MalformedComposeCheck:
+          test_id: "N/A"
+          labels: ["demo"]
+          requires: []
+          description: "Check something"
+          compose:
+            - StepSuccessCheck
+            - [FieldExistsCheck]
+"""
+    )
+
+    errors = validate_suite_wiring.wiring_errors(tmp_path)
+    assert any("MalformedComposeCheck" in err and "must be 'CheckName'" in err for err in errors)
+
+
 def test_wiring_errors_allows_platform_suite_named_after_capability(tmp_path: Path) -> None:
     """The kubernetes *platform* suite (declares tests.capability) is not a collision."""
     (tmp_path / "k8s.yaml").write_text(

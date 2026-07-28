@@ -205,6 +205,8 @@ domains:
                 status: published
                 notes: ""
               - summary: Delete user
+                labels:
+                  - iam
                 priority: P0
                 dependencies:
                   - LimitedEnv

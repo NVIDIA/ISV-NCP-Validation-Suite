@@ -151,7 +151,7 @@ class TestOrchestrator:
                     steps=[StepConfig(name="setup", command="echo", args=["test"], phase="setup")]
                 )
             },
-            tests=ValidationConfig(platform="kubernetes"),
+            tests=ValidationConfig(capability="kubernetes"),
         )
         orchestrator = Orchestrator(config)
 
@@ -179,7 +179,7 @@ EOF
                     ]
                 )
             },
-            tests=ValidationConfig(platform="kubernetes"),
+            tests=ValidationConfig(capability="kubernetes"),
         )
         orchestrator = Orchestrator(config)
 
@@ -208,7 +208,7 @@ EOF
                     ]
                 )
             },
-            tests=ValidationConfig(platform="kubernetes"),
+            tests=ValidationConfig(capability="kubernetes"),
         )
 
         result = Orchestrator(config).run(phases=[Phase.SETUP])
@@ -246,7 +246,7 @@ EOF
                     ]
                 )
             },
-            tests=ValidationConfig(platform="kubernetes"),
+            tests=ValidationConfig(capability="kubernetes"),
         )
 
         result = Orchestrator(config).run(phases=[Phase.SETUP])
@@ -265,7 +265,7 @@ EOF
                     ]
                 )
             },
-            tests=ValidationConfig(platform="kubernetes"),
+            tests=ValidationConfig(capability="kubernetes"),
         )
         orchestrator = Orchestrator(config)
 
@@ -280,7 +280,7 @@ EOF
         """Test skipping setup phase (platform-level skip)."""
         config = RunConfig(
             commands={"kubernetes": PlatformCommands(skip=True)},
-            tests=ValidationConfig(platform="kubernetes"),
+            tests=ValidationConfig(capability="kubernetes"),
         )
         orchestrator = Orchestrator(config)
 
@@ -302,7 +302,7 @@ EOF
                     phases=["setup", "teardown"],
                 )
             },
-            tests=ValidationConfig(platform="kubernetes"),
+            tests=ValidationConfig(capability="kubernetes"),
         )
         orchestrator = Orchestrator(config)
 
@@ -321,7 +321,7 @@ EOF
                     steps=[]  # No steps defined
                 )
             },
-            tests=ValidationConfig(platform="kubernetes", cluster_name="test"),
+            tests=ValidationConfig(capability="kubernetes", cluster_name="test"),
         )
         orchestrator = Orchestrator(config)
 
@@ -349,7 +349,7 @@ EOF
                     ]
                 )
             },
-            tests=ValidationConfig(platform="kubernetes"),
+            tests=ValidationConfig(capability="kubernetes"),
         )
         orchestrator = Orchestrator(config)
 
@@ -374,7 +374,7 @@ EOF
                     ]
                 )
             },
-            tests=ValidationConfig(platform="kubernetes"),
+            tests=ValidationConfig(capability="kubernetes"),
         )
         orchestrator = Orchestrator(config)
 
@@ -418,7 +418,7 @@ EOF
                 )
             },
             tests=ValidationConfig(
-                platform="kubernetes",
+                capability="kubernetes",
                 validations={
                     "setup_checks": {
                         "step": "setup_cluster",
@@ -453,7 +453,7 @@ EOF
                     ],
                 )
             },
-            tests=ValidationConfig(platform="kubernetes"),
+            tests=ValidationConfig(capability="kubernetes"),
         )
         orchestrator = Orchestrator(config)
         result = orchestrator.run(teardown_on_failure=True)
@@ -490,7 +490,7 @@ EOF
                     ]
                 )
             },
-            tests=ValidationConfig(platform="kubernetes"),
+            tests=ValidationConfig(capability="kubernetes"),
         )
         orchestrator = Orchestrator(config)
         result = orchestrator.run(teardown_on_failure=True)
@@ -514,7 +514,7 @@ EOF
                 )
             },
             tests=ValidationConfig(
-                platform="kubernetes",
+                capability="kubernetes",
                 validations={
                     "probe_checks": {
                         "step": "probe",
@@ -556,7 +556,7 @@ EOF
                 )
             },
             tests=ValidationConfig(
-                platform="kubernetes",
+                capability="kubernetes",
                 validations={
                     "probe_checks": {
                         "checks": {
@@ -596,7 +596,7 @@ EOF
                 )
             },
             tests=ValidationConfig(
-                platform="kubernetes",
+                capability="kubernetes",
                 validations={
                     "skip_checks": {
                         "step": "no_json",
@@ -658,7 +658,7 @@ class TestLabelFiltering:
                 )
             },
             tests=ValidationConfig(
-                platform="kubernetes",
+                capability="kubernetes",
                 validations={"cluster": {"checks": {"K8sNodeCountCheck": {"labels": ["kubernetes"]}}}},
                 exclude={"labels": exclude_labels} if exclude_labels else {},
             ),
@@ -746,7 +746,7 @@ class TestTeardownOnlyPhase:
                     ]
                 )
             },
-            tests=ValidationConfig(platform="kubernetes"),
+            tests=ValidationConfig(capability="kubernetes"),
         )
         orchestrator = Orchestrator(config)
         result = orchestrator.run(phases=[Phase.TEARDOWN])
@@ -776,7 +776,7 @@ class TestTeardownOnlyPhase:
                     ]
                 )
             },
-            tests=ValidationConfig(platform="kubernetes"),
+            tests=ValidationConfig(capability="kubernetes"),
         )
         orchestrator = Orchestrator(config)
         result = orchestrator.run(phases=[Phase.SETUP, Phase.TEARDOWN])
@@ -797,7 +797,7 @@ class TestTeardownOnlyPhase:
                     ]
                 )
             },
-            tests=ValidationConfig(platform="kubernetes"),
+            tests=ValidationConfig(capability="kubernetes"),
         )
         orchestrator = Orchestrator(config)
         result = orchestrator.run(phases=[Phase.TEARDOWN])
@@ -818,7 +818,7 @@ class TestTeardownOnlyPhase:
                     ]
                 )
             },
-            tests=ValidationConfig(platform="kubernetes"),
+            tests=ValidationConfig(capability="kubernetes"),
         )
         orchestrator = Orchestrator(config)
         result = orchestrator.run(phases=[Phase.TEARDOWN])
@@ -844,7 +844,7 @@ class TestTeardownOnlyPhase:
                     ],
                 )
             },
-            tests=ValidationConfig(platform="kubernetes"),
+            tests=ValidationConfig(capability="kubernetes"),
         )
         orchestrator = Orchestrator(config)
         result = orchestrator.run(phases=[Phase.SETUP, Phase.TEARDOWN], teardown_on_failure=True)

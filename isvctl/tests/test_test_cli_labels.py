@@ -45,7 +45,7 @@ commands:
         args: ['{"success": true}']
         phase: test
 tests:
-  platform: kubernetes
+  capability: kubernetes
   validations: {}
 """,
         encoding="utf-8",
@@ -106,7 +106,7 @@ class _FakeOrchestrator:
         type(self).captured.update(kwargs)
         type(self).calls.append(
             {
-                "platform": self.config.tests.platform,
+                "platform": self.config.tests.capability,
                 "working_dir": self.kwargs.get("working_dir"),
                 "run_kwargs": kwargs,
             }
@@ -345,7 +345,7 @@ tests:
         encoding="utf-8",
     )
     (configs_root / "suites" / "vm.yaml").write_text(
-        "tests:\n  platform: vm\n  validations: {}\n",
+        "tests:\n  capability: vm\n  validations: {}\n",
         encoding="utf-8",
     )
     _write_provider_config(configs_root, "aws", "storage.yaml", "storage.yaml", "storage")
@@ -412,7 +412,7 @@ tests:
         encoding="utf-8",
     )
     (configs_root / "suites" / "vm.yaml").write_text(
-        "tests:\n  platform: vm\n  validations: {}\n",
+        "tests:\n  capability: vm\n  validations: {}\n",
         encoding="utf-8",
     )
     provider_config = _write_provider_config(configs_root, "aws", "storage.yaml", "storage.yaml", "storage")
@@ -446,7 +446,7 @@ def test_platform_suite_keeps_the_unfiltered_context(
     (suites / "vm.yaml").write_text(
         """\
 tests:
-  platform: vm
+  capability: vm
   validations:
     vm:
       checks:
@@ -491,7 +491,7 @@ tests:
         encoding="utf-8",
     )
     (configs_root / "suites" / "kubernetes.yaml").write_text(
-        "tests:\n  platform: kubernetes\n  validations: {}\n",
+        "tests:\n  capability: kubernetes\n  validations: {}\n",
         encoding="utf-8",
     )
     _write_provider_config(configs_root, "aws", "iam.yaml", "iam.yaml", "iam")

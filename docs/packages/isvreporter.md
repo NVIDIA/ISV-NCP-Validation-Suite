@@ -180,7 +180,7 @@ Create a new test run record.
 
 **Optional Arguments:**
 
-- `--config`: Path to isvctl config YAML file (auto-detects platform from `tests.platform`)
+- `--config`: Path to isvctl config YAML file (auto-detects capability from `tests.capability`)
 - `--platform`: Platform type (kubernetes, slurm, bare_metal). Required only if `--config` is not provided; otherwise auto-detected from config.
 
 **Returns:**

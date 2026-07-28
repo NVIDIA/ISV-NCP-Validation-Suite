@@ -45,7 +45,7 @@ def platform_vocabulary(configs_root: Path) -> frozenset[str]:
             data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         except (OSError, yaml.YAMLError):
             continue
-        platform = (data.get("tests") or {}).get("platform") if isinstance(data, dict) else None
+        platform = (data.get("tests") or {}).get("capability") if isinstance(data, dict) else None
         if isinstance(platform, str) and platform:
             platforms.add(_normalize_name(platform))
     return frozenset(platforms)
@@ -107,7 +107,7 @@ def _suite_name(config_path: Path, declarable: frozenset[str]) -> tuple[str, str
     """
     merged = merge_yaml_files([config_path])
     tests = merged.get("tests") or {}
-    platform = tests.get("platform") if isinstance(tests, dict) else None
+    platform = tests.get("capability") if isinstance(tests, dict) else None
     if isinstance(platform, str) and _normalize_name(platform) in declarable:
         normalized = _normalize_name(platform)
         return normalized, normalized

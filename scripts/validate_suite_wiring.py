@@ -143,7 +143,7 @@ def wiring_errors(suites_dir: Path = SUITES_DIR) -> list[str]:
     declared_platforms: set[str] = set()
     for _, _, data in parsed:
         tests = data.get("tests") if isinstance(data, dict) else None
-        platform = tests.get("platform") if isinstance(tests, dict) else None
+        platform = tests.get("capability") if isinstance(tests, dict) else None
         if isinstance(platform, str) and platform in DECLARABLE_CAPABILITIES:
             declared_platforms.add(platform)
 
@@ -154,12 +154,14 @@ def wiring_errors(suites_dir: Path = SUITES_DIR) -> list[str]:
             errors.append(f"failed to read/parse {path}: {exc}")
             continue
         tests = data.get("tests") or {}
-        platform = tests.get("platform") if isinstance(tests, dict) else None
+        platform = tests.get("capability") if isinstance(tests, dict) else None
         module = tests.get("module") if isinstance(tests, dict) else None
         if module is not None:
             errors.append(f"{path}: tests.module is no longer supported")
+        if isinstance(tests, dict) and tests.get("platform") is not None:
+            errors.append(f"{path}: tests.platform was renamed to tests.capability")
         if platform is not None and platform not in DECLARABLE_CAPABILITIES:
-            errors.append(f"{path}: tests.platform must be one of: {', '.join(sorted(DECLARABLE_CAPABILITIES))}")
+            errors.append(f"{path}: tests.capability must be one of: {', '.join(sorted(DECLARABLE_CAPABILITIES))}")
         suite_is_platform = isinstance(platform, str) and platform in DECLARABLE_CAPABILITIES
         if not suite_is_platform:
             suite_name = canonical_suite_name(path.stem)

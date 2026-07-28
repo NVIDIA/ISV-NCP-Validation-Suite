@@ -268,7 +268,7 @@ class TestRunConfigModel:
                 },
                 "context": {"node_count": 4},
                 "tests": {
-                    "platform": "kubernetes",
+                    "capability": "kubernetes",
                     "validations": {"kubernetes": [{"K8sNodeCountCheck": {"count": 4}}]},
                 },
             }
@@ -276,7 +276,7 @@ class TestRunConfigModel:
         assert config.lab is not None
         assert config.lab.id == "lab-001"
         assert config.tests is not None
-        assert config.tests.platform == "kubernetes"
+        assert config.tests.capability == "kubernetes"
         # Verify step-based command structure
         steps = config.get_steps("kubernetes")
         assert len(steps) == 2

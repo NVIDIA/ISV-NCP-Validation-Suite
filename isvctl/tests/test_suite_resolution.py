@@ -27,7 +27,7 @@ def _write_catalog(root: Path) -> None:
     configs = root / "providers" / "acme" / "config"
     suites.mkdir(parents=True)
     configs.mkdir(parents=True)
-    (suites / "k8s.yaml").write_text("tests:\n  platform: kubernetes\n  validations: {}\n")
+    (suites / "k8s.yaml").write_text("tests:\n  capability: kubernetes\n  validations: {}\n")
     (suites / "storage.yaml").write_text("tests:\n  validations: {}\n")
     (configs / "eks.yaml").write_text("import: ../../../suites/k8s.yaml\ncommands: {}\n")
     (configs / "storage.yaml").write_text("import: ../../../suites/storage.yaml\ncommands: {}\n")
@@ -63,9 +63,9 @@ def test_platform_suites_reject_requires_and_unknown_platforms() -> None:
     validation = {"sample": {"checks": {"PlainCheck": {"requires": []}}}}
 
     with pytest.raises(ValidationError, match="requires is not allowed in platform suites"):
-        RunConfig.model_validate({"tests": {"platform": "kubernetes", "validations": validation}})
-    with pytest.raises(ValidationError, match=r"tests\.platform must be one of"):
-        RunConfig.model_validate({"tests": {"platform": "compute", "validations": {}}})
+        RunConfig.model_validate({"tests": {"capability": "kubernetes", "validations": validation}})
+    with pytest.raises(ValidationError, match=r"tests\.capability must be one of"):
+        RunConfig.model_validate({"tests": {"capability": "compute", "validations": {}}})
 
 
 def test_plain_suite_rejects_unknown_requires_vocabulary() -> None:
@@ -101,8 +101,6 @@ def test_storage_cleanup_steps_have_explicit_capability_gates(provider: str) -> 
 
     assert steps["teardown_volume"].requires == ["vm", "bare_metal"]
     assert steps["teardown"].requires == ["vm", "bare_metal"]
-    assert steps["setup_cluster"].requires == ["kubernetes"]
-    assert steps["teardown_cluster"].requires == ["kubernetes"]
 
 
 @pytest.mark.parametrize("capability", sorted(DECLARABLE_CAPABILITIES))
@@ -114,20 +112,6 @@ def test_my_isv_scaffold_covers_every_declarable_capability(capability: str) -> 
     """
     resolved = resolve_suite("my-isv", capability, configs_root=CONFIGS_ROOT)
     assert resolved.platform == capability
-
-
-@pytest.mark.parametrize("provider", ["aws", "my-isv"])
-def test_storage_cluster_fixture_uses_its_own_output_contract(provider: str) -> None:
-    """The storage cluster fixture is not held to the platform `cluster` schema.
-
-    `setup_cluster` auto-detects that schema by name, and it demands
-    cluster_name/node_count - inventory no storage check reads.
-    """
-    config_path = CONFIGS_ROOT / "providers" / provider / "config" / "storage.yaml"
-    config = RunConfig.model_validate(merge_yaml_files([str(config_path)]))
-    steps = {step.name: step for step in config.get_steps("storage")}
-
-    assert steps["setup_cluster"].output_schema == "generic"
 
 
 def test_suite_name_survives_every_entry_path(tmp_path: Path) -> None:

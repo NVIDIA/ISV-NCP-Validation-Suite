@@ -656,10 +656,10 @@ def test_nico_check_credentials_reports_identity_shape_on_auth_failure(
 
 
 def test_nico_bare_metal_config_platform_matches_command_group() -> None:
-    """The orchestrator uses tests.platform to look up the bare-metal commands group."""
+    """The orchestrator uses tests.capability to look up the bare-metal commands group."""
     merged, _steps = _merged_nico_config_steps("bare_metal.yaml", "bare_metal")
 
-    assert merged["tests"]["platform"] == "bare_metal"
+    assert merged["tests"]["capability"] == "bare_metal"
 
 
 def test_nico_bare_metal_config_wires_instance_inventory_probes() -> None:

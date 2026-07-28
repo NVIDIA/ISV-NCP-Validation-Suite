@@ -190,7 +190,7 @@ class TestReportedCapability:
         """Return a minimal config, declaring `platform` only for a platform suite."""
         raw: dict[str, Any] = {"commands": {}, "tests": {"validations": {}}}
         if platform:
-            raw["tests"]["platform"] = platform
+            raw["tests"]["capability"] = platform
         return RunConfig.model_validate(raw)
 
     def test_core_context_is_reported_as_no_capability(self) -> None:

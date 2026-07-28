@@ -117,7 +117,7 @@ def create(
         typer.Option(
             "--config",
             "-f",
-            help="Path to isvctl config YAML file (auto-detects platform from 'tests.platform')",
+            help="Path to isvctl config YAML file (auto-detects capability from 'tests.capability')",
             exists=True,
         ),
     ] = None,

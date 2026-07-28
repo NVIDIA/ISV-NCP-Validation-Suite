@@ -214,9 +214,13 @@ def _iter_suite_docs() -> Iterator[tuple[Path, dict[str, Any]]]:
 
 
 def _declared_platform(data: dict[str, Any]) -> str | None:
-    """Return the platform key a suite document declares, or None for a plain suite."""
+    """Return the capability a suite document declares, or None for a plain suite.
+
+    Reads ``tests.capability``; the value still travels to the service as the
+    catalog entry's ``platform`` field, which is the wire name.
+    """
     tests = data.get("tests") or {}
-    platform = tests.get("platform") if isinstance(tests, dict) else None
+    platform = tests.get("capability") if isinstance(tests, dict) else None
     return platform if isinstance(platform, str) and platform else None
 
 

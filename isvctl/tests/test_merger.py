@@ -580,7 +580,7 @@ class TestImportEndToEnd:
         assert context.render_string(exclude_selector) == "isv.ncp.validation/pool=test"
         assert context.render_string(total_gpu_count) == "2"
         assert context.render_string(expected_total) == "2"
-        assert result["tests"]["platform"] == "kubernetes"
+        assert result["tests"]["capability"] == "kubernetes"
 
     def test_aws_eks_does_not_hardcode_world_open_endpoint_allowlist(self) -> None:
         """EKS setup must not create clusters that make the security suite fail."""

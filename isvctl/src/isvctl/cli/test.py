@@ -130,7 +130,7 @@ def _resolve_capability_context(config: RunConfig, capability: str | None, suite
     runs on vm and kubernetes at once - so a plain suite always has a context.
     Platform suites declare no ``requires:``, so they are left alone.
     """
-    if config.tests and config.tests.platform:
+    if config.tests and config.tests.capability:
         return capability
 
     if capability is None:
@@ -149,13 +149,13 @@ def _reported_capability(config: RunConfig, capability_context: str | None) -> s
     Two client-side spellings have to be translated before they leave the process.
     ``CORE_REQUIREMENT_CONTEXT`` is this module's word for "no capability", which
     the service records as NULL. A platform suite is left with no explicit context
-    because its own platform *is* the capability it runs under, so report that
+    because the capability it declares *is* the one it runs under, so report that
     rather than losing the axis for every platform-suite run.
     """
     if capability_context == CORE_REQUIREMENT_CONTEXT:
         return None
-    if capability_context is None and config.tests and config.tests.platform:
-        return config.tests.platform
+    if capability_context is None and config.tests and config.tests.capability:
+        return config.tests.capability
     return capability_context
 
 
@@ -166,8 +166,8 @@ def _human_readable_dry_run(
     exclude_labels: list[str] | None = None,
 ) -> str:
     """Render the validation requirement plan without executing lifecycle steps."""
-    platform = config.tests.platform if config.tests and config.tests.platform else None
-    suite_type = f"platform ({platform})" if platform else "plain"
+    declared = config.tests.capability if config.tests and config.tests.capability else None
+    suite_type = f"platform ({declared})" if declared else "plain"
     context = "not filtered" if capability is None else capability
     selected_labels = set(include_labels or [])
     rejected_labels = set(exclude_labels or [])
@@ -553,7 +553,9 @@ def run(
     if upload_results and lab_id:
         print_progress("Creating test run in ISV Lab Service...")
         platform = (
-            config.tests.platform if config.tests and config.tests.platform else next(iter(config.commands), "unknown")
+            config.tests.capability
+            if config.tests and config.tests.capability
+            else next(iter(config.commands), "unknown")
         )
         test_run_id = create_test_run(
             lab_id=lab_id,
@@ -768,7 +770,8 @@ def validate(
         run_config = RunConfig.model_validate(merged_config)
         ok_status = typer.style("[OK]", fg=typer.colors.GREEN)
         typer.echo(f"{ok_status} Configuration is valid")
-        typer.echo(f"\nPlatform: {run_config.tests.platform if run_config.tests else 'not specified'}")
+        declared = run_config.tests.capability if run_config.tests else None
+        typer.echo(f"\nCapability: {declared or 'not specified (plain suite)'}")
         if run_config.commands:
             typer.echo(f"Commands defined: {list(run_config.commands.keys())}")
         if run_config.context:

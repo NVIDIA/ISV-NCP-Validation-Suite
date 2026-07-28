@@ -125,10 +125,12 @@ class StepConfig(BaseModel):
 
 
 class PlatformCommands(BaseModel):
-    """Lifecycle commands for a specific platform.
+    """Lifecycle commands for a specific test target.
 
-    Groups commands for a platform (kubernetes, slurm, bare_metal, network, vm, iam, image_registry, security, observability).
-    Supports skip at both platform level (skips all phases) and phase level.
+    Groups commands for a test target (kubernetes, slurm, bare_metal, network, vm, iam, image_registry, security, observability).
+    The keys span both capabilities and plain suites, which is why this axis is
+    "test target" and not "capability".
+    Supports skip at both target level (skips all phases) and phase level.
 
     The `phases` field defines the execution order. Steps are grouped by their `phase`
     field and executed in the order defined by `phases`. Validations run after each phase.
@@ -148,12 +150,12 @@ class PlatformCommands(BaseModel):
 
     If a step's phase is not in the phases list, an error is raised.
 
-    Supports skip at both platform level (skips all phases) and step level.
+    Supports skip at both target level (skips all phases) and step level.
     """
 
     model_config = ConfigDict(extra="allow")
 
-    skip: bool = Field(default=False, description="Skip all commands for this platform")
+    skip: bool = Field(default=False, description="Skip all commands for this test target")
     phases: list[str] = Field(
         default_factory=lambda: ["setup", "teardown"],
         description="Ordered list of phases to execute. Steps are grouped by phase and run in this order.",
@@ -374,7 +376,7 @@ class ValidationConfig(BaseModel):
 
     cluster_name: str | None = Field(default=None, description="Cluster name for test run")
     description: str | None = Field(default=None, description="Test run description")
-    platform: str | None = Field(
+    capability: str | None = Field(
         default=None,
         description=(
             "Capability a platform suite declares: vm, bare_metal, kubernetes, slurm. "
@@ -396,14 +398,19 @@ class ValidationConfig(BaseModel):
         """Reject legacy axes and requirements on platform suite checks."""
         if self.model_extra and "module" in self.model_extra:
             raise ValueError("tests.module is no longer supported; plain suites have no axis key")
-        if self.platform and self.platform not in DECLARABLE_CAPABILITIES:
-            raise ValueError(f"tests.platform must be one of: {', '.join(sorted(DECLARABLE_CAPABILITIES))}")
+        # This model allows extras, so a config still saying `tests.platform:` would be
+        # silently ignored and the suite would demote to a plain suite - every check
+        # gated on a capability it no longer declares. Name the rename instead.
+        if self.model_extra and "platform" in self.model_extra:
+            raise ValueError("tests.platform was renamed to tests.capability")
+        if self.capability and self.capability not in DECLARABLE_CAPABILITIES:
+            raise ValueError(f"tests.capability must be one of: {', '.join(sorted(DECLARABLE_CAPABILITIES))}")
         entries = parse_validations(self.validations)
-        if self.platform and any("requires" in entry.params_template for entry in entries):
+        if self.capability and any("requires" in entry.params_template for entry in entries):
             raise ValueError("requires is not allowed in platform suites")
         if any("platforms" in entry.params_template for entry in entries):
             raise ValueError("per-check platforms is no longer supported; use requires in plain suites")
-        if not self.platform:
+        if not self.capability:
             for entry in entries:
                 raw_requires = entry.params_template.get("requires")
                 if raw_requires is None:
@@ -419,7 +426,7 @@ class RunConfig(BaseModel):
 
     This is the merged result of all YAML config files (from -f/--config). It contains:
     - lab: Lab/environment metadata
-    - commands: ISV-provided lifecycle commands grouped by platform
+    - commands: ISV-provided lifecycle commands grouped by test target
     - context: Variables for Jinja2 templating
     - tests: Test configuration (validations to run)
     """
@@ -431,41 +438,41 @@ class RunConfig(BaseModel):
     lab: LabConfig | None = Field(default=None, description="Lab configuration")
     commands: dict[str, PlatformCommands] = Field(
         default_factory=dict,
-        description="Lifecycle commands by platform (kubernetes, slurm, bare_metal, network, vm, iam, image_registry, security, observability)",
+        description="Lifecycle commands by test target (kubernetes, slurm, bare_metal, network, vm, iam, image_registry, security, observability)",
     )
     context: dict[str, Any] = Field(default_factory=dict, description="Context variables for templating")
     tests: ValidationConfig | None = Field(default=None, description="Test configuration")
 
     def get_steps(self, platform: str) -> list[StepConfig]:
-        """Get the sequential steps for a given platform.
+        """Get the sequential steps for a given test target.
 
         Args:
-            platform: 'kubernetes', 'slurm', 'bare_metal', 'network', 'vm', 'iam', 'security', etc.
+            platform: test target key - 'kubernetes', 'slurm', 'bare_metal', 'network', 'vm', 'iam', 'security', etc.
 
         Returns:
             List of StepConfig if steps are defined, empty list otherwise
 
         Raises:
-            KeyError: If platform is not configured
+            KeyError: If the test target is not configured
         """
         platform_cmds = self.commands.get(platform)
         if platform_cmds is None:
-            raise KeyError(f"Platform '{platform}' not configured in commands")
+            raise KeyError(f"Test target '{platform}' not configured in commands")
         return platform_cmds.steps
 
     def get_phases(self, platform: str) -> list[str]:
-        """Get the ordered phases list for a given platform.
+        """Get the ordered phases list for a given test target.
 
         Args:
-            platform: 'kubernetes', 'slurm', 'bare_metal', 'network', 'vm', 'iam', 'security', etc.
+            platform: test target key - 'kubernetes', 'slurm', 'bare_metal', 'network', 'vm', 'iam', 'security', etc.
 
         Returns:
             List of phase names in execution order
 
         Raises:
-            KeyError: If platform is not configured
+            KeyError: If the test target is not configured
         """
         platform_cmds = self.commands.get(platform)
         if platform_cmds is None:
-            raise KeyError(f"Platform '{platform}' not configured in commands")
+            raise KeyError(f"Test target '{platform}' not configured in commands")
         return platform_cmds.phases

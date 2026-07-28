@@ -297,7 +297,7 @@ never a combination:
 `vm` · `bare_metal` · `kubernetes` · `slurm`
 
 Each has a **platform suite** (`suites/vm.yaml`, `suites/k8s.yaml`, ...) carrying
-the checks you owe by declaring it. Its `tests.platform:` key names the
+the checks you owe by declaring it. Its `tests.capability:` key names the
 capability, and its checks declare no `requires:` — they all run.
 
 Everything else is a **plain suite** (`storage`, `network`, `iam`, ...), named by
@@ -325,7 +325,7 @@ and `--label` discovery behave identically:
 
 ```bash
 isvctl test run --provider acme --suite storage                         # core only
-isvctl test run --provider acme --suite storage --capability kubernetes # core + k8s checks
+isvctl test run --provider acme --suite storage --capability vm         # core + vm checks
 isvctl test run --provider acme --suite kubernetes                      # the platform suite
 ```
 

@@ -48,7 +48,7 @@ def _plain_suite_configs() -> list[tuple[str, Path]]:
             config = RunConfig.model_validate(merge_yaml_files([str(path)]))
             # Platform suites carry no `requires:` on their checks, so nothing
             # is ever gated inside them.
-            if config.tests and config.tests.platform:
+            if config.tests and config.tests.capability:
                 continue
             configs.append((provider, path))
     return configs

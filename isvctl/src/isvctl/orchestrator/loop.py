@@ -902,7 +902,7 @@ class Orchestrator:
         """Detect platform from configuration.
 
         Checks execution identity without requiring a plain-suite axis key:
-        1. tests.platform (isvctl schema)
+        1. tests.capability (isvctl schema)
         2. Root-level platform (legacy isvtest schema)
         3. The sole commands mapping key (plain suites)
 
@@ -912,8 +912,8 @@ class Orchestrator:
         platform = None
 
         # Check isvctl schema location first
-        if self.config.tests and self.config.tests.platform:
-            platform = self.config.tests.platform
+        if self.config.tests and self.config.tests.capability:
+            platform = self.config.tests.capability
         # Fall back to root-level platform (legacy isvtest configs)
         elif hasattr(self.config, "model_extra") and self.config.model_extra:
             platform = self.config.model_extra.get("platform")

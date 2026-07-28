@@ -49,7 +49,7 @@ def test_wiring_errors_rejects_scalar_labels(tmp_path: Path) -> None:
     suite.write_text(
         """\
 tests:
-  platform: kubernetes
+  capability: kubernetes
   validations:
     example:
       checks:
@@ -68,7 +68,7 @@ def test_wiring_errors_require_canonical_suite_label(tmp_path: Path) -> None:
     suite.write_text(
         """\
 tests:
-  platform: kubernetes
+  capability: kubernetes
   validations:
     example:
       checks:
@@ -163,7 +163,7 @@ def test_wiring_errors_flags_requires_with_no_platform_suite(tmp_path: Path) -> 
     (tmp_path / "vm.yaml").write_text(
         """\
 tests:
-  platform: vm
+  capability: vm
   validations:
     example:
       checks:
@@ -190,11 +190,11 @@ tests:
 
 
 def test_wiring_errors_allows_platform_suite_named_after_capability(tmp_path: Path) -> None:
-    """The kubernetes *platform* suite (declares tests.platform) is not a collision."""
+    """The kubernetes *platform* suite (declares tests.capability) is not a collision."""
     (tmp_path / "k8s.yaml").write_text(
         """\
 tests:
-  platform: kubernetes
+  capability: kubernetes
   validations:
     sample:
       checks:

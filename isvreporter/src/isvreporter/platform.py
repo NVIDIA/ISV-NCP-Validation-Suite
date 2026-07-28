@@ -92,7 +92,10 @@ def normalize_platform(platform: str | None) -> str:
 
 
 def get_platform_from_config(config_path: Path | str) -> str:
-    """Extract and normalize platform from a config file.
+    """Extract and normalize the declared capability from a config file.
+
+    Reads ``tests.capability``, the key a platform suite uses to declare which
+    capability it covers. Plain suites omit it and fall back to the default.
 
     Args:
         config_path: Path to the YAML config file
@@ -103,7 +106,7 @@ def get_platform_from_config(config_path: Path | str) -> str:
     try:
         with open(config_path) as f:
             config_data = yaml.safe_load(f)
-        platform = config_data.get("tests", {}).get("platform", "")
+        platform = config_data.get("tests", {}).get("capability", "")
         return normalize_platform(platform)
     except Exception:
         return DEFAULT_PLATFORM

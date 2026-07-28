@@ -92,6 +92,12 @@ check that wires one purpose-built class — `SerialConsoleCheck`,
 `IamCredentialAccessCheck` — already has a name that says what it proves and
 keeps it.
 
+The generic checks — `StepSuccessCheck`, `FieldExistsCheck`, `FieldValueCheck`,
+`CrudOperationsCheck` — are marked `compose_only` in their class definition and a
+suite may only reach them from inside a `compose` list. Suffixing the class name
+(`StepSuccessCheck-teardown`) does not count: it still leaves the mechanism, not
+the property under test, as the test's public identity.
+
 ## Test Suite Details
 
 ### IAM (`iam.yaml`)

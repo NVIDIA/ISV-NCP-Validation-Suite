@@ -69,6 +69,11 @@ class BaseValidation(ABC):
     description: ClassVar[str] = ""
     timeout: ClassVar[int] = 60
     catalog_exclude: ClassVar[bool] = False
+    # Set on checks that assert something generic ("the step succeeded", "these
+    # fields exist"). Their class name describes the mechanism, not the property
+    # under test, so a suite may only reach them from inside a composite's
+    # ``compose`` list - never wire one directly and hand it a catalog identity.
+    compose_only: ClassVar[bool] = False
 
     def __init__(self, runner: Runner | None = None, config: dict[str, Any] | None = None):
         self.config = config or {}

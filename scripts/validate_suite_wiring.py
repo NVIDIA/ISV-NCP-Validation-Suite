@@ -29,6 +29,10 @@ A check wired with ``compose`` is a composite: it names no validation class of
 its own, so it must supply the ``description`` the catalog would otherwise take
 from a class, and every name in its ``compose`` list must be a real check.
 
+Checks marked ``compose_only`` (``StepSuccessCheck`` and friends) assert
+something generic, so their class name would be a poor catalog identity. They
+may only be reached from inside a ``compose`` list.
+
 Usage:
     python3 scripts/validate_suite_wiring.py
     python3 scripts/validate_suite_wiring.py --check   # exit 1 on violations
@@ -49,13 +53,20 @@ from typing import Any
 import yaml
 from isvtest.catalog import iter_checks_from_data
 from isvtest.core.composite import COMPOSE_KEY, composed_members, is_composite
-from isvtest.core.resolution import DECLARABLE_CAPABILITIES, canonical_suite_name, requires_error
+from isvtest.core.resolution import (
+    DECLARABLE_CAPABILITIES,
+    canonical_suite_name,
+    requires_error,
+    resolve_class_key,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SUITES_DIR = REPO_ROOT / "isvctl" / "configs" / "suites"
 _NEXT_CATEGORY_LINE = re.compile(r"^    \S")
-# Opt-in until unique wiring names land in a dedicated PR.
-ENFORCE_UNIQUE_WIRING = os.environ.get("ISVCTL_ENFORCE_UNIQUE_WIRING") == "1"
+# Two rules describe the wiring contract the suites are migrating to: names are
+# globally unique, and generic checks are reached only through a composite. Both
+# hold once every suite is migrated, so both stay opt-in until then.
+ENFORCE_WIRING_RULES = os.environ.get("ISVCTL_ENFORCE_WIRING_RULES") == "1"
 
 
 def _check_line_patterns(check_name: str) -> tuple[re.Pattern[str], ...]:
@@ -112,6 +123,14 @@ def discovered_check_names() -> frozenset[str]:
     from isvtest.core.discovery import discover_all_tests
 
     return frozenset(cls.__name__ for cls in discover_all_tests())
+
+
+@cache
+def compose_only_check_names() -> frozenset[str]:
+    """Return the checks that may only be reached from inside a composite."""
+    from isvtest.core.discovery import discover_all_tests
+
+    return frozenset(cls.__name__ for cls in discover_all_tests() if getattr(cls, "compose_only", False))
 
 
 def composite_errors(location: str, name: str, params: dict[str, Any]) -> list[str]:
@@ -227,12 +246,17 @@ def wiring_errors(suites_dir: Path = SUITES_DIR) -> list[str]:
             # Uniqueness enforcement is intentionally deferred to a follow-up
             # PR. Keep the check so it can be re-enabled without rediscovery.
             if previous_location:
-                if ENFORCE_UNIQUE_WIRING:
+                if ENFORCE_WIRING_RULES:
                     errors.append(f"{location}: wiring name is not globally unique (also at {previous_location})")
             else:
                 wiring_locations[name] = location
             if is_composite(params):
                 errors.extend(composite_errors(location, name, params))
+            elif ENFORCE_WIRING_RULES and (generic := resolve_class_key(name, compose_only_check_names())):
+                errors.append(
+                    f"{location}: {generic} is a generic check and may only appear in a composite's "
+                    f"{COMPOSE_KEY} list; name what the test proves and compose it"
+                )
             if test_id is None:
                 errors.append(f'{location}: missing test_id (use a plan id or "N/A")')
             if not labels:

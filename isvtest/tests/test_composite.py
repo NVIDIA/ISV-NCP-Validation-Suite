@@ -175,6 +175,29 @@ class TestCompositeCheck:
 
         assert composite._subtest_results == []
 
+    def test_generic_checks_are_marked_compose_only(self) -> None:
+        """The generic checks describe a mechanism, so they need a composite.
+
+        Dropping the marker would silently let a suite spend a catalog identity
+        on ``StepSuccessCheck`` again, which the wiring validator only catches
+        while the marker is present.
+        """
+        from isvtest.validations.generic import (
+            CrudOperationsCheck,
+            FieldExistsCheck,
+            FieldValueCheck,
+            StepSuccessCheck,
+        )
+
+        for check in (FieldExistsCheck, FieldValueCheck, StepSuccessCheck, CrudOperationsCheck):
+            assert check.compose_only is True, f"{check.__name__} must stay compose-only"
+
+    def test_purpose_built_checks_are_not_compose_only(self) -> None:
+        """A check whose name already says what it proves is wired directly."""
+        from isvtest.validations.iam import IamCredentialAccessCheck
+
+        assert IamCredentialAccessCheck.compose_only is False
+
     def test_is_excluded_from_discovery(self) -> None:
         """The runner is machinery: it must never be discovered or catalogued."""
         from isvtest.core.discovery import discover_all_tests

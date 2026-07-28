@@ -232,9 +232,9 @@ def _build_suite_map() -> dict[str, dict[str, Any]]:
     the wiring here and used as the catalog description.
 
     Duplicate wiring names currently last-wins. Global uniqueness enforcement
-    is deferred to a follow-up PR (``ISVCTL_ENFORCE_UNIQUE_WIRING=1``).
+    is deferred to a follow-up PR (``ISVCTL_ENFORCE_WIRING_RULES=1``).
     """
-    enforce_unique = os.environ.get("ISVCTL_ENFORCE_UNIQUE_WIRING") == "1"
+    enforce_unique = os.environ.get("ISVCTL_ENFORCE_WIRING_RULES") == "1"
     suite_map: dict[str, dict[str, Any]] = {}
     for config_path, data in _iter_suite_docs():
         capability = _declared_capability(data)

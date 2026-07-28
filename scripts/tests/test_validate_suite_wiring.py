@@ -282,6 +282,79 @@ tests:
     assert any("MalformedComposeCheck" in err and "must be 'CheckName'" in err for err in errors)
 
 
+def _generic_wiring_suite(tmp_path: Path) -> None:
+    """Write a suite that wires a generic check directly and as a variant."""
+    (tmp_path / "demo.yaml").write_text(
+        """\
+tests:
+  validations:
+    example:
+      step: create_user
+      checks:
+        StepSuccessCheck:
+          test_id: "N/A"
+          labels: ["demo"]
+          requires: []
+        StepSuccessCheck-teardown:
+          test_id: "N/A"
+          labels: ["demo"]
+          requires: []
+"""
+    )
+
+
+def test_generic_checks_may_not_be_wired_directly(monkeypatch, tmp_path: Path) -> None:
+    """A compose_only check wired under its class name is rejected."""
+    monkeypatch.setattr(validate_suite_wiring, "ENFORCE_WIRING_RULES", True)
+    _generic_wiring_suite(tmp_path)
+
+    errors = validate_suite_wiring.wiring_errors(tmp_path)
+    assert sum("may only appear in a composite" in err for err in errors) == 2
+
+
+def test_generic_check_variant_names_are_also_rejected(monkeypatch, tmp_path: Path) -> None:
+    """Suffixing a generic class name does not make it a name of its own."""
+    monkeypatch.setattr(validate_suite_wiring, "ENFORCE_WIRING_RULES", True)
+    _generic_wiring_suite(tmp_path)
+
+    errors = validate_suite_wiring.wiring_errors(tmp_path)
+    assert any("StepSuccessCheck-teardown" in err and "may only appear in a composite" in err for err in errors)
+
+
+def test_generic_wiring_rule_is_opt_in_during_migration(monkeypatch, tmp_path: Path) -> None:
+    """Unmigrated suites still pass while the wiring rules are deferred."""
+    monkeypatch.setattr(validate_suite_wiring, "ENFORCE_WIRING_RULES", False)
+    _generic_wiring_suite(tmp_path)
+
+    errors = validate_suite_wiring.wiring_errors(tmp_path)
+    assert not any("may only appear in a composite" in err for err in errors)
+
+
+def test_generic_checks_are_allowed_inside_a_composite(monkeypatch, tmp_path: Path) -> None:
+    """``compose`` is exactly where a generic check belongs."""
+    monkeypatch.setattr(validate_suite_wiring, "ENFORCE_WIRING_RULES", True)
+    (tmp_path / "demo.yaml").write_text(
+        """\
+tests:
+  validations:
+    example:
+      step: create_user
+      checks:
+        DemoUserCreatedCheck:
+          test_id: "N/A"
+          labels: ["demo"]
+          requires: []
+          description: "Check the demo user is created"
+          compose:
+            - StepSuccessCheck
+            - FieldExistsCheck:
+                fields: ["username"]
+"""
+    )
+
+    assert validate_suite_wiring.wiring_errors(tmp_path) == []
+
+
 def test_wiring_errors_allows_platform_suite_named_after_capability(tmp_path: Path) -> None:
     """The kubernetes *platform* suite (declares tests.capability) is not a collision."""
     (tmp_path / "k8s.yaml").write_text(

@@ -303,36 +303,48 @@ tests:
     )
 
 
-def test_generic_checks_may_not_be_wired_directly(monkeypatch, tmp_path: Path) -> None:
+def test_wiring_names_must_be_unique_across_suites(tmp_path: Path) -> None:
+    """The catalog keys on the wiring name, so a reused name would drop a test."""
+    for suite in ("demo", "other"):
+        (tmp_path / f"{suite}.yaml").write_text(
+            f"""\
+tests:
+  validations:
+    example:
+      step: create_user
+      checks:
+        DemoUserCreatedCheck:
+          test_id: "N/A"
+          labels: ["{suite}"]
+          requires: []
+          description: "Check the demo user is created"
+          compose:
+            - StepSuccessCheck
+"""
+        )
+
+    errors = validate_suite_wiring.wiring_errors(tmp_path)
+    assert any("DemoUserCreatedCheck" in err and "not globally unique" in err for err in errors)
+
+
+def test_generic_checks_may_not_be_wired_directly(tmp_path: Path) -> None:
     """A compose_only check wired under its class name is rejected."""
-    monkeypatch.setattr(validate_suite_wiring, "ENFORCE_WIRING_RULES", True)
     _generic_wiring_suite(tmp_path)
 
     errors = validate_suite_wiring.wiring_errors(tmp_path)
     assert sum("may only appear in a composite" in err for err in errors) == 2
 
 
-def test_generic_check_variant_names_are_also_rejected(monkeypatch, tmp_path: Path) -> None:
+def test_generic_check_variant_names_are_also_rejected(tmp_path: Path) -> None:
     """Suffixing a generic class name does not make it a name of its own."""
-    monkeypatch.setattr(validate_suite_wiring, "ENFORCE_WIRING_RULES", True)
     _generic_wiring_suite(tmp_path)
 
     errors = validate_suite_wiring.wiring_errors(tmp_path)
     assert any("StepSuccessCheck-teardown" in err and "may only appear in a composite" in err for err in errors)
 
 
-def test_generic_wiring_rule_is_opt_in_during_migration(monkeypatch, tmp_path: Path) -> None:
-    """Unmigrated suites still pass while the wiring rules are deferred."""
-    monkeypatch.setattr(validate_suite_wiring, "ENFORCE_WIRING_RULES", False)
-    _generic_wiring_suite(tmp_path)
-
-    errors = validate_suite_wiring.wiring_errors(tmp_path)
-    assert not any("may only appear in a composite" in err for err in errors)
-
-
-def test_generic_checks_are_allowed_inside_a_composite(monkeypatch, tmp_path: Path) -> None:
+def test_generic_checks_are_allowed_inside_a_composite(tmp_path: Path) -> None:
     """``compose`` is exactly where a generic check belongs."""
-    monkeypatch.setattr(validate_suite_wiring, "ENFORCE_WIRING_RULES", True)
     (tmp_path / "demo.yaml").write_text(
         """\
 tests:

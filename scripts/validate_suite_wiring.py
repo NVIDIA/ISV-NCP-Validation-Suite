@@ -41,7 +41,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import os
 import re
 import sys
 from collections import defaultdict
@@ -63,10 +62,6 @@ from isvtest.core.resolution import (
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SUITES_DIR = REPO_ROOT / "isvctl" / "configs" / "suites"
 _NEXT_CATEGORY_LINE = re.compile(r"^    \S")
-# Two rules describe the wiring contract the suites are migrating to: names are
-# globally unique, and generic checks are reached only through a composite. Both
-# hold once every suite is migrated, so both stay opt-in until then.
-ENFORCE_WIRING_RULES = os.environ.get("ISVCTL_ENFORCE_WIRING_RULES") == "1"
 
 
 def _check_line_patterns(check_name: str) -> tuple[re.Pattern[str], ...]:
@@ -243,16 +238,13 @@ def wiring_errors(suites_dir: Path = SUITES_DIR) -> list[str]:
             labels = _normalize_labels(params.get("labels"))
             required_label = required_suite_label(path)
             previous_location = wiring_locations.get(name)
-            # Uniqueness enforcement is intentionally deferred to a follow-up
-            # PR. Keep the check so it can be re-enabled without rediscovery.
             if previous_location:
-                if ENFORCE_WIRING_RULES:
-                    errors.append(f"{location}: wiring name is not globally unique (also at {previous_location})")
+                errors.append(f"{location}: wiring name is not globally unique (also at {previous_location})")
             else:
                 wiring_locations[name] = location
             if is_composite(params):
                 errors.extend(composite_errors(location, name, params))
-            elif ENFORCE_WIRING_RULES and (generic := resolve_class_key(name, compose_only_check_names())):
+            elif generic := resolve_class_key(name, compose_only_check_names()):
                 errors.append(
                     f"{location}: {generic} is a generic check and may only appear in a composite's "
                     f"{COMPOSE_KEY} list; name what the test proves and compose it"

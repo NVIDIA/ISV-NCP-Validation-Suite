@@ -24,7 +24,6 @@ Suite placement and capability requirements come only from canonical
 """
 
 import logging
-import os
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
@@ -231,16 +230,15 @@ def _build_suite_map() -> dict[str, dict[str, Any]]:
     Composites carry no validation class, so their ``description`` is read off
     the wiring here and used as the catalog description.
 
-    Duplicate wiring names currently last-wins. Global uniqueness enforcement
-    is deferred to a follow-up PR (``ISVCTL_ENFORCE_WIRING_RULES=1``).
+    Wiring names are the catalog's keys, so a duplicate would silently drop a
+    test the suite proves. Reject it here rather than let last-wins hide it.
     """
-    enforce_unique = os.environ.get("ISVCTL_ENFORCE_WIRING_RULES") == "1"
     suite_map: dict[str, dict[str, Any]] = {}
     for config_path, data in _iter_suite_docs():
         capability = _declared_capability(data)
         suite = capability if capability else canonical_suite_name(config_path.stem)
         for _, check_name, params in iter_checks_from_data(data):
-            if check_name in suite_map and enforce_unique:
+            if check_name in suite_map:
                 raise ValueError(f"Suite wiring name {check_name!r} is not globally unique")
             requires = params.get("requires", [])
             suite_map[check_name] = {

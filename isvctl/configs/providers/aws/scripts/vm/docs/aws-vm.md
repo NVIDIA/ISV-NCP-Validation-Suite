@@ -47,23 +47,24 @@ to prevent resource leaks. NIM steps are shared and reusable across VMaaS and BM
 
 | Validation | Step | Description |
 |------------|------|-------------|
-| `InstanceStateCheck` | launch_instance, reboot_instance | Verify instance is running |
-| `InstanceListCheck` | list_instances | Verify instances in VPC, target found |
-| `InstanceTagCheck` | verify_tags | Verify required tags (Name, CreatedBy) |
-| `ConnectivityCheck` | launch_instance, start_instance, reboot_instance | SSH connectivity and command execution |
-| `OsCheck` | launch_instance, start_instance, reboot_instance | Verify OS type |
-| `CloudInitCheck` | launch_instance | Cloud-init completed successfully |
-| `GpuCheck` | launch_instance, start_instance, reboot_instance | GPU visibility via nvidia-smi |
-| `VcpuPinningCheck` | launch_instance, reboot_instance | vCPU count, NUMA topology, CPU-GPU locality |
-| `PciBusCheck` | launch_instance, reboot_instance | PCI GPU enumeration, PCIe link, IOMMU, BAR memory |
-| `HostSoftwareCheck` | launch_instance, reboot_instance | Kernel, libvirt/QEMU, SBIOS, NVIDIA drivers |
-| `InstanceStopCheck` | stop_instance | Stop API call, state transitions to stopped |
-| `InstanceStartCheck` | start_instance | Start API call, state recovery to running |
-| `SerialConsoleCheck` | serial_console | Serial console output available and accessible |
-| `InstanceRebootCheck` | reboot_instance | Reboot API call, state recovery, SSH, uptime reset |
-| `NimHealthCheck` | deploy_nim | NIM `/v1/health/ready` (skipped if no NGC key) |
-| `NimModelCheck` | deploy_nim | NIM `/v1/models` returns expected model |
-| `NimInferenceCheck` | deploy_nim | Chat completion request and response validation |
+| `VmRunningCheck`, `VmStateReportedCheck`, `VmRunningAfterRebootCheck` | launch_instance, describe_instance, reboot_instance | Verify instance is running |
+| `VmListedCheck` | list_instances | Verify instances in VPC, target found |
+| `VmTaggedCheck` | verify_tags | Verify required tags (Name, CreatedBy) |
+| `VmReachableOverSshCheck` (+ `AfterStart`, `AfterReboot`) | describe_instance, start_instance, reboot_instance | SSH connectivity and command execution |
+| `VmOsImageCheck` (+ `AfterStart`, `AfterReboot`) | describe_instance, start_instance, reboot_instance | Verify OS type |
+| `VmCloudInitCheck` | launch_instance | Cloud-init completed successfully |
+| `VmGpusPresentCheck` (+ `AfterStart`, `AfterReboot`) | describe_instance, start_instance, reboot_instance | GPU visibility via nvidia-smi |
+| `VmVcpuPinningCheck` | describe_instance | vCPU count, NUMA topology, CPU-GPU locality |
+| `VmPciBusCheck` | describe_instance | PCI GPU enumeration, PCIe link, IOMMU, BAR memory |
+| `VmHostSoftwareCheck` | describe_instance | Kernel, libvirt/QEMU, SBIOS, NVIDIA drivers |
+| `VmStoppedCheck` | stop_instance | Stop API call, state transitions to stopped |
+| `VmStartedCheck` | start_instance | Start API call, state recovery to running |
+| `VmIdentifierStableAfterStartCheck`, `VmIdentifierStableAfterRebootCheck` | start_instance, reboot_instance | Instance ID stable across power events |
+| `VmSerialConsoleCheck` | serial_console | Serial console output available and accessible |
+| `VmRebootedCheck` | reboot_instance | Reboot API call, state recovery, SSH, uptime reset |
+| `VmNimHealthCheck` | deploy_nim | NIM `/v1/health/ready` (skipped if no NGC key) |
+| `VmNimModelCheck` | deploy_nim | NIM `/v1/models` returns expected model |
+| `VmNimInferenceCheck` | deploy_nim | Chat completion request and response validation |
 | `VmResourcesDeletedCheck` | teardown | Teardown completed successfully |
 
 ## Prerequisites
@@ -206,7 +207,8 @@ mode to capture `system_vendor`, `system_product`, `bios_version`, and
 `tpm_version`, then configure the approved baseline:
 
 ```yaml
-HostSoftwareCheck:
+# Keyed by the suite's wiring name, not the class name
+VmHostSoftwareCheck:
   bios_baselines:
     "Dell Inc.|PowerEdge R760xa":
       min_version: "2.4.8"

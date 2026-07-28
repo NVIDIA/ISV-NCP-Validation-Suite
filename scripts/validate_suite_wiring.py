@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Validate suite identity and per-check metadata in canonical YAML.
+"""Validate suite identity and check resolution in canonical and provider YAML.
 
 Suite configs under ``isvctl/configs/suites/`` are the source of truth for
 validation metadata on this branch. Each wired check must declare:
@@ -33,6 +33,10 @@ Checks marked ``compose_only`` (``StepSuccessCheck`` and friends) assert
 something generic, so their class name would be a poor catalog identity. They
 may only be reached from inside a ``compose`` list.
 
+Provider configs are validated after resolving their imports. This catches
+overrides that accidentally replace a canonical composite's metadata, as well
+as provider-only checks that bypass the canonical suite guardrails.
+
 Usage:
     python3 scripts/validate_suite_wiring.py
     python3 scripts/validate_suite_wiring.py --check   # exit 1 on violations
@@ -50,17 +54,20 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from isvctl.config.merger import merge_yaml_files
 from isvtest.catalog import iter_checks_from_data
 from isvtest.core.composite import COMPOSE_KEY, composed_members, is_composite
 from isvtest.core.resolution import (
     DECLARABLE_CAPABILITIES,
     canonical_suite_name,
+    parse_validations,
     requires_error,
     resolve_class_key,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SUITES_DIR = REPO_ROOT / "isvctl" / "configs" / "suites"
+PROVIDERS_DIR = REPO_ROOT / "isvctl" / "configs" / "providers"
 _NEXT_CATEGORY_LINE = re.compile(r"^    \S")
 
 
@@ -276,6 +283,61 @@ def wiring_errors(suites_dir: Path = SUITES_DIR) -> list[str]:
     return errors
 
 
+def provider_wiring_errors(providers_dir: Path = PROVIDERS_DIR) -> list[str]:
+    """Return errors in provider validations after imports and overrides merge."""
+    errors: list[str] = []
+    known = discovered_check_names()
+    generic_names = compose_only_check_names()
+
+    for path in sorted(providers_dir.rglob("*.yaml")):
+        try:
+            data = merge_yaml_files([path])
+        except (OSError, ValueError, yaml.YAMLError) as exc:
+            errors.append(f"failed to read/merge {path}: {exc}")
+            continue
+
+        tests = data.get("tests") if isinstance(data, dict) else None
+        validations = tests.get("validations") if isinstance(tests, dict) else None
+        if not isinstance(validations, dict):
+            continue
+
+        try:
+            entries = parse_validations(validations)
+        except (ValueError, AttributeError) as exc:
+            errors.append(f"failed to parse merged validations in {path}: {exc}")
+            continue
+
+        locations: dict[str, str] = {}
+        for entry in entries:
+            location = _format_location(path, entry.category, entry.name, None)
+            previous_location = locations.get(entry.name)
+            if previous_location:
+                errors.append(
+                    f"{location}: wiring name is not unique in merged provider config (also at {previous_location})"
+                )
+            else:
+                locations[entry.name] = location
+
+            params = entry.params_template
+            if not isinstance(params, dict):
+                errors.append(f"{location}: check parameters must be a mapping")
+                continue
+            if is_composite(params):
+                errors.extend(composite_errors(location, entry.name, params))
+            elif generic := resolve_class_key(entry.name, generic_names):
+                errors.append(
+                    f"{location}: {generic} is a generic check and may only appear in a composite's "
+                    f"{COMPOSE_KEY} list; name what the test proves and compose it"
+                )
+            elif resolve_class_key(entry.name, known) is None:
+                errors.append(
+                    f"{location}: names unknown validation {entry.name!r}; "
+                    "an override may have replaced composite metadata"
+                )
+
+    return errors
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point. Returns a process exit code."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -289,7 +351,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    errors = wiring_errors()
+    errors = [*wiring_errors(), *provider_wiring_errors()]
     if errors:
         header = f"suite wiring validation failed ({len(errors)} issue(s)):"
         message = header + "\n  " + "\n  ".join(errors)
@@ -299,7 +361,10 @@ def main(argv: list[str] | None = None) -> int:
         print(message)
         return 0
 
-    ok = f"OK: all wired checks in {SUITES_DIR.relative_to(REPO_ROOT)} declare valid suite metadata."
+    ok = (
+        f"OK: canonical checks in {SUITES_DIR.relative_to(REPO_ROOT)} have valid metadata "
+        f"and merged configs in {PROVIDERS_DIR.relative_to(REPO_ROOT)} resolve."
+    )
     print(ok)
     return 0
 

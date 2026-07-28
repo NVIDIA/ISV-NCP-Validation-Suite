@@ -190,34 +190,20 @@ tests:
     host_os:
       step: describe_instance
       checks:
-        VmVcpuPinningCheck:
+        VmComputeTopologyCheck:
           test_id: "VMAAS09-01"
           labels: ["gpu", "ssh", "vm"]
-          description: "Check the VM reports its vCPU pinning layout"
+          description: "Check the VM reports valid vCPU pinning, NUMA, and PCI/GPU topology"
           compose:
             - VcpuPinningCheck
-        VmPciBusCheck:
-          test_id: "VMAAS09-01"
-          labels: ["vm", "ssh", "gpu"]
-          expected_gpus: 1
-          description: "Check the expected GPUs are visible on the VM's PCI bus"
-          compose:
-            - PciBusCheck
-        VmHostSoftwareCheck:
+            - PciBusCheck:
+                expected_gpus: 1
+        VmSoftwareStackCheck:
           test_id: "VMAAS07-01"
           labels: ["gpu", "ssh", "vm"]
-          description: "Check the expected host software is installed on the VM"
+          description: "Check the VM reports a usable host, kernel, and GPU software stack"
           compose:
             - HostSoftwareCheck
-
-    driver_info:
-      step: describe_instance
-      checks:
-        VmGpuDriverCheck:
-          test_id: "VMAAS07-01"
-          labels: ["vm", "ssh", "gpu"]
-          description: "Check the VM reports a usable GPU driver and kernel"
-          compose:
             - DriverCheck
 
     cpu_info:
@@ -307,7 +293,7 @@ tests:
           compose:
             - InstanceRebootCheck
         VmIdentifierStableAfterRebootCheck:
-          test_id: "CNP08-03"
+          test_id: "N/A"
           labels: ["min_req", "vm"]
           reference_id: "{{steps.launch_instance.instance_id}}"
           description: "Check the VM keeps its identifier across a reboot"
@@ -354,37 +340,19 @@ tests:
             - GpuCheck
 
     # ─── NIM validations ─────────────────────────────────────────────
-    nim_health:
-      step: deploy_nim
-      checks:
-        VmNimHealthCheck:
-          test_id: "VMAAS12-01"
-          labels: ["gpu", "slow", "ssh", "vm", "workload"]
-          description: "Check the NIM deployed on the VM reports healthy"
-          compose:
-            - NimHealthCheck
-
-    nim_models:
-      step: deploy_nim
-      checks:
-        VmNimModelCheck:
-          test_id: "VMAAS12-01"
-          labels: ["gpu", "slow", "ssh", "vm", "workload"]
-          description: "Check the NIM deployed on the VM lists its model"
-          compose:
-            - NimModelCheck
-
     nim_inference:
       step: deploy_nim
       checks:
-        VmNimInferenceCheck:
+        VmNimInferenceReadyCheck:
           test_id: "VMAAS12-01"
           labels: ["vm", "ssh", "gpu", "workload", "slow"]
-          prompt: "What is CUDA?"
-          max_tokens: 50
-          description: "Check the NIM deployed on the VM answers an inference request"
+          description: "Check the deployed NIM is healthy, exposes its model, and answers an inference request"
           compose:
-            - NimInferenceCheck
+            - NimHealthCheck
+            - NimModelCheck
+            - NimInferenceCheck:
+                prompt: "What is CUDA?"
+                max_tokens: 50
 
     # ─── Teardown validations ────────────────────────────────────────
     nim_teardown:

@@ -290,7 +290,7 @@ commands:
           - "{{teardown_flag}}"
         timeout: 2400
 
-      # Post-teardown sanitization: verify instance terminated and resources deleted
+      # Post-teardown verification: confirm the instance and resources are gone.
       - name: verify_teardown
         phase: teardown
         command: "python3 ../scripts/bare_metal/verify_terminated.py"
@@ -316,14 +316,6 @@ tests:
 
   # Overrides only - all other validations inherited from ../bare_metal.yaml
   validations:
-    # AWS EC2 GetConsoleOutput can validate current console access, but it does
-    # not prove historical one-month retention. Override the canonical BM group
-    # until an external serial-console archive integration is wired in.
-    serial_console:
-      step: serial_console
-      checks:
-        - BmSerialConsoleCheck: {}
-
     # GPU stress - AWS metal has 8 GPUs
     gpu_stress:
       step: describe_instance
@@ -373,16 +365,28 @@ tests:
     image_installed:
       step: verify_image
       checks:
-        StepSuccessCheck: {}
-        FieldExistsCheck:
-          fields: ["instance_id", "image_id", "image_name", "instance_state"]
-        InstanceStateCheck:
-          expected_state: "running"
+        BmImageInstallationVerifiedCheck:
+          description: "Check the configured OS image is installed on a running bare metal host"
+          compose:
+            - StepSuccessCheck
+            - FieldExistsCheck:
+                fields: ["instance_id", "image_id", "image_name", "instance_state"]
+            - InstanceStateCheck:
+                expected_state: "running"
 
     # AWS-specific: verify install config can provision BM
     config_installable:
       step: verify_config
       checks:
-        StepSuccessCheck: {}
-        FieldExistsCheck:
-          fields: ["config_id", "config_name", "dry_run_passed"]
+        BmInstallConfigUsableCheck:
+          description: "Check the OS install configuration is present and can provision a bare metal host"
+          compose:
+            - StepSuccessCheck
+            - FieldExistsCheck:
+                fields: ["config_id", "config_name", "dry_run_passed"]
+
+  exclude:
+    # EC2 GetConsoleOutput proves current console access, but not historical
+    # one-month retention.
+    tests:
+      - SerialConsoleRetentionCheck

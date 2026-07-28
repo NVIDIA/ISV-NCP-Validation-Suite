@@ -479,6 +479,11 @@ def test_nico_control_plane_config_wires_api_health() -> None:
     validations = merged["tests"]["validations"]
     assert merged["tests"]["settings"]["nico_api_base"] == "{{env.NICO_API_BASE}}"
     assert validations["api_health"]["step"] == "check_api"
+    check = validations["api_health"]["checks"]["NicoControlPlaneApiHealthCheck"]
+    assert check["compose"] == [
+        {"FieldExistsCheck": {"fields": ["account_id", "tests"]}},
+        {"FieldValueCheck": {"field": "success", "expected": True}},
+    ]
 
 
 def test_nico_check_api_reads_site_and_site_list(
@@ -570,10 +575,10 @@ def test_nico_iam_config_wires_credential_readiness() -> None:
     validations = merged["tests"]["validations"]
     assert merged["tests"]["settings"]["nico_api_base"] == "{{env.NICO_API_BASE}}"
     assert validations["credential_readiness"]["step"] == "check_credentials"
-    assert validations["credential_readiness"]["checks"]["FieldExistsCheck"]["fields"] == [
-        "account_id",
-        "authenticated",
-        "tests",
+    check = validations["credential_readiness"]["checks"]["NicoCredentialReadinessCheck"]
+    assert check["compose"] == [
+        {"FieldExistsCheck": {"fields": ["account_id", "authenticated", "tests"]}},
+        "StepSuccessCheck",
     ]
 
 
@@ -859,6 +864,14 @@ def test_nico_network_config_wires_network_inventory_probes() -> None:
     assert validations["vpc_info"]["step"] == "get_vpc"
     assert validations["network_connectivity"]["step"] == "network_connectivity"
     assert validations["traffic_validation"]["step"] == "traffic_validation"
+    assert validations["network_connectivity"]["checks"]["NicoNetworkAssignedCheck"]["compose"] == [
+        "StepSuccessCheck",
+        {"FieldValueCheck": {"field": "tests.network_assigned.passed", "expected": True}},
+    ]
+    assert validations["traffic_validation"]["checks"]["NicoNetworkSetupCheck"]["compose"] == [
+        "StepSuccessCheck",
+        {"FieldValueCheck": {"field": "tests.network_setup.passed", "expected": True}},
+    ]
 
 
 def test_nico_network_config_keeps_empty_vpc_and_subnet_ids_attached(

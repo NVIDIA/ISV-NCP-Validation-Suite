@@ -130,7 +130,7 @@ tests:
     volume_persistence:
       step: volume_persistence
       checks:
-        VolumePersistedAcrossRestartCheck:
+        VolumePersistsAcrossRestartCheck:
           test_id: "DATASVC04-01"
           labels: ["min_req", "storage"]
           requires: [vm, bare_metal]

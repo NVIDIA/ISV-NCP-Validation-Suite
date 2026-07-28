@@ -56,11 +56,13 @@ tests:
     credential_readiness:
       step: check_credentials
       checks:
-        FieldExistsCheck:
+        NicoCredentialReadinessCheck:
           test_id: "N/A"
-          fields: ["account_id", "authenticated", "tests"]
-        StepSuccessCheck:
-          test_id: "N/A"
+          description: "Check NICo credentials authenticate and return account-scoped results"
+          compose:
+            - FieldExistsCheck:
+                fields: ["account_id", "authenticated", "tests"]
+            - StepSuccessCheck
 
   exclude:
     labels: []

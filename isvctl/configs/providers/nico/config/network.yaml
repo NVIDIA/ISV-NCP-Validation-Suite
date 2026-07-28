@@ -118,22 +118,26 @@ tests:
     network_connectivity:
       step: network_connectivity
       checks:
-        StepSuccessCheck:
+        NicoNetworkAssignedCheck:
           test_id: "N/A"
-        FieldValueCheck:
-          test_id: "N/A"
-          field: "tests.network_assigned.passed"
-          expected: true
+          description: "Check the NICo network assignment probe succeeds"
+          compose:
+            - StepSuccessCheck
+            - FieldValueCheck:
+                field: "tests.network_assigned.passed"
+                expected: true
 
     traffic_validation:
       step: traffic_validation
       checks:
-        StepSuccessCheck:
+        NicoNetworkSetupCheck:
           test_id: "N/A"
-        FieldValueCheck:
-          test_id: "N/A"
-          field: "tests.network_setup.passed"
-          expected: true
+          description: "Check the NICo network setup probe succeeds"
+          compose:
+            - StepSuccessCheck
+            - FieldValueCheck:
+                field: "tests.network_setup.passed"
+                expected: true
 
   exclude:
     labels: []

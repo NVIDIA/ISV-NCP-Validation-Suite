@@ -286,7 +286,7 @@ tests:
           compose:
             - InstanceStartCheck
         BmIdentifierStableAfterStartCheck:
-          test_id: "CNP08-01"
+          test_id: "N/A"
           labels: ["bare_metal", "min_req"]
           reference_id: "{{steps.launch_instance.instance_id}}"
           description: "Check the bare metal host keeps its identifier across a start"
@@ -382,12 +382,15 @@ tests:
     power_cycle_checks:
       step: power_cycle_instance
       checks:
-        InstancePowerCycleCheck:
+        BmHostPowerCycledCheck:
           test_id: "CNP01-06"
           labels: ["bare_metal", "min_req"]
           max_recovery_time: 900
+          description: "Check the bare metal host recovers after a power cycle"
+          compose:
+            - InstancePowerCycleCheck
         BmIdentifierStableAfterPowerCycleCheck:
-          test_id: "CNP08-01"
+          test_id: "N/A"
           labels: ["bare_metal", "min_req"]
           reference_id: "{{steps.launch_instance.instance_id}}"
           description: "Check the bare metal host keeps its identifier across a power cycle"
@@ -440,7 +443,7 @@ tests:
           compose:
             - InstanceStateCheck
         BmIdentifierStableAfterReinstallCheck:
-          test_id: "CNP08-01"
+          test_id: "CNP08-02"
           labels: ["bare_metal", "min_req"]
           reference_id: "{{steps.launch_instance.instance_id}}"
           description: "Check the bare metal host keeps its identifier across a reinstall"
@@ -469,37 +472,19 @@ tests:
           compose:
             - GpuCheck
 
-    nim_health:
-      step: deploy_nim
-      checks:
-        BmNimHealthCheck:
-          test_id: "BMAAS10-01"
-          labels: ["bare_metal", "gpu", "min_req", "slow", "ssh", "workload"]
-          description: "Check the NIM deployed on the bare metal host reports healthy"
-          compose:
-            - NimHealthCheck
-
-    nim_models:
-      step: deploy_nim
-      checks:
-        BmNimModelCheck:
-          test_id: "BMAAS10-01"
-          labels: ["bare_metal", "gpu", "min_req", "slow", "ssh", "workload"]
-          description: "Check the NIM deployed on the bare metal host lists its model"
-          compose:
-            - NimModelCheck
-
     nim_inference:
       step: deploy_nim
       checks:
-        BmNimInferenceCheck:
+        BmNimInferenceReadyCheck:
           test_id: "BMAAS10-01"
           labels: ["bare_metal", "gpu", "min_req", "slow", "ssh", "workload"]
-          prompt: "What is CUDA?"
-          max_tokens: 50
-          description: "Check the NIM deployed on the bare metal host answers an inference request"
+          description: "Check the deployed NIM is healthy, exposes its model, and answers an inference request"
           compose:
-            - NimInferenceCheck
+            - NimHealthCheck
+            - NimModelCheck
+            - NimInferenceCheck:
+                prompt: "What is CUDA?"
+                max_tokens: 50
 
     nim_teardown:
       step: teardown_nim
@@ -521,13 +506,13 @@ tests:
           compose:
             - StepSuccessCheck
 
-    sanitization:
+    teardown_verification:
       step: verify_teardown
       checks:
-        TenantDataSanitizedCheck:
-          test_id: "SEC21-01"
-          labels: ["bare_metal", "min_req", "security"]
-          description: "Check tenant data is sanitized once the host is released"
+        BmTeardownVerifiedCheck:
+          test_id: "N/A"
+          labels: ["bare_metal"]
+          description: "Check the host is terminated and its provider resources are deleted"
           compose:
             - StepSuccessCheck
 

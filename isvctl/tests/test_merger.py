@@ -591,12 +591,14 @@ class TestImportEndToEnd:
         assert "TF_VAR_cluster_endpoint_public_access_cidrs" not in setup_env
         assert "0.0.0.0/0" not in str(setup_step)
 
-    def test_aws_bare_metal_overrides_serial_console_retention_check(self) -> None:
-        """AWS BM must not inherit the retention check until archive evidence exists."""
+    def test_aws_bare_metal_excludes_serial_console_retention_check(self) -> None:
+        """AWS BM preserves the composite and excludes only unsupported retention."""
         result = merge_yaml_files([self.CONFIGS_DIR / "providers" / "aws" / "config" / "bare_metal.yaml"])
 
         checks = result["tests"]["validations"]["serial_console"]["checks"]
-        assert checks == [{"BmSerialConsoleCheck": {}}]
+        assert checks["BmSerialConsoleCheck"]["compose"] == ["SerialConsoleCheck"]
+        assert "SerialConsoleRetentionCheck" in checks
+        assert "SerialConsoleRetentionCheck" in result["tests"]["exclude"]["tests"]
 
     def test_microk8s_inherits_k8s_validations(self) -> None:
         """providers/microk8s.yaml imports suites/k8s.yaml and adds overrides."""

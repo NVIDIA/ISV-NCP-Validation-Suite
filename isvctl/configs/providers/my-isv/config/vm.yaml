@@ -27,7 +27,7 @@
 #    VmIdentifierStableAfter* checks, VmSerialConsoleCheck,
 #    ConsoleRbacCheck, ComponentKeyAccessCheck,
 #    VmResourcesDeletedCheck). SSH-based host checks
-#    (VmReachableOverSsh*, VmGpusPresent*, VmGpuDriverCheck,
+#    (VmReachableOverSsh*, VmGpusPresent*, VmSoftwareStackCheck,
 #    VmCpuInfoCheck, the NIM checks, etc.) are excluded
 #    via `exclude.labels: [ssh]` because a dummy-success stub cannot
 #    spin up a real host to SSH into. The deploy_nim / teardown_nim
@@ -233,7 +233,7 @@ tests:
     teardown_flag: "{{(env.VM_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"
 
   # Skip SSH-based host checks (VmReachableOverSsh*, VmGpusPresent*,
-  # VmGpuDriverCheck, VmCpuInfoCheck, VmCloudInitCheck, NIM) - they'd try to connect
+  # VmSoftwareStackCheck, VmCpuInfoCheck, VmCloudInitCheck, NIM) - they'd try to connect
   # to the dummy public_ip. Pure JSON-contract checks still run.
   # Real ISVs remove this exclusion as their stubs come online.
   exclude:

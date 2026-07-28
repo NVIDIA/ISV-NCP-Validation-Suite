@@ -116,6 +116,12 @@ def test_repo_suites_declare_test_id_and_labels() -> None:
     assert not errors, "suite wiring validation failed:\n  " + "\n  ".join(errors)
 
 
+def test_repo_provider_configs_resolve_after_merging() -> None:
+    """Guardrail: provider overrides preserve composites and never wire generics directly."""
+    errors = validate_suite_wiring.provider_wiring_errors()
+    assert not errors, "provider wiring validation failed:\n  " + "\n  ".join(errors)
+
+
 def test_plain_suite_requires_are_explicit_and_valid(tmp_path: Path) -> None:
     """Plain suites require an allowed list, including an explicit empty list."""
     (tmp_path / "demo.yaml").write_text(
@@ -384,3 +390,74 @@ tests:
 
     errors = validate_suite_wiring.wiring_errors(tmp_path)
     assert not any("collides with a declarable capability" in error for error in errors)
+
+
+def test_provider_wiring_errors_checks_the_merged_override(tmp_path: Path) -> None:
+    """A provider override cannot strip an imported composite down to an unknown name."""
+    suite = tmp_path / "suite.yaml"
+    suite.write_text(
+        """\
+tests:
+  validations:
+    example:
+      checks:
+        DemoCreatedCheck:
+          description: "Check the demo is created"
+          compose:
+            - StepSuccessCheck
+"""
+    )
+    providers = tmp_path / "providers"
+    providers.mkdir()
+    (providers / "demo.yaml").write_text(
+        f"""\
+import:
+  - {suite}
+tests:
+  validations:
+    example:
+      checks:
+        - DemoCreatedCheck: {{}}
+"""
+    )
+
+    errors = validate_suite_wiring.provider_wiring_errors(providers)
+    assert any("DemoCreatedCheck" in error and "unknown validation" in error for error in errors)
+
+
+def test_provider_wiring_errors_rejects_provider_only_generic_checks(tmp_path: Path) -> None:
+    """Provider-only configs receive the same compose-only protection as suites."""
+    providers = tmp_path / "providers"
+    providers.mkdir()
+    (providers / "demo.yaml").write_text(
+        """\
+tests:
+  validations:
+    example:
+      checks:
+        StepSuccessCheck: {}
+"""
+    )
+
+    errors = validate_suite_wiring.provider_wiring_errors(providers)
+    assert any("StepSuccessCheck" in error and "may only appear in a composite" in error for error in errors)
+
+
+def test_provider_wiring_errors_accepts_provider_only_composites(tmp_path: Path) -> None:
+    """A named provider-only composite is valid without suite-owned labels."""
+    providers = tmp_path / "providers"
+    providers.mkdir()
+    (providers / "demo.yaml").write_text(
+        """\
+tests:
+  validations:
+    example:
+      checks:
+        DemoCreatedCheck:
+          description: "Check the demo is created"
+          compose:
+            - StepSuccessCheck
+"""
+    )
+
+    assert validate_suite_wiring.provider_wiring_errors(providers) == []

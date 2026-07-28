@@ -980,7 +980,7 @@ https://github.com/NVIDIA/ai-cloud-validation/issues/185[#185]
 | [[CNP08-02]]CNP08-02
 | CNP08
 |
-| min_req
+| bare_metal, min_req
 |
 | P0
 a|

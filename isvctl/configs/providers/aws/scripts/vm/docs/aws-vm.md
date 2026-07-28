@@ -54,17 +54,14 @@ to prevent resource leaks. NIM steps are shared and reusable across VMaaS and BM
 | `VmOsImageCheck` (+ `AfterStart`, `AfterReboot`) | describe_instance, start_instance, reboot_instance | Verify OS type |
 | `VmCloudInitCheck` | launch_instance | Cloud-init completed successfully |
 | `VmGpusPresentCheck` (+ `AfterStart`, `AfterReboot`) | describe_instance, start_instance, reboot_instance | GPU visibility via nvidia-smi |
-| `VmVcpuPinningCheck` | describe_instance | vCPU count, NUMA topology, CPU-GPU locality |
-| `VmPciBusCheck` | describe_instance | PCI GPU enumeration, PCIe link, IOMMU, BAR memory |
-| `VmHostSoftwareCheck` | describe_instance | Kernel, libvirt/QEMU, SBIOS, NVIDIA drivers |
+| `VmComputeTopologyCheck` | describe_instance | vCPU pinning, NUMA topology, PCI GPU enumeration, and CPU-GPU locality |
+| `VmSoftwareStackCheck` | describe_instance | Kernel, libvirt/QEMU, SBIOS, and NVIDIA drivers |
 | `VmStoppedCheck` | stop_instance | Stop API call, state transitions to stopped |
 | `VmStartedCheck` | start_instance | Start API call, state recovery to running |
 | `VmIdentifierStableAfterStartCheck`, `VmIdentifierStableAfterRebootCheck` | start_instance, reboot_instance | Instance ID stable across power events |
 | `VmSerialConsoleCheck` | serial_console | Serial console output available and accessible |
 | `VmRebootedCheck` | reboot_instance | Reboot API call, state recovery, SSH, uptime reset |
-| `VmNimHealthCheck` | deploy_nim | NIM `/v1/health/ready` (skipped if no NGC key) |
-| `VmNimModelCheck` | deploy_nim | NIM `/v1/models` returns expected model |
-| `VmNimInferenceCheck` | deploy_nim | Chat completion request and response validation |
+| `VmNimInferenceReadyCheck` | deploy_nim | NIM is healthy, exposes its model, and answers inference (skipped if no NGC key) |
 | `VmResourcesDeletedCheck` | teardown | Teardown completed successfully |
 
 ## Prerequisites
@@ -208,7 +205,7 @@ mode to capture `system_vendor`, `system_product`, `bios_version`, and
 
 ```yaml
 # Keyed by the suite's wiring name, not the class name
-VmHostSoftwareCheck:
+VmSoftwareStackCheck:
   bios_baselines:
     "Dell Inc.|PowerEdge R760xa":
       min_version: "2.4.8"

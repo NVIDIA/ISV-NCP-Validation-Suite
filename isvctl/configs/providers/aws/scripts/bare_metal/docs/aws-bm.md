@@ -87,10 +87,10 @@ root volume replacement is slow on AWS metal (~30-45 min).
 ## Validations
 
 `SerialConsoleRetentionCheck` requires evidence from a historical serial console
-log archive. The AWS config currently overrides the canonical bare-metal suite
-to run only `BmSerialConsoleCheck` because EC2 `GetConsoleOutput` does not
-prove one-month retention by itself. Add an external archive integration before
-re-enabling the retention check for AWS.
+log archive. The AWS config excludes that check because EC2 `GetConsoleOutput`
+does not prove one-month retention by itself; the canonical
+`BmSerialConsoleCheck` composite remains intact. Add an external archive
+integration before re-enabling the retention check for AWS.
 
 | Validation Group | Check | Step | Description |
 |------------------|-------|------|-------------|
@@ -100,8 +100,8 @@ re-enabling the retention check for AWS.
 | `topology_placement` | `TopologyPlacementCheck` | topology_placement | Placement group CRUD operations |
 | `serial_console` | `BmSerialConsoleCheck` | serial_console | Console output available |
 | `cloud_init` | `BmCloudInitCheck` | launch_instance | Cloud-init completed |
-| `image_installed` | `StepSuccessCheck`, `FieldExistsCheck`, `InstanceStateCheck` | verify_image | OS image verified on BM |
-| `config_installable` | `StepSuccessCheck`, `FieldExistsCheck` | verify_config | Install config dry-run passed |
+| `image_installed` | `BmImageInstallationVerifiedCheck` | verify_image | OS image verified on BM |
+| `config_installable` | `BmInstallConfigUsableCheck` | verify_config | Install config dry-run passed |
 | `instance_info` | `BmHostStateReportedCheck` | describe_instance | Post-start state is running |
 | `ssh` | `BmHostReadyCheck` | describe_instance | SSH works, OS is ubuntu |
 | `gpu` | `BmGpusPresentCheck` | describe_instance | GPU visibility (8 GPUs) |
@@ -121,19 +121,17 @@ re-enabling the retention check for AWS.
 | `reboot_ssh` | `BmHostReadyAfterRebootCheck` | reboot_instance | SSH works after reboot |
 | `reboot_gpu` | `BmGpusPresentAfterRebootCheck` | reboot_instance | GPUs visible after reboot (8 GPUs) |
 | `reboot_host_os` | `HostSoftwareCheck` | reboot_instance | Host OS persisted after reboot |
-| `power_cycle_checks` | `InstancePowerCycleCheck`, `BmIdentifierStableAfterPowerCycleCheck` | power_cycle_instance | Power-cycle recovery, instance ID stable |
+| `power_cycle_checks` | `BmHostPowerCycledCheck`, `BmIdentifierStableAfterPowerCycleCheck` | power_cycle_instance | Power-cycle recovery, instance ID stable |
 | `power_cycle_state` | `BmHostRunningAfterPowerCycleCheck` | power_cycle_instance | Instance running after power-cycle |
 | `power_cycle_ssh` | `BmHostReadyAfterPowerCycleCheck` | power_cycle_instance | SSH works after power-cycle |
 | `power_cycle_gpu` | `BmGpusPresentAfterPowerCycleCheck` | power_cycle_instance | GPUs visible after power-cycle |
 | `reinstall_state` | `BmHostRunningAfterReinstallCheck`, `BmIdentifierStableAfterReinstallCheck` | reinstall_instance | Running with a stable ID after reinstall (if enabled) |
 | `reinstall_ssh` | `BmHostReadyAfterReinstallCheck` | reinstall_instance | SSH works after reinstall |
 | `reinstall_gpu` | `BmGpusPresentAfterReinstallCheck` | reinstall_instance | GPUs visible after reinstall |
-| `nim_health` | `BmNimHealthCheck` | deploy_nim | NIM `/v1/health/ready` |
-| `nim_models` | `BmNimModelCheck` | deploy_nim | NIM `/v1/models` returns model |
-| `nim_inference` | `BmNimInferenceCheck` | deploy_nim | Chat completion works |
+| `nim_inference` | `BmNimInferenceReadyCheck` | deploy_nim | NIM is healthy, exposes its model, and answers inference |
 | `nim_teardown` | `BmNimDeploymentDeletedCheck` | teardown_nim | NIM container removed |
 | `teardown_checks` | `BmResourcesDeletedCheck` | teardown | Instance terminated |
-| `sanitization` | `TenantDataSanitizedCheck` | verify_teardown | SG, key pair confirmed deleted |
+| `teardown_verification` | `BmTeardownVerifiedCheck` | verify_teardown | Instance, SG, and key pair confirmed deleted |
 
 ## Dev Workflow (Instance Reuse)
 

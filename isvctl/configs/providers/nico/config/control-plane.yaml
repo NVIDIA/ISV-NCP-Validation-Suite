@@ -57,13 +57,15 @@ tests:
     api_health:
       step: check_api
       checks:
-        FieldExistsCheck:
-          test_id: "N/A"
-          fields: ["account_id", "tests"]
-        FieldValueCheck:
+        NicoControlPlaneApiHealthCheck:
           test_id: "CP03-01"
-          field: "success"
-          expected: true
+          description: "Check the NICo control-plane API is reachable and returns account-scoped results"
+          compose:
+            - FieldExistsCheck:
+                fields: ["account_id", "tests"]
+            - FieldValueCheck:
+                field: "success"
+                expected: true
 
   exclude:
     labels: []

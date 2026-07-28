@@ -58,7 +58,7 @@ tests:
       checks:
         # DATASVC-XX-01 (S3-compatible API w/ authenticated endpoints):
         # authenticated-endpoint half - a successful authenticated check_api
-        # response. The data-path half is ObjectStorageCrudCheck in the
+        # response. The data-path half is ObjectStorageObjectLifecycleCheck in the
         # "s3_object_lifecycle" section, which declares the same test_id.
         ControlPlaneApiHealthCheck:
           test_id: "DATASVC01-01"
@@ -122,7 +122,7 @@ tests:
         # Data-path half of DATASVC-XX-01 (object put/get/delete); the
         # authenticated-endpoint half is ControlPlaneApiHealthCheck in
         # "api_health".
-        ObjectStorageCrudCheck:
+        ObjectStorageObjectLifecycleCheck:
           test_id: "DATASVC01-01"
           labels: ["control_plane", "min_req"]
           requires: []

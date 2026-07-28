@@ -131,8 +131,9 @@ tests:
           test_id: "K8S06-03"
           labels: ["kubernetes", "min_req", "slow"]
           step: delete_test_node_pool
-          description: "Check a deleted node pool drains to zero nodes"
+          description: "Check the node pool deletion succeeds and drains the pool to zero nodes"
           compose:
+            - StepSuccessCheck
             - K8sNodePoolCheck
           label_selector: "{{ steps.create_test_delete_node_pool.label_selector }}"
           expected_replicas: 0

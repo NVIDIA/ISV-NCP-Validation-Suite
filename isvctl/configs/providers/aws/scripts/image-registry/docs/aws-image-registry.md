@@ -65,7 +65,7 @@ uv run isvctl test run -f isvctl/configs/providers/aws/config/image-registry.yam
 │  1. upload_image (SETUP phase)                                     │
 │     Download VMDK ─▶ Create S3 Bucket ─▶ Upload ─▶ Import AMI      │
 │     Output: {image_id, storage_bucket, disk_ids}                   │
-│     Validations: ImageUploadedCheck                                │
+│     Validations: CustomOsImageUploadedCheck                        │
 └────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
@@ -73,7 +73,7 @@ uv run isvctl test run -f isvctl/configs/providers/aws/config/image-registry.yam
 │  2. crud_image (TEST phase)                                        │
 │     Get AMI ─▶ List AMIs ─▶ Copy AMI ─▶ Delete copy                │
 │     Output: {image_id, operations: {get, list, create, delete}}    │
-│     Validations: ImageCrudCheck                                    │
+│     Validations: CustomOsImageCrudCheck                            │
 └────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
@@ -81,8 +81,8 @@ uv run isvctl test run -f isvctl/configs/providers/aws/config/image-registry.yam
 │  3. launch_instance (TEST phase)                                   │
 │     Create Key Pair ─▶ Create SG ─▶ Launch from imported AMI       │
 │     Output: {instance_id, public_ip, key_path}                     │
-│     Validations: VmBootsFromImageCheck, ConnectivityCheck,         │
-│                  OsCheck, GpuCheck                                 │
+│     Validations: VmBootsFromCustomImageCheck,                      │
+│                  CustomImageVmReadyCheck                           │
 └────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
@@ -91,7 +91,7 @@ uv run isvctl test run -f isvctl/configs/providers/aws/config/image-registry.yam
 │     Create template ─▶ Read ─▶ Update ─▶ Delete                    │
 │     Output: {config_id, config_name, operations: {create, read,    │
 │              update, delete}}                                      │
-│     Validations: InstallConfigCrudCheck                            │
+│     Validations: OsInstallConfigCrudCheck                          │
 └────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
@@ -99,7 +99,7 @@ uv run isvctl test run -f isvctl/configs/providers/aws/config/image-registry.yam
 │  5. teardown (TEARDOWN phase)                                      │
 │     Terminate Instance ─▶ Delete AMI ─▶ Delete Snapshots           │
 │     Delete Bucket ─▶ Delete Key Pair ─▶ Delete SG ─▶ Delete IAM    │
-│     Validations: ImageDeletedCheck                                 │
+│     Validations: CustomOsImageDeletedCheck                         │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -348,12 +348,12 @@ uv run isvctl test run -f isvctl/configs/providers/aws/config/image-registry.yam
 
 | Validation Group | Checks | Step |
 |------------------|--------|------|
-| `image_upload` | `ImageUploadedCheck` — step success + fields (image_id, storage_bucket, disk_ids) | upload_image |
-| `image_crud` | `ImageCrudCheck` — step success + fields + CRUD (get, list, create, delete) | crud_image |
-| `vm_from_image` | `VmBootsFromImageCheck` — step success + fields + instance state (running) | launch_instance |
-| `vm_ssh` | `ImageBootedVmReadyCheck` — SSH reachable + expected OS (ubuntu) | launch_instance |
-| `install_config_crud` | `InstallConfigCrudCheck` — step success + fields (config_id, config_name, operations) | crud_install_config |
-| `teardown_checks` | `ImageDeletedCheck` — step success | teardown |
+| `image_upload` | `CustomOsImageUploadedCheck` — step success + fields (image_id, storage_bucket, disk_ids) | upload_image |
+| `image_crud` | `CustomOsImageCrudCheck` — step success + fields + CRUD (get, list, create, delete) | crud_image |
+| `vm_from_image` | `VmBootsFromCustomImageCheck` — step success + fields + instance state (running) | launch_instance |
+| `vm_ssh` | `CustomImageVmReadyCheck` — SSH reachable + expected OS (ubuntu) | launch_instance |
+| `install_config_crud` | `OsInstallConfigCrudCheck` — step success + fields + CRUD (create, read, update, delete) | crud_install_config |
+| `teardown_checks` | `CustomOsImageDeletedCheck` — step success | teardown |
 
 The canonical config also defines `bm_from_image` and `bm_from_config` validation groups
 for bare-metal provisioning steps. These are auto-skipped in this config since the

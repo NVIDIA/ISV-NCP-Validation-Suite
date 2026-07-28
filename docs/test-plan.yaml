@@ -956,6 +956,7 @@ domains:
                 status: published
               - summary: Verify that a BM node's ID does not change after a maintenance/reprovision event
                 labels:
+                  - bare_metal
                   - min_req
                 priority: P0
                 milestone: M5

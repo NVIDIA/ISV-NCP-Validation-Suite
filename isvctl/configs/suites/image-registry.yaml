@@ -53,7 +53,7 @@ tests:
     image_upload:
       step: upload_image
       checks:
-        ImageUploadedCheck:
+        CustomOsImageUploadedCheck:
           test_id: "BOOT01-01"
           labels: ["image_registry", "min_req"]
           requires: []
@@ -67,7 +67,7 @@ tests:
     image_crud:
       step: crud_image
       checks:
-        ImageCrudCheck:
+        CustomOsImageCrudCheck:
           test_id: "BOOT03-02"
           labels: ["image_registry", "min_req"]
           requires: []
@@ -83,7 +83,7 @@ tests:
     vm_from_image:
       step: launch_instance
       checks:
-        VmBootsFromImageCheck:
+        VmBootsFromCustomImageCheck:
           test_id: "BOOT01-05"
           labels: ["image_registry", "min_req"]
           requires: [vm]
@@ -98,7 +98,7 @@ tests:
     vm_ssh:
       step: launch_instance
       checks:
-        ImageBootedVmReadyCheck:
+        CustomImageVmReadyCheck:
           test_id: "N/A"
           labels: ["image_registry", "ssh"]
           requires: [vm]
@@ -112,7 +112,7 @@ tests:
     install_config_crud:
       step: crud_install_config
       checks:
-        InstallConfigCrudCheck:
+        OsInstallConfigCrudCheck:
           test_id: "BOOT01-02"
           labels: ["image_registry"]
           requires: []
@@ -121,12 +121,14 @@ tests:
             - StepSuccessCheck
             - FieldExistsCheck:
                 fields: ["config_id", "config_name", "operations"]
+            - CrudOperationsCheck:
+                operations: ["create", "read", "update", "delete"]
 
     # --- OS Image on BMaaS ---
     bm_from_image:
       step: install_image_bm
       checks:
-        BmBootsFromImageCheck:
+        BmHostBootsFromCustomImageCheck:
           test_id: "BOOT01-03"
           labels: ["image_registry", "min_req"]
           requires: [bare_metal]
@@ -142,7 +144,7 @@ tests:
     bm_from_config:
       step: install_config_bm
       checks:
-        BmBootsFromInstallConfigCheck:
+        BmHostBootsFromInstallConfigCheck:
           test_id: "BOOT01-04"
           labels: ["image_registry", "min_req"]
           requires: [bare_metal]
@@ -160,7 +162,7 @@ tests:
     teardown_checks:
       step: teardown_image
       checks:
-        ImageDeletedCheck:
+        CustomOsImageDeletedCheck:
           test_id: "N/A"
           labels: ["image_registry"]
           requires: []

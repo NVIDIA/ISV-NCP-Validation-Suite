@@ -227,25 +227,6 @@ commands:
           - "{{nico_api_base}}"
         timeout: 120
 
-      # ─── Query Hardware Serial Numbers (BFX03-01) ──────────────────
-      # Reads each machine's discovered hardware metadata and reduces it to a
-      # per-component stable-identifier record (chassis / baseboard DMI serials,
-      # GPU serials, NIC MAC/GUID, CPU model). BmHardwareSerialCheck asserts a
-      # stable identifier is queryable for every present component so break/fix
-      # can identify installed hardware. Obfuscated-but-stable IDs are accepted.
-      - name: query_serial_numbers
-        phase: test
-        continue_on_failure: true
-        command: "python ../scripts/hardware_inventory/query_serial_numbers.py"
-        args:
-          - "--org"
-          - "{{org}}"
-          - "--site-id"
-          - "{{site_id}}"
-          - "--api-base"
-          - "{{nico_api_base}}"
-        timeout: 120
-
       # ─── Query Failure-Domain Topology (STG05-01) ──────────────────
       # Reads each machine's rack label and reduces it to a per-host
       # failure-domain identifier plus the distinct set of failure domains at

@@ -1,4 +1,4 @@
-MY_ISV_SUITES := bare_metal control-plane iam image-registry network observability security storage vm
+MY_ISV_SUITES := bare_metal control-plane iam image-registry network observability remediation security storage vm
 DEMO_TARGETS := $(addprefix demo-,$(MY_ISV_SUITES))
 
 .PHONY: help pre-commit build test coverage clean lint format install bump-patch bump-fix bump-minor bump-feat bump-major bump bump-check \
@@ -89,6 +89,7 @@ test: ## Run tests for all packages
 # stubs. Unlisted suites are core-only or platform suites.
 DEMO_CAP_network       := vm
 DEMO_CAP_observability := vm
+DEMO_CAP_remediation   := bare_metal
 DEMO_CAP_security      := vm
 DEMO_CAP_storage       := vm
 

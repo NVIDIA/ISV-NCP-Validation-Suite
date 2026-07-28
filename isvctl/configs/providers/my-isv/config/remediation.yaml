@@ -1,0 +1,156 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# my-isv Remediation (Break-Fix) Validation Configuration - Living Example
+#
+# Imports suites/remediation.yaml and wires commands to scripts/remediation/*.
+# Demo mode (ISVCTL_DEMO_MODE=1) returns dummy-success JSON for all BFX checks.
+#
+# Usage:
+#   uv run isvctl test run --provider my-isv --suite remediation
+#   uv run isvctl test run --provider my-isv --suite remediation --capability bare_metal
+
+import:
+  - ../../../suites/remediation.yaml
+
+version: "1.0"
+
+commands:
+  remediation:
+    phases: ["test"]
+    steps:
+      - name: query_serial_numbers
+        phase: test
+        command: "python ../scripts/remediation/query_serial_numbers.py"
+        args: ["--region", "{{region}}"]
+        requires: [bare_metal]
+        timeout: 120
+
+      - name: query_switch_firmware
+        phase: test
+        command: "python ../scripts/remediation/query_switch_firmware.py"
+        args: ["--region", "{{region}}"]
+        requires: [bare_metal]
+        timeout: 120
+
+      - name: query_bmc_kernel_logs
+        phase: test
+        command: "python ../scripts/remediation/query_bmc_kernel_logs.py"
+        args: ["--region", "{{region}}"]
+        requires: [bare_metal]
+        timeout: 120
+
+      - name: query_maintenance_events
+        phase: test
+        command: "python ../scripts/remediation/query_maintenance_events.py"
+        args: ["--region", "{{region}}"]
+        requires: [bare_metal]
+        timeout: 120
+
+      - name: query_retirement_notices
+        phase: test
+        command: "python ../scripts/remediation/query_retirement_notices.py"
+        args: ["--region", "{{region}}"]
+        requires: [bare_metal]
+        timeout: 120
+
+      - name: query_repair_history
+        phase: test
+        command: "python ../scripts/remediation/query_repair_history.py"
+        args: ["--region", "{{region}}"]
+        requires: [bare_metal]
+        timeout: 120
+
+      - name: reset_gpus
+        phase: test
+        command: "python ../scripts/remediation/reset_gpus.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--machine-id"
+          - "{{machine_id}}"
+        requires: [kubernetes, bare_metal]
+        timeout: 600
+
+      - name: return_node_maintenance
+        phase: test
+        command: "python ../scripts/remediation/return_node_maintenance.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--machine-id"
+          - "{{machine_id}}"
+        requires: [bare_metal]
+        timeout: 600
+
+      - name: return_rack_maintenance
+        phase: test
+        command: "python ../scripts/remediation/return_rack_maintenance.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--rack-id"
+          - "{{rack_id}}"
+        requires: [bare_metal]
+        timeout: 600
+
+      - name: cordon_node
+        phase: test
+        command: "python ../scripts/remediation/cordon_node.py"
+        args: ["--region", "{{region}}"]
+        requires: [kubernetes]
+        timeout: 600
+
+      - name: request_host_replacement
+        phase: test
+        command: "python ../scripts/remediation/request_host_replacement.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--machine-id"
+          - "{{machine_id}}"
+        requires: [bare_metal]
+        timeout: 900
+
+      - name: query_node_health_agents
+        phase: test
+        command: "python ../scripts/remediation/query_node_health_agents.py"
+        args: ["--region", "{{region}}"]
+        timeout: 120
+
+      - name: query_planned_notifications
+        phase: test
+        command: "python ../scripts/remediation/query_planned_notifications.py"
+        args: ["--region", "{{region}}"]
+        timeout: 120
+
+      - name: query_failure_notifications
+        phase: test
+        command: "python ../scripts/remediation/query_failure_notifications.py"
+        args: ["--region", "{{region}}"]
+        timeout: 120
+
+tests:
+  cluster_name: "my-isv-remediation-validation"
+  description: "Break-fix / remediation validation (my-isv demo stubs)"
+
+  settings:
+    region: "us-west-2"
+    instance_type: ""
+    machine_id: "demo-machine-001"
+    rack_id: "demo-rack-001"
+
+  exclude:
+    labels: []

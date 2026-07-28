@@ -1988,6 +1988,8 @@ domains:
             tests:
               - summary: Check that GPUd or Sentinel is running
                 priority: P1
+                labels:
+                  - remediation
                 dependencies:
                   - LimitedEnv
                 req_id: BFX04
@@ -1997,6 +1999,8 @@ domains:
                 notes: ""
                 milestone: ""
               - summary: Verify that Tenants can be notified, by some communication system, of planned future node maintenance
+                labels:
+                  - remediation
                 dependencies:
                   - LimitedEnv
                 req_id: BFX05
@@ -2007,6 +2011,8 @@ domains:
                 priority: ""
                 milestone: ""
               - summary: Verify that Tenants can be notified, by some communication system, of immediate node failure
+                labels:
+                  - remediation
                 dependencies:
                   - LimitedEnv
                 req_id: BFX06
@@ -2021,6 +2027,7 @@ domains:
               - summary: Reset GPUs on an individual node via the Breakfix API
                 labels:
                   - min_req
+                  - remediation
                 priority: P2
                 milestone: M5
                 notes: ""
@@ -2032,6 +2039,7 @@ domains:
               - summary: Return an individual node to the provider for maintenance via the API
                 labels:
                   - min_req
+                  - remediation
                 priority: P1
                 milestone: M5
                 notes: ""
@@ -2043,6 +2051,7 @@ domains:
               - summary: Return a rack to the provider for maintenance via the API
                 labels:
                   - min_req
+                  - remediation
                 priority: P1
                 milestone: M5
                 notes: ""
@@ -2054,6 +2063,7 @@ domains:
               - summary: Cordon a node (mark unschedulable); verify no new workloads are placed; verify existing workloads continue
                 labels:
                   - min_req
+                  - remediation
                 priority: P1
                 milestone: M5
                 notes: ""
@@ -2065,6 +2075,7 @@ domains:
               - summary: Request a host replacement when health thresholds are breached; verify the node is removed from the pool
                 labels:
                   - min_req
+                  - remediation
                 priority: P1
                 milestone: M5
                 notes: ""
@@ -2078,6 +2089,7 @@ domains:
               - summary: Query upcoming/current maintenance events for a node
                 labels:
                   - min_req
+                  - remediation
                 priority: P1
                 milestone: M5
                 notes: ""
@@ -2089,6 +2101,7 @@ domains:
               - summary: Query retirement notices for a node/rack
                 labels:
                   - min_req
+                  - remediation
                 priority: P1
                 milestone: M5
                 notes: ""
@@ -2100,6 +2113,7 @@ domains:
               - summary: Query historical repair status for a node
                 labels:
                   - min_req
+                  - remediation
                 priority: P1
                 milestone: M5
                 notes: ""
@@ -2115,6 +2129,7 @@ domains:
                   - bare_metal
                   - breakfix
                   - min_req
+                  - remediation
                 priority: P1
                 milestone: M5
                 notes: ""
@@ -2126,6 +2141,7 @@ domains:
               - summary: Inspect firmware versions of NV switch trays
                 labels:
                   - min_req
+                  - remediation
                 priority: P1
                 milestone: M5
                 notes: ""
@@ -2137,6 +2153,7 @@ domains:
               - summary: Obtain BMC kernel log messages for a node
                 labels:
                   - min_req
+                  - remediation
                 priority: P1
                 milestone: M5
                 notes: ""

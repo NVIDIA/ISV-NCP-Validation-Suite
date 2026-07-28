@@ -32,7 +32,7 @@ from isvreporter.platform import get_platform_from_config
 
 from isvctl.cli import setup_logging
 from isvctl.cli.common import get_output_dir, print_error, print_progress, print_step, print_warning
-from isvctl.config.suite_resolution import CONFIGS_ROOT, resolve_suite_name
+from isvctl.config.suite_resolution import CONFIGS_ROOT, platform_vocabulary, resolve_suite_name
 from isvctl.orchestrator.loop import Phase
 from isvctl.remote import SCPTransfer, SSHClient, TarArchive
 from isvctl.remote.archive import DEFAULT_EXCLUDES as DEFAULT_ARCHIVE_EXCLUDES
@@ -57,6 +57,13 @@ app = typer.Typer(
     help="Deploy to remote machine and run validation tests",
     no_args_is_help=True,
 )
+
+
+def _reporting_suite_and_capability(config_files: list[Path]) -> tuple[str | None, str | None]:
+    """Return the suite and platform-suite capability recorded for a deploy."""
+    suite = resolve_suite_name(config_files, CONFIGS_ROOT)
+    capability = suite if suite in platform_vocabulary(CONFIGS_ROOT) else None
+    return suite, capability
 
 
 def _resolve_config_paths(
@@ -389,6 +396,7 @@ def run(
             print_step("Creating test run in isvreporter...")
             # Derive platform from first config file
             platform = get_platform_from_config(config_files[0]) if config_files else "kubernetes"
+            suite, capability = _reporting_suite_and_capability(list(config_files))
             test_run_id = create_test_run(
                 lab_id=lab_id,
                 platform=platform,
@@ -399,7 +407,8 @@ def run(
                 isv_software_version=isv_software_version,
                 # deploy has no --capability of its own; the remote `test run`
                 # it invokes is core-only unless the config is a platform suite.
-                suite=resolve_suite_name(list(config_files), CONFIGS_ROOT),
+                suite=suite,
+                capability=capability,
             )
             if not test_run_id:
                 print_warning("Failed to create test run, continuing without upload")

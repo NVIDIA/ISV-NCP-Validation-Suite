@@ -224,8 +224,11 @@ class TestReportedCapability:
         config = self._config("vm")
         assert _reported_capability(config, None) == "vm"
 
-    def test_explicit_capability_wins(self) -> None:
-        """An explicit `--capability` is reported as-is, whatever the suite declares."""
+    def test_plain_suite_reports_explicit_capability(self) -> None:
+        """A plain suite reports its explicit capability context."""
         config = self._config(None)
         assert _reported_capability(config, "vm") == "vm"
-        assert _reported_capability(self._config("vm"), "kubernetes") == "kubernetes"
+
+    def test_platform_suite_declaration_wins_defensively(self) -> None:
+        """A platform suite cannot be mislabeled if an invalid context reaches reporting."""
+        assert _reported_capability(self._config("vm"), "kubernetes") == "vm"

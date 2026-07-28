@@ -128,10 +128,16 @@ def _resolve_capability_context(config: RunConfig, capability: str | None, suite
     One rule for every entry path: a plain suite with no ``--capability`` runs
     its core checks. "Unfiltered" corresponds to no real ISV situation - nobody
     runs on vm and kubernetes at once - so a plain suite always has a context.
-    Platform suites declare no ``requires:``, so they are left alone.
+    Platform suites declare no ``requires:``, so they are left alone and reject
+    an explicit capability context.
     """
     if config.tests and config.tests.capability:
-        return capability
+        if capability is not None:
+            raise SuiteResolutionError(
+                f"--capability cannot be used with platform suite {suite_label!r}; "
+                f"it already runs under capability {config.tests.capability!r}."
+            )
+        return None
 
     if capability is None:
         print_progress(f"No capability selected; running {suite_label!r} core checks.")
@@ -152,10 +158,10 @@ def _reported_capability(config: RunConfig, capability_context: str | None) -> s
     because the capability it declares *is* the one it runs under, so report that
     rather than losing the axis for every platform-suite run.
     """
+    if config.tests and config.tests.capability:
+        return config.tests.capability
     if capability_context == CORE_REQUIREMENT_CONTEXT:
         return None
-    if capability_context is None and config.tests and config.tests.capability:
-        return config.tests.capability
     return capability_context
 
 
@@ -500,11 +506,15 @@ def run(
     # or --label discovery. Platform suites carry no `requires:`, so they keep
     # the unfiltered context (filtering there would be a no-op anyway).
     suite_name = suite_label or resolve_suite_name(config_files, CONFIGS_ROOT)
-    capability_context = _resolve_capability_context(
-        config,
-        capability_context,
-        suite_name or config_files[0].stem,
-    )
+    try:
+        capability_context = _resolve_capability_context(
+            config,
+            capability_context,
+            suite_name or config_files[0].stem,
+        )
+    except SuiteResolutionError as exc:
+        print_error(str(exc))
+        raise typer.Exit(code=1)
 
     if dry_run:
         typer.echo(_human_readable_dry_run(config, capability_context, labels, exclude_labels))

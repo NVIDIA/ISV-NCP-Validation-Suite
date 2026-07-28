@@ -469,6 +469,44 @@ tests:
     assert "[RUN]  PlatformCheck" in result.stdout
 
 
+def test_platform_suite_rejects_explicit_capability(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A platform suite cannot be relabeled with an explicit capability."""
+    configs_root = tmp_path / "configs"
+    suites = configs_root / "suites"
+    suites.mkdir(parents=True)
+    (suites / "vm.yaml").write_text(
+        "tests:\n  capability: vm\n  validations: {}\n",
+        encoding="utf-8",
+    )
+    (suites / "k8s.yaml").write_text(
+        "tests:\n  capability: kubernetes\n  validations: {}\n",
+        encoding="utf-8",
+    )
+    _write_provider_config(configs_root, "aws", "vm.yaml", "vm.yaml", "vm")
+    monkeypatch.setattr(test_cli, "CONFIGS_ROOT", configs_root)
+
+    result = runner.invoke(
+        test_cli.app,
+        [
+            "run",
+            "--provider",
+            "aws",
+            "--suite",
+            "vm",
+            "--capability",
+            "kubernetes",
+            "--dry-run",
+            "--no-upload",
+        ],
+    )
+
+    assert result.exit_code == 1, result.output
+    assert "--capability cannot be used with platform suite 'vm'" in result.output
+
+
 def test_capability_with_no_matching_check_warns(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

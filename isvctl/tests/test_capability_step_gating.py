@@ -117,9 +117,11 @@ class TestUnguardedReferences:
     """The guard is per `{{ ... }}`, not per string."""
 
     def test_guarded_reference_is_ignored(self) -> None:
+        """Ignore references with a default fallback."""
         assert _unguarded_references("{{ steps.setup.id | default('') }}") == set()
 
     def test_bare_reference_is_reported(self) -> None:
+        """Report an unguarded step reference."""
         assert _unguarded_references("{{ steps.setup.id }}") == {"setup"}
 
     def test_a_guarded_expression_does_not_cover_its_neighbour(self) -> None:
@@ -128,8 +130,10 @@ class TestUnguardedReferences:
         assert _unguarded_references(value) == {"b"}
 
     def test_reference_outside_an_expression_is_not_a_dependency(self) -> None:
+        """Ignore step-like text outside Jinja expressions."""
         assert _unguarded_references("see steps.setup in the docs") == set()
 
     def test_nested_structures_are_walked(self) -> None:
+        """Traverse nested dictionaries and lists."""
         value = {"args": ["{{ steps.a.id }}", {"k": "{{ steps.b.id | default('') }}"}]}
         assert _unguarded_references(value) == {"a"}

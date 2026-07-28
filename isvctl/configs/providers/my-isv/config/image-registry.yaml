@@ -25,7 +25,7 @@
 #   steps. They are wired as composites (ImageUploadedCheck and friends)
 #   over StepSuccessCheck, FieldExistsCheck, CrudOperationsCheck and
 #   InstanceStateCheck. The vm_ssh validation group
-#    (ConnectivityCheck + OsCheck on launch_instance) is excluded via
+#    (ImageBootedVmReadyCheck on launch_instance) is excluded via
 #    `exclude.labels: [ssh]` because a dummy stub cannot stand up a
 #    real VM to SSH into.
 #
@@ -160,7 +160,7 @@ tests:
     region: "my-isv-region-1"
     instance_type: "my-isv.gpu.1x"
 
-  # Skip SSH-based vm_ssh check (ConnectivityCheck + OsCheck on
+  # Skip SSH-based vm_ssh check (ImageBootedVmReadyCheck on
   # launch_instance) - would try to SSH into the dummy public_ip.
   # Real ISVs remove this exclusion as their stubs come online.
   exclude:

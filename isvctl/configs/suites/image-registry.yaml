@@ -98,15 +98,15 @@ tests:
     vm_ssh:
       step: launch_instance
       checks:
-        ConnectivityCheck:
+        ImageBootedVmReadyCheck:
           test_id: "N/A"
           labels: ["image_registry", "ssh"]
           requires: [vm]
-        OsCheck:
-          test_id: "N/A"
-          labels: ["image_registry", "ssh"]
-          requires: [vm]
-          expected_os: "ubuntu"
+          description: "Check the VM booted from the custom image answers SSH and reports the expected OS"
+          compose:
+            - ConnectivityCheck
+            - OsCheck:
+                expected_os: "ubuntu"
 
     # --- OS Install Config CRUD ---
     install_config_crud:

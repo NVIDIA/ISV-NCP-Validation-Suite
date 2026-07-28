@@ -351,7 +351,7 @@ uv run isvctl test run -f isvctl/configs/providers/aws/config/image-registry.yam
 | `image_upload` | `ImageUploadedCheck` — step success + fields (image_id, storage_bucket, disk_ids) | upload_image |
 | `image_crud` | `ImageCrudCheck` — step success + fields + CRUD (get, list, create, delete) | crud_image |
 | `vm_from_image` | `VmBootsFromImageCheck` — step success + fields + instance state (running) | launch_instance |
-| `vm_ssh` | `ConnectivityCheck`, `OsCheck` (ubuntu) | launch_instance |
+| `vm_ssh` | `ImageBootedVmReadyCheck` — SSH reachable + expected OS (ubuntu) | launch_instance |
 | `install_config_crud` | `InstallConfigCrudCheck` — step success + fields (config_id, config_name, operations) | crud_install_config |
 | `teardown_checks` | `ImageDeletedCheck` — step success | teardown |
 

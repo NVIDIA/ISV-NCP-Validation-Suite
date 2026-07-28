@@ -241,7 +241,7 @@ def _build_suite_map() -> dict[str, dict[str, Any]]:
             requires = params.get("requires", [])
             suite_map[check_name] = {
                 "suite": suite,
-                "platform": platform,
+                "capability": platform,
                 "requires": list(requires) if isinstance(requires, list) else [],
             }
     return suite_map
@@ -388,12 +388,12 @@ def catalog_document(entries: list[dict[str, Any]], version: str) -> dict[str, A
     ``labels`` are intentionally not summarized at the top level - a consumer
     can derive the label universe from the entries when needed.
     """
-    platforms, suites = suite_vocabularies()
-    _assert_disjoint_vocabulary(platforms, suites)
+    capabilities, suites = suite_vocabularies()
+    _assert_disjoint_vocabulary(capabilities, suites)
     return {
         "schemaVersion": CATALOG_SCHEMA_VERSION,
         "isvTestVersion": version,
-        "platforms": platforms,
+        "capabilities": capabilities,
         "suites": suites,
         "entries": entries,
     }

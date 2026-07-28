@@ -297,7 +297,7 @@ def upload_test_catalog(
     entries: list[dict[str, Any]],
     *,
     schema_version: int,
-    platforms: list[str],
+    capabilities: list[str],
     suites: list[str],
 ) -> bool:
     """Upload test catalog for a suite version (idempotent per version).
@@ -311,9 +311,9 @@ def upload_test_catalog(
         jwt_token: JWT access token
         isv_test_version: Test suite version string (e.g. "1.2.3")
         entries: List of catalog entry dicts with keys:
-            name, description, labels, source, suite, platform, requires, test_ids
+            name, description, labels, source, suite, capability, requires, test_ids
         schema_version: Catalog document schema version.
-        platforms: Declarable capability vocabulary (platform suites).
+        capabilities: Declarable capability vocabulary (platform suites).
         suites: Plain suite names declared by the catalog.
 
     Returns:
@@ -336,7 +336,7 @@ def upload_test_catalog(
     payload = {
         "schemaVersion": schema_version,
         "isvTestVersion": isv_test_version,
-        "platforms": platforms,
+        "capabilities": capabilities,
         "suites": suites,
         "entries": [
             {
@@ -345,7 +345,7 @@ def upload_test_catalog(
                 "labels": e.get("labels", []),
                 "source": e.get("source", ""),
                 "suite": e.get("suite", ""),
-                "platform": e.get("platform"),
+                "capability": e.get("capability"),
                 "requires": e.get("requires", []),
                 "test_ids": e.get("test_ids", []),
             }

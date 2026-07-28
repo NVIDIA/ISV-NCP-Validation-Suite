@@ -63,9 +63,10 @@ class TestCatalogDocument:
         assert doc["schemaVersion"] == CATALOG_SCHEMA_VERSION
         assert doc["isvTestVersion"] == "1.2.3"
         assert doc["entries"] == entries
-        assert doc["platforms"] == build_capability_vocabulary()
+        assert doc["capabilities"] == build_capability_vocabulary()
         assert doc["suites"] == build_suite_vocabulary()
-        assert "capabilities" not in doc
+        # The axis is named `capabilities`; the former `platforms` spelling is gone.
+        assert "platforms" not in doc
         # The label universe is intentionally not summarized at the top level.
         assert "labels" not in doc
 
@@ -101,12 +102,12 @@ class TestBuildCatalog:
                 "test_ids",
                 "source",
                 "suite",
-                "platform",
+                "capability",
                 "requires",
             }
             assert isinstance(entry["source"], str)
             assert isinstance(entry["requires"], list)
-            if entry["platform"]:
+            if entry["capability"]:
                 assert entry["requires"] == []
 
     def test_extract_checks_supports_direct_dict_category_form(self, tmp_path) -> None:
@@ -201,7 +202,7 @@ tests:
                 return_value={
                     "ExplicitLabelCatalogCheck": {
                         "suite": "demo",
-                        "platform": None,
+                        "capability": None,
                         "requires": ["vm", "bare_metal"],
                     }
                 },
@@ -223,7 +224,7 @@ tests:
                 "test_ids": [],
                 "source": __name__,
                 "suite": "demo",
-                "platform": None,
+                "capability": None,
                 "requires": ["vm", "bare_metal"],
             }
         ]

@@ -61,7 +61,7 @@ class TestUploadTestCatalog:
                 "labels": ["k8s"],
                 "source": "mod.a",
                 "suite": "kubernetes",
-                "platform": "kubernetes",
+                "capability": "kubernetes",
                 "requires": [],
                 "test_ids": ["K8S06-01"],
             },
@@ -71,7 +71,7 @@ class TestUploadTestCatalog:
                 "labels": [],
                 "source": "mod.b",
                 "suite": "storage",
-                "platform": None,
+                "capability": None,
                 "requires": ["vm", "bare_metal"],
             },
         ]
@@ -82,7 +82,7 @@ class TestUploadTestCatalog:
             isv_test_version="1.2.3",
             entries=entries,
             schema_version=2,
-            platforms=["kubernetes", "vm"],
+            capabilities=["kubernetes", "vm"],
             suites=["storage"],
         )
 
@@ -97,7 +97,7 @@ class TestUploadTestCatalog:
         payload = json.loads(request.data.decode())
         assert payload["isvTestVersion"] == "1.2.3"
         assert payload["schemaVersion"] == 2
-        assert payload["platforms"] == ["kubernetes", "vm"]
+        assert payload["capabilities"] == ["kubernetes", "vm"]
         assert payload["suites"] == ["storage"]
         assert len(payload["entries"]) == 2
         assert payload["entries"][0]["name"] == "TestA"
@@ -122,7 +122,7 @@ class TestUploadTestCatalog:
             isv_test_version="1.2.3",
             entries=[{"name": "TestA"}],
             schema_version=2,
-            platforms=["kubernetes"],
+            capabilities=["kubernetes"],
             suites=["storage"],
         )
 
@@ -146,7 +146,7 @@ class TestUploadTestCatalog:
             isv_test_version="1.2.3",
             entries=[{"name": "TestA"}],
             schema_version=2,
-            platforms=["kubernetes"],
+            capabilities=["kubernetes"],
             suites=["storage"],
         )
 
@@ -169,7 +169,7 @@ class TestUploadTestCatalog:
             isv_test_version="1.2.3",
             entries=[{"name": "TestA"}],
             schema_version=2,
-            platforms=["kubernetes"],
+            capabilities=["kubernetes"],
             suites=["storage"],
         )
 
@@ -186,7 +186,7 @@ class TestUploadTestCatalog:
             isv_test_version="1.2.3",
             entries=[{"name": "TestA"}],
             schema_version=2,
-            platforms=["kubernetes"],
+            capabilities=["kubernetes"],
             suites=["storage"],
         )
 
@@ -209,7 +209,7 @@ class TestUploadTestCatalog:
             isv_test_version="1.0.0",
             entries=entries,
             schema_version=2,
-            platforms=["kubernetes"],
+            capabilities=["kubernetes"],
             suites=["storage"],
         )
 
@@ -224,7 +224,7 @@ class TestUploadTestCatalog:
         assert "markers" not in entry
         assert entry["source"] == ""
         assert entry["suite"] == ""
-        assert entry["platform"] is None
+        assert entry["capability"] is None
         assert entry["requires"] == []
         assert entry["test_ids"] == []
 
@@ -247,14 +247,14 @@ class TestUploadTestCatalog:
             isv_test_version="1.2.3",
             entries=[{"name": "TestA"}],
             schema_version=2,
-            platforms=["kubernetes", "vm"],
+            capabilities=["kubernetes", "vm"],
             suites=["storage", "iam"],
         )
 
         request = mock_urlopen.call_args_list[1][0][0]
         payload = json.loads(request.data.decode())
         assert payload["schemaVersion"] == 2
-        assert payload["platforms"] == ["kubernetes", "vm"]
+        assert payload["capabilities"] == ["kubernetes", "vm"]
         assert payload["suites"] == ["storage", "iam"]
 
     @patch("isvreporter.client.urlopen")
@@ -272,7 +272,7 @@ class TestUploadTestCatalog:
             isv_test_version="1.0.0",
             entries=[{"name": "TestA", "labels": ["gpu"], "markers": ["gpu"]}],
             schema_version=2,
-            platforms=["kubernetes"],
+            capabilities=["kubernetes"],
             suites=["storage"],
         )
 

@@ -91,7 +91,7 @@ def list_cmd(
 
     for entry in sorted(catalog_entries, key=lambda e: e["name"]):
         suite = entry.get("suite") or "-"
-        requirement = entry.get("platform") or ", ".join(entry.get("requires") or []) or "core"
+        requirement = entry.get("capability") or ", ".join(entry.get("requires") or []) or "core"
         suite_requirement = f"{suite} / {requirement}"
         table.add_row(
             entry["name"],
@@ -228,7 +228,7 @@ def push(
         isv_test_version=catalog_version,
         entries=catalog_entries,
         schema_version=document["schemaVersion"],
-        platforms=document["platforms"],
+        capabilities=document["capabilities"],
         suites=document["suites"],
     ):
         print_progress(typer.style("[OK]", fg=typer.colors.GREEN) + " Catalog push complete")

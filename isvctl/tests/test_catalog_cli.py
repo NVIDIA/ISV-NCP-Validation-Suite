@@ -33,7 +33,7 @@ _FAKE_ENTRIES = [
         "labels": ["kubernetes"],
         "source": "isvtest.validations.alpha",
         "suite": "kubernetes",
-        "platform": "kubernetes",
+        "capability": "kubernetes",
         "requires": [],
     },
     {
@@ -42,7 +42,7 @@ _FAKE_ENTRIES = [
         "labels": [],
         "source": "isvtest.validations.beta",
         "suite": "storage",
-        "platform": None,
+        "capability": None,
         "requires": ["vm", "bare_metal"],
     },
 ]
@@ -82,7 +82,7 @@ def test_catalog_list_json() -> None:
     assert payload["schemaVersion"] == 2
     assert payload["isvTestVersion"] == "1.2.3"
     assert payload["entries"] == _FAKE_ENTRIES
-    assert "kubernetes" in payload["platforms"]
+    assert "kubernetes" in payload["capabilities"]
     assert "storage" in payload["suites"]
 
 

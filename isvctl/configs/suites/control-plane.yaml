@@ -56,21 +56,21 @@ tests:
     api_health:
       step: check_api
       checks:
-        FieldExistsCheck:
-          test_id: "N/A"
-          labels: ["control_plane"]
-          requires: []
-          fields: ["account_id", "tests"]
         # DATASVC-XX-01 (S3-compatible API w/ authenticated endpoints):
         # authenticated-endpoint half - a successful authenticated check_api
-        # response. The data-path half is the CrudOperationsCheck in the
+        # response. The data-path half is ObjectStorageCrudCheck in the
         # "s3_object_lifecycle" section, which declares the same test_id.
-        FieldValueCheck:
+        ControlPlaneApiHealthCheck:
           test_id: "DATASVC01-01"
           labels: ["control_plane", "min_req"]
           requires: []
-          field: "success"
-          expected: true
+          description: "Check the control plane API answers an authenticated request for the account"
+          compose:
+            - FieldExistsCheck:
+                fields: ["account_id", "tests"]
+            - FieldValueCheck:
+                field: "success"
+                expected: true
 
     setup_checks:
       checks:
@@ -120,36 +120,40 @@ tests:
       step: s3_object_lifecycle
       checks:
         # Data-path half of DATASVC-XX-01 (object put/get/delete); the
-        # authenticated-endpoint half is the FieldValueCheck in "api_health".
-        StepSuccessCheck:
-          test_id: "N/A"
-          labels: ["control_plane"]
-          requires: []
-        FieldExistsCheck:
-          test_id: "N/A"
-          labels: ["control_plane"]
-          requires: []
-          fields: ["bucket_name", "object_key", "operations"]
-        CrudOperationsCheck:
+        # authenticated-endpoint half is ControlPlaneApiHealthCheck in
+        # "api_health".
+        ObjectStorageCrudCheck:
           test_id: "DATASVC01-01"
           labels: ["control_plane", "min_req"]
           requires: []
-          operations: ["put", "get", "delete"]
+          description: "Check objects can be put, read back, and deleted through the object storage API"
+          compose:
+            - StepSuccessCheck
+            - FieldExistsCheck:
+                fields: ["bucket_name", "object_key", "operations"]
+            - CrudOperationsCheck:
+                operations: ["put", "get", "delete"]
 
     teardown_checks:
       checks:
-        StepSuccessCheck-delete_access_key:
+        AccessKeyDeletedCheck:
           # No dedicated "delete access key" plan item; access-key lifecycle is
           # CP05-01 (create) and CP06-01 (disable).
           test_id: "N/A"
           labels: ["control_plane"]
           requires: []
           step: delete_access_key
-        StepSuccessCheck-delete_tenant:
+          description: "Check the access key created for the run is deleted"
+          compose:
+            - StepSuccessCheck
+        TenantDeletedCheck:
           test_id: "CP10-01"
           labels: ["control_plane"]
           requires: []
           step: delete_tenant
+          description: "Check the tenant created for the run is deleted"
+          compose:
+            - StepSuccessCheck
 
   exclude:
     labels: []

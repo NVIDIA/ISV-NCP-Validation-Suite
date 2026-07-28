@@ -262,10 +262,13 @@ tests:
     teardown_checks:
       step: teardown
       checks:
-        StepSuccessCheck:
+        NetworkResourcesDeletedCheck:
           test_id: "N/A"
           labels: ["network"]
           requires: []
+          description: "Check the network resources created for the run are deleted"
+          compose:
+            - StepSuccessCheck
 
   exclude:
     labels: []

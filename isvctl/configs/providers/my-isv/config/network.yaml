@@ -27,7 +27,8 @@
 #    NetworkConnectivityCheck, TrafficFlowCheck, VpcIpConfigCheck,
 #    ByoipCheck, StablePrivateIpCheck, StableEgressIpCheck, FloatingIpCheck, LocalizedDnsCheck,
 #    VpcPeeringCheck, SgPolicyPropagationTimingCheck,
-#    BackendSwitchFabricCheck, NvlinkDomainCheck, StepSuccessCheck).
+#    BackendSwitchFabricCheck, NvlinkDomainCheck,
+#    NetworkResourcesDeletedCheck).
 #    The NET01-01 and NET02-02 checks validate
 #    provider-reported fabric metadata only. The DhcpIpManagementCheck
 #    validation needs to SSH into a real instance, so it is excluded

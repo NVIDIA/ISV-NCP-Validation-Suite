@@ -25,7 +25,8 @@
 #   (InstanceStateCheck, InstanceListCheck, InstanceTagCheck,
 #    TopologyPlacementCheck, SerialConsoleCheck, InstanceStopCheck,
 #    InstanceStartCheck, InstanceRebootCheck, InstancePowerCycleCheck,
-#    StableIdentifierCheck, StepSuccessCheck). SSH-based host checks
+#    StableIdentifierCheck, BareMetalResourcesDeletedCheck,
+#    TenantDataSanitizedCheck). SSH-based host checks
 #    (Connectivity, Os, Gpu, Driver, CpuInfo, HostSoftware, GpuStress,
 #    Nccl, Training, Nvlink, InfiniBand, Ethernet, ContainerRuntime,
 #    CloudInit, NIM*) are excluded via `exclude.labels: [ssh]` because

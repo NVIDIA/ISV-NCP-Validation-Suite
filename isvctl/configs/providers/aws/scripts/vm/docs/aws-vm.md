@@ -64,7 +64,7 @@ to prevent resource leaks. NIM steps are shared and reusable across VMaaS and BM
 | `NimHealthCheck` | deploy_nim | NIM `/v1/health/ready` (skipped if no NGC key) |
 | `NimModelCheck` | deploy_nim | NIM `/v1/models` returns expected model |
 | `NimInferenceCheck` | deploy_nim | Chat completion request and response validation |
-| `StepSuccessCheck` | teardown | Teardown completed successfully |
+| `VmResourcesDeletedCheck` | teardown | Teardown completed successfully |
 
 ## Prerequisites
 

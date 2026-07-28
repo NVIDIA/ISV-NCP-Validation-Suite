@@ -206,8 +206,7 @@ ORCHESTRATION RESULTS
 ============================================================
 [PASS] SETUP   : check_api: passed; create_access_key: passed; create_tenant: passed
   [check_api] Schema(api_health): PASSED
-  [check_api] FieldExistsCheck: PASSED - All required fields present: account_id, tests
-  [check_api] FieldValueCheck: PASSED - success=True
+  [check_api] ControlPlaneApiHealthCheck: PASSED - FieldExistsCheck: All required fields present: account_id, tests; FieldValueCheck: success=True
   [create_access_key] Schema(access_key): PASSED
   [create_access_key] AccessKeyCreatedCheck: PASSED - Access key AKIAY32T... created for isv-access-key-test-xxx
   [create_tenant] Schema(tenant): PASSED
@@ -224,8 +223,8 @@ ORCHESTRATION RESULTS
   [get_tenant] Schema(tenant): PASSED
   [get_tenant] TenantInfoCheck: PASSED - Tenant 'isv-tenant-test-xxx' info retrieved
 [PASS] TEARDOWN: delete_access_key: passed; delete_tenant: passed
-  [delete_access_key] StepSuccessCheck: PASSED - Teardown completed successfully
-  [delete_tenant] StepSuccessCheck: PASSED - Teardown completed successfully
+  [delete_access_key] AccessKeyDeletedCheck: PASSED - StepSuccessCheck: Teardown completed successfully
+  [delete_tenant] TenantDeletedCheck: PASSED - StepSuccessCheck: Teardown completed successfully
 ------------------------------------------------------------
 [PASS] All phases completed successfully
 ```
@@ -254,12 +253,8 @@ tests:
   validations:
     api_health:
       step: check_api
-      checks:
-        - FieldExistsCheck:
-            fields: ["account_id", "tests"]
-        - FieldValueCheck:
-            field: "success"
-            expected: true
+      # The canonical suite wires ControlPlaneApiHealthCheck over these two
+      # generic checks; a provider config only supplies the step command.
 ```
 
 ### Key Configuration Options

@@ -79,77 +79,65 @@ tests:
     fixture_volume:
       step: create_volume
       checks:
-        StepSuccessCheck:
+        VolumeProvisionedCheck:
           test_id: "N/A"
           labels: ["storage"]
           requires: [vm, bare_metal]
-        FieldExistsCheck:
-          test_id: "N/A"
-          labels: ["storage"]
-          requires: [vm, bare_metal]
-          fields: ["volume_id", "mount_point", "operations"]
-        CrudOperationsCheck:
-          test_id: "N/A"
-          labels: ["storage"]
-          requires: [vm, bare_metal]
-          operations: ["create", "attach", "format", "mount", "write_sentinel"]
+          description: "Check a volume is created, attached, formatted, and mounted with seed data"
+          compose:
+            - StepSuccessCheck
+            - FieldExistsCheck:
+                fields: ["volume_id", "mount_point", "operations"]
+            - CrudOperationsCheck:
+                operations: ["create", "attach", "format", "mount", "write_sentinel"]
 
     # ─── DATASVC-XX-02: volume snapshots (issue #321) ────────────────
     snapshot_lifecycle:
       step: snapshot_lifecycle
       checks:
-        StepSuccessCheck:
-          test_id: "N/A"
-          labels: ["storage"]
-          requires: [vm, bare_metal]
-        FieldExistsCheck:
-          test_id: "N/A"
-          labels: ["storage"]
-          requires: [vm, bare_metal]
-          fields: ["volume_id", "snapshot_id", "operations"]
-        CrudOperationsCheck:
+        VolumeSnapshotRestoredCheck:
           test_id: "DATASVC02-01"
           labels: ["min_req", "storage"]
           requires: [vm, bare_metal]
-          operations: ["create_snapshot", "restore_volume", "verify_data"]
+          description: "Check a volume snapshot can be taken and restored with its data intact"
+          compose:
+            - StepSuccessCheck
+            - FieldExistsCheck:
+                fields: ["volume_id", "snapshot_id", "operations"]
+            - CrudOperationsCheck:
+                operations: ["create_snapshot", "restore_volume", "verify_data"]
 
     # ─── DATASVC-XX-03: volume resizing (issue #322) ─────────────────
     volume_resize:
       step: volume_resize
       checks:
-        StepSuccessCheck:
-          test_id: "N/A"
-          labels: ["storage"]
-          requires: [vm, bare_metal]
-        FieldExistsCheck:
-          test_id: "N/A"
-          labels: ["storage"]
-          requires: [vm, bare_metal]
-          fields: ["volume_id", "operations"]
-        CrudOperationsCheck:
+        VolumeResizedCheck:
           test_id: "DATASVC03-01"
           labels: ["min_req", "storage"]
           requires: [vm, bare_metal]
-          operations: ["modify_volume", "grow_partition", "resize_filesystem", "verify_size"]
+          description: "Check a volume can be grown and the filesystem reports the new size"
+          compose:
+            - StepSuccessCheck
+            - FieldExistsCheck:
+                fields: ["volume_id", "operations"]
+            - CrudOperationsCheck:
+                operations: ["modify_volume", "grow_partition", "resize_filesystem", "verify_size"]
 
     # ─── DATASVC-XX-04: persistence across restarts (issue #323) ─────
     volume_persistence:
       step: volume_persistence
       checks:
-        StepSuccessCheck:
-          test_id: "N/A"
-          labels: ["storage"]
-          requires: [vm, bare_metal]
-        FieldExistsCheck:
-          test_id: "N/A"
-          labels: ["storage"]
-          requires: [vm, bare_metal]
-          fields: ["volume_id", "operations"]
-        CrudOperationsCheck:
+        VolumePersistedAcrossRestartCheck:
           test_id: "DATASVC04-01"
           labels: ["min_req", "storage"]
           requires: [vm, bare_metal]
-          operations: ["stop", "start", "verify_attached", "verify_data"]
+          description: "Check a volume stays attached with its data after the instance restarts"
+          compose:
+            - StepSuccessCheck
+            - FieldExistsCheck:
+                fields: ["volume_id", "operations"]
+            - CrudOperationsCheck:
+                operations: ["stop", "start", "verify_attached", "verify_data"]
 
     # ─── Home directory storage ──────────────────────────────────────
     home_directory:
@@ -459,10 +447,13 @@ tests:
     teardown_checks:
       step: teardown_volume
       checks:
-        StepSuccessCheck:
+        VolumeDeletedCheck:
           test_id: "N/A"
           labels: ["storage"]
           requires: [vm, bare_metal]
+          description: "Check the volume created for the run is detached and deleted"
+          compose:
+            - StepSuccessCheck
 
   exclude:
     labels: []

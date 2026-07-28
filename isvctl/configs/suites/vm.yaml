@@ -303,16 +303,22 @@ tests:
     nim_teardown:
       step: teardown_nim
       checks:
-        StepSuccessCheck:
+        VmNimDeploymentDeletedCheck:
           test_id: "N/A"
           labels: ["vm"]
+          description: "Check the NIM deployment on the VM is removed"
+          compose:
+            - StepSuccessCheck
 
     teardown_checks:
       step: teardown
       checks:
-        StepSuccessCheck:
+        VmResourcesDeletedCheck:
           test_id: "N/A"
           labels: ["vm"]
+          description: "Check the VM and its associated resources are deleted"
+          compose:
+            - StepSuccessCheck
 
   exclude:
     labels: []

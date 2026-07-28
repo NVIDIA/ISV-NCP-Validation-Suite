@@ -76,9 +76,6 @@ tests:
     topology_placement:
       step: topology_placement
       checks:
-        StepSuccessCheck:
-          test_id: "N/A"
-          labels: ["bare_metal"]
         TopologyPlacementCheck:
           test_id: "CNP01-04"
           labels: ["bare_metal", "min_req"]
@@ -150,9 +147,6 @@ tests:
     host_status_logs:
       step: host_status_log
       checks:
-        StepSuccessCheck:
-          test_id: "N/A"
-          labels: ["bare_metal"]
         BmHostStatusLog:
           test_id: "BMAAS07-01"
           labels: ["bare_metal"]
@@ -426,23 +420,32 @@ tests:
     nim_teardown:
       step: teardown_nim
       checks:
-        StepSuccessCheck:
+        BareMetalNimDeploymentDeletedCheck:
           test_id: "N/A"
           labels: ["bare_metal"]
+          description: "Check the NIM deployment on the bare metal host is removed"
+          compose:
+            - StepSuccessCheck
 
     teardown_checks:
       step: teardown
       checks:
-        StepSuccessCheck:
+        BareMetalResourcesDeletedCheck:
           test_id: "N/A"
           labels: ["bare_metal"]
+          description: "Check the bare metal host and its associated resources are released"
+          compose:
+            - StepSuccessCheck
 
     sanitization:
       step: verify_teardown
       checks:
-        StepSuccessCheck:
+        TenantDataSanitizedCheck:
           test_id: "SEC21-01"
           labels: ["bare_metal", "min_req", "security"]
+          description: "Check tenant data is sanitized once the host is released"
+          compose:
+            - StepSuccessCheck
 
     # Hardware ingestion: expected-machine manifest vs discovered machines.
     # Only runs for providers that implement the verify_ingestion step.

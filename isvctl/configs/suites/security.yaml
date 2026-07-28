@@ -234,10 +234,13 @@ tests:
     teardown_checks:
       step: teardown
       checks:
-        StepSuccessCheck:
+        SecurityResourcesDeletedCheck:
           test_id: "N/A"
           labels: ["security"]
           requires: []
+          description: "Check the security resources created for the run are deleted"
+          compose:
+            - StepSuccessCheck
 
   exclude:
     labels: []

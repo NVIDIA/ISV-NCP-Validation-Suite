@@ -25,7 +25,8 @@
 #   (InstanceStateCheck, InstanceCreatedCheck, InstanceListCheck,
 #    InstanceTagCheck, InstanceStopCheck, InstanceStartCheck,
 #    StableIdentifierCheck, InstanceRebootCheck, SerialConsoleCheck,
-#    ConsoleRbacCheck, ComponentKeyAccessCheck, StepSuccessCheck). SSH-based host checks (ConnectivityCheck,
+#    ConsoleRbacCheck, ComponentKeyAccessCheck,
+#    VmResourcesDeletedCheck). SSH-based host checks (ConnectivityCheck,
 #    GpuCheck, DriverCheck, CpuInfoCheck, NIM checks, etc.) are excluded
 #    via `exclude.labels: [ssh]` because a dummy-success stub cannot
 #    spin up a real host to SSH into. The deploy_nim / teardown_nim

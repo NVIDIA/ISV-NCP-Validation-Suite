@@ -171,20 +171,24 @@ tests:
 
     def test_released_only_filters_catalog(self) -> None:
         """Default catalog generation excludes tests not in the release manifest."""
-        with patch("isvtest.catalog.load_released_test_filter", return_value={"StepSuccessCheck"}):
+        with patch("isvtest.catalog.load_released_test_filter", return_value={"MfaEnforcedCheck"}):
             catalog = build_catalog()
 
         assert catalog
-        assert all(entry["name"].startswith("StepSuccessCheck") for entry in catalog)
+        assert all(entry["name"].startswith("MfaEnforcedCheck") for entry in catalog)
 
     def test_unreleased_env_includes_full_catalog(self) -> None:
-        """When the release filter is disabled, default catalog generation includes all tests."""
+        """When the release filter is disabled, default catalog generation includes all tests.
+
+        Composites are the unreleased entries in practice: they are added to the
+        release manifest by a release commit, not by the PR that wires them.
+        """
         with patch("isvtest.catalog.load_released_test_filter", return_value=None):
             catalog = build_catalog()
 
         names = {e["name"] for e in catalog}
-        assert "StepSuccessCheck" in names
-        assert "FieldExistsCheck" in names
+        assert "MfaEnforcedCheck" in names
+        assert "VolumeDeletedCheck" in names
 
     def test_labels_are_lists_of_strings(self) -> None:
         """Test that labels are lists of strings."""

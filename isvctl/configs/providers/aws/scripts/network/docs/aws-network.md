@@ -494,7 +494,7 @@ ORCHESTRATION RESULTS
   [dns_test] LocalizedDnsCheck: PASSED - internal.isv.test resolves correctly
   [peering_test] VpcPeeringCheck: PASSED - Cross-VPC connectivity verified
 [PASS] TEARDOWN: teardown: passed
-  [teardown] StepSuccessCheck: PASSED - Teardown successful
+  [teardown] NetworkResourcesDeletedCheck: PASSED - StepSuccessCheck: Teardown successful
 ------------------------------------------------------------
 [PASS] All phases completed successfully
 ```

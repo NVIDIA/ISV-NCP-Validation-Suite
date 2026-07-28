@@ -131,9 +131,9 @@ re-enabling the retention check for AWS.
 | `nim_health` | `NimHealthCheck` | deploy_nim | NIM `/v1/health/ready` |
 | `nim_models` | `NimModelCheck` | deploy_nim | NIM `/v1/models` returns model |
 | `nim_inference` | `NimInferenceCheck` | deploy_nim | Chat completion works |
-| `nim_teardown` | `StepSuccessCheck` | teardown_nim | NIM container removed |
-| `teardown_checks` | `StepSuccessCheck` | teardown | Instance terminated |
-| `sanitization` | `StepSuccessCheck` | verify_teardown | SG, key pair confirmed deleted |
+| `nim_teardown` | `BareMetalNimDeploymentDeletedCheck` | teardown_nim | NIM container removed |
+| `teardown_checks` | `BareMetalResourcesDeletedCheck` | teardown | Instance terminated |
+| `sanitization` | `TenantDataSanitizedCheck` | verify_teardown | SG, key pair confirmed deleted |
 
 ## Dev Workflow (Instance Reuse)
 

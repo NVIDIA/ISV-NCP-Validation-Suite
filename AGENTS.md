@@ -103,7 +103,10 @@ include/exclude-label filtering all read them from there. Declare labels ONLY in
 they import (top-level `exclude.labels:` filtering blocks are fine). Sole
 exception: the single-node local providers
 `isvctl/configs/providers/{k3s,microk8s,minikube}.yaml`, which wire host-level
-checks that exist in no suite.
+checks that exist in no suite. Those checks are local-dev tools no ISV runs, so
+they are deliberately absent from the catalog (built from `suites/` only) and
+therefore from `released_tests.json` - run those three configs with
+`ISVTEST_INCLUDE_UNRELEASED=1` or they skip as `unreleased`.
 
 Workloads (`isvtest/src/isvtest/workloads/`) are long-running tests (NIM, NCCL,
 stress) labelled `("workload", "slow", ...)` with manifests and helper scripts

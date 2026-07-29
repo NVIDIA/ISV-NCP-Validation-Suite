@@ -27,7 +27,7 @@
 #    BmSerialConsoleCheck, BmHostStoppedCheck,
 #    BmHostStartedCheck, BmHostRebootedCheck,
 #    BmHostPowerCycledCheck, the BmIdentifierStableAfter* checks,
-#    BmResourcesDeletedCheck, BmTeardownVerifiedCheck). SSH-based
+#    BmResourcesDeletedCheck, BmHostTerminatedCheck). SSH-based
 #    host checks (BmHostReady*, BmGpusPresent*, GpuStress,
 #    Nccl, Training, Nvlink, InfiniBand, Ethernet, the host OS/driver/CPU
 #    and container-runtime checks, cloud-init, NIM) are excluded via

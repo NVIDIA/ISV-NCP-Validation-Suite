@@ -76,9 +76,10 @@ tests:
             - FieldValueCheck:
                 field: "found_target"
                 expected: true
-        # SDN01-02 (retrieve a VPC) via a standalone read, for platforms that
-        # cannot run the vpc_crud lifecycle VpcCrudCheck-read asserts.
-        VpcInfoCheck:
+        # SDN01-02 (retrieve a VPC) via a standalone read of a pre-provisioned
+        # VPC, for platforms that cannot run the vpc_crud lifecycle VpcReadCheck
+        # asserts. Same requirement, different evidence path.
+        VpcReadFromInventoryCheck:
           test_id: "SDN01-02"
           labels: ["min_req", "network"]
           requires: []
@@ -90,7 +91,7 @@ tests:
                 fields: ["vpc_id", "vpc_name"]
         # No plan item for subnet presence: SDN04-01 is exclusive-subnet
         # isolation, which reading the VPC's subnet list does not establish.
-        SubnetAssignedCheck:
+        VpcContainsExpectedSubnetCheck:
           test_id: "N/A"
           labels: ["network"]
           requires: []
@@ -106,30 +107,42 @@ tests:
       checks:
         # VPC CRUD is split per operation so each maps to one plan id; all four
         # bind to the same vpc_crud step and assert their slice of its output.
-        VpcCrudCheck-create:
+        VpcCreatedCheck:
           test_id: "SDN01-01"
           labels: ["min_req", "network"]
           requires: []
           step: vpc_crud
-          operations: ["create_vpc"]
-        VpcCrudCheck-read:
+          description: "Check a VPC can be created"
+          compose:
+            - VpcCrudCheck:
+                operations: ["create_vpc"]
+        VpcReadCheck:
           test_id: "SDN01-02"
           labels: ["min_req", "network"]
           requires: []
           step: vpc_crud
-          operations: ["read_vpc"]
-        VpcCrudCheck-update:
+          description: "Check a VPC can be retrieved after it is created"
+          compose:
+            - VpcCrudCheck:
+                operations: ["read_vpc"]
+        VpcUpdatedCheck:
           test_id: "SDN01-03"
           labels: ["min_req", "network"]
           requires: []
           step: vpc_crud
-          operations: ["update_tags", "update_dns"]
-        VpcCrudCheck-delete:
+          description: "Check a VPC's tags and DNS settings can be updated"
+          compose:
+            - VpcCrudCheck:
+                operations: ["update_tags", "update_dns"]
+        VpcDeletedCheck:
           test_id: "SDN01-04"
           labels: ["min_req", "network"]
           requires: []
           step: vpc_crud
-          operations: ["delete_vpc"]
+          description: "Check a VPC can be deleted"
+          compose:
+            - VpcCrudCheck:
+                operations: ["delete_vpc"]
         # no test id for subnet count / multi-AZ layout (SDN04-01 covers exclusive-subnet isolation, not subnet topology).
         SubnetConfigCheck:
           test_id: "N/A"
@@ -144,30 +157,42 @@ tests:
           labels: ["min_req", "network", "security"]
           requires: []
           step: vpc_isolation
-        SgCrudCheck-create:
+        SecurityGroupCreatedCheck:
           test_id: "SDN02-01"
           labels: ["min_req", "network", "security"]
           requires: []
           step: sg_crud
-          operations: ["create_vpc", "create_sg"]
-        SgCrudCheck-read:
+          description: "Check a security group can be created"
+          compose:
+            - SgCrudCheck:
+                operations: ["create_vpc", "create_sg"]
+        SecurityGroupReadCheck:
           test_id: "SDN02-02"
           labels: ["min_req", "network", "security"]
           requires: []
           step: sg_crud
-          operations: ["read_sg"]
-        SgCrudCheck-update:
+          description: "Check a security group can be retrieved after it is created"
+          compose:
+            - SgCrudCheck:
+                operations: ["read_sg"]
+        SecurityGroupUpdatedCheck:
           test_id: "SDN02-03"
           labels: ["min_req", "network", "security"]
           requires: []
           step: sg_crud
-          operations: ["update_sg_add_rule", "update_sg_modify_rule", "update_sg_remove_rule"]
-        SgCrudCheck-delete:
+          description: "Check a security group's rules can be added, modified, and removed"
+          compose:
+            - SgCrudCheck:
+                operations: ["update_sg_add_rule", "update_sg_modify_rule", "update_sg_remove_rule"]
+        SecurityGroupDeletedCheck:
           test_id: "SDN02-04"
           labels: ["min_req", "network", "security"]
           requires: []
           step: sg_crud
-          operations: ["delete_sg", "verify_deleted"]
+          description: "Check a security group can be deleted and stays deleted"
+          compose:
+            - SgCrudCheck:
+                operations: ["delete_sg", "verify_deleted"]
         # SG/NACL enforcement + connectivity/traffic behavior have no dedicated
         # plan item (SG CRUD is SDN02-01..04; VPC isolation is SDN04-02).
         SecurityBlockingCheck:

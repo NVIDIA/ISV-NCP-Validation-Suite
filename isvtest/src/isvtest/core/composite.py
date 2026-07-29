@@ -62,7 +62,8 @@ def composed_members(value: Any) -> list[tuple[str, dict[str, Any]]]:
     Both ``- CheckName`` and ``- CheckName: {params}`` are accepted so a member
     that takes no parameters stays a single line. Items in neither form are
     dropped; :mod:`scripts.validate_suite_wiring` rejects them at authoring time
-    so they cannot silently shrink a composite.
+    and :meth:`CompositeCheck.run` fails on them at runtime, so they cannot
+    silently shrink a composite.
     """
     if not isinstance(value, list):
         return []
@@ -85,9 +86,19 @@ class CompositeCheck(BaseValidation):
     _exclude_from_discovery: ClassVar[bool] = True
 
     def run(self) -> None:
-        members = composed_members(self.config.get(COMPOSE_KEY))
+        raw = self.config.get(COMPOSE_KEY)
+        members = composed_members(raw)
         if not members:
             self.set_failed(f"'{COMPOSE_KEY}' must be a non-empty list of check names")
+            return
+
+        # An out-of-tree config never meets validate_suite_wiring, so a malformed
+        # member would otherwise shrink the composite and still report a pass.
+        if isinstance(raw, list) and len(members) != len(raw):
+            self.set_failed(
+                f"'{COMPOSE_KEY}' has {len(raw) - len(members)} malformed member(s); "
+                "each must be 'CheckName' or 'CheckName: {params}'"
+            )
             return
 
         shared = {key: value for key, value in self.config.items() if key not in _WIRING_KEYS}

@@ -135,6 +135,17 @@ class TestCompositeCheck:
         assert result["passed"] is False
         assert "must be a non-empty list" in result["error"]
 
+    def test_fails_when_a_member_is_malformed(self) -> None:
+        """A malformed member must fail rather than shrink the composite.
+
+        An out-of-tree config never meets ``validate_suite_wiring``, so dropping
+        the item would run fewer checks than the config names and still pass.
+        """
+        result = CompositeCheck(config=_config(["StepSuccessCheck", ["FieldExistsCheck"]])).execute()
+
+        assert result["passed"] is False
+        assert "1 malformed member(s)" in result["error"]
+
     def test_wiring_metadata_is_not_passed_to_members(self) -> None:
         """``test_id``/``labels``/``description`` describe the composite only.
 

@@ -81,8 +81,8 @@ uv run isvctl test run -f isvctl/configs/providers/aws/config/image-registry.yam
 │  3. launch_instance (TEST phase)                                   │
 │     Create Key Pair ─▶ Create SG ─▶ Launch from imported AMI       │
 │     Output: {instance_id, public_ip, key_path}                     │
-│     Validations: VmBootsFromCustomImageCheck,                      │
-│                  CustomImageVmReadyCheck                           │
+│     Validations: VmBootedFromCustomImageCheck,                     │
+│                  VmFromCustomImageReadyCheck                       │
 └────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
@@ -351,8 +351,8 @@ uv run isvctl test run -f isvctl/configs/providers/aws/config/image-registry.yam
 |------------------|--------|------|
 | `image_upload` | `CustomOsImageUploadedCheck` — step success + fields (image_id, storage_bucket, disk_ids) | upload_image |
 | `image_crud` | `CustomOsImageCrudCheck` — step success + fields + CRUD (get, list, create, delete) | crud_image |
-| `vm_from_image` | `VmBootsFromCustomImageCheck` — step success + fields + instance state (running) | launch_instance |
-| `vm_ssh` | `CustomImageVmReadyCheck` — SSH reachable + expected OS (ubuntu) | launch_instance |
+| `vm_from_image` | `VmBootedFromCustomImageCheck` — step success + fields + instance state (running) | launch_instance |
+| `vm_ssh` | `VmFromCustomImageReadyCheck` — SSH reachable + expected OS (ubuntu) | launch_instance |
 | `install_config_crud` | `OsInstallConfigCrudCheck` — step success + fields + CRUD (create, read, update, delete) | crud_install_config |
 | `teardown_checks` | `CustomOsImageDeletedCheck` — step success | teardown |
 

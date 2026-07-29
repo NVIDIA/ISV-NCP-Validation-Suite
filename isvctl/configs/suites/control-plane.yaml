@@ -114,7 +114,7 @@ tests:
     s3_object_lifecycle:
       step: s3_object_lifecycle
       checks:
-        ObjectStorageObjectLifecycleCheck:
+        ObjectStorageCrudCheck:
           test_id: "DATASVC01-01"
           labels: ["control_plane", "min_req"]
           requires: []

@@ -572,7 +572,7 @@ def test_nico_iam_config_wires_caller_identity() -> None:
     validations = merged["tests"]["validations"]
     assert merged["tests"]["settings"]["nico_api_base"] == "{{env.NICO_API_BASE}}"
     assert validations["caller_identity"]["step"] == "check_credentials"
-    assert "IamCallerIdentityCheck" in validations["caller_identity"]["checks"]
+    assert "IamCredentialsAuthenticateCheck" in validations["caller_identity"]["checks"]
 
 
 def test_nico_check_credentials_reports_api_readiness(
@@ -855,8 +855,8 @@ def test_nico_network_config_wires_network_inventory_probes() -> None:
     assert merged["tests"]["settings"]["nico_api_base"] == "{{env.NICO_API_BASE}}"
     inventory = validations["network_inventory"]["checks"]
     assert inventory["VpcListedCheck"]["step"] == "list_vpcs"
-    assert inventory["VpcInfoCheck"]["step"] == "get_vpc"
-    assert inventory["SubnetAssignedCheck"]["step"] == "subnet_assignment"
+    assert inventory["VpcReadFromInventoryCheck"]["step"] == "get_vpc"
+    assert inventory["VpcContainsExpectedSubnetCheck"]["step"] == "subnet_assignment"
 
 
 def test_nico_network_config_keeps_empty_vpc_and_subnet_ids_attached(

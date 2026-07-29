@@ -83,7 +83,7 @@ tests:
     vm_from_image:
       step: launch_instance
       checks:
-        VmBootsFromCustomImageCheck:
+        VmBootedFromCustomImageCheck:
           test_id: "BOOT01-05"
           labels: ["image_registry", "min_req"]
           requires: [vm]
@@ -98,7 +98,7 @@ tests:
     vm_ssh:
       step: launch_instance
       checks:
-        CustomImageVmReadyCheck:
+        VmFromCustomImageReadyCheck:
           test_id: "N/A"
           labels: ["image_registry", "ssh"]
           requires: [vm]
@@ -128,7 +128,7 @@ tests:
     bm_from_image:
       step: install_image_bm
       checks:
-        BmHostBootsFromCustomImageCheck:
+        BmHostBootedFromCustomImageCheck:
           test_id: "BOOT01-03"
           labels: ["bare_metal", "image_registry", "min_req"]
           requires: [bare_metal]
@@ -144,7 +144,7 @@ tests:
     bm_from_config:
       step: install_config_bm
       checks:
-        BmHostBootsFromInstallConfigCheck:
+        BmHostBootedFromInstallConfigCheck:
           test_id: "BOOT01-04"
           labels: ["image_registry", "min_req"]
           requires: [bare_metal]

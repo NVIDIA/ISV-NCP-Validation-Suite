@@ -100,7 +100,7 @@ integration before re-enabling the retention check for AWS.
 | `topology_placement` | `TopologyPlacementCheck` | topology_placement | Placement group CRUD operations |
 | `serial_console` | `BmSerialConsoleCheck` | serial_console | Console output available |
 | `cloud_init` | `BmCloudInitCheck` | launch_instance | Cloud-init completed |
-| `image_installed` | `BmImageInstallationVerifiedCheck` | verify_image | OS image verified on BM |
+| `image_installed` | `BmHostRunsExpectedImageCheck` | verify_image | Running host reports the configured image |
 | `instance_info` | `BmHostStateReportedCheck` | describe_instance | Post-start state is running |
 | `ssh` | `BmHostReadyCheck` | describe_instance | SSH works, OS is ubuntu |
 | `gpu` | `BmGpusPresentCheck` | describe_instance | GPU visibility (8 GPUs) |
@@ -130,7 +130,7 @@ integration before re-enabling the retention check for AWS.
 | `nim_inference` | `BmNimInferenceReadyCheck` | deploy_nim | NIM is healthy, exposes its model, and answers inference |
 | `nim_teardown` | `BmNimDeploymentDeletedCheck` | teardown_nim | NIM container removed |
 | `teardown_checks` | `BmResourcesDeletedCheck` | teardown | Instance terminated |
-| `teardown_verification` | `BmTeardownVerifiedCheck` | verify_teardown | Instance, SG, and key pair confirmed deleted |
+| `teardown_verification` | `BmHostTerminatedCheck` | verify_teardown | Instance, SG, and key pair confirmed deleted |
 
 ## Dev Workflow (Instance Reuse)
 

@@ -66,7 +66,7 @@ tests:
     caller_identity:
       step: check_credentials
       checks:
-        IamCallerIdentityCheck:
+        IamCredentialsAuthenticateCheck:
           # No plan item for "the operator's own credentials work"; user
           # lifecycle is IAM01-01/IAM02-01 and user API access is IAM03-01.
           test_id: "N/A"

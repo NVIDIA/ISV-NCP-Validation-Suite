@@ -119,10 +119,10 @@ tests:
     image_installed:
       step: verify_image
       checks:
-        BmImageInstallationVerifiedCheck:
+        BmHostRunsExpectedImageCheck:
           test_id: "BOOT01-03"
           labels: ["bare_metal", "image_registry", "min_req"]
-          description: "Check the configured OS image is installed on a running bare metal host"
+          description: "Check a running bare metal host reports the OS image it was configured with"
           compose:
             - StepSuccessCheck
             - FieldExistsCheck:
@@ -520,17 +520,17 @@ tests:
         BmResourcesDeletedCheck:
           test_id: "N/A"
           labels: ["bare_metal"]
-          description: "Check the bare metal host and its associated resources are released"
+          description: "Check the teardown step reports the host and its resources released"
           compose:
             - StepSuccessCheck
 
     teardown_verification:
       step: verify_teardown
       checks:
-        BmTeardownVerifiedCheck:
+        BmHostTerminatedCheck:
           test_id: "N/A"
           labels: ["bare_metal"]
-          description: "Check the host is terminated and its provider resources are deleted"
+          description: "Check the platform independently confirms the host is gone, rather than trusting teardown's own report"
           compose:
             - StepSuccessCheck
 

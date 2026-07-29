@@ -302,6 +302,9 @@ domains:
           - description: Control plane can be accessed
             tests:
               - summary: Make sure we can ping the control plane, or get a heart beat/status code
+                labels:
+                  - control_plane
+                  - min_req
                 priority: P0
                 dependencies:
                   - LimitedEnv

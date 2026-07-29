@@ -106,6 +106,7 @@ the property under test, as the test's public identity.
 |------|-------|--------|-----------------|
 | `create_user` | setup | `providers/my-isv/scripts/iam/create_user.py` | `username`, `user_id`, `access_key_id`, `secret_access_key` |
 | `test_credentials` | test | `providers/my-isv/scripts/iam/test_credentials.py` | `account_id`, `tests.identity.passed`, `tests.access.passed` (`IamCredentialAccessCheck` / IAM03-01) |
+| `check_credentials` | test | `providers/nico/scripts/iam/check_credentials.py` | `account_id`, `identity_id`, `authenticated` - the run's own credentials, for platforms with read-only IAM |
 | `teardown` | teardown | `providers/my-isv/scripts/iam/delete_user.py` | `resources_deleted`, `message` |
 
 ### Network (`network.yaml`)
@@ -113,6 +114,9 @@ the property under test, as the test's public identity.
 | Step | Phase | Script | What It Tests |
 |------|-------|--------|---------------|
 | `create_network` | setup | `providers/my-isv/scripts/network/create_vpc.py` | Shared VPC creation |
+| `list_vpcs` | test | `providers/nico/scripts/network/list_vpcs.py` | Pre-provisioned VPC inventory: `vpcs`, `count`, `found_target` |
+| `get_vpc` | test | `providers/nico/scripts/network/get_vpc.py` | Single VPC identity: `vpc_id`, `vpc_name` |
+| `subnet_assignment` | test | `providers/nico/scripts/network/check_subnet_assignment.py` | `tests.subnet_assigned.passed` for the VPC under test |
 | `vpc_crud` | test | `providers/my-isv/scripts/network/vpc_crud_test.py` | Create/Read/Update/Delete lifecycle |
 | `subnet_config` | test | `providers/my-isv/scripts/network/subnet_test.py` | Multi-AZ subnet distribution |
 | `vpc_isolation` | test | `providers/my-isv/scripts/network/isolation_test.py` | Security boundaries between VPCs |

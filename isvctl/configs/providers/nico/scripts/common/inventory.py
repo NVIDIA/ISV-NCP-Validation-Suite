@@ -59,12 +59,11 @@ def normalize_instance(data: dict[str, Any]) -> dict[str, str]:
 
 
 def normalize_vpc(data: dict[str, Any]) -> dict[str, str]:
-    """Normalize a NICo VPC object to tenant-compatible fields."""
+    """Normalize a NICo VPC object for network inventory checks."""
     vpc_id = first_string(data, "vpc_id", "vpcId", "id")
-    name = first_string(data, "name", "vpc_name", "vpcName") or vpc_id
     return {
-        "tenant_id": vpc_id,
-        "tenant_name": name,
+        "vpc_id": vpc_id,
+        "vpc_name": first_string(data, "name", "vpc_name", "vpcName") or vpc_id,
         "description": first_string(data, "description"),
     }
 

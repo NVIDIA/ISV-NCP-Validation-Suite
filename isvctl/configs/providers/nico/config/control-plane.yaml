@@ -15,16 +15,19 @@
 
 # NICo Control Plane Validation Configuration
 #
-# Wires NICo API health checks adapted from the earlier Carbide provider work.
-# This file does not import the full provider-agnostic control-plane suite
-# because NICo does not yet wire the access-key, tenant, or object-lifecycle
-# steps required by that suite.
+# Imports the provider-agnostic control-plane contract and wires the NICo API
+# health step, adapted from the earlier Carbide provider work. The access-key,
+# tenant, and object-lifecycle checks in that contract skip until NICo wires
+# their steps.
 #
 # Required:
 #   NICO_API_BASE, NICO_ORGANIZATION, NICO_SITE_ID, and NICo auth.
 #
 # Usage:
 #   uv run isvctl test run -f isvctl/configs/providers/nico/config/control-plane.yaml
+
+import:
+  - ../../../suites/control-plane.yaml
 
 version: "1.0"
 
@@ -52,20 +55,3 @@ tests:
     org: "{{env.NICO_ORGANIZATION}}"
     site_id: "{{env.NICO_SITE_ID}}"
     nico_api_base: "{{env.NICO_API_BASE}}"
-
-  validations:
-    api_health:
-      step: check_api
-      checks:
-        NicoControlPlaneApiHealthCheck:
-          test_id: "CP03-01"
-          description: "Check the NICo control-plane API is reachable and returns account-scoped results"
-          compose:
-            - FieldExistsCheck:
-                fields: ["account_id", "tests"]
-            - FieldValueCheck:
-                field: "success"
-                expected: true
-
-  exclude:
-    labels: []

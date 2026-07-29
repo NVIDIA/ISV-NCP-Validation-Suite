@@ -15,10 +15,10 @@
 
 # NICo Network Validation Configuration
 #
-# Wires existing VPC, subnet, and network-assignment probes adapted from the
-# earlier Carbide provider work. This file does not import the full
-# provider-agnostic network suite because NICo does not yet wire VPC/SG/SDN
-# lifecycle and traffic-test steps required by that suite.
+# Imports the provider-agnostic network contract and wires the read-only VPC and
+# subnet inventory steps, adapted from the earlier Carbide provider work. The
+# VPC/SG/SDN lifecycle and traffic checks in that contract skip until NICo wires
+# their steps.
 #
 # Required:
 #   NICO_API_BASE, NICO_ORGANIZATION, NICO_SITE_ID, and NICo auth.
@@ -30,6 +30,9 @@
 #
 # Usage:
 #   uv run isvctl test run -f isvctl/configs/providers/nico/config/network.yaml
+
+import:
+  - ../../../suites/network.yaml
 
 version: "1.0"
 
@@ -63,23 +66,9 @@ commands:
           - "--vpc-id={{vpc_id}}"
         timeout: 120
 
-      - name: network_connectivity
+      - name: subnet_assignment
         phase: test
-        command: "python ../scripts/network/test_connectivity.py"
-        args:
-          - "--org"
-          - "{{org}}"
-          - "--site-id"
-          - "{{site_id}}"
-          - "--api-base"
-          - "{{nico_api_base}}"
-          - "--vpc-id={{vpc_id}}"
-          - "--subnet-id={{subnet_id}}"
-        timeout: 120
-
-      - name: traffic_validation
-        phase: test
-        command: "python ../scripts/network/traffic_validation.py"
+        command: "python ../scripts/network/check_subnet_assignment.py"
         args:
           - "--org"
           - "{{org}}"
@@ -101,43 +90,3 @@ tests:
     nico_api_base: "{{env.NICO_API_BASE}}"
     vpc_id: "{{env.NICO_VPC_ID}}"
     subnet_id: "{{env.NICO_SUBNET_ID}}"
-
-  validations:
-    vpc_inventory:
-      step: list_vpcs
-      checks:
-        TenantListedCheck:
-          test_id: "N/A"
-
-    vpc_info:
-      step: get_vpc
-      checks:
-        TenantInfoCheck:
-          test_id: "N/A"
-
-    network_connectivity:
-      step: network_connectivity
-      checks:
-        NicoNetworkAssignedCheck:
-          test_id: "N/A"
-          description: "Check the NICo network assignment probe succeeds"
-          compose:
-            - StepSuccessCheck
-            - FieldValueCheck:
-                field: "tests.network_assigned.passed"
-                expected: true
-
-    traffic_validation:
-      step: traffic_validation
-      checks:
-        NicoNetworkSetupCheck:
-          test_id: "N/A"
-          description: "Check the NICo network setup probe succeeds"
-          compose:
-            - StepSuccessCheck
-            - FieldValueCheck:
-                field: "tests.network_setup.passed"
-                expected: true
-
-  exclude:
-    labels: []

@@ -60,6 +60,27 @@ tests:
             - FieldExistsCheck:
                 fields: ["username", "access_key_id"]
 
+    # Whoami on the credentials the run itself is configured with, before any
+    # user is created. Platforms that only expose read-only IAM can wire this
+    # step alone and skip the lifecycle checks above.
+    caller_identity:
+      step: check_credentials
+      checks:
+        IamCallerIdentityCheck:
+          # No plan item for "the operator's own credentials work"; user
+          # lifecycle is IAM01-01/IAM02-01 and user API access is IAM03-01.
+          test_id: "N/A"
+          labels: ["iam"]
+          requires: []
+          description: "Check the configured credentials authenticate and resolve to an account identity"
+          compose:
+            - StepSuccessCheck
+            - FieldExistsCheck:
+                fields: ["account_id", "identity_id"]
+            - FieldValueCheck:
+                field: "authenticated"
+                expected: true
+
     credentials:
       step: test_credentials
       checks:

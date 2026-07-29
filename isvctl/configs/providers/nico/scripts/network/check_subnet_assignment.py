@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""NICo network topology probe."""
+"""NICo subnet assignment probe."""
 
 import argparse
 import json
@@ -39,12 +39,12 @@ def _first_vpc_id(org: str, site_id: str, token: str, *, base_url: str) -> str:
         result_key="vpcs",
     )
     vpcs = [normalize_vpc(vpc) for vpc in raw_vpcs]
-    return first_non_empty_id(vpcs, "tenant_id")
+    return first_non_empty_id(vpcs, "vpc_id")
 
 
 def main() -> int:
-    """Verify that an existing NICo VPC exists and has associated subnets."""
-    parser = argparse.ArgumentParser(description="Validate NICo network topology")
+    """Verify that an existing NICo VPC carries the subnet it is expected to have."""
+    parser = argparse.ArgumentParser(description="Check NICo subnet assignment")
     parser.add_argument("--org", required=True, help="NGC org name")
     parser.add_argument("--site-id", required=True, help="NICo site UUID")
     parser.add_argument("--api-base", required=True, help="NICo API base URL")
@@ -68,7 +68,7 @@ def main() -> int:
         if not vpc_id:
             result["success"] = True
             result["skipped"] = True
-            result["skip_reason"] = "No VPCs found at site; network topology validation has no resource to inspect"
+            result["skip_reason"] = "No VPCs found at site; subnet assignment validation has no resource to inspect"
             print(json.dumps(result, indent=2))
             return 0
 
@@ -86,24 +86,24 @@ def main() -> int:
         subnet_ids = {subnet["subnet_id"] for subnet in subnets if subnet["subnet_id"]}
         target_found = args.subnet_id in subnet_ids if args.subnet_id else bool(subnet_ids)
 
-        result.update({"vpc_id": vpc_id, **normalize_vpc(raw_vpc)})
+        result.update({**normalize_vpc(raw_vpc), "vpc_id": vpc_id})
         result["subnets"] = subnets
         result["subnet_count"] = len(subnets)
         if not subnet_ids and not args.subnet_id:
             result["success"] = True
             result["skipped"] = True
-            result["skip_reason"] = "No subnets found for VPC; network topology validation has no resource to inspect"
+            result["skip_reason"] = "No subnets found for VPC; subnet assignment validation has no resource to inspect"
             print(json.dumps(result, indent=2))
             return 0
 
-        result["tests"]["network_setup"] = {"passed": bool(raw_vpc) and target_found}
-        result["success"] = result["tests"]["network_setup"]["passed"]
+        result["tests"]["subnet_assigned"] = {"passed": bool(raw_vpc) and target_found}
+        result["success"] = result["tests"]["subnet_assigned"]["passed"]
 
     except NicoAuthError as e:
         result["error_type"] = "auth"
         result["error"] = str(e)
     except Exception as e:
-        result["tests"]["network_setup"] = {"passed": False, "error": str(e)}
+        result["tests"]["subnet_assigned"] = {"passed": False, "error": str(e)}
         result["error"] = f"{type(e).__name__}: {e}"
 
     print(json.dumps(result, indent=2))

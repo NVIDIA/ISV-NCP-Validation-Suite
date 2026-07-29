@@ -56,6 +56,52 @@ tests:
           require_subnets: true
           min_subnets: 2
 
+    # Read-only inventory of networks the platform already exposes. Platforms
+    # that hand out pre-provisioned VPCs instead of letting a tenant create them
+    # can wire these steps and skip the lifecycle checks below.
+    network_inventory:
+      checks:
+        # No plan item for listing networks; SDN01-01..04 are the VPC
+        # create/retrieve/update/delete lifecycle.
+        VpcListedCheck:
+          test_id: "N/A"
+          labels: ["network"]
+          requires: []
+          step: list_vpcs
+          description: "Check the platform lists its VPCs, including the one under test"
+          compose:
+            - StepSuccessCheck
+            - FieldExistsCheck:
+                fields: ["vpcs", "count"]
+            - FieldValueCheck:
+                field: "found_target"
+                expected: true
+        # SDN01-02 (retrieve a VPC) via a standalone read, for platforms that
+        # cannot run the vpc_crud lifecycle VpcCrudCheck-read asserts.
+        VpcInfoCheck:
+          test_id: "SDN01-02"
+          labels: ["min_req", "network"]
+          requires: []
+          step: get_vpc
+          description: "Check the platform reports the identity of a single VPC"
+          compose:
+            - StepSuccessCheck
+            - FieldExistsCheck:
+                fields: ["vpc_id", "vpc_name"]
+        # No plan item for subnet presence: SDN04-01 is exclusive-subnet
+        # isolation, which reading the VPC's subnet list does not establish.
+        SubnetAssignedCheck:
+          test_id: "N/A"
+          labels: ["network"]
+          requires: []
+          step: subnet_assignment
+          description: "Check the VPC under test has the subnet it is expected to carry"
+          compose:
+            - StepSuccessCheck
+            - FieldValueCheck:
+                field: "tests.subnet_assigned.passed"
+                expected: true
+
     network:
       checks:
         # VPC CRUD is split per operation so each maps to one plan id; all four

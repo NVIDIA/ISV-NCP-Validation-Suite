@@ -318,7 +318,7 @@ a|
 | [[CP03-01]]CP03-01
 | CP03
 | https://github.com/NVIDIA/ai-cloud-validation/issues/26[#26]
-|
+| control_plane, min_req
 |
 | P0
 a| https://github.com/NVIDIA/ai-cloud-validation/issues/26[#26] +

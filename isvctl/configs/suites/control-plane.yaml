@@ -23,11 +23,10 @@
 # right fields, the validations pass regardless of which cloud you use.
 #
 # Coverage notes:
-# - API Health (check_api) is provider-agnostic: at minimum it must prove
-#   authenticated reachability of the platform's object-storage / S3-compatible
-#   API. This is sufficient to satisfy the "authenticated endpoint" half of
-#   DATASVC-XX-01 (issue #262); the data-path half is covered by the
-#   s3_object_lifecycle validation below.
+# - API Health (check_api) is provider-agnostic: it must prove the control plane
+#   answers an authenticated request scoped to the account (CP03-01).
+# - DATASVC-XX-01 (S3-compatible API with authenticated endpoints, issue #262)
+#   is covered end to end by the s3_object_lifecycle validation below.
 #
 # Quick start:
 #   1. Copy providers/my-isv/config/control-plane.yaml to providers/<your-platform>/config/control-plane.yaml
@@ -56,12 +55,8 @@ tests:
     api_health:
       step: check_api
       checks:
-        # DATASVC-XX-01 (S3-compatible API w/ authenticated endpoints):
-        # authenticated-endpoint half - a successful authenticated check_api
-        # response. The data-path half is ObjectStorageObjectLifecycleCheck in the
-        # "s3_object_lifecycle" section, which declares the same test_id.
         ControlPlaneApiHealthCheck:
-          test_id: "DATASVC01-01"
+          test_id: "CP03-01"
           labels: ["control_plane", "min_req"]
           requires: []
           description: "Check the control plane API answers an authenticated request for the account"
@@ -119,9 +114,6 @@ tests:
     s3_object_lifecycle:
       step: s3_object_lifecycle
       checks:
-        # Data-path half of DATASVC-XX-01 (object put/get/delete); the
-        # authenticated-endpoint half is ControlPlaneApiHealthCheck in
-        # "api_health".
         ObjectStorageObjectLifecycleCheck:
           test_id: "DATASVC01-01"
           labels: ["control_plane", "min_req"]

@@ -73,3 +73,10 @@ tests:
   settings:
     region: "us-west-2"
     teardown_flag: "{{(env.AWS_IAM_SKIP_TEARDOWN == 'true') | ternary('--skip-destroy', '')}}"
+
+  exclude:
+    # Whoami on the run's own credentials, for platforms whose read-only IAM
+    # cannot create a user and log in as them. AWS does exactly that, so
+    # IAM01-01/IAM03-01 already prove the stronger property.
+    tests:
+      - IamCredentialsAuthenticateCheck

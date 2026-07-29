@@ -577,7 +577,7 @@ Below is a summary by category.
 
 | Validation | Description |
 | ---------- | ----------- |
-| `VmCreatedCheck` | Check instance was created |
+| `VmInstanceIdReportedCheck` | Check instance was created |
 | `InstanceStateCheck` | Check instance is in expected state |
 | `InstanceListCheck` | Check instance list from VPC |
 | `InstanceTagCheck` | Check instance tags are present |

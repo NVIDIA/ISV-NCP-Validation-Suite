@@ -76,7 +76,7 @@ Instance lifecycle validations for VMs and bare metal.
 
 | Validation | Platforms | Description |
 | ---------- | --------- | ----------- |
-| `VmCreatedCheck` | vm | Check instance was created |
+| `VmInstanceIdReportedCheck` | vm | Check instance was created |
 | `InstanceStateCheck` | vm, bare_metal | Check instance is in expected state |
 | `InstanceListCheck` | vm, bare_metal | Check instance list from VPC |
 | `InstanceTagCheck` | vm, bare_metal | Check instance tags are present |

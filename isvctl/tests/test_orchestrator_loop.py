@@ -400,12 +400,13 @@ EOF
         assert not result.success
         assert "Cannot determine platform" in result.phases[0].message
 
-    def test_teardown_runs_when_setup_validation_fails(self, tmp_path: Path) -> None:
+    def test_teardown_runs_when_setup_validation_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Teardown must run when setup steps succeed but setup validations fail.
 
         Regression test for issue where validation failures in setup caused
         teardown to be skipped, leaking cloud resources.
         """
+        monkeypatch.setattr("isvctl.orchestrator.loop.load_released_test_filter", lambda: None)
         setup_script = _write_script(tmp_path, "setup.sh", _INVENTORY_SCRIPT)
 
         config = RunConfig(
@@ -423,7 +424,8 @@ EOF
                     "setup_checks": {
                         "step": "setup_cluster",
                         "checks": {
-                            "FieldExistsCheck": {
+                            "ClusterFieldPresentCheck": {
+                                "compose": ["FieldExistsCheck"],
                                 "field": "missing_field",
                             }
                         },
@@ -502,8 +504,9 @@ EOF
         assert "teardown_nim" in step_names, "first teardown step must be recorded"
         assert "teardown_vm" in step_names, "second teardown step must run despite first failure"
 
-    def test_validation_without_step_output_is_reported_as_skipped(self) -> None:
+    def test_validation_without_step_output_is_reported_as_skipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A configured validation whose step produced no JSON is skipped visibly."""
+        monkeypatch.setattr("isvctl.orchestrator.loop.load_released_test_filter", lambda: None)
         config = RunConfig(
             commands={
                 "kubernetes": PlatformCommands(
@@ -518,7 +521,7 @@ EOF
                 validations={
                     "probe_checks": {
                         "step": "probe",
-                        "checks": {"StepSuccessCheck": {}},
+                        "checks": {"ProbeSucceededCheck": {"compose": ["StepSuccessCheck"]}},
                     },
                 },
             ),
@@ -531,7 +534,7 @@ EOF
         validations = result.phases[0].details["validations"]
         assert validations == [
             {
-                "name": "StepSuccessCheck",
+                "name": "ProbeSucceededCheck",
                 "passed": True,
                 "skipped": True,
                 "message": "step 'probe' did not produce output",
@@ -543,8 +546,11 @@ EOF
             }
         ]
 
-    def test_validation_template_error_is_reported_as_error(self, tmp_path: Path) -> None:
+    def test_validation_template_error_is_reported_as_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Validation parameter render failures are terminal validation errors."""
+        monkeypatch.setattr("isvctl.orchestrator.loop.load_released_test_filter", lambda: None)
         ok_script = _write_script(tmp_path, "ok.sh", _OK_SCRIPT)
         config = RunConfig(
             commands={
@@ -560,7 +566,8 @@ EOF
                 validations={
                     "probe_checks": {
                         "checks": {
-                            "FieldExistsCheck": {
+                            "ProbeFieldPresentCheck": {
+                                "compose": ["FieldExistsCheck"],
                                 "field": "{{ missing.value }}",
                             }
                         },
@@ -574,15 +581,18 @@ EOF
 
         assert not result.success
         validation = result.phases[0].details["validations"][0]
-        assert validation["name"] == "FieldExistsCheck"
+        assert validation["name"] == "ProbeFieldPresentCheck"
         assert validation["passed"] is False
         assert validation["skipped"] is False
         assert validation["state"] == "error"
         assert validation["error_reason"] == "template_render_failed"
         assert "failed to render validation parameters" in validation["message"]
 
-    def test_preresolved_skip_and_error_are_written_to_junit(self, tmp_path: Path) -> None:
+    def test_preresolved_skip_and_error_are_written_to_junit(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Merged JUnit includes terminal entries that never went through pytest."""
+        monkeypatch.setattr("isvctl.orchestrator.loop.load_released_test_filter", lambda: None)
         ok_script = _write_script(tmp_path, "ok.sh", _OK_SCRIPT)
         junit_path = tmp_path / "junit.xml"
         config = RunConfig(
@@ -600,11 +610,12 @@ EOF
                 validations={
                     "skip_checks": {
                         "step": "no_json",
-                        "checks": {"StepSuccessCheck": {}},
+                        "checks": {"ProbeSucceededCheck": {"compose": ["StepSuccessCheck"]}},
                     },
                     "error_checks": {
                         "checks": {
-                            "FieldExistsCheck": {
+                            "ProbeFieldPresentCheck": {
+                                "compose": ["FieldExistsCheck"],
                                 "field": "{{ missing.value }}",
                             }
                         },
@@ -618,12 +629,12 @@ EOF
 
         root = ET.parse(junit_path).getroot()
         cases = {case.attrib["name"]: case for case in root.iter("testcase")}
-        assert "StepSuccessCheck" in cases
-        assert cases["StepSuccessCheck"].find("skipped") is not None
-        assert cases["StepSuccessCheck"].find("skipped").attrib["type"] == "step_no_output"
-        assert "FieldExistsCheck" in cases
-        assert cases["FieldExistsCheck"].find("error") is not None
-        assert cases["FieldExistsCheck"].find("error").attrib["type"] == "template_render_failed"
+        assert "ProbeSucceededCheck" in cases
+        assert cases["ProbeSucceededCheck"].find("skipped") is not None
+        assert cases["ProbeSucceededCheck"].find("skipped").attrib["type"] == "step_no_output"
+        assert "ProbeFieldPresentCheck" in cases
+        assert cases["ProbeFieldPresentCheck"].find("error") is not None
+        assert cases["ProbeFieldPresentCheck"].find("error").attrib["type"] == "template_render_failed"
 
 
 class TestLabelFiltering:

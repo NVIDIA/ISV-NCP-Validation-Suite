@@ -55,15 +55,18 @@ tests:
   #   -> lifecycle (stop / start / reboot)
   #   -> NIM -> teardown
   validations:
+    # One row for one launch event: CNP01-09 is "create a VM node", which the
+    # platform returning an id and the VM reaching running together establish.
     setup_checks:
       step: launch_instance
       checks:
-        VmRunningCheck:
-          test_id: "N/A"
-          labels: ["vm"]
+        VmCreatedCheck:
+          test_id: "CNP01-09"
+          labels: ["min_req", "vm"]
           expected_state: "running"
-          description: "Check the VM reaches the running state after launch"
+          description: "Check the VM is created and reaches the running state"
           compose:
+            - VmInstanceIdReportedCheck
             - InstanceStateCheck
 
     specified_key:
@@ -79,13 +82,6 @@ tests:
         VmComponentKeyAccessCheck:
           test_id: "AUTH03-01"
           labels: ["bare_metal", "iam", "security", "vm"]
-
-    instance_created:
-      step: launch_instance
-      checks:
-        VmCreatedCheck:
-          test_id: "CNP01-09"
-          labels: ["min_req", "vm"]
 
     list_instances:
       step: list_instances

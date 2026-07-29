@@ -22,7 +22,7 @@
 #
 # Coverage:
 #   This example exercises only the pure JSON-contract validations
-#   (VmRunningCheck, VmCreatedCheck, VmListedCheck, VmTaggedCheck,
+#   (VmCreatedCheck, VmListedCheck, VmTaggedCheck,
 #    VmStoppedCheck, VmStartedCheck, VmRebootedCheck, the
 #    VmIdentifierStableAfter* checks, VmSerialConsoleCheck,
 #    VmConsoleRbacCheck, VmComponentKeyAccessCheck,

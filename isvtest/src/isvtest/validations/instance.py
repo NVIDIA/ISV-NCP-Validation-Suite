@@ -324,8 +324,12 @@ class StableIdentifierCheck(BaseValidation):
             self.set_failed(f"Instance ID changed: expected {reference_id}, got {instance_id}")
 
 
-class VmCreatedCheck(BaseValidation):
-    """Validate instance was created successfully.
+class VmInstanceIdReportedCheck(BaseValidation):
+    """Validate the platform returned an identifier for the created instance.
+
+    One half of CNP01-09: the ``VmCreatedCheck`` composite pairs it with
+    ``InstanceStateCheck`` so creation and reaching the running state are one
+    test rather than two catalog rows over the same launch event.
 
     Config:
         step_output: The step output to check

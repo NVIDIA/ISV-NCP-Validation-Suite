@@ -18,6 +18,7 @@
 from typing import Any
 
 from isvtest.core.composite import CompositeCheck, composed_members, is_composite
+from isvtest.core.resolution import parse_validations
 
 
 def _config(compose: Any, step_output: dict[str, Any] | None = None, **extra: Any) -> dict[str, Any]:
@@ -30,6 +31,38 @@ def _config(compose: Any, step_output: dict[str, Any] | None = None, **extra: An
         "step_output": step_output if step_output is not None else {"success": True, "username": "u"},
         **extra,
     }
+
+
+class TestComposeOnlyAtParseTime:
+    """A compose_only check wired under its own name is a config error.
+
+    ``validate_suite_wiring`` enforces this in-tree; an ISV's own config is
+    never linted, so config parsing has to reject it too.
+    """
+
+    @staticmethod
+    def _parse(checks: dict[str, Any]) -> list[Any]:
+        return parse_validations({"setup_checks": {"step": "s", "checks": checks}})
+
+    def test_rejects_a_directly_wired_compose_only_check(self) -> None:
+        """The entry becomes an invalid-config error naming the fix."""
+        entry = self._parse({"StepSuccessCheck": {}})[0]
+
+        assert "compose_only" in entry.params_template["_invalid_config"]
+        assert "compose:" in entry.params_template["_invalid_config"]
+
+    def test_allows_the_same_check_inside_a_compose_list(self) -> None:
+        """Composing it is the supported way to reach a generic check."""
+        entry = self._parse({"VmCreatedCheck": {"compose": ["StepSuccessCheck"]}})[0]
+
+        assert entry.name == "VmCreatedCheck"
+        assert "_invalid_config" not in entry.params_template
+
+    def test_allows_a_purpose_built_class_wired_directly(self) -> None:
+        """Only compose_only checks are restricted."""
+        entry = self._parse({"InstanceStateCheck": {"expected_state": "running"}})[0]
+
+        assert "_invalid_config" not in entry.params_template
 
 
 class TestIsComposite:

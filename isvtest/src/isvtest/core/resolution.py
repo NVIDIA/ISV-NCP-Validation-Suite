@@ -28,6 +28,8 @@ from typing import Any
 from jinja2 import ChainableUndefined, Environment, Undefined
 
 from isvtest.config.loader import _ternary
+from isvtest.core.composite import is_composite
+from isvtest.core.validation import get_validation_class
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +162,24 @@ def requirements_satisfied(requires: Iterable[str], capability: str) -> bool:
     return not required or capability in required
 
 
+def _compose_only_error(name: str, params: Any) -> str | None:
+    """Return an error when a ``compose_only`` check is wired under its own name.
+
+    ``validate_suite_wiring`` enforces this in-tree, but an ISV's own config is
+    never linted, and a generic check wired directly would report a pass under a
+    name that says nothing about the property proven.
+    """
+    if is_composite(params):
+        return None
+    target = get_validation_class(name)
+    if target is not None and getattr(target, "compose_only", False):
+        return (
+            f"'{name}' is compose_only and cannot be wired directly; "
+            "name the property under test and list it under 'compose:'"
+        )
+    return None
+
+
 def parse_validations(raw_config: Mapping[str, Any]) -> list[ValidationEntry]:
     """Parse raw validation config into ordered validation entries.
 
@@ -192,6 +212,10 @@ def parse_validations(raw_config: Mapping[str, Any]) -> list[ValidationEntry]:
                     entry_phase = params_template.get("phase")
             else:
                 params_template = copy.deepcopy(params_template)
+
+            if compose_only_error := _compose_only_error(name, params_template):
+                entries.append(_invalid_entry(name, category, compose_only_error))
+                continue
 
             labels = _wiring_labels(params_template)
             requires = _wiring_requires(params_template)

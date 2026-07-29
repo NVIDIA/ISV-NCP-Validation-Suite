@@ -47,7 +47,7 @@ to prevent resource leaks. NIM steps are shared and reusable across VMaaS and BM
 
 | Validation | Step | Description |
 |------------|------|-------------|
-| `VmRunningCheck`, `VmStateReportedCheck`, `VmRunningAfterRebootCheck` | launch_instance, describe_instance, reboot_instance | Verify instance is running |
+| `VmCreatedCheck`, `VmStateReportedCheck`, `VmRunningAfterRebootCheck` | launch_instance, describe_instance, reboot_instance | Verify instance is running |
 | `VmListedCheck` | list_instances | Verify instances in VPC, target found |
 | `VmTaggedCheck` | verify_tags | Verify required tags (Name, CreatedBy) |
 | `VmReachableOverSshCheck` (+ `AfterStart`, `AfterReboot`) | describe_instance, start_instance, reboot_instance | SSH connectivity and command execution |

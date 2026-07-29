@@ -78,7 +78,7 @@ from isvtest.validations.instance import (
     InstanceStopCheck,
     InstanceTagCheck,
     StableIdentifierCheck,
-    VmCreatedCheck,
+    VmInstanceIdReportedCheck,
     VmLaunchedWithSpecifiedKeyCheck,
 )
 from isvtest.validations.k8s_conformance import (
@@ -243,7 +243,7 @@ __all__ = [
     "TenantListedCheck",
     "TrafficFlowCheck",
     "VmConsoleRbacCheck",
-    "VmCreatedCheck",
+    "VmInstanceIdReportedCheck",
     "VmLaunchedWithSpecifiedKeyCheck",
     "VmVirtualDeviceHardeningCheck",
     "VpcCrudCheck",

@@ -83,6 +83,7 @@ class SkipReason(StrEnum):
     RUNTIME_SKIP = "runtime_skip"  # validation called pytest.skip(...) at runtime
     STEP_NO_OUTPUT = "step_no_output"  # step ran but produced no JSON output
     STEP_NOT_CONFIGURED = "step_not_configured"  # step the entry binds to isn't in the platform's step list
+    STEP_SKIPPED = "step_skipped"  # step is configured but carries skip: true
     UNRELEASED = "unreleased"  # not in released_tests.json (gated until release)
     CAPABILITY_REQUIREMENT = "capability_requirement"  # declared capabilities do not satisfy ``requires``
 
@@ -246,6 +247,7 @@ def resolve_entries(
     released_tests: AbstractSet[str] | None,
     render_context: Mapping[str, Any],
     capability: str | None = None,
+    skipped_steps: AbstractSet[str] = frozenset(),
 ) -> list[ResolvedEntry]:
     """Resolve validation entries into ready or terminal outcomes.
 
@@ -260,6 +262,9 @@ def resolve_entries(
         released_tests: Released test manifest, or None when unreleased checks are included.
         render_context: Jinja context for validation parameter rendering.
         capability: Declared capability context (a single platform), or None to disable requirement filtering.
+        skipped_steps: Steps the config declares with ``skip: true``. They are absent from
+            ``step_phases`` like an unconfigured step, so name them separately to distinguish
+            "switched off here" from "this provider has no such step".
 
     Returns:
         A resolved entry for every input entry, in input order.
@@ -322,6 +327,16 @@ def resolve_entries(
                     entry,
                     SkipReason.EXCLUDED,
                     f"validation '{entry.name}' is excluded by label: {label_list}",
+                )
+            )
+            continue
+
+        if entry.step and entry.step in skipped_steps:
+            resolved.append(
+                _skip(
+                    entry,
+                    SkipReason.STEP_SKIPPED,
+                    f"step '{entry.step}' is configured but skipped (skip: true)",
                 )
             )
             continue

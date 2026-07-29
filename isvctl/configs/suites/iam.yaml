@@ -50,11 +50,17 @@ tests:
     setup_checks:
       step: create_user
       checks:
+        # No plan item for creation alone: IAM01-01 is "create user and log in as
+        # that user", and issuing an access key does not establish the login.
+        # IamUserAuthenticatedCheck claims it from the test_credentials step.
+        # Keeps min_req so a min_req-only run still creates the user the
+        # credential checks need - setup steps are skipped when every check bound
+        # to them is filtered out.
         IamUserCreatedCheck:
-          test_id: "IAM01-01"
+          test_id: "N/A"
           labels: ["iam", "min_req"]
           requires: []
-          description: "Check the IAM user is created with usable credentials"
+          description: "Check the IAM user is created and its access key is returned"
           compose:
             - StepSuccessCheck
             - FieldExistsCheck:
@@ -81,17 +87,29 @@ tests:
                 field: "authenticated"
                 expected: true
 
+    # The step reports identity and access as separate probes, so each plan item
+    # gets the half that proves it: logging in (IAM01-01) and reaching an
+    # authorized resource once logged in (IAM03-01).
     credentials:
       step: test_credentials
       checks:
+        IamUserAuthenticatedCheck:
+          test_id: "IAM01-01"
+          labels: ["iam", "min_req"]
+          requires: []
+          description: "Check the created user can log in with the credentials it was issued"
+          compose:
+            - StepSuccessCheck
+            - IamCredentialAccessCheck:
+                required_tests: ["identity"]
         IamUserApiAccessCheck:
           test_id: "IAM03-01"
           labels: ["iam"]
           requires: []
-          description: "Check a created user can reach the API and its authorized resources"
+          description: "Check the logged-in user can reach its authorized resources"
           compose:
-            - StepSuccessCheck
-            - IamCredentialAccessCheck
+            - IamCredentialAccessCheck:
+                required_tests: ["access"]
 
     teardown_checks:
       step: teardown

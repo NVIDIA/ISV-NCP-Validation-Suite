@@ -31,9 +31,10 @@ from isvtest.core.validation import BaseValidation, check_required_tests
 class IamCredentialAccessCheck(BaseValidation):
     """Validate created IAM credentials authenticate and reach authorized resources.
 
-    Proves IAM03-01: a user created earlier can access the API (identity) and at
-    least one authorized resource (access). Scripts emit provider-neutral
-    ``tests.identity`` / ``tests.access`` subtests.
+    Scripts emit provider-neutral ``tests.identity`` / ``tests.access`` subtests.
+    ``required_tests`` selects which of them must pass, so a suite can prove
+    logging in (IAM01-01) and reaching an authorized resource once logged in
+    (IAM03-01) as separate tests over the same step output.
 
     Config:
         step_output: The test_credentials step output to check
@@ -55,7 +56,7 @@ class IamCredentialAccessCheck(BaseValidation):
 
         step_output = self.config.get("step_output", {})
         account_id = step_output.get("account_id") or "unknown"
-        self.set_passed(f"IAM credentials authenticated with authorized resource access (account={account_id})")
+        self.set_passed(f"IAM credentials passed {', '.join(required)} (account={account_id})")
 
 
 class AccessKeyCreatedCheck(BaseValidation):

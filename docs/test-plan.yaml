@@ -78,6 +78,7 @@ domains:
                 notes: ""
               - summary: Check that an OS image can be installed on a BMaaS system
                 labels:
+                  - bare_metal
                   - image_registry
                   - min_req
                 priority: P0

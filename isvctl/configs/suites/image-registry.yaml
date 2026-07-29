@@ -130,7 +130,7 @@ tests:
       checks:
         BmHostBootsFromCustomImageCheck:
           test_id: "BOOT01-03"
-          labels: ["image_registry", "min_req"]
+          labels: ["bare_metal", "image_registry", "min_req"]
           requires: [bare_metal]
           description: "Check a bare metal host installs the custom OS image and reaches the running state"
           compose:

@@ -104,10 +104,11 @@ uv run isvctl test run -f isvctl/configs/providers/aws/config/image-registry.yam
 ```
 
 > **Note**: The canonical image-registry config also defines `install_image_bm` and
-> `install_config_bm` steps for bare-metal provisioning. On AWS, these are implemented
-> in the [bare_metal.yaml](../../../config/bare_metal.yaml) config instead
-> (as `verify_image` and `verify_config` steps). They are auto-skipped here since
-> this config doesn't define those steps.
+> `install_config_bm` steps for bare-metal provisioning. This config implements
+> neither, because its run launches a VM rather than a metal host, so both groups
+> are auto-skipped here. AWS proves BOOT01-03 from its
+> [bare_metal.yaml](../../../config/bare_metal.yaml) run instead, via the
+> `verify_image` step wired in the bare-metal suite.
 
 ## Prerequisites
 

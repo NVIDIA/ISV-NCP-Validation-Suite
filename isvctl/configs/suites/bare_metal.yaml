@@ -112,6 +112,24 @@ tests:
           compose:
             - CloudInitCheck
 
+    # BOOT01-03 proven from the bare-metal run: the host is running and the
+    # image it booted is the configured one. The image-registry suite proves the
+    # same id from its own install_image_bm step, so providers that can install a
+    # metal host inside the image-registry run need not implement verify_image.
+    image_installed:
+      step: verify_image
+      checks:
+        BmImageInstallationVerifiedCheck:
+          test_id: "BOOT01-03"
+          labels: ["bare_metal", "image_registry", "min_req"]
+          description: "Check the configured OS image is installed on a running bare metal host"
+          compose:
+            - StepSuccessCheck
+            - FieldExistsCheck:
+                fields: ["instance_id", "image_id", "image_name", "instance_state"]
+            - InstanceStateCheck:
+                expected_state: "running"
+
     instance_info:
       step: describe_instance
       checks:

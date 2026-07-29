@@ -68,21 +68,21 @@ uv run isvctl test run -f isvctl/configs/providers/aws/config/bare_metal.yaml --
 | 4 | `topology_placement` | test | `providers/aws/scripts/bare_metal/topology_placement.py` | Validate placement group support |
 | 5 | `serial_console` | test | `providers/aws/scripts/bare_metal/serial_console.py` | Retrieve serial console output; retention proof requires an external log archive |
 | 6 | `verify_image` | test | `providers/aws/scripts/image-registry/verify_image_installed.py` | Verify OS image installed on BM |
-| 7 | `verify_config` | test | `providers/aws/scripts/image-registry/verify_config_installable.py` | Verify install config can provision BM |
-| 8 | `stop_instance` | test | `providers/aws/scripts/bare_metal/stop_instance.py` | Power off node, verify stopped state |
-| 9 | `start_instance` | test | `providers/aws/scripts/bare_metal/start_instance.py` | Power on node, verify recovery |
-| 10 | `reboot_instance` | test | `providers/aws/scripts/bare_metal/reboot_instance.py` | Reboot instance, validate recovery |
-| 11 | `power_cycle_instance` | test | `providers/aws/scripts/bare_metal/power_cycle_instance.py` | Force stop + start, validate recovery |
-| 12 | `describe_instance` | test | `providers/aws/scripts/bare_metal/describe_instance.py` | Describe post-power-cycle state + SSH info |
-| 13 | `reinstall_instance` | test | `providers/aws/scripts/bare_metal/reinstall_instance.py` | Reinstall OS (skip: true by default) |
-| 14 | `deploy_nim` | test | `providers/shared/deploy_nim.py` | Deploy NIM container via SSH |
-| 15 | `teardown_nim` | teardown | `providers/shared/teardown_nim.py` | Stop NIM container |
-| 16 | `teardown` | teardown | `providers/aws/scripts/bare_metal/teardown.py` | Terminate instance, delete resources |
-| 17 | `verify_teardown` | teardown | `providers/aws/scripts/bare_metal/verify_terminated.py` | Confirm instance terminated + SG deleted |
+| 7 | `stop_instance` | test | `providers/aws/scripts/bare_metal/stop_instance.py` | Power off node, verify stopped state |
+| 8 | `start_instance` | test | `providers/aws/scripts/bare_metal/start_instance.py` | Power on node, verify recovery |
+| 9 | `reboot_instance` | test | `providers/aws/scripts/bare_metal/reboot_instance.py` | Reboot instance, validate recovery |
+| 10 | `power_cycle_instance` | test | `providers/aws/scripts/bare_metal/power_cycle_instance.py` | Force stop + start, validate recovery |
+| 11 | `describe_instance` | test | `providers/aws/scripts/bare_metal/describe_instance.py` | Describe post-power-cycle state + SSH info |
+| 12 | `reinstall_instance` | test | `providers/aws/scripts/bare_metal/reinstall_instance.py` | Reinstall OS (skip: true by default) |
+| 13 | `deploy_nim` | test | `providers/shared/deploy_nim.py` | Deploy NIM container via SSH |
+| 14 | `teardown_nim` | teardown | `providers/shared/teardown_nim.py` | Stop NIM container |
+| 15 | `teardown` | teardown | `providers/aws/scripts/bare_metal/teardown.py` | Terminate instance, delete resources |
+| 16 | `verify_teardown` | teardown | `providers/aws/scripts/bare_metal/verify_terminated.py` | Confirm instance terminated + SG deleted |
 
-Steps 6-7 (`verify_image`, `verify_config`) cross-reference the image-registry domain to validate
-BM provisioning from OS images. Step 13 (`reinstall_instance`) is skipped by default because
-root volume replacement is slow on AWS metal (~30-45 min).
+Step 6 (`verify_image`) cross-references the image-registry domain: it is how AWS proves
+BOOT01-03, since its image-registry run launches a VM rather than a metal host. Step 12
+(`reinstall_instance`) is skipped by default because root volume replacement is slow on
+AWS metal (~30-45 min).
 
 ## Validations
 
@@ -101,7 +101,6 @@ integration before re-enabling the retention check for AWS.
 | `serial_console` | `BmSerialConsoleCheck` | serial_console | Console output available |
 | `cloud_init` | `BmCloudInitCheck` | launch_instance | Cloud-init completed |
 | `image_installed` | `BmImageInstallationVerifiedCheck` | verify_image | OS image verified on BM |
-| `config_installable` | `BmInstallConfigUsableCheck` | verify_config | Install config dry-run passed |
 | `instance_info` | `BmHostStateReportedCheck` | describe_instance | Post-start state is running |
 | `ssh` | `BmHostReadyCheck` | describe_instance | SSH works, OS is ubuntu |
 | `gpu` | `BmGpusPresentCheck` | describe_instance | GPU visibility (8 GPUs) |
@@ -174,7 +173,7 @@ AWS_BM_INSTANCE_ID=i-xxx AWS_BM_KEY_FILE=/tmp/isv-bm-test-key.pem \
 | List Instances | ~5s | Verify instance visible in VPC |
 | Topology Placement | ~10s | Placement group CRUD |
 | Serial Console | ~5s | Retrieve console output |
-| Image/Config Verify | ~15s | Cross-check image registry (verify_image, verify_config) |
+| Image Verify | ~10s | Cross-check image registry (verify_image) |
 | SSH/GPU/Host OS | ~1 min | SSH, GPU, kernel, drivers, cloud-init |
 | GPU Stress/NCCL/Training | 2-5 min | All GPU workload validations |
 | NVLink/IB/Ethernet | ~30s | Interconnect and network checks |

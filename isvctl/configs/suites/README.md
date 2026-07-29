@@ -185,6 +185,7 @@ the property under test, as the test's public identity.
 | `verify_tags` | test | `providers/my-isv/scripts/bare_metal/describe_tags.py` | `instance_id`, `tags`, `tag_count` |
 | `topology_placement` | test | `providers/my-isv/scripts/bare_metal/topology_placement.py` | `placement_supported`, `operations` |
 | `serial_console` | test | `providers/my-isv/scripts/bare_metal/serial_console.py` | `console_available`, `serial_access_enabled`, `console_log_queryable`, `retention_days_required`, `retention_days_configured`, `oldest_queryable_log_age_days`, `query_result_count`, `retention_evidence` |
+| `verify_image` | test | `providers/aws/scripts/image-registry/verify_image_installed.py` | `instance_id`, `image_id`, `image_name`, `instance_state` - BOOT01-03 for providers whose image-registry run cannot install a metal host |
 | `stop_instance` | test | `providers/my-isv/scripts/bare_metal/stop_instance.py` | `instance_id`, `state`, `stop_initiated` |
 | `start_instance` | test | `providers/my-isv/scripts/bare_metal/start_instance.py` | `instance_id`, `state`, `public_ip`, `ssh_ready` |
 | `reboot_instance` | test | `providers/my-isv/scripts/bare_metal/reboot_instance.py` | `reboot_initiated`, `ssh_ready`, `uptime_seconds` |

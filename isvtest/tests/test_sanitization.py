@@ -24,7 +24,7 @@ from isvtest.validations.sanitization import (
     BmFirmwareResetCheck,
     BmGpuMemorySanitizationCheck,
     BmMemorySanitizationCheck,
-    BmSkipSanitizationBreakfixCheck,
+    SkipSanitizationBreakfixCheck,
 )
 
 
@@ -297,24 +297,24 @@ class TestDiskSanitizationCheck:
 
 
 # ===========================================================================
-# BmSkipSanitizationBreakfixCheck (STG02-01)
+# SkipSanitizationBreakfixCheck (STG02-01)
 # ===========================================================================
 
 
 class TestSkipSanitizationBreakfixCheck:
-    """Tests for BmSkipSanitizationBreakfixCheck validation (STG02-01)."""
+    """Tests for SkipSanitizationBreakfixCheck validation (STG02-01)."""
 
     def test_valid_breakfix_skip_passes(self) -> None:
         """A tenancy-preserving maintenance skip passes."""
         machine = _machine(breakfix_skip_observed=True, transitions=["in_use", "maintenance", "in_use"])
-        check = BmSkipSanitizationBreakfixCheck(config={"step_output": _output(machines=[machine])})
+        check = SkipSanitizationBreakfixCheck(config={"step_output": _output(machines=[machine])})
         check.run()
         assert check._passed is True, check._error
         assert "1 tenancy-preserving maintenance skip(s) observed" in check._output
 
     def test_no_breakfix_history_passes(self) -> None:
         """Sites with no maintenance skips still pass as auditable."""
-        check = BmSkipSanitizationBreakfixCheck(config={"step_output": _output()})
+        check = SkipSanitizationBreakfixCheck(config={"step_output": _output()})
         check.run()
         assert check._passed is True, check._error
         assert "no tenancy-preserving maintenance skips" in check._output
@@ -322,7 +322,7 @@ class TestSkipSanitizationBreakfixCheck:
     def test_unsanitized_tenant_release_fails(self) -> None:
         """Tenant release without sanitizing still fails."""
         machine = _machine(sanitized=False, transitions=["in_use", "available"])
-        check = BmSkipSanitizationBreakfixCheck(config={"step_output": _output(machines=[machine])})
+        check = SkipSanitizationBreakfixCheck(config={"step_output": _output(machines=[machine])})
         check.run()
         assert check._passed is False
 
@@ -333,7 +333,7 @@ class TestSkipSanitizationBreakfixCheck:
             tenancy_preserved=False,
             transitions=["in_use", "maintenance", "in_use"],
         )
-        check = BmSkipSanitizationBreakfixCheck(config={"step_output": _output(machines=[machine])})
+        check = SkipSanitizationBreakfixCheck(config={"step_output": _output(machines=[machine])})
         check.run()
         assert check._passed is False
         sub = next(r for r in check._subtest_results if r["name"] == "breakfix_skip_m-001")

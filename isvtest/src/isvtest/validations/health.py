@@ -20,7 +20,7 @@ signals NVIDIA requires:
 
 - ``BmHostHealthCheck`` (CAP05-01): the per-host health API returns real-time
   GPU state, thermal status, and memory health for every host.
-- ``BmHealthAggregationCheck`` (CAP05-02): health can be rolled up to a
+- ``HealthAggregationCheck`` (CAP05-02): health can be rolled up to a
   primitive level (cluster, nodegroup, or reservation) with internally
   consistent counts.
 
@@ -59,7 +59,7 @@ class BmHostHealthCheck(BaseValidation):
         fail_on_classifications: Optional list of alert classifications that are
             blocking (e.g. ["SensorCritical", "SensorFailure", "Leak"]). When
             omitted (default), ANY alert fails the host, matching how
-            BmDpuHealthCheck and BmHardwareIngestionCheck treat alerts.
+            BmDpuHealthCheck and HardwareIngestionCheck treat alerts.
         require_probes: Optional list of probe IDs that must be present for each
             host (default: [] = coverage not enforced). Use to require specific
             signals, e.g. ["BmcSensor"] or ["BmcLeakDetection"].
@@ -208,7 +208,7 @@ class BmHostHealthCheck(BaseValidation):
             self.set_passed(f"All {total} host(s) return a healthy report via the per-host health API")
 
 
-class BmHealthAggregationCheck(BaseValidation):
+class HealthAggregationCheck(BaseValidation):
     """Validate primitive-level health aggregation (cluster/nodegroup/reservation).
 
     Asserts that the health API can roll host health up to a higher-level

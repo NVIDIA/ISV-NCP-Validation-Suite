@@ -18,13 +18,13 @@
 Two provider-agnostic checks that assert an InfiniBand fabric isolates tenants
 and is hardened with the expected subnet-manager keys:
 
-- ``BmIbTenantIsolationCheck`` (SDN04-04): every tenant's InfiniBand compute is
+- ``IbTenantIsolationCheck`` (SDN04-04): every tenant's InfiniBand compute is
   scoped to its own P_Key partition. Because the subnet manager only permits
   traffic between ports that share a P_Key, distinct-P_Key-per-tenant is the
   fabric-side isolation boundary -- a host cannot bypass it. This asserts no
   P_Key is shared across tenants and no tenant partition rides the all-ports
   default management partition.
-- ``BmIbKeysConfiguredCheck`` (SDN04-05): the InfiniBand security keys (P_Key,
+- ``IbKeysConfiguredCheck`` (SDN04-05): the InfiniBand security keys (P_Key,
   Management Key, and the OpenSM/SHARP subnet-manager keys) are configured.
 
 Both validations only inspect provider-neutral JSON produced by a step script,
@@ -87,7 +87,7 @@ def _normalize_pkey(value: Any) -> int | None:
         return None
 
 
-class BmIbTenantIsolationCheck(BaseValidation):
+class IbTenantIsolationCheck(BaseValidation):
     """Validate InfiniBand tenant isolation via P_Key partitioning (SDN04-04).
 
     InfiniBand isolation is enforced by the subnet manager: a host port that is
@@ -226,7 +226,7 @@ class BmIbTenantIsolationCheck(BaseValidation):
         )
 
 
-class BmIbKeysConfiguredCheck(BaseValidation):
+class IbKeysConfiguredCheck(BaseValidation):
     """Validate the InfiniBand security keys are configured (SDN04-05).
 
     SDN04 requires the InfiniBand fabric to be hardened with the partition key

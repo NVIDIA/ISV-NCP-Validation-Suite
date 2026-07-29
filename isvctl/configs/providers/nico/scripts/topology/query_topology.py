@@ -25,7 +25,7 @@ identifier is the provider-neutral failure domain.
 
 This script reads each machine's labels, extracts the rack/failure-domain
 identifier, and emits a provider-neutral per-host record.
-``BmFailureDomainObservabilityCheck`` then asserts the topology is observable
+``FailureDomainObservabilityCheck`` then asserts the topology is observable
 (every host maps to a named failure domain) and that the site exposes enough
 distinct domains for the configured diversity floor.
 

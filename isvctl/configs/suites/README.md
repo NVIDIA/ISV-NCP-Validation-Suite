@@ -98,6 +98,24 @@ suite may only reach them from inside a `compose` list. Suffixing the class name
 (`StepSuccessCheck-teardown`) does not count: it still leaves the mechanism, not
 the property under test, as the test's public identity.
 
+### Prefixes
+
+A `Bm`/`Vm` prefix means the check asserts a property of one bare-metal host or
+one VM, so the same property can be proven for both without the two names
+colliding: `BmGpusPresentCheck` and `VmGpusPresentCheck`, `BmCloudInitCheck` and
+`VmCloudInitCheck`. The prefix follows the subject, not the suite and not the
+`test_id`'s requirement family — `BmHardwareSerialCheck` proves BFX03-01 and
+`BmCloudInitCheck` proves BOOT02-01, and both are still properties of a host.
+
+A check that asserts something about the platform, the fabric, or a service
+stays unprefixed even when it is wired into `bare_metal.yaml`, because there is
+no per-host reading of it to distinguish: `GovernanceMetricsCheck` (fleet-wide
+counts), `HealthAggregationCheck` (cluster/nodegroup/reservation level),
+`IbTenantIsolationCheck` (fabric), `StableStorageNodeIpCheck` (storage service).
+Those live here because that is where the provider supplying the step imports
+from; several already carry a `network` or `sds_controller` label for the same
+reason. Prefixing them would claim a scope their plan items do not have.
+
 ## Test Suite Details
 
 ### IAM (`iam.yaml`)

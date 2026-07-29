@@ -21,7 +21,7 @@ from typing import Any
 
 import pytest
 
-from isvtest.validations.infiniband import BmIbKeysConfiguredCheck, BmIbTenantIsolationCheck
+from isvtest.validations.infiniband import IbKeysConfiguredCheck, IbTenantIsolationCheck
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -95,16 +95,16 @@ def _keys_output(
 
 
 # ===========================================================================
-# BmIbTenantIsolationCheck tests (SDN04-04)
+# IbTenantIsolationCheck tests (SDN04-04)
 # ===========================================================================
 
 
 class TestIbTenantIsolationCheck:
-    """Tests for BmIbTenantIsolationCheck validation."""
+    """Tests for IbTenantIsolationCheck validation."""
 
     def test_distinct_tenant_pkeys_pass(self) -> None:
         """Per-tenant, distinct, non-default P_Keys pass."""
-        check = BmIbTenantIsolationCheck(config={"step_output": _isolation_output()})
+        check = IbTenantIsolationCheck(config={"step_output": _isolation_output()})
         check.run()
         assert check._passed is True, check._error
         assert "2 tenant(s)" in check._output
@@ -113,14 +113,14 @@ class TestIbTenantIsolationCheck:
 
     def test_step_failure(self) -> None:
         """A failed step is reported with its error detail."""
-        check = BmIbTenantIsolationCheck(config={"step_output": _isolation_output(success=False, error="API timeout")})
+        check = IbTenantIsolationCheck(config={"step_output": _isolation_output(success=False, error="API timeout")})
         check.run()
         assert check._passed is False
         assert "API timeout" in check._error
 
     def test_skipped_step(self) -> None:
         """A structured skip (no partitions) skips the validation."""
-        check = BmIbTenantIsolationCheck(
+        check = IbTenantIsolationCheck(
             config={"step_output": {"success": True, "skipped": True, "skip_reason": "No InfiniBand partitions found"}}
         )
         with pytest.raises(pytest.skip.Exception, match="No InfiniBand partitions found"):
@@ -130,14 +130,14 @@ class TestIbTenantIsolationCheck:
         """A non-list partitions field fails."""
         output = _isolation_output()
         output["partitions"] = None
-        check = BmIbTenantIsolationCheck(config={"step_output": output})
+        check = IbTenantIsolationCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "partitions" in check._error
 
     def test_min_partitions_not_met(self) -> None:
         """Fewer partitions than min_partitions fails."""
-        check = BmIbTenantIsolationCheck(
+        check = IbTenantIsolationCheck(
             config={"step_output": _isolation_output(partitions=[_partition()]), "min_partitions": 2}
         )
         check.run()
@@ -147,7 +147,7 @@ class TestIbTenantIsolationCheck:
     def test_partition_without_pkey_fails(self) -> None:
         """A partition with no allocated P_Key is not isolated."""
         partitions = [_partition(name="a", partition_key=None, tenant_id="tenant-a")]
-        check = BmIbTenantIsolationCheck(config={"step_output": _isolation_output(partitions=partitions)})
+        check = IbTenantIsolationCheck(config={"step_output": _isolation_output(partitions=partitions)})
         check.run()
         assert check._passed is False
         assert "no P_Key" in check._error
@@ -157,7 +157,7 @@ class TestIbTenantIsolationCheck:
     def test_partition_without_tenant_fails(self) -> None:
         """A partition not scoped to a tenant is not an isolation boundary."""
         partitions = [_partition(name="a", partition_key="0x1", tenant_id="")]
-        check = BmIbTenantIsolationCheck(config={"step_output": _isolation_output(partitions=partitions)})
+        check = IbTenantIsolationCheck(config={"step_output": _isolation_output(partitions=partitions)})
         check.run()
         assert check._passed is False
         assert "not scoped to a tenant" in check._error
@@ -165,7 +165,7 @@ class TestIbTenantIsolationCheck:
     def test_default_partition_pkey_fails(self) -> None:
         """A tenant partition reusing the all-ports default partition fails."""
         partitions = [_partition(name="mgmt", partition_key="0x7fff", tenant_id="tenant-a")]
-        check = BmIbTenantIsolationCheck(config={"step_output": _isolation_output(partitions=partitions)})
+        check = IbTenantIsolationCheck(config={"step_output": _isolation_output(partitions=partitions)})
         check.run()
         assert check._passed is False
         assert "default all-ports partition" in check._error
@@ -173,7 +173,7 @@ class TestIbTenantIsolationCheck:
     def test_full_member_default_partition_pkey_fails(self) -> None:
         """A full-member default P_Key (0xffff) is the all-ports partition too."""
         partitions = [_partition(name="mgmt", partition_key="0xffff", tenant_id="tenant-a")]
-        check = BmIbTenantIsolationCheck(config={"step_output": _isolation_output(partitions=partitions)})
+        check = IbTenantIsolationCheck(config={"step_output": _isolation_output(partitions=partitions)})
         check.run()
         assert check._passed is False
         assert "default all-ports partition" in check._error
@@ -184,7 +184,7 @@ class TestIbTenantIsolationCheck:
             _partition(name="a", partition_key="0x0001", tenant_id="tenant-a"),
             _partition(name="b", partition_key="0x8001", tenant_id="tenant-b"),
         ]
-        check = BmIbTenantIsolationCheck(config={"step_output": _isolation_output(partitions=partitions)})
+        check = IbTenantIsolationCheck(config={"step_output": _isolation_output(partitions=partitions)})
         check.run()
         assert check._passed is False
         assert "shared across tenants" in check._error
@@ -195,7 +195,7 @@ class TestIbTenantIsolationCheck:
             _partition(name="a", partition_key="0x5", tenant_id="tenant-a"),
             _partition(name="b", partition_key="0x5", tenant_id="tenant-b"),
         ]
-        check = BmIbTenantIsolationCheck(config={"step_output": _isolation_output(partitions=partitions)})
+        check = IbTenantIsolationCheck(config={"step_output": _isolation_output(partitions=partitions)})
         check.run()
         assert check._passed is False
         assert "shared across tenants" in check._error
@@ -208,7 +208,7 @@ class TestIbTenantIsolationCheck:
             _partition(name="a", partition_key="0x1", tenant_id="tenant-a"),
             _partition(name="b", partition_key="0x2", tenant_id="tenant-a"),
         ]
-        check = BmIbTenantIsolationCheck(config={"step_output": _isolation_output(partitions=partitions)})
+        check = IbTenantIsolationCheck(config={"step_output": _isolation_output(partitions=partitions)})
         check.run()
         assert check._passed is True, check._error
         assert "1 tenant(s)" in check._output
@@ -219,23 +219,23 @@ class TestIbTenantIsolationCheck:
             _partition(name="a", partition_key="0x10", tenant_id="tenant-a"),
             _partition(name="b", partition_key="16", tenant_id="tenant-b"),
         ]
-        check = BmIbTenantIsolationCheck(config={"step_output": _isolation_output(partitions=partitions)})
+        check = IbTenantIsolationCheck(config={"step_output": _isolation_output(partitions=partitions)})
         check.run()
         assert check._passed is False
         assert "shared across tenants" in check._error
 
 
 # ===========================================================================
-# BmIbKeysConfiguredCheck tests (SDN04-05)
+# IbKeysConfiguredCheck tests (SDN04-05)
 # ===========================================================================
 
 
 class TestIbKeysConfiguredCheck:
-    """Tests for BmIbKeysConfiguredCheck validation."""
+    """Tests for IbKeysConfiguredCheck validation."""
 
     def test_required_keys_configured_pass(self) -> None:
         """All required keys verified configured + P_Key evidence passes."""
-        check = BmIbKeysConfiguredCheck(
+        check = IbKeysConfiguredCheck(
             config={"step_output": _keys_output(), "required_keys": ["p_key", "management_key"]}
         )
         check.run()
@@ -253,20 +253,20 @@ class TestIbKeysConfiguredCheck:
             "node2node_key": _key(None, source="ufm-host", detail="not exposed"),
             "manager2node_key": _key(None, source="ufm-host", detail="not exposed"),
         }
-        check = BmIbKeysConfiguredCheck(config={"step_output": _keys_output(keys=keys)})
+        check = IbKeysConfiguredCheck(config={"step_output": _keys_output(keys=keys)})
         with pytest.raises(pytest.skip.Exception, match="could not observe required key"):
             check.run()
 
     def test_step_failure(self) -> None:
         """A failed step is reported with its error detail."""
-        check = BmIbKeysConfiguredCheck(config={"step_output": _keys_output(success=False, error="auth error")})
+        check = IbKeysConfiguredCheck(config={"step_output": _keys_output(success=False, error="auth error")})
         check.run()
         assert check._passed is False
         assert "auth error" in check._error
 
     def test_skipped_step(self) -> None:
         """A structured skip (no partitions) skips the validation."""
-        check = BmIbKeysConfiguredCheck(
+        check = IbKeysConfiguredCheck(
             config={"step_output": {"success": True, "skipped": True, "skip_reason": "No InfiniBand partitions"}}
         )
         with pytest.raises(pytest.skip.Exception, match="No InfiniBand partitions"):
@@ -278,7 +278,7 @@ class TestIbKeysConfiguredCheck:
             "p_key": _key(True),
             "management_key": _key(False, source="ufm", detail="m_key is unset (0)"),
         }
-        check = BmIbKeysConfiguredCheck(
+        check = IbKeysConfiguredCheck(
             config={"step_output": _keys_output(keys=keys), "required_keys": ["p_key", "management_key"]}
         )
         check.run()
@@ -291,7 +291,7 @@ class TestIbKeysConfiguredCheck:
             "p_key": _key(True),
             "management_key": _key(None, source="ufm", detail="UFM access not configured"),
         }
-        check = BmIbKeysConfiguredCheck(
+        check = IbKeysConfiguredCheck(
             config={"step_output": _keys_output(keys=keys), "required_keys": ["p_key", "management_key"]}
         )
         with pytest.raises(pytest.skip.Exception, match="management_key"):
@@ -301,7 +301,7 @@ class TestIbKeysConfiguredCheck:
         """A non-dict keys field fails."""
         output = _keys_output()
         output["keys"] = None
-        check = BmIbKeysConfiguredCheck(config={"step_output": output})
+        check = IbKeysConfiguredCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "keys" in check._error
@@ -309,7 +309,7 @@ class TestIbKeysConfiguredCheck:
     def test_missing_required_key_entry_fails(self) -> None:
         """A required key absent from the keys object fails."""
         keys = {"p_key": _key(True)}
-        check = BmIbKeysConfiguredCheck(
+        check = IbKeysConfiguredCheck(
             config={"step_output": _keys_output(keys=keys), "required_keys": ["p_key", "management_key"]}
         )
         check.run()
@@ -319,7 +319,7 @@ class TestIbKeysConfiguredCheck:
     def test_no_pkey_evidence_fails(self) -> None:
         """Zero partitions carrying a P_Key fails the concrete evidence check."""
         keys = {"p_key": _key(True), "management_key": _key(True, source="ufm")}
-        check = BmIbKeysConfiguredCheck(
+        check = IbKeysConfiguredCheck(
             config={
                 "step_output": _keys_output(keys=keys, partitions_with_pkey=0),
                 "required_keys": ["p_key", "management_key"],
@@ -333,14 +333,14 @@ class TestIbKeysConfiguredCheck:
         """A missing integer partitions_with_pkey field fails."""
         output = _keys_output()
         output["partitions_with_pkey"] = None
-        check = BmIbKeysConfiguredCheck(config={"step_output": output, "required_keys": ["p_key"]})
+        check = IbKeysConfiguredCheck(config={"step_output": output, "required_keys": ["p_key"]})
         check.run()
         assert check._passed is False
         assert "partitions_with_pkey" in check._error
 
     def test_invalid_required_keys(self) -> None:
         """An empty required_keys list is rejected."""
-        check = BmIbKeysConfiguredCheck(config={"step_output": _keys_output(), "required_keys": []})
+        check = IbKeysConfiguredCheck(config={"step_output": _keys_output(), "required_keys": []})
         check.run()
         assert check._passed is False
         assert "required_keys" in check._error

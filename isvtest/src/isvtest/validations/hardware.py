@@ -38,7 +38,7 @@ def _machine_label(machine: dict[str, Any]) -> str:
     return machine.get("machine_id") or machine.get("expected_machine_id") or machine.get("chassis_serial") or "unknown"
 
 
-class BmHardwareIngestionCheck(BaseValidation):
+class HardwareIngestionCheck(BaseValidation):
     """Validate that all expected hardware has been ingested and matches the manifest.
 
     Compares expected-machine records against actually discovered machines.

@@ -31,7 +31,7 @@ def _host_label(host: dict[str, Any]) -> str:
     return host.get("host_id") or "unknown"
 
 
-class BmStableStorageNodeIpCheck(BaseValidation):
+class StableStorageNodeIpCheck(BaseValidation):
     """Validate stable admin IP assignment is queryable per host (STG03-01).
 
     Asserts every host reports at least one non-empty IP on its primary admin
@@ -112,7 +112,7 @@ class BmStableStorageNodeIpCheck(BaseValidation):
         self.set_passed(f"Stable admin IPs queryable for {len(scoped)} host(s)")
 
 
-class BmOobFailureDetectionCheck(BaseValidation):
+class OobFailureDetectionCheck(BaseValidation):
     """Validate out-of-band failure detection is observable per host (STG04-01).
 
     Asserts the per-host health API exposes BMC/out-of-band probes and that the

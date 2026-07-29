@@ -22,8 +22,8 @@ from typing import Any
 from isvtest.validations.hardware import (
     BmDpuHealthCheck,
     BmDpuNetworkReadinessCheck,
-    BmHardwareIngestionCheck,
     BmHardwareSerialCheck,
+    HardwareIngestionCheck,
 )
 
 # ---------------------------------------------------------------------------
@@ -149,16 +149,16 @@ def _dpu_network_output(
 
 
 # ===========================================================================
-# BmHardwareIngestionCheck tests
+# HardwareIngestionCheck tests
 # ===========================================================================
 
 
 class TestHardwareIngestionCheck:
-    """Tests for BmHardwareIngestionCheck validation."""
+    """Tests for HardwareIngestionCheck validation."""
 
     def test_all_machines_ingested_and_healthy(self) -> None:
         """All expected machines are present, Ready, and healthy."""
-        check = BmHardwareIngestionCheck(config={"step_output": _ingestion_output()})
+        check = HardwareIngestionCheck(config={"step_output": _ingestion_output()})
         check.run()
         assert check._passed is True
         assert "2 expected machines ingested" in check._output
@@ -171,7 +171,7 @@ class TestHardwareIngestionCheck:
 
     def test_step_failure(self) -> None:
         """Step itself failed -- validation should fail with error detail."""
-        check = BmHardwareIngestionCheck(
+        check = HardwareIngestionCheck(
             config={"step_output": _ingestion_output(success=False, error="API connection timeout")}
         )
         check.run()
@@ -197,7 +197,7 @@ class TestHardwareIngestionCheck:
                 },
             ],
         )
-        check = BmHardwareIngestionCheck(config={"step_output": output})
+        check = HardwareIngestionCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "1 missing" in check._error
@@ -217,7 +217,7 @@ class TestHardwareIngestionCheck:
             },
         ]
         output = _ingestion_output(expected_count=1, ingested_count=1, matched_count=1, machines=machines)
-        check = BmHardwareIngestionCheck(config={"step_output": output})
+        check = HardwareIngestionCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "bad status" in check._error
@@ -240,7 +240,7 @@ class TestHardwareIngestionCheck:
             },
         ]
         output = _ingestion_output(expected_count=1, ingested_count=1, matched_count=1, machines=machines)
-        check = BmHardwareIngestionCheck(config={"step_output": output})
+        check = HardwareIngestionCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "unhealthy" in check._error
@@ -260,14 +260,14 @@ class TestHardwareIngestionCheck:
             },
         ]
         output = _ingestion_output(expected_count=1, ingested_count=1, matched_count=1, machines=machines)
-        check = BmHardwareIngestionCheck(config={"step_output": output, "require_healthy": False})
+        check = HardwareIngestionCheck(config={"step_output": output, "require_healthy": False})
         check.run()
         assert check._passed is True
 
     def test_below_min_machines(self) -> None:
         """Fewer expected machines than min_machines threshold."""
         output = _ingestion_output(expected_count=0, machines=[])
-        check = BmHardwareIngestionCheck(config={"step_output": output, "min_machines": 1})
+        check = HardwareIngestionCheck(config={"step_output": output, "min_machines": 1})
         check.run()
         assert check._passed is False
         assert "at least 1" in check._error
@@ -277,7 +277,7 @@ class TestHardwareIngestionCheck:
         output = _ingestion_output(
             extra=[{"chassis_serial": "SN-EXTRA", "machine_id": "m-extra"}],
         )
-        check = BmHardwareIngestionCheck(config={"step_output": output})
+        check = HardwareIngestionCheck(config={"step_output": output})
         check.run()
         # Extra machines are informational -- overall check should pass
         assert check._passed is True
@@ -302,21 +302,21 @@ class TestHardwareIngestionCheck:
             },
         ]
         output = _ingestion_output(expected_count=1, ingested_count=1, matched_count=1, machines=machines)
-        check = BmHardwareIngestionCheck(config={"step_output": output, "expected_status": ["Ready"]})
+        check = HardwareIngestionCheck(config={"step_output": output, "expected_status": ["Ready"]})
         check.run()
         assert check._passed is False
         assert "bad status" in check._error
 
     def test_empty_step_output(self) -> None:
         """Empty step_output (missing success key) should fail."""
-        check = BmHardwareIngestionCheck(config={"step_output": {}})
+        check = HardwareIngestionCheck(config={"step_output": {}})
         check.run()
         assert check._passed is False
         assert "step failed" in check._error
 
     def test_no_step_output_key(self) -> None:
         """Config with no step_output key at all should fail."""
-        check = BmHardwareIngestionCheck(config={})
+        check = HardwareIngestionCheck(config={})
         check.run()
         assert check._passed is False
 

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from isvtest.validations.health import BmHealthAggregationCheck, BmHostHealthCheck
+from isvtest.validations.health import BmHostHealthCheck, HealthAggregationCheck
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -308,16 +308,16 @@ class TestHostHealthCheck:
 
 
 # ===========================================================================
-# BmHealthAggregationCheck tests (CAP05-02)
+# HealthAggregationCheck tests (CAP05-02)
 # ===========================================================================
 
 
 class TestHealthAggregationCheck:
-    """Tests for BmHealthAggregationCheck validation."""
+    """Tests for HealthAggregationCheck validation."""
 
     def test_consistent_groups_pass(self) -> None:
         """Internally consistent, fully healthy groups pass."""
-        check = BmHealthAggregationCheck(config={"step_output": _aggregation_output()})
+        check = HealthAggregationCheck(config={"step_output": _aggregation_output()})
         check.run()
         assert check._passed is True, check._error
         assert "nodegroup-level group" in check._output
@@ -325,7 +325,7 @@ class TestHealthAggregationCheck:
     def test_degraded_group_passes_but_is_reported(self) -> None:
         """A degraded group is reported in the summary but is not fatal by default."""
         groups = [_group(total=4, healthy=3, unhealthy=1, unhealthy_hosts=["m-x"])]
-        check = BmHealthAggregationCheck(config={"step_output": _aggregation_output(groups=groups)})
+        check = HealthAggregationCheck(config={"step_output": _aggregation_output(groups=groups)})
         check.run()
         assert check._passed is True, check._error
         assert "degraded" in check._output
@@ -333,7 +333,7 @@ class TestHealthAggregationCheck:
     def test_require_all_healthy_fails_on_degraded(self) -> None:
         """With require_all_healthy, any degraded group fails the check."""
         groups = [_group(total=4, healthy=3, unhealthy=1, unhealthy_hosts=["m-x"])]
-        check = BmHealthAggregationCheck(
+        check = HealthAggregationCheck(
             config={"step_output": _aggregation_output(groups=groups), "require_all_healthy": True}
         )
         check.run()
@@ -342,7 +342,7 @@ class TestHealthAggregationCheck:
 
     def test_step_failure(self) -> None:
         """A failed step is reported with its error detail."""
-        check = BmHealthAggregationCheck(config={"step_output": _aggregation_output(success=False, error="API down")})
+        check = HealthAggregationCheck(config={"step_output": _aggregation_output(success=False, error="API down")})
         check.run()
         assert check._passed is False
         assert "API down" in check._error
@@ -351,7 +351,7 @@ class TestHealthAggregationCheck:
         """A missing aggregation_level field fails."""
         output = _aggregation_output()
         output["aggregation_level"] = ""
-        check = BmHealthAggregationCheck(config={"step_output": output})
+        check = HealthAggregationCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "aggregation_level" in check._error
@@ -360,14 +360,14 @@ class TestHealthAggregationCheck:
         """A non-list groups field fails."""
         output = _aggregation_output()
         output["groups"] = None
-        check = BmHealthAggregationCheck(config={"step_output": output})
+        check = HealthAggregationCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "groups" in check._error
 
     def test_min_groups_not_met(self) -> None:
         """Fewer groups than min_groups fails."""
-        check = BmHealthAggregationCheck(config={"step_output": _aggregation_output(groups=[]), "min_groups": 1})
+        check = HealthAggregationCheck(config={"step_output": _aggregation_output(groups=[]), "min_groups": 1})
         check.run()
         assert check._passed is False
         assert "at least 1" in check._error
@@ -375,7 +375,7 @@ class TestHealthAggregationCheck:
     def test_inconsistent_counts_fail(self) -> None:
         """Counts that do not reconcile fail the group subtest."""
         groups = [_group(total=4, healthy=2, unhealthy=1, status="Degraded")]
-        check = BmHealthAggregationCheck(config={"step_output": _aggregation_output(groups=groups)})
+        check = HealthAggregationCheck(config={"step_output": _aggregation_output(groups=groups)})
         check.run()
         assert check._passed is False
         assert "inconsistent" in check._error
@@ -383,7 +383,7 @@ class TestHealthAggregationCheck:
     def test_status_mismatch_fails(self) -> None:
         """A status that disagrees with the counts fails."""
         groups = [_group(total=4, healthy=4, unhealthy=0, status="Degraded")]
-        check = BmHealthAggregationCheck(config={"step_output": _aggregation_output(groups=groups)})
+        check = HealthAggregationCheck(config={"step_output": _aggregation_output(groups=groups)})
         check.run()
         assert check._passed is False
         assert "inconsistent" in check._error
@@ -392,7 +392,7 @@ class TestHealthAggregationCheck:
         """Non-integer counts (e.g. null) are reported as inconsistent."""
         groups = [_group()]
         groups[0]["unhealthy"] = None
-        check = BmHealthAggregationCheck(config={"step_output": _aggregation_output(groups=groups)})
+        check = HealthAggregationCheck(config={"step_output": _aggregation_output(groups=groups)})
         check.run()
         assert check._passed is False
         assert "inconsistent" in check._error

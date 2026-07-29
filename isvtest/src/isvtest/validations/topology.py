@@ -32,7 +32,7 @@ def _host_label(host: dict[str, Any]) -> str:
     return host.get("host_id") or "unknown"
 
 
-class BmFailureDomainObservabilityCheck(BaseValidation):
+class FailureDomainObservabilityCheck(BaseValidation):
     """Validate failure-domain topology is observable per host (STG05-01).
 
     Asserts that every host reports the failure domain (rack / physical

@@ -174,7 +174,7 @@ class _TenantSanitizationCheck(BaseValidation):
         self.set_passed(self._passed_summary(total, served))
 
 
-class BmSkipSanitizationBreakfixCheck(_TenantSanitizationCheck):
+class SkipSanitizationBreakfixCheck(_TenantSanitizationCheck):
     """Validate optional skip-sanitization during break/fix preserves tenancy (STG02-01).
 
     Extends the SEC21 tenant-transition audit with the STG02 break/fix policy: a

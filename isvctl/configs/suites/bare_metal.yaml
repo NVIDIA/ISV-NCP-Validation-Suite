@@ -539,7 +539,7 @@ tests:
     ingestion_check:
       step: verify_ingestion
       checks:
-        BmHardwareIngestionCheck:
+        HardwareIngestionCheck:
           test_id: "HWING01-01"
           labels: ["bare_metal", "ingestion"]
           min_machines: 1
@@ -579,7 +579,7 @@ tests:
     governance_metrics:
       step: query_governance_metrics
       checks:
-        BmGovernanceMetricsCheck:
+        GovernanceMetricsCheck:
           test_id: "CAP01-01"
           labels: ["bare_metal", "governance", "min_req"]
           min_delivered_nodes: 1
@@ -604,7 +604,7 @@ tests:
     health_aggregation:
       step: query_health_aggregation
       checks:
-        BmHealthAggregationCheck:
+        HealthAggregationCheck:
           test_id: "CAP05-02"
           labels: ["bare_metal", "health", "min_req"]
           min_groups: 1
@@ -617,7 +617,7 @@ tests:
     ib_tenant_isolation:
       step: query_ib_tenant_isolation
       checks:
-        BmIbTenantIsolationCheck:
+        IbTenantIsolationCheck:
           test_id: "SDN04-04"
           labels: ["bare_metal", "infiniband", "min_req", "network", "security"]
           min_partitions: 1
@@ -633,7 +633,7 @@ tests:
     ib_keys_configured:
       step: query_ib_keys
       checks:
-        BmIbKeysConfiguredCheck:
+        IbKeysConfiguredCheck:
           test_id: "SDN04-05"
           labels: ["bare_metal", "infiniband", "min_req", "network", "security"]
           required_keys: ["p_key", "management_key"]
@@ -700,7 +700,7 @@ tests:
     failure_domain_observability:
       step: query_topology
       checks:
-        BmFailureDomainObservabilityCheck:
+        FailureDomainObservabilityCheck:
           test_id: "STG05-01"
           labels: ["bare_metal", "sds_controller", "min_req"]
           min_failure_domains: 1
@@ -713,7 +713,7 @@ tests:
     breakfix_skip_sanitization:
       step: query_sanitization
       checks:
-        BmSkipSanitizationBreakfixCheck:
+        SkipSanitizationBreakfixCheck:
           test_id: "STG02-01"
           labels: ["bare_metal", "min_req", "sanitization", "sds_controller"]
 
@@ -724,7 +724,7 @@ tests:
     stable_storage_ips:
       step: query_stable_ips
       checks:
-        BmStableStorageNodeIpCheck:
+        StableStorageNodeIpCheck:
           test_id: "STG03-01"
           labels: ["bare_metal", "min_req", "network", "sds_controller"]
 
@@ -734,7 +734,7 @@ tests:
     oob_failure_detection:
       step: query_oob_health
       checks:
-        BmOobFailureDetectionCheck:
+        OobFailureDetectionCheck:
           test_id: "STG04-01"
           labels: ["bare_metal", "health", "min_req", "sds_controller"]
 

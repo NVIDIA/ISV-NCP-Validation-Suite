@@ -43,11 +43,11 @@ from isvtest.validations.generic import (
     StepSuccessCheck,
 )
 from isvtest.validations.governance import (
-    BmGovernanceMetricsCheck,
+    GovernanceMetricsCheck,
 )
 from isvtest.validations.health import (
-    BmHealthAggregationCheck,
     BmHostHealthCheck,
+    HealthAggregationCheck,
 )
 from isvtest.validations.host import (
     CloudInitCheck,
@@ -66,8 +66,8 @@ from isvtest.validations.iam import (
     TenantListedCheck,
 )
 from isvtest.validations.infiniband import (
-    BmIbKeysConfiguredCheck,
-    BmIbTenantIsolationCheck,
+    IbKeysConfiguredCheck,
+    IbTenantIsolationCheck,
 )
 from isvtest.validations.instance import (
     InstanceListCheck,
@@ -123,7 +123,7 @@ from isvtest.validations.sanitization import (
     BmFirmwareResetCheck,
     BmGpuMemorySanitizationCheck,
     BmMemorySanitizationCheck,
-    BmSkipSanitizationBreakfixCheck,
+    SkipSanitizationBreakfixCheck,
 )
 from isvtest.validations.security import (
     ApiEndpointIsolationCheck,
@@ -149,8 +149,8 @@ from isvtest.validations.security import (
     VmVirtualDeviceHardeningCheck,
 )
 from isvtest.validations.storage_infra import (
-    BmOobFailureDetectionCheck,
-    BmStableStorageNodeIpCheck,
+    OobFailureDetectionCheck,
+    StableStorageNodeIpCheck,
 )
 
 __all__ = [
@@ -165,17 +165,10 @@ __all__ = [
     "BmDiskSanitizationCheck",
     "BmFirmwareAttestationCheck",
     "BmFirmwareResetCheck",
-    "BmGovernanceMetricsCheck",
     "BmGpuMemorySanitizationCheck",
-    "BmHealthAggregationCheck",
     "BmHostHealthCheck",
-    "BmIbKeysConfiguredCheck",
-    "BmIbTenantIsolationCheck",
     "BmMemorySanitizationCheck",
     "BmNonceAttestationCheck",
-    "BmOobFailureDetectionCheck",
-    "BmSkipSanitizationBreakfixCheck",
-    "BmStableStorageNodeIpCheck",
     "BmcBastionAccessCheck",
     "BmcManagementNetworkCheck",
     "BmcProtocolSecurityCheck",
@@ -193,7 +186,11 @@ __all__ = [
     "FieldExistsCheck",
     "FieldValueCheck",
     "FloatingIpCheck",
+    "GovernanceMetricsCheck",
     "GpuOperatorInstalledCheck",
+    "HealthAggregationCheck",
+    "IbKeysConfiguredCheck",
+    "IbTenantIsolationCheck",
     "InsecureProtocolsCheck",
     "InstanceListCheck",
     "InstancePowerCycleCheck",
@@ -217,6 +214,7 @@ __all__ = [
     "NodeCountCheck",
     "NvlinkDomainCheck",
     "OidcUserAuthCheck",
+    "OobFailureDetectionCheck",
     "PerformanceCheck",
     "SchemaValidation",
     "SdnFilterAuditTrailCheck",
@@ -232,8 +230,10 @@ __all__ = [
     "SgSubnetScopingCheck",
     "SgWorkloadScopingCheck",
     "ShortLivedCredentialsCheck",
+    "SkipSanitizationBreakfixCheck",
     "StableIdentifierCheck",
     "StablePrivateIpCheck",
+    "StableStorageNodeIpCheck",
     "StepSuccessCheck",
     "StorageL3RoutingCheck",
     "SubnetConfigCheck",

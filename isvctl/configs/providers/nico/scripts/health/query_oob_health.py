@@ -21,7 +21,7 @@ network, memory, and drive issues surfaced before or without relying on the
 tenant OS. NICo aggregates BMC sensor data into the machine ``health`` report
 (``BmcSensor``, ``BmcLeakDetection``, ...). This script maps those probes into
 provider-neutral per-category observability records so
-``BmOobFailureDetectionCheck`` can assert the OOB health API is present and
+``OobFailureDetectionCheck`` can assert the OOB health API is present and
 covers the required failure classes.
 
 NICo API endpoints used:

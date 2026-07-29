@@ -197,6 +197,7 @@ the property under test, as the test's public identity.
 | `verify_teardown` | teardown | `providers/my-isv/scripts/bare_metal/verify_terminated.py` | `checks.instance_terminated`, `checks.sg_deleted` |
 | `verify_ingestion` | test | `providers/nico/scripts/hardware_ingestion/verify_ingestion.py` | `expected_count`, `ingested_count`, `matched_count`, `missing`, `extra`, `machines[].status`, `machines[].health` |
 | `check_dpu_health` | test | `providers/nico/scripts/dpu/check_dpu_health.py` | `machines_checked`, `machines[].dpu_count`, `machines[].dpu_agent_heartbeat`, `machines[].health_summary`, `machines[].health_alerts` |
+| `check_dpu_network` | test | _no implementation yet_ | `interfaces[].{name,status,type}`, `bgp_enabled`, optional `dpu_extension_deployments[].{name,status,version}` |
 | `query_governance_metrics` | test | `providers/nico/scripts/governance/query_metrics.py` | `machine_count`, `metrics.delivered.{nodes,gpus}`, `metrics.healthy.{nodes,gpus}`, `metrics.reserved.{nodes,gpus}`, `metrics.active.{nodes,gpus}` |
 | `query_host_health` | test | `providers/nico/scripts/health/query_host_health.py` | `hosts_checked`, `hosts[].health_present`, `hosts[].healthy`, `hosts[].observed_age_seconds`, `hosts[].probe_ids`, `hosts[].alerts[].{id,target,message,classifications}`, `hosts[].components.{gpu,thermal,memory,cooling}` |
 | `query_health_aggregation` | test | `providers/nico/scripts/health/query_health_aggregation.py` | `aggregation_level`, `groups[].{total,healthy,unhealthy,status,unhealthy_hosts}` |

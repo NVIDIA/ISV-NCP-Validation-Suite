@@ -171,12 +171,19 @@ def _human_readable_dry_run(
     include_labels: list[str] | None = None,
     exclude_labels: list[str] | None = None,
 ) -> str:
-    """Render the validation requirement plan without executing lifecycle steps."""
+    """Render the validation requirement plan without executing lifecycle steps.
+
+    The config's own ``exclude`` block is applied here as well as in the
+    orchestrator: a plan that ignored it would promise checks the run then skips,
+    which is misleading in exactly the case the flag exists for.
+    """
     declared = config.tests.capability if config.tests and config.tests.capability else None
     suite_type = f"platform ({declared})" if declared else "plain"
     context = "not filtered" if capability is None else capability
     selected_labels = set(include_labels or [])
-    rejected_labels = set(exclude_labels or [])
+    config_exclude = (config.tests.exclude if config.tests and config.tests.exclude else None) or {}
+    rejected_labels = set(exclude_labels or []) | set(config_exclude.get("labels") or [])
+    rejected_tests = set(config_exclude.get("tests") or [])
     validations = config.tests.validations if config.tests else {}
     entries = parse_validations(validations)
 
@@ -190,9 +197,14 @@ def _human_readable_dry_run(
         lines.append(f"  Labels: {', '.join(sorted(selected_labels))} (all required)")
     if rejected_labels:
         lines.append(f"  Excluded labels: {', '.join(sorted(rejected_labels))}")
+    if rejected_tests:
+        lines.append(f"  Excluded tests: {', '.join(sorted(rejected_tests))}")
 
     for entry in entries:
-        if capability is not None and not requirements_satisfied(entry.requires, capability):
+        # Name exclusion first, mirroring resolve_entries' precedence.
+        if entry.name in rejected_tests:
+            lines.append(f"  [SKIP] {entry.name}: excluded by name")
+        elif capability is not None and not requirements_satisfied(entry.requires, capability):
             requirement = ", ".join(entry.requires)
             lines.append(f"  [SKIP] {entry.name}: requires {requirement} (context: {capability})")
         elif missing_labels := sorted(selected_labels.difference(entry.labels)):

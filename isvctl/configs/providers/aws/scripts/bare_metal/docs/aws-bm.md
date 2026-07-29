@@ -86,7 +86,7 @@ AWS metal (~30-45 min).
 
 ## Validations
 
-`SerialConsoleRetentionCheck` requires evidence from a historical serial console
+`BmSerialConsoleRetentionCheck` requires evidence from a historical serial console
 log archive. The AWS config excludes that check because EC2 `GetConsoleOutput`
 does not prove one-month retention by itself; the canonical
 `BmSerialConsoleCheck` composite remains intact. Add an external archive
@@ -97,7 +97,7 @@ integration before re-enabling the retention check for AWS.
 | `setup_checks` | `BmHostRunningCheck` | launch_instance | Instance is running |
 | `list_instances` | `BmHostListedCheck` | list_instances | Target instance found in VPC |
 | `tag_checks` | `BmHostTaggedCheck` | verify_tags | Instance has required tags (Name, CreatedBy) |
-| `topology_placement` | `TopologyPlacementCheck` | topology_placement | Placement group CRUD operations |
+| `topology_placement` | `BmTopologyPlacementCheck` | topology_placement | Placement group CRUD operations |
 | `serial_console` | `BmSerialConsoleCheck` | serial_console | Console output available |
 | `cloud_init` | `BmCloudInitCheck` | launch_instance | Cloud-init completed |
 | `image_installed` | `BmHostRunsExpectedImageCheck` | verify_image | Running host reports the configured image |
@@ -105,12 +105,12 @@ integration before re-enabling the retention check for AWS.
 | `ssh` | `BmHostReadyCheck` | describe_instance | SSH works, OS is ubuntu |
 | `gpu` | `BmGpusPresentCheck` | describe_instance | GPU visibility (8 GPUs) |
 | `host_os` | `BmVcpuPinningCheck`, `BmPciBusCheck`, `BmHostSoftwareCheck` | describe_instance | vCPU pinning, PCI bus, kernel/drivers/BIOS |
-| `gpu_stress` | `GpuStressCheck` | describe_instance | PyTorch matrix multiply on all 8 GPUs |
-| `nccl` | `NcclCheck` | describe_instance | NCCL AllReduce (NVLink/NVSwitch) |
-| `training` | `TrainingCheck` | describe_instance | DDP training workload (50 steps) |
-| `nvlink` | `NvlinkCheck` | describe_instance | NVLink topology and bandwidth |
-| `infiniband` | `InfiniBandCheck` | describe_instance | InfiniBand device presence |
-| `ethernet` | `EthernetCheck` | describe_instance | Network connectivity (ping 8.8.8.8) |
+| `gpu_stress` | `BmGpuStressCheck` | describe_instance | PyTorch matrix multiply on all 8 GPUs |
+| `nccl` | `BmNcclCheck` | describe_instance | NCCL AllReduce (NVLink/NVSwitch) |
+| `training` | `BmTrainingCheck` | describe_instance | DDP training workload (50 steps) |
+| `nvlink` | `BmNvlinkCheck` | describe_instance | NVLink topology and bandwidth |
+| `infiniband` | `BmInfiniBandCheck` | describe_instance | InfiniBand device presence |
+| `ethernet` | `BmEthernetCheck` | describe_instance | Network connectivity (ping 8.8.8.8) |
 | `stop_checks` | `BmHostStoppedCheck` | stop_instance | Power-off confirmed |
 | `start_checks` | `BmHostStartedCheck`, `BmIdentifierStableAfterStartCheck` | start_instance | Power-on confirmed, instance ID stable |
 | `start_ssh` | `BmHostReadyAfterStartCheck` | start_instance | SSH works after start |

@@ -85,7 +85,7 @@ tests:
     topology_placement:
       step: topology_placement
       checks:
-        TopologyPlacementCheck:
+        BmTopologyPlacementCheck:
           test_id: "CNP01-04"
           labels: ["bare_metal", "min_req"]
 
@@ -98,7 +98,7 @@ tests:
           description: "Check the bare metal host's serial console is reachable"
           compose:
             - SerialConsoleCheck
-        SerialConsoleRetentionCheck:
+        BmSerialConsoleRetentionCheck:
           test_id: "CNP06-02"
           labels: ["bare_metal", "min_req"]
 
@@ -199,7 +199,7 @@ tests:
     host_status_logs:
       step: host_status_log
       checks:
-        BmHostStatusLog:
+        BmHostStatusLogCheck:
           test_id: "BMAAS07-01"
           labels: ["bare_metal"]
 
@@ -207,7 +207,7 @@ tests:
     gpu_stress:
       step: describe_instance
       checks:
-        GpuStressCheck:
+        BmGpuStressCheck:
           test_id: "BMAAS09-01"
           labels: ["bare_metal", "gpu", "min_req", "ssh", "workload"]
           runtime: 30
@@ -217,7 +217,7 @@ tests:
     nccl:
       step: describe_instance
       checks:
-        NcclCheck:
+        BmNcclCheck:
           test_id: "BMAAS11-01"
           labels: ["bare_metal", "gpu", "min_req", "ssh", "workload"]
 
@@ -225,7 +225,7 @@ tests:
     training:
       step: describe_instance
       checks:
-        TrainingCheck:
+        BmTrainingCheck:
           test_id: "BMAAS12-01"
           labels: ["bare_metal", "gpu", "min_req", "ssh", "workload"]
           steps: 50
@@ -234,21 +234,21 @@ tests:
     nvlink:
       step: describe_instance
       checks:
-        NvlinkCheck:
+        BmNvlinkCheck:
           test_id: "BMAAS06-01"
           labels: ["bare_metal", "ssh", "gpu", "network"]
 
     infiniband:
       step: describe_instance
       checks:
-        InfiniBandCheck:
+        BmInfiniBandCheck:
           test_id: "BMAAS06-01"
           labels: ["bare_metal", "gpu", "network", "ssh"]
 
     ethernet:
       step: describe_instance
       checks:
-        EthernetCheck:
+        BmEthernetCheck:
           test_id: "BMAAS06-01"
           labels: ["bare_metal", "gpu", "network", "ssh"]
           ping_target: "8.8.8.8"
@@ -539,7 +539,7 @@ tests:
     ingestion_check:
       step: verify_ingestion
       checks:
-        HardwareIngestionCheck:
+        BmHardwareIngestionCheck:
           test_id: "HWING01-01"
           labels: ["bare_metal", "ingestion"]
           min_machines: 1
@@ -551,7 +551,7 @@ tests:
     dpu_health:
       step: check_dpu_health
       checks:
-        DpuHealthCheck:
+        BmDpuHealthCheck:
           test_id: "BMAAS05-01"
           labels: ["bare_metal", "dpu"]
           require_heartbeat: true
@@ -567,7 +567,7 @@ tests:
     dpu_network:
       step: check_dpu_network
       checks:
-        DpuNetworkCheck:
+        BmDpuNetworkReadinessCheck:
           test_id: "N/A"
           labels: ["bare_metal", "dpu", "network"]
           require_bgp: true
@@ -579,7 +579,7 @@ tests:
     governance_metrics:
       step: query_governance_metrics
       checks:
-        GovernanceMetricsCheck:
+        BmGovernanceMetricsCheck:
           test_id: "CAP01-01"
           labels: ["bare_metal", "governance", "min_req"]
           min_delivered_nodes: 1
@@ -593,7 +593,7 @@ tests:
     host_health:
       step: query_host_health
       checks:
-        HostHealthCheck:
+        BmHostHealthCheck:
           test_id: "CAP05-01"
           labels: ["bare_metal", "health", "min_req"]
           require_report: true
@@ -604,7 +604,7 @@ tests:
     health_aggregation:
       step: query_health_aggregation
       checks:
-        HealthAggregationCheck:
+        BmHealthAggregationCheck:
           test_id: "CAP05-02"
           labels: ["bare_metal", "health", "min_req"]
           min_groups: 1
@@ -617,7 +617,7 @@ tests:
     ib_tenant_isolation:
       step: query_ib_tenant_isolation
       checks:
-        IbTenantIsolationCheck:
+        BmIbTenantIsolationCheck:
           test_id: "SDN04-04"
           labels: ["bare_metal", "infiniband", "min_req", "network", "security"]
           min_partitions: 1
@@ -633,7 +633,7 @@ tests:
     ib_keys_configured:
       step: query_ib_keys
       checks:
-        IbKeysConfiguredCheck:
+        BmIbKeysConfiguredCheck:
           test_id: "SDN04-05"
           labels: ["bare_metal", "infiniband", "min_req", "network", "security"]
           required_keys: ["p_key", "management_key"]
@@ -649,21 +649,21 @@ tests:
     memory_sanitization:
       step: query_sanitization
       checks:
-        MemorySanitizationCheck:
+        BmMemorySanitizationCheck:
           test_id: "SEC21-04"
           labels: ["bare_metal", "min_req", "sanitization", "security"]
 
     gpu_memory_sanitization:
       step: query_sanitization
       checks:
-        GpuMemorySanitizationCheck:
+        BmGpuMemorySanitizationCheck:
           test_id: "SEC21-05"
           labels: ["bare_metal", "gpu", "min_req", "sanitization", "security"]
 
     firmware_reset:
       step: query_sanitization
       checks:
-        FirmwareResetCheck:
+        BmFirmwareResetCheck:
           test_id: "SEC21-06"
           labels: ["bare_metal", "firmware", "min_req", "sanitization", "security"]
 
@@ -674,7 +674,7 @@ tests:
     disk_sanitization:
       step: query_sanitization
       checks:
-        DiskSanitizationCheck:
+        BmDiskSanitizationCheck:
           test_id: "SEC21-02"
           labels: ["bare_metal", "disk", "min_req", "sanitization", "security"]
 
@@ -686,7 +686,7 @@ tests:
     hardware_serials:
       step: query_serial_numbers
       checks:
-        HardwareSerialCheck:
+        BmHardwareSerialCheck:
           test_id: "BFX03-01"
           labels: ["bare_metal", "breakfix", "min_req"]
           min_machines: 1
@@ -700,7 +700,7 @@ tests:
     failure_domain_observability:
       step: query_topology
       checks:
-        FailureDomainObservabilityCheck:
+        BmFailureDomainObservabilityCheck:
           test_id: "STG05-01"
           labels: ["bare_metal", "sds_controller", "min_req"]
           min_failure_domains: 1
@@ -713,7 +713,7 @@ tests:
     breakfix_skip_sanitization:
       step: query_sanitization
       checks:
-        SkipSanitizationBreakfixCheck:
+        BmSkipSanitizationBreakfixCheck:
           test_id: "STG02-01"
           labels: ["bare_metal", "min_req", "sanitization", "sds_controller"]
 
@@ -724,7 +724,7 @@ tests:
     stable_storage_ips:
       step: query_stable_ips
       checks:
-        StableStorageNodeIpCheck:
+        BmStableStorageNodeIpCheck:
           test_id: "STG03-01"
           labels: ["bare_metal", "min_req", "network", "sds_controller"]
 
@@ -734,7 +734,7 @@ tests:
     oob_failure_detection:
       step: query_oob_health
       checks:
-        OobFailureDetectionCheck:
+        BmOobFailureDetectionCheck:
           test_id: "STG04-01"
           labels: ["bare_metal", "health", "min_req", "sds_controller"]
 
@@ -748,14 +748,14 @@ tests:
     nonce_attestation:
       step: query_attestation
       checks:
-        NonceAttestationCheck:
+        BmNonceAttestationCheck:
           test_id: "SEC22-01"
           labels: ["bare_metal", "security", "attestation"]
 
     firmware_attestation:
       step: query_attestation
       checks:
-        FirmwareAttestationCheck:
+        BmFirmwareAttestationCheck:
           test_id: "CNP09-02"
           labels: ["attestation", "bare_metal", "firmware", "min_req", "security"]
 
@@ -768,7 +768,7 @@ tests:
     specified_key_access:
       step: query_key_access
       checks:
-        SpecifiedKeyAccessCheck:
+        BmComponentKeyAccessCheck:
           test_id: "AUTH03-01"
           labels: ["bare_metal", "iam", "security", "vm"]
 

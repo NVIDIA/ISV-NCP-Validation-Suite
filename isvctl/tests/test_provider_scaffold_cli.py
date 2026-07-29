@@ -423,7 +423,7 @@ print(json.dumps({
             str(tmp_path / "junit.xml"),
             "--",
             "-k",
-            "InstanceStateCheck or InstanceCreatedCheck or InstanceSpecifiedKeyCheck",
+            "InstanceStateCheck or VmCreatedCheck or VmLaunchedWithSpecifiedKeyCheck",
         ],
     )
 

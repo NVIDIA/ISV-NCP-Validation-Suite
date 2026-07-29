@@ -20,11 +20,11 @@ from __future__ import annotations
 from typing import Any
 
 from isvtest.validations.sanitization import (
-    DiskSanitizationCheck,
-    FirmwareResetCheck,
-    GpuMemorySanitizationCheck,
-    MemorySanitizationCheck,
-    SkipSanitizationBreakfixCheck,
+    BmDiskSanitizationCheck,
+    BmFirmwareResetCheck,
+    BmGpuMemorySanitizationCheck,
+    BmMemorySanitizationCheck,
+    BmSkipSanitizationBreakfixCheck,
 )
 
 
@@ -84,16 +84,16 @@ def _output(
 
 
 # ===========================================================================
-# MemorySanitizationCheck (SEC21-04)
+# BmMemorySanitizationCheck (SEC21-04)
 # ===========================================================================
 
 
 class TestMemorySanitizationCheck:
-    """Tests for MemorySanitizationCheck validation."""
+    """Tests for BmMemorySanitizationCheck validation."""
 
     def test_sanitized_fleet_passes(self) -> None:
         """A fleet whose released hosts were all sanitized passes."""
-        check = MemorySanitizationCheck(config={"step_output": _output()})
+        check = BmMemorySanitizationCheck(config={"step_output": _output()})
         check.run()
         assert check._passed is True, check._error
         sub = next(r for r in check._subtest_results if r["name"] == "memory_m-001")
@@ -102,7 +102,7 @@ class TestMemorySanitizationCheck:
     def test_never_served_tenant_passes(self) -> None:
         """A freshly ingested host with no prior tenancy passes vacuously."""
         machine = _machine(served_tenant=False, transitions=["initializing", "available"])
-        check = MemorySanitizationCheck(config={"step_output": _output(machines=[machine])})
+        check = BmMemorySanitizationCheck(config={"step_output": _output(machines=[machine])})
         check.run()
         assert check._passed is True, check._error
         assert "no prior tenancy" in check._subtest_results[0]["message"]
@@ -110,7 +110,7 @@ class TestMemorySanitizationCheck:
     def test_unsanitized_release_fails(self) -> None:
         """A host returned to the pool without sanitization fails."""
         machine = _machine(sanitized=False, transitions=["in_use", "available"])
-        check = MemorySanitizationCheck(config={"step_output": _output(machines=[machine])})
+        check = BmMemorySanitizationCheck(config={"step_output": _output(machines=[machine])})
         check.run()
         assert check._passed is False
         # Summary stays concise (count + offending ids); the full per-machine
@@ -123,7 +123,7 @@ class TestMemorySanitizationCheck:
     def test_stale_tenant_binding_fails(self) -> None:
         """A host offered to new tenants while still bound to a prior tenant fails."""
         machine = _machine(stale_tenant_binding=True)
-        check = MemorySanitizationCheck(config={"step_output": _output(machines=[machine])})
+        check = BmMemorySanitizationCheck(config={"step_output": _output(machines=[machine])})
         check.run()
         assert check._passed is False
         assert "1/1 machine(s)" in check._error
@@ -132,7 +132,7 @@ class TestMemorySanitizationCheck:
 
     def test_step_failure(self) -> None:
         """A failed step is reported with its error detail."""
-        check = MemorySanitizationCheck(config={"step_output": _output(success=False, error="API timeout")})
+        check = BmMemorySanitizationCheck(config={"step_output": _output(success=False, error="API timeout")})
         check.run()
         assert check._passed is False
         assert "API timeout" in check._error
@@ -141,14 +141,14 @@ class TestMemorySanitizationCheck:
         """A non-list machines field fails."""
         output = _output()
         output["machines"] = None
-        check = MemorySanitizationCheck(config={"step_output": output})
+        check = BmMemorySanitizationCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "machines" in check._error
 
     def test_no_machines_fails(self) -> None:
         """An empty machine list fails -- nothing was validated."""
-        check = MemorySanitizationCheck(config={"step_output": _output(machines=[])})
+        check = BmMemorySanitizationCheck(config={"step_output": _output(machines=[])})
         check.run()
         assert check._passed is False
         assert "No machines" in check._error
@@ -157,7 +157,7 @@ class TestMemorySanitizationCheck:
         """One failing host fails the check while the clean host still passes."""
         good = _machine(machine_id="m-good")
         bad = _machine(machine_id="m-bad", sanitized=False, transitions=["in_use", "available"])
-        check = MemorySanitizationCheck(config={"step_output": _output(machines=[good, bad])})
+        check = BmMemorySanitizationCheck(config={"step_output": _output(machines=[good, bad])})
         check.run()
         assert check._passed is False
         assert "1/2 machine(s)" in check._error
@@ -167,18 +167,18 @@ class TestMemorySanitizationCheck:
 
 
 # ===========================================================================
-# GpuMemorySanitizationCheck (SEC21-05)
+# BmGpuMemorySanitizationCheck (SEC21-05)
 # ===========================================================================
 
 
 class TestGpuMemorySanitizationCheck:
-    """Tests for GpuMemorySanitizationCheck validation."""
+    """Tests for BmGpuMemorySanitizationCheck validation."""
 
     def test_only_gpu_hosts_are_scoped(self) -> None:
         """Non-GPU hosts are ignored; a sanitized GPU host passes."""
         gpu = _machine(machine_id="m-gpu", has_gpu=True)
         cpu = _machine(machine_id="m-cpu", has_gpu=False, sanitized=False, transitions=["in_use", "available"])
-        check = GpuMemorySanitizationCheck(config={"step_output": _output(machines=[gpu, cpu])})
+        check = BmGpuMemorySanitizationCheck(config={"step_output": _output(machines=[gpu, cpu])})
         check.run()
         # The CPU host's violation must not count -- it is out of GPU scope.
         assert check._passed is True, check._error
@@ -189,7 +189,7 @@ class TestGpuMemorySanitizationCheck:
     def test_no_gpu_hosts_fails(self) -> None:
         """A fleet with no GPU-equipped host fails (nothing to validate)."""
         cpu = _machine(machine_id="m-cpu", has_gpu=False)
-        check = GpuMemorySanitizationCheck(config={"step_output": _output(machines=[cpu])})
+        check = BmGpuMemorySanitizationCheck(config={"step_output": _output(machines=[cpu])})
         check.run()
         assert check._passed is False
         assert "No GPU-equipped machines" in check._error
@@ -197,23 +197,23 @@ class TestGpuMemorySanitizationCheck:
     def test_gpu_violation_fails(self) -> None:
         """An unsanitized GPU host fails."""
         gpu = _machine(machine_id="m-gpu", has_gpu=True, sanitized=False, transitions=["in_use", "available"])
-        check = GpuMemorySanitizationCheck(config={"step_output": _output(machines=[gpu])})
+        check = BmGpuMemorySanitizationCheck(config={"step_output": _output(machines=[gpu])})
         check.run()
         assert check._passed is False
         assert "GPU memory sanitization failed" in check._error
 
 
 # ===========================================================================
-# FirmwareResetCheck (SEC21-06 / SEC22)
+# BmFirmwareResetCheck (SEC21-06 / SEC22)
 # ===========================================================================
 
 
 class TestFirmwareResetCheck:
-    """Tests for FirmwareResetCheck validation."""
+    """Tests for BmFirmwareResetCheck validation."""
 
     def test_sanitized_fleet_passes_and_reports_firmware(self) -> None:
         """A sanitized fleet passes and emits a report-only firmware identity subtest."""
-        check = FirmwareResetCheck(config={"step_output": _output()})
+        check = BmFirmwareResetCheck(config={"step_output": _output()})
         check.run()
         assert check._passed is True, check._error
         identity = next(r for r in check._subtest_results if r["name"] == "firmware_m-001_identity")
@@ -223,7 +223,7 @@ class TestFirmwareResetCheck:
     def test_unsanitized_release_fails(self) -> None:
         """A host returned without TPM/BIOS reset fails the gate."""
         machine = _machine(sanitized=False, transitions=["in_use", "available"])
-        check = FirmwareResetCheck(config={"step_output": _output(machines=[machine])})
+        check = BmFirmwareResetCheck(config={"step_output": _output(machines=[machine])})
         check.run()
         assert check._passed is False
         assert "Firmware reset failed" in check._error
@@ -231,7 +231,7 @@ class TestFirmwareResetCheck:
     def test_missing_bios_version_reports_unknown(self) -> None:
         """A missing BIOS version is reported as unknown, not a failure."""
         machine = _machine(bios_version="")
-        check = FirmwareResetCheck(config={"step_output": _output(machines=[machine])})
+        check = BmFirmwareResetCheck(config={"step_output": _output(machines=[machine])})
         check.run()
         assert check._passed is True, check._error
         identity = next(r for r in check._subtest_results if r["name"] == "firmware_m-001_identity")
@@ -239,23 +239,23 @@ class TestFirmwareResetCheck:
 
     def test_step_failure_skips_firmware_subtests(self) -> None:
         """A failed step fails the check and emits no firmware identity subtests."""
-        check = FirmwareResetCheck(config={"step_output": _output(success=False, error="API down")})
+        check = BmFirmwareResetCheck(config={"step_output": _output(success=False, error="API down")})
         check.run()
         assert check._passed is False
         assert not any(r["name"].endswith("_identity") for r in check._subtest_results)
 
 
 # ===========================================================================
-# DiskSanitizationCheck (SEC21-02)
+# BmDiskSanitizationCheck (SEC21-02)
 # ===========================================================================
 
 
 class TestDiskSanitizationCheck:
-    """Tests for DiskSanitizationCheck validation (SEC21-02)."""
+    """Tests for BmDiskSanitizationCheck validation (SEC21-02)."""
 
     def test_sanitized_fleet_passes(self) -> None:
         """A fleet whose released hosts all passed the sanitizing stage passes."""
-        check = DiskSanitizationCheck(config={"step_output": _output()})
+        check = BmDiskSanitizationCheck(config={"step_output": _output()})
         check.run()
         assert check._passed is True, check._error
         sub = next(r for r in check._subtest_results if r["name"] == "disk_m-001")
@@ -264,7 +264,7 @@ class TestDiskSanitizationCheck:
     def test_never_served_tenant_passes(self) -> None:
         """A host with no prior tenancy needs no storage wipe and passes vacuously."""
         machine = _machine(served_tenant=False, transitions=["initializing", "available"])
-        check = DiskSanitizationCheck(config={"step_output": _output(machines=[machine])})
+        check = BmDiskSanitizationCheck(config={"step_output": _output(machines=[machine])})
         check.run()
         assert check._passed is True, check._error
         assert "no prior tenancy" in check._subtest_results[0]["message"]
@@ -272,7 +272,7 @@ class TestDiskSanitizationCheck:
     def test_unsanitized_release_fails(self) -> None:
         """A host returned to the pool without the sanitizing stage fails."""
         machine = _machine(sanitized=False, transitions=["in_use", "available"])
-        check = DiskSanitizationCheck(config={"step_output": _output(machines=[machine])})
+        check = BmDiskSanitizationCheck(config={"step_output": _output(machines=[machine])})
         check.run()
         assert check._passed is False
         assert "1/1 machine(s)" in check._error
@@ -282,7 +282,7 @@ class TestDiskSanitizationCheck:
     def test_stale_tenant_binding_fails(self) -> None:
         """A host still bound to a prior tenant fails the storage gate too."""
         machine = _machine(stale_tenant_binding=True)
-        check = DiskSanitizationCheck(config={"step_output": _output(machines=[machine])})
+        check = BmDiskSanitizationCheck(config={"step_output": _output(machines=[machine])})
         check.run()
         assert check._passed is False
         sub = next(r for r in check._subtest_results if r["name"] == "disk_m-001")
@@ -290,31 +290,31 @@ class TestDiskSanitizationCheck:
 
     def test_step_failure(self) -> None:
         """A failed step is reported with its error detail."""
-        check = DiskSanitizationCheck(config={"step_output": _output(success=False, error="API timeout")})
+        check = BmDiskSanitizationCheck(config={"step_output": _output(success=False, error="API timeout")})
         check.run()
         assert check._passed is False
         assert "API timeout" in check._error
 
 
 # ===========================================================================
-# SkipSanitizationBreakfixCheck (STG02-01)
+# BmSkipSanitizationBreakfixCheck (STG02-01)
 # ===========================================================================
 
 
 class TestSkipSanitizationBreakfixCheck:
-    """Tests for SkipSanitizationBreakfixCheck validation (STG02-01)."""
+    """Tests for BmSkipSanitizationBreakfixCheck validation (STG02-01)."""
 
     def test_valid_breakfix_skip_passes(self) -> None:
         """A tenancy-preserving maintenance skip passes."""
         machine = _machine(breakfix_skip_observed=True, transitions=["in_use", "maintenance", "in_use"])
-        check = SkipSanitizationBreakfixCheck(config={"step_output": _output(machines=[machine])})
+        check = BmSkipSanitizationBreakfixCheck(config={"step_output": _output(machines=[machine])})
         check.run()
         assert check._passed is True, check._error
         assert "1 tenancy-preserving maintenance skip(s) observed" in check._output
 
     def test_no_breakfix_history_passes(self) -> None:
         """Sites with no maintenance skips still pass as auditable."""
-        check = SkipSanitizationBreakfixCheck(config={"step_output": _output()})
+        check = BmSkipSanitizationBreakfixCheck(config={"step_output": _output()})
         check.run()
         assert check._passed is True, check._error
         assert "no tenancy-preserving maintenance skips" in check._output
@@ -322,7 +322,7 @@ class TestSkipSanitizationBreakfixCheck:
     def test_unsanitized_tenant_release_fails(self) -> None:
         """Tenant release without sanitizing still fails."""
         machine = _machine(sanitized=False, transitions=["in_use", "available"])
-        check = SkipSanitizationBreakfixCheck(config={"step_output": _output(machines=[machine])})
+        check = BmSkipSanitizationBreakfixCheck(config={"step_output": _output(machines=[machine])})
         check.run()
         assert check._passed is False
 
@@ -333,7 +333,7 @@ class TestSkipSanitizationBreakfixCheck:
             tenancy_preserved=False,
             transitions=["in_use", "maintenance", "in_use"],
         )
-        check = SkipSanitizationBreakfixCheck(config={"step_output": _output(machines=[machine])})
+        check = BmSkipSanitizationBreakfixCheck(config={"step_output": _output(machines=[machine])})
         check.run()
         assert check._passed is False
         sub = next(r for r in check._subtest_results if r["name"] == "breakfix_skip_m-001")

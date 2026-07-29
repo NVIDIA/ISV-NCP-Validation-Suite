@@ -69,21 +69,21 @@ tests:
     specified_key:
       step: launch_instance
       checks:
-        InstanceSpecifiedKeyCheck:
+        VmLaunchedWithSpecifiedKeyCheck:
           test_id: "AUTH02-01"
           labels: ["vm"]
 
     component_key_access:
       step: component_key_access
       checks:
-        ComponentKeyAccessCheck:
+        VmComponentKeyAccessCheck:
           test_id: "AUTH03-01"
           labels: ["bare_metal", "iam", "security", "vm"]
 
     instance_created:
       step: launch_instance
       checks:
-        InstanceCreatedCheck:
+        VmCreatedCheck:
           test_id: "CNP01-09"
           labels: ["min_req", "vm"]
 
@@ -122,14 +122,14 @@ tests:
     console_rbac:
       step: console_rbac
       checks:
-        ConsoleRbacCheck:
+        VmConsoleRbacCheck:
           test_id: "CNP01-16"
           labels: ["iam", "min_req", "security", "vm"]
 
     virtual_device_hardening:
       step: virtual_device_hardening
       checks:
-        VirtualDeviceHardeningCheck:
+        VmVirtualDeviceHardeningCheck:
           test_id: "CNP01-17"
           labels: ["min_req", "security", "vm"]
 

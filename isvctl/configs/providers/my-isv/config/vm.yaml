@@ -22,10 +22,10 @@
 #
 # Coverage:
 #   This example exercises only the pure JSON-contract validations
-#   (VmRunningCheck, InstanceCreatedCheck, VmListedCheck, VmTaggedCheck,
+#   (VmRunningCheck, VmCreatedCheck, VmListedCheck, VmTaggedCheck,
 #    VmStoppedCheck, VmStartedCheck, VmRebootedCheck, the
 #    VmIdentifierStableAfter* checks, VmSerialConsoleCheck,
-#    ConsoleRbacCheck, ComponentKeyAccessCheck,
+#    VmConsoleRbacCheck, VmComponentKeyAccessCheck,
 #    VmResourcesDeletedCheck). SSH-based host checks
 #    (VmReachableOverSsh*, VmGpusPresent*, VmSoftwareStackCheck,
 #    VmCpuInfoCheck, the NIM checks, etc.) are excluded

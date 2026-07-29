@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from isvtest.validations.health import HealthAggregationCheck, HostHealthCheck
+from isvtest.validations.health import BmHealthAggregationCheck, BmHostHealthCheck
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -126,16 +126,16 @@ def _aggregation_output(
 
 
 # ===========================================================================
-# HostHealthCheck tests (CAP05-01)
+# BmHostHealthCheck tests (CAP05-01)
 # ===========================================================================
 
 
 class TestHostHealthCheck:
-    """Tests for HostHealthCheck validation."""
+    """Tests for BmHostHealthCheck validation."""
 
     def test_healthy_host_passes(self) -> None:
         """A host with a fresh report and no alerts passes."""
-        check = HostHealthCheck(config={"step_output": _host_health_output()})
+        check = BmHostHealthCheck(config={"step_output": _host_health_output()})
         check.run()
         assert check._passed is True, check._error
         # report + alerts subtests, both passing.
@@ -145,14 +145,14 @@ class TestHostHealthCheck:
 
     def test_step_failure(self) -> None:
         """A failed step is reported with its error detail."""
-        check = HostHealthCheck(config={"step_output": _host_health_output(success=False, error="API timeout")})
+        check = BmHostHealthCheck(config={"step_output": _host_health_output(success=False, error="API timeout")})
         check.run()
         assert check._passed is False
         assert "API timeout" in check._error
 
     def test_no_hosts(self) -> None:
         """An empty host list fails -- nothing was validated."""
-        check = HostHealthCheck(config={"step_output": _host_health_output(hosts=[])})
+        check = BmHostHealthCheck(config={"step_output": _host_health_output(hosts=[])})
         check.run()
         assert check._passed is False
         assert "No hosts" in check._error
@@ -160,7 +160,7 @@ class TestHostHealthCheck:
     def test_missing_report_fails(self) -> None:
         """A host the health API returns nothing for fails the baseline check."""
         host = _host(health_present=False, probe_ids=[])
-        check = HostHealthCheck(config={"step_output": _host_health_output(hosts=[host])})
+        check = BmHostHealthCheck(config={"step_output": _host_health_output(hosts=[host])})
         check.run()
         assert check._passed is False
         assert "no health report" in check._error
@@ -170,7 +170,7 @@ class TestHostHealthCheck:
     def test_any_alert_fails_by_default(self) -> None:
         """By default any alert (regardless of classification) fails the host."""
         host = _host(alerts=[_alert(probe_id="HeartbeatTimeout", message="dpu agent silent")])
-        check = HostHealthCheck(config={"step_output": _host_health_output(hosts=[host])})
+        check = BmHostHealthCheck(config={"step_output": _host_health_output(hosts=[host])})
         check.run()
         assert check._passed is False
         assert "HeartbeatTimeout" in check._error
@@ -191,7 +191,7 @@ class TestHostHealthCheck:
                 )
             ],
         )
-        check = HostHealthCheck(config={"step_output": _host_health_output(hosts=[host])})
+        check = BmHostHealthCheck(config={"step_output": _host_health_output(hosts=[host])})
         check.run()
         assert check._passed is False
         alerts_sub = next(r for r in check._subtest_results if r["name"] == "host_m-001_alerts")
@@ -206,7 +206,7 @@ class TestHostHealthCheck:
                 _alert(probe_id="BmcSensor", message="warn", classifications=["SensorWarning"]),
             ],
         )
-        check = HostHealthCheck(
+        check = BmHostHealthCheck(
             config={
                 "step_output": _host_health_output(hosts=[host]),
                 "fail_on_classifications": ["SensorCritical", "SensorFailure", "Leak"],
@@ -222,7 +222,7 @@ class TestHostHealthCheck:
         host = _host(
             alerts=[_alert(probe_id="BmcSensor", message="crit", classifications=["SensorCritical"])],
         )
-        check = HostHealthCheck(
+        check = BmHostHealthCheck(
             config={
                 "step_output": _host_health_output(hosts=[host]),
                 "fail_on_classifications": ["SensorCritical"],
@@ -235,7 +235,7 @@ class TestHostHealthCheck:
     def test_require_probes_coverage(self) -> None:
         """require_probes enforces that specific probe IDs are present."""
         host = _host(probe_ids=["BgpDaemonEnabled"])
-        check = HostHealthCheck(
+        check = BmHostHealthCheck(
             config={
                 "step_output": _host_health_output(hosts=[host]),
                 "require_probes": ["BmcSensor"],
@@ -250,7 +250,7 @@ class TestHostHealthCheck:
     def test_require_probes_present_passes(self) -> None:
         """require_probes passes when the required probe IDs are present."""
         host = _host(probe_ids=["BmcSensor", "BgpDaemonEnabled"])
-        check = HostHealthCheck(
+        check = BmHostHealthCheck(
             config={
                 "step_output": _host_health_output(hosts=[host]),
                 "require_probes": ["BmcSensor"],
@@ -262,7 +262,7 @@ class TestHostHealthCheck:
     def test_freshness_stale_fails(self) -> None:
         """An observation older than max_observation_age_seconds fails."""
         host = _host(observed_age_seconds=600)
-        check = HostHealthCheck(
+        check = BmHostHealthCheck(
             config={
                 "step_output": _host_health_output(hosts=[host]),
                 "max_observation_age_seconds": 300,
@@ -276,7 +276,7 @@ class TestHostHealthCheck:
 
     def test_freshness_fresh_passes(self) -> None:
         """A recent observation passes the freshness subtest."""
-        check = HostHealthCheck(
+        check = BmHostHealthCheck(
             config={
                 "step_output": _host_health_output(hosts=[_host(observed_age_seconds=30)]),
                 "max_observation_age_seconds": 300,
@@ -289,7 +289,7 @@ class TestHostHealthCheck:
 
     def test_freshness_missing_timestamp_fails(self) -> None:
         """When freshness is enforced, a missing timestamp is a failure."""
-        check = HostHealthCheck(
+        check = BmHostHealthCheck(
             config={
                 "step_output": _host_health_output(hosts=[_host(observed_age_seconds=None)]),
                 "max_observation_age_seconds": 300,
@@ -301,23 +301,23 @@ class TestHostHealthCheck:
 
     def test_freshness_not_enforced_by_default(self) -> None:
         """Without max_observation_age_seconds, a null timestamp does not fail."""
-        check = HostHealthCheck(config={"step_output": _host_health_output(hosts=[_host(observed_age_seconds=None)])})
+        check = BmHostHealthCheck(config={"step_output": _host_health_output(hosts=[_host(observed_age_seconds=None)])})
         check.run()
         assert check._passed is True, check._error
         assert not any(r["name"].endswith("_freshness") for r in check._subtest_results)
 
 
 # ===========================================================================
-# HealthAggregationCheck tests (CAP05-02)
+# BmHealthAggregationCheck tests (CAP05-02)
 # ===========================================================================
 
 
 class TestHealthAggregationCheck:
-    """Tests for HealthAggregationCheck validation."""
+    """Tests for BmHealthAggregationCheck validation."""
 
     def test_consistent_groups_pass(self) -> None:
         """Internally consistent, fully healthy groups pass."""
-        check = HealthAggregationCheck(config={"step_output": _aggregation_output()})
+        check = BmHealthAggregationCheck(config={"step_output": _aggregation_output()})
         check.run()
         assert check._passed is True, check._error
         assert "nodegroup-level group" in check._output
@@ -325,7 +325,7 @@ class TestHealthAggregationCheck:
     def test_degraded_group_passes_but_is_reported(self) -> None:
         """A degraded group is reported in the summary but is not fatal by default."""
         groups = [_group(total=4, healthy=3, unhealthy=1, unhealthy_hosts=["m-x"])]
-        check = HealthAggregationCheck(config={"step_output": _aggregation_output(groups=groups)})
+        check = BmHealthAggregationCheck(config={"step_output": _aggregation_output(groups=groups)})
         check.run()
         assert check._passed is True, check._error
         assert "degraded" in check._output
@@ -333,7 +333,7 @@ class TestHealthAggregationCheck:
     def test_require_all_healthy_fails_on_degraded(self) -> None:
         """With require_all_healthy, any degraded group fails the check."""
         groups = [_group(total=4, healthy=3, unhealthy=1, unhealthy_hosts=["m-x"])]
-        check = HealthAggregationCheck(
+        check = BmHealthAggregationCheck(
             config={"step_output": _aggregation_output(groups=groups), "require_all_healthy": True}
         )
         check.run()
@@ -342,7 +342,7 @@ class TestHealthAggregationCheck:
 
     def test_step_failure(self) -> None:
         """A failed step is reported with its error detail."""
-        check = HealthAggregationCheck(config={"step_output": _aggregation_output(success=False, error="API down")})
+        check = BmHealthAggregationCheck(config={"step_output": _aggregation_output(success=False, error="API down")})
         check.run()
         assert check._passed is False
         assert "API down" in check._error
@@ -351,7 +351,7 @@ class TestHealthAggregationCheck:
         """A missing aggregation_level field fails."""
         output = _aggregation_output()
         output["aggregation_level"] = ""
-        check = HealthAggregationCheck(config={"step_output": output})
+        check = BmHealthAggregationCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "aggregation_level" in check._error
@@ -360,14 +360,14 @@ class TestHealthAggregationCheck:
         """A non-list groups field fails."""
         output = _aggregation_output()
         output["groups"] = None
-        check = HealthAggregationCheck(config={"step_output": output})
+        check = BmHealthAggregationCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "groups" in check._error
 
     def test_min_groups_not_met(self) -> None:
         """Fewer groups than min_groups fails."""
-        check = HealthAggregationCheck(config={"step_output": _aggregation_output(groups=[]), "min_groups": 1})
+        check = BmHealthAggregationCheck(config={"step_output": _aggregation_output(groups=[]), "min_groups": 1})
         check.run()
         assert check._passed is False
         assert "at least 1" in check._error
@@ -375,7 +375,7 @@ class TestHealthAggregationCheck:
     def test_inconsistent_counts_fail(self) -> None:
         """Counts that do not reconcile fail the group subtest."""
         groups = [_group(total=4, healthy=2, unhealthy=1, status="Degraded")]
-        check = HealthAggregationCheck(config={"step_output": _aggregation_output(groups=groups)})
+        check = BmHealthAggregationCheck(config={"step_output": _aggregation_output(groups=groups)})
         check.run()
         assert check._passed is False
         assert "inconsistent" in check._error
@@ -383,7 +383,7 @@ class TestHealthAggregationCheck:
     def test_status_mismatch_fails(self) -> None:
         """A status that disagrees with the counts fails."""
         groups = [_group(total=4, healthy=4, unhealthy=0, status="Degraded")]
-        check = HealthAggregationCheck(config={"step_output": _aggregation_output(groups=groups)})
+        check = BmHealthAggregationCheck(config={"step_output": _aggregation_output(groups=groups)})
         check.run()
         assert check._passed is False
         assert "inconsistent" in check._error
@@ -392,7 +392,7 @@ class TestHealthAggregationCheck:
         """Non-integer counts (e.g. null) are reported as inconsistent."""
         groups = [_group()]
         groups[0]["unhealthy"] = None
-        check = HealthAggregationCheck(config={"step_output": _aggregation_output(groups=groups)})
+        check = BmHealthAggregationCheck(config={"step_output": _aggregation_output(groups=groups)})
         check.run()
         assert check._passed is False
         assert "inconsistent" in check._error

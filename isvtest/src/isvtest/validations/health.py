@@ -18,9 +18,9 @@
 Two provider-agnostic checks that assert a cloud's health API surfaces the
 signals NVIDIA requires:
 
-- ``HostHealthCheck`` (CAP05-01): the per-host health API returns real-time
+- ``BmHostHealthCheck`` (CAP05-01): the per-host health API returns real-time
   GPU state, thermal status, and memory health for every host.
-- ``HealthAggregationCheck`` (CAP05-02): health can be rolled up to a
+- ``BmHealthAggregationCheck`` (CAP05-02): health can be rolled up to a
   primitive level (cluster, nodegroup, or reservation) with internally
   consistent counts.
 
@@ -40,7 +40,7 @@ def _host_label(host: dict[str, Any]) -> str:
     return host.get("host_id") or host.get("machine_id") or host.get("chassis_serial") or "unknown"
 
 
-class HostHealthCheck(BaseValidation):
+class BmHostHealthCheck(BaseValidation):
     """Validate the per-host health API returns a fresh, alert-free report.
 
     NICo exposes host health as an alert-driven report keyed on probe IDs
@@ -59,7 +59,7 @@ class HostHealthCheck(BaseValidation):
         fail_on_classifications: Optional list of alert classifications that are
             blocking (e.g. ["SensorCritical", "SensorFailure", "Leak"]). When
             omitted (default), ANY alert fails the host, matching how
-            DpuHealthCheck and HardwareIngestionCheck treat alerts.
+            BmDpuHealthCheck and BmHardwareIngestionCheck treat alerts.
         require_probes: Optional list of probe IDs that must be present for each
             host (default: [] = coverage not enforced). Use to require specific
             signals, e.g. ["BmcSensor"] or ["BmcLeakDetection"].
@@ -208,7 +208,7 @@ class HostHealthCheck(BaseValidation):
             self.set_passed(f"All {total} host(s) return a healthy report via the per-host health API")
 
 
-class HealthAggregationCheck(BaseValidation):
+class BmHealthAggregationCheck(BaseValidation):
     """Validate primitive-level health aggregation (cluster/nodegroup/reservation).
 
     Asserts that the health API can roll host health up to a higher-level

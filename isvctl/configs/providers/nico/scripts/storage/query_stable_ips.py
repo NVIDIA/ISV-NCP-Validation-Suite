@@ -21,7 +21,7 @@ lifecycle operations and maintenance events. NICo assigns admin IPs through its
 IPAM service and exposes them on each machine's ``machineInterfaces`` array.
 This script reads the per-interface ``ipAddresses`` (preferring the primary
 admin interface) and emits a provider-neutral record so
-``StableStorageNodeIpCheck`` can assert every host reports at least one stable
+``BmStableStorageNodeIpCheck`` can assert every host reports at least one stable
 admin IP.
 
 NICo API endpoints used:

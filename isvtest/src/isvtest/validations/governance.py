@@ -33,7 +33,7 @@ REQUIRED_METRICS: tuple[str, ...] = ("delivered", "healthy", "reserved", "active
 REQUIRED_RESOURCES: tuple[str, ...] = ("nodes", "gpus")
 
 
-class GovernanceMetricsCheck(BaseValidation):
+class BmGovernanceMetricsCheck(BaseValidation):
     """Validate the governance API returns the required capacity metrics.
 
     Asserts that the step output exposes per-resource counts (nodes, GPUs) for

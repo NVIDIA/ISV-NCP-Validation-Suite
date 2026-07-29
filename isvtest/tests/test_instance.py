@@ -23,10 +23,10 @@ import pytest
 
 from isvtest.validations.instance import (
     SERIAL_CONSOLE_RETENTION_DAYS_REQUIRED,
-    ComponentKeyAccessCheck,
+    BmSerialConsoleRetentionCheck,
     InstanceRebootCheck,
-    InstanceSpecifiedKeyCheck,
-    SerialConsoleRetentionCheck,
+    VmComponentKeyAccessCheck,
+    VmLaunchedWithSpecifiedKeyCheck,
 )
 
 
@@ -125,7 +125,7 @@ class TestInstanceSpecifiedKeyCheck:
 
     def test_passes_when_instance_key_matches_requested_key(self) -> None:
         """Provider output proves the launched instance uses the requested key."""
-        v = InstanceSpecifiedKeyCheck(
+        v = VmLaunchedWithSpecifiedKeyCheck(
             config={
                 "step_output": {
                     "instance_id": "i-abc123",
@@ -142,7 +142,7 @@ class TestInstanceSpecifiedKeyCheck:
 
     def test_passes_with_instance_key_name_alias(self) -> None:
         """Providers may emit instance_key_name when key_name is reserved elsewhere."""
-        v = InstanceSpecifiedKeyCheck(
+        v = VmLaunchedWithSpecifiedKeyCheck(
             config={
                 "step_output": {
                     "instance_id": "i-abc123",
@@ -158,7 +158,7 @@ class TestInstanceSpecifiedKeyCheck:
 
     def test_fails_when_requested_key_is_missing(self) -> None:
         """The provider must state which key it requested."""
-        v = InstanceSpecifiedKeyCheck(
+        v = VmLaunchedWithSpecifiedKeyCheck(
             config={
                 "step_output": {
                     "instance_id": "i-abc123",
@@ -174,7 +174,7 @@ class TestInstanceSpecifiedKeyCheck:
 
     def test_fails_when_actual_key_is_missing(self) -> None:
         """The provider must report the key observed on the launched instance."""
-        v = InstanceSpecifiedKeyCheck(
+        v = VmLaunchedWithSpecifiedKeyCheck(
             config={
                 "step_output": {
                     "instance_id": "i-abc123",
@@ -190,7 +190,7 @@ class TestInstanceSpecifiedKeyCheck:
 
     def test_fails_when_actual_key_differs_from_requested_key(self) -> None:
         """A launched instance with the wrong key fails the validation."""
-        v = InstanceSpecifiedKeyCheck(
+        v = VmLaunchedWithSpecifiedKeyCheck(
             config={
                 "step_output": {
                     "instance_id": "i-abc123",
@@ -226,14 +226,14 @@ class TestComponentKeyAccessCheck:
 
     def test_passes_with_sol_and_network_access(self) -> None:
         """Happy path: both required component probes pass."""
-        result = ComponentKeyAccessCheck(config={"step_output": self._output()}).execute()
+        result = VmComponentKeyAccessCheck(config={"step_output": self._output()}).execute()
 
         assert result["passed"] is True
         assert "isv-test-key" in result["output"]
 
     def test_passes_with_provider_hidden_network_devices(self) -> None:
         """Network-device access may be provider-hidden when not tenant-visible."""
-        result = ComponentKeyAccessCheck(
+        result = VmComponentKeyAccessCheck(
             config={
                 "step_output": self._output(
                     tests={
@@ -256,14 +256,14 @@ class TestComponentKeyAccessCheck:
         out = self._output()
         del out["key_name"]
 
-        result = ComponentKeyAccessCheck(config={"step_output": out}).execute()
+        result = VmComponentKeyAccessCheck(config={"step_output": out}).execute()
 
         assert result["passed"] is False
         assert "key_name" in result["error"]
 
     def test_fails_when_sol_access_fails(self) -> None:
         """SOL access failure fails AUTH03."""
-        result = ComponentKeyAccessCheck(
+        result = VmComponentKeyAccessCheck(
             config={
                 "step_output": self._output(
                     tests={
@@ -280,7 +280,7 @@ class TestComponentKeyAccessCheck:
     def test_skips_when_step_marked_skipped(self) -> None:
         """Whole-step skip (e.g. serial console disabled) is a pytest skip."""
         with pytest.raises(pytest.skip.Exception, match="serial console"):
-            ComponentKeyAccessCheck(
+            VmComponentKeyAccessCheck(
                 config={
                     "step_output": self._output(
                         skipped=True,
@@ -295,7 +295,7 @@ class TestSerialConsoleRetentionCheck:
 
     def test_passes_with_complete_retention_evidence(self) -> None:
         """Happy path: queryable logs satisfy the required retention window."""
-        v = SerialConsoleRetentionCheck(
+        v = BmSerialConsoleRetentionCheck(
             config={
                 "step_output": _retention_output(),
                 "retention_days_required": SERIAL_CONSOLE_RETENTION_DAYS_REQUIRED,
@@ -311,21 +311,21 @@ class TestSerialConsoleRetentionCheck:
         """The provider output must identify the node being checked."""
         out = _retention_output()
         del out["instance_id"]
-        v = SerialConsoleRetentionCheck(config={"step_output": out})
+        v = BmSerialConsoleRetentionCheck(config={"step_output": out})
         result = v.execute()
         assert result["passed"] is False
         assert "No 'instance_id'" in result["error"]
 
     def test_fails_when_console_logs_are_not_queryable(self) -> None:
         """A provider must prove historical logs can be queried."""
-        v = SerialConsoleRetentionCheck(config={"step_output": _retention_output(console_log_queryable=False)})
+        v = BmSerialConsoleRetentionCheck(config={"step_output": _retention_output(console_log_queryable=False)})
         result = v.execute()
         assert result["passed"] is False
         assert "not queryable" in result["error"]
 
     def test_fails_when_configured_retention_is_below_required(self) -> None:
         """Configured retention must meet the required minimum."""
-        v = SerialConsoleRetentionCheck(
+        v = BmSerialConsoleRetentionCheck(
             config={
                 "step_output": _retention_output(retention_days_configured=14),
                 "retention_days_required": SERIAL_CONSOLE_RETENTION_DAYS_REQUIRED,
@@ -337,7 +337,7 @@ class TestSerialConsoleRetentionCheck:
 
     def test_fails_when_oldest_queryable_age_is_below_required(self) -> None:
         """The returned evidence must cover the full retention window."""
-        v = SerialConsoleRetentionCheck(
+        v = BmSerialConsoleRetentionCheck(
             config={
                 "step_output": _retention_output(oldest_queryable_log_age_days=7),
                 "retention_days_required": SERIAL_CONSOLE_RETENTION_DAYS_REQUIRED,
@@ -350,7 +350,7 @@ class TestSerialConsoleRetentionCheck:
 
     def test_fails_when_query_returns_no_records(self) -> None:
         """A configured retention policy alone is insufficient without query results."""
-        v = SerialConsoleRetentionCheck(config={"step_output": _retention_output(query_result_count=0)})
+        v = BmSerialConsoleRetentionCheck(config={"step_output": _retention_output(query_result_count=0)})
         result = v.execute()
         assert result["passed"] is False
         assert "returned no records" in result["error"]
@@ -359,7 +359,7 @@ class TestSerialConsoleRetentionCheck:
         """Passing retention fields still require an evidence source."""
         out = _retention_output()
         del out["retention_evidence"]
-        v = SerialConsoleRetentionCheck(config={"step_output": out})
+        v = BmSerialConsoleRetentionCheck(config={"step_output": out})
         result = v.execute()
         assert result["passed"] is False
         assert "No 'retention_evidence'" in result["error"]

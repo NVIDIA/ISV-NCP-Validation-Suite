@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from isvtest.validations.storage_infra import OobFailureDetectionCheck, StableStorageNodeIpCheck
+from isvtest.validations.storage_infra import BmOobFailureDetectionCheck, BmStableStorageNodeIpCheck
 
 
 def _host(
@@ -75,18 +75,18 @@ def _output(*, hosts: list[dict[str, Any]] | None = None) -> dict[str, Any]:
 
 
 class TestStableStorageNodeIpCheck:
-    """Tests for StableStorageNodeIpCheck validation (STG03-01)."""
+    """Tests for BmStableStorageNodeIpCheck validation (STG03-01)."""
 
     def test_hosts_with_ips_pass(self) -> None:
         """Every host reporting admin IPs passes."""
-        check = StableStorageNodeIpCheck(config={"step_output": _output()})
+        check = BmStableStorageNodeIpCheck(config={"step_output": _output()})
         check.run()
         assert check._passed is True, check._error
 
     def test_missing_ip_fails(self) -> None:
         """A host with no admin IPs fails."""
         host = _host(primary_ip_addresses=[])
-        check = StableStorageNodeIpCheck(config={"step_output": _output(hosts=[host])})
+        check = BmStableStorageNodeIpCheck(config={"step_output": _output(hosts=[host])})
         check.run()
         assert check._passed is False
         assert "m-001" in check._error
@@ -94,24 +94,24 @@ class TestStableStorageNodeIpCheck:
     def test_storage_only_filter(self) -> None:
         """storage_only scopes validation to storage SKU hosts."""
         hosts = [_host(hw_sku_device_type="cpu"), _host(host_id="m-002", hw_sku_device_type="storage")]
-        check = StableStorageNodeIpCheck(config={"step_output": _output(hosts=hosts), "storage_only": True})
+        check = BmStableStorageNodeIpCheck(config={"step_output": _output(hosts=hosts), "storage_only": True})
         check.run()
         assert check._passed is True, check._error
 
 
 class TestOobFailureDetectionCheck:
-    """Tests for OobFailureDetectionCheck validation (STG04-01)."""
+    """Tests for BmOobFailureDetectionCheck validation (STG04-01)."""
 
     def test_bmc_coverage_passes(self) -> None:
         """Hosts with BmcSensor and device observability pass."""
-        check = OobFailureDetectionCheck(config={"step_output": _output(hosts=[_oob_host()])})
+        check = BmOobFailureDetectionCheck(config={"step_output": _output(hosts=[_oob_host()])})
         check.run()
         assert check._passed is True, check._error
 
     def test_missing_bmc_probe_fails(self) -> None:
         """Missing required BMC probes fails the host."""
         host = _oob_host(bmc_probe_ids=["BgpDaemonEnabled"])
-        check = OobFailureDetectionCheck(config={"step_output": _output(hosts=[host])})
+        check = BmOobFailureDetectionCheck(config={"step_output": _output(hosts=[host])})
         check.run()
         assert check._passed is False
         assert "BmcSensor" in check._error
@@ -119,6 +119,6 @@ class TestOobFailureDetectionCheck:
     def test_missing_oob_report_fails(self) -> None:
         """Absent OOB health report fails when required."""
         host = _oob_host(oob_health_present=False, bmc_probe_ids=[])
-        check = OobFailureDetectionCheck(config={"step_output": _output(hosts=[host])})
+        check = BmOobFailureDetectionCheck(config={"step_output": _output(hosts=[host])})
         check.run()
         assert check._passed is False

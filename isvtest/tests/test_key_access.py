@@ -21,7 +21,7 @@ from typing import Any
 
 import pytest
 
-from isvtest.validations.key_access import SpecifiedKeyAccessCheck
+from isvtest.validations.key_access import BmComponentKeyAccessCheck
 
 
 def _serial_target(
@@ -73,11 +73,11 @@ def _output(
 
 
 class TestSpecifiedKeyAccessCheck:
-    """Tests for SpecifiedKeyAccessCheck (AUTH-XX-03)."""
+    """Tests for BmComponentKeyAccessCheck (AUTH-XX-03)."""
 
     def test_serial_console_accessible_passes(self) -> None:
         """A key synced to a SOL-enabled, SSH-key-auth site passes."""
-        check = SpecifiedKeyAccessCheck(config={"step_output": _output()})
+        check = BmComponentKeyAccessCheck(config={"step_output": _output()})
         check.run()
         assert check._passed is True, check._error
         assert "can access" in check._output
@@ -89,14 +89,14 @@ class TestSpecifiedKeyAccessCheck:
 
     def test_step_failure(self) -> None:
         """A failed step is reported with its error detail."""
-        check = SpecifiedKeyAccessCheck(config={"step_output": _output(success=False, error="API timeout")})
+        check = BmComponentKeyAccessCheck(config={"step_output": _output(success=False, error="API timeout")})
         check.run()
         assert check._passed is False
         assert "API timeout" in check._error
 
     def test_structured_skip(self) -> None:
         """A structured skip skips the validation."""
-        check = SpecifiedKeyAccessCheck(
+        check = BmComponentKeyAccessCheck(
             config={"step_output": {"success": True, "skipped": True, "skip_reason": "SOL not configured"}}
         )
         with pytest.raises(pytest.skip.Exception, match="SOL not configured"):
@@ -104,14 +104,14 @@ class TestSpecifiedKeyAccessCheck:
 
     def test_no_specified_keys_skips(self) -> None:
         """Without any specified key there is nothing to evidence access with."""
-        check = SpecifiedKeyAccessCheck(config={"step_output": _output(specified_keys=0)})
+        check = BmComponentKeyAccessCheck(config={"step_output": _output(specified_keys=0)})
         with pytest.raises(pytest.skip.Exception, match="No tenant-specified key"):
             check.run()
 
     def test_key_access_disabled_fails(self) -> None:
         """A component whose key access is explicitly disabled fails."""
         targets = [_serial_target(key_access_enabled=False, reachable=False, detail="SSH-key access disabled")]
-        check = SpecifiedKeyAccessCheck(config={"step_output": _output(targets=targets)})
+        check = BmComponentKeyAccessCheck(config={"step_output": _output(targets=targets)})
         check.run()
         assert check._passed is False
         assert "key access disabled" in check._error
@@ -119,7 +119,7 @@ class TestSpecifiedKeyAccessCheck:
     def test_enabled_but_unreachable_fails(self) -> None:
         """Key access enabled but the key has not propagated is a broken path."""
         targets = [_serial_target(key_access_enabled=True, reachable=False, detail="key not synced")]
-        check = SpecifiedKeyAccessCheck(config={"step_output": _output(targets=targets)})
+        check = BmComponentKeyAccessCheck(config={"step_output": _output(targets=targets)})
         check.run()
         assert check._passed is False
         assert "not reachable" in check._error
@@ -135,14 +135,14 @@ class TestSpecifiedKeyAccessCheck:
                 "detail": "bad type",
             }
         ]
-        check = SpecifiedKeyAccessCheck(config={"step_output": _output(targets=targets)})
+        check = BmComponentKeyAccessCheck(config={"step_output": _output(targets=targets)})
         check.run()
         assert check._passed is False
         assert "not reachable" in check._error
 
     def test_only_unverified_targets_skips(self) -> None:
         """When the only targets are unverifiable, the check skips."""
-        check = SpecifiedKeyAccessCheck(config={"step_output": _output(targets=[_network_target()])})
+        check = BmComponentKeyAccessCheck(config={"step_output": _output(targets=[_network_target()])})
         with pytest.raises(pytest.skip.Exception, match="could not verify"):
             check.run()
 
@@ -150,7 +150,7 @@ class TestSpecifiedKeyAccessCheck:
         """A non-list access_targets field fails."""
         output = _output()
         output["access_targets"] = None
-        check = SpecifiedKeyAccessCheck(config={"step_output": output})
+        check = BmComponentKeyAccessCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "access_targets" in check._error
@@ -159,20 +159,20 @@ class TestSpecifiedKeyAccessCheck:
         """A missing/non-int specified_keys field fails."""
         output = _output()
         output["specified_keys"] = "1"
-        check = SpecifiedKeyAccessCheck(config={"step_output": output})
+        check = BmComponentKeyAccessCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "specified_keys" in check._error
 
     def test_min_accessible_targets_enforced(self) -> None:
         """Requiring more accessible targets than available skips (network unverified)."""
-        check = SpecifiedKeyAccessCheck(config={"step_output": _output(), "min_accessible_targets": 2})
+        check = BmComponentKeyAccessCheck(config={"step_output": _output(), "min_accessible_targets": 2})
         with pytest.raises(pytest.skip.Exception, match="could not verify"):
             check.run()
 
     def test_invalid_min_accessible_targets_fails(self) -> None:
         """A non-integer min_accessible_targets is rejected."""
-        check = SpecifiedKeyAccessCheck(config={"step_output": _output(), "min_accessible_targets": "two"})
+        check = BmComponentKeyAccessCheck(config={"step_output": _output(), "min_accessible_targets": "two"})
         check.run()
         assert check._passed is False
         assert "min_accessible_targets" in check._error

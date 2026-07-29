@@ -18,7 +18,7 @@
 
 SSHes to the BM host and samples journalctl + dmesg to confirm at least
 one Linux status log is producing fresh entries within the configured
-recency window. Output is consumed by isvtest.validations.bm_host_status.BmHostStatusLog.
+recency window. Output is consumed by isvtest.validations.bm_host_status.BmHostStatusLogCheck.
 
 Usage:
     python host_status_log.py --instance-id i-xxx --region us-west-2 \\

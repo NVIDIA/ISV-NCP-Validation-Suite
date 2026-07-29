@@ -20,7 +20,7 @@ from __future__ import annotations
 import copy
 from typing import Any
 
-from isvtest.validations.governance import GovernanceMetricsCheck
+from isvtest.validations.governance import BmGovernanceMetricsCheck
 
 
 def _metrics_output(
@@ -53,11 +53,11 @@ def _metrics_output(
 
 
 class TestGovernanceMetricsCheck:
-    """Tests for GovernanceMetricsCheck."""
+    """Tests for BmGovernanceMetricsCheck."""
 
     def test_well_formed_metrics_pass(self) -> None:
         """All four buckets present with consistent counts -- should pass."""
-        check = GovernanceMetricsCheck(config={"step_output": _metrics_output()})
+        check = BmGovernanceMetricsCheck(config={"step_output": _metrics_output()})
         check.run()
         assert check._passed is True
         # One passing subtest per bucket, so callers see the counts.
@@ -73,7 +73,7 @@ class TestGovernanceMetricsCheck:
 
     def test_step_failure_propagates(self) -> None:
         """When the underlying step reports failure the check should fail."""
-        check = GovernanceMetricsCheck(config={"step_output": _metrics_output(success=False, error="API down")})
+        check = BmGovernanceMetricsCheck(config={"step_output": _metrics_output(success=False, error="API down")})
         check.run()
         assert check._passed is False
         assert "API down" in check._error
@@ -82,7 +82,7 @@ class TestGovernanceMetricsCheck:
         """A step output without a 'metrics' object should fail with a clear message."""
         output = _metrics_output()
         del output["metrics"]
-        check = GovernanceMetricsCheck(config={"step_output": output})
+        check = BmGovernanceMetricsCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "missing the 'metrics' object" in check._error
@@ -91,7 +91,7 @@ class TestGovernanceMetricsCheck:
         """All four canonical buckets are required."""
         output = _metrics_output()
         del output["metrics"]["active"]
-        check = GovernanceMetricsCheck(config={"step_output": output})
+        check = BmGovernanceMetricsCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "missing required buckets" in check._error
@@ -101,7 +101,7 @@ class TestGovernanceMetricsCheck:
         """Each bucket must expose both ``nodes`` and ``gpus``."""
         output = _metrics_output()
         del output["metrics"]["delivered"]["gpus"]
-        check = GovernanceMetricsCheck(config={"step_output": output})
+        check = BmGovernanceMetricsCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "delivered" in check._error and "gpus" in check._error
@@ -109,7 +109,7 @@ class TestGovernanceMetricsCheck:
     def test_negative_count_fails(self) -> None:
         """Counts must be non-negative integers."""
         output = _metrics_output(delivered={"nodes": -1, "gpus": 0})
-        check = GovernanceMetricsCheck(config={"step_output": output})
+        check = BmGovernanceMetricsCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "delivered.nodes" in check._error
@@ -118,7 +118,7 @@ class TestGovernanceMetricsCheck:
         """A boolean masquerading as an int should be rejected."""
         output = _metrics_output()
         output["metrics"]["healthy"]["nodes"] = True  # type: ignore[assignment]
-        check = GovernanceMetricsCheck(config={"step_output": output})
+        check = BmGovernanceMetricsCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "healthy.nodes" in check._error
@@ -127,7 +127,7 @@ class TestGovernanceMetricsCheck:
         """Non-integer count types should be rejected."""
         output = _metrics_output()
         output["metrics"]["reserved"]["gpus"] = "120"  # type: ignore[assignment]
-        check = GovernanceMetricsCheck(config={"step_output": output})
+        check = BmGovernanceMetricsCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "reserved.gpus" in check._error
@@ -138,7 +138,7 @@ class TestGovernanceMetricsCheck:
             delivered={"nodes": 5, "gpus": 40},
             healthy={"nodes": 6, "gpus": 40},
         )
-        check = GovernanceMetricsCheck(config={"step_output": output})
+        check = BmGovernanceMetricsCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "healthy nodes" in check._error
@@ -150,7 +150,7 @@ class TestGovernanceMetricsCheck:
             delivered={"nodes": 5, "gpus": 40},
             reserved={"nodes": 5, "gpus": 48},
         )
-        check = GovernanceMetricsCheck(config={"step_output": output})
+        check = BmGovernanceMetricsCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "reserved gpus" in check._error
@@ -161,7 +161,7 @@ class TestGovernanceMetricsCheck:
             reserved={"nodes": 3, "gpus": 24},
             active={"nodes": 4, "gpus": 24},
         )
-        check = GovernanceMetricsCheck(config={"step_output": output})
+        check = BmGovernanceMetricsCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "active nodes" in check._error
@@ -170,7 +170,7 @@ class TestGovernanceMetricsCheck:
     def test_min_delivered_thresholds_enforced(self) -> None:
         """Configurable minimum thresholds enforce a delivered fleet floor."""
         output = _metrics_output(delivered={"nodes": 0, "gpus": 0})
-        check = GovernanceMetricsCheck(config={"step_output": output, "min_delivered_nodes": 1})
+        check = BmGovernanceMetricsCheck(config={"step_output": output, "min_delivered_nodes": 1})
         check.run()
         assert check._passed is False
         assert "Delivered nodes 0" in check._error
@@ -179,13 +179,13 @@ class TestGovernanceMetricsCheck:
         """Without overrides, a zero-machine site is still well-formed."""
         zero = {"nodes": 0, "gpus": 0}
         output = _metrics_output(delivered=zero, healthy=zero, reserved=zero, active=zero)
-        check = GovernanceMetricsCheck(config={"step_output": output})
+        check = BmGovernanceMetricsCheck(config={"step_output": output})
         check.run()
         assert check._passed is True
 
     def test_invalid_min_threshold_type_fails(self) -> None:
         """A non-int min threshold should produce an actionable error."""
-        check = GovernanceMetricsCheck(
+        check = BmGovernanceMetricsCheck(
             config={
                 "step_output": _metrics_output(),
                 "min_delivered_nodes": "many",
@@ -199,14 +199,14 @@ class TestGovernanceMetricsCheck:
         """A metric bucket that is not a dict should be rejected up front."""
         output = _metrics_output()
         output["metrics"]["healthy"] = [1, 2, 3]  # type: ignore[assignment]
-        check = GovernanceMetricsCheck(config={"step_output": output})
+        check = BmGovernanceMetricsCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "healthy" in check._error
 
     def test_empty_step_output_fails(self) -> None:
         """Empty step_output should fail (no success flag)."""
-        check = GovernanceMetricsCheck(config={"step_output": {}})
+        check = BmGovernanceMetricsCheck(config={"step_output": {}})
         check.run()
         assert check._passed is False
         assert "step failed" in check._error

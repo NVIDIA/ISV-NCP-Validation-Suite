@@ -308,7 +308,7 @@ tests:
     gpu_stress:
       step: describe_instance
       checks:
-        GpuStressCheck:
+        BmGpuStressCheck:
           runtime: 30
           memory_gb: 16
           expected_gpus: 8
@@ -317,14 +317,14 @@ tests:
     nccl:
       step: describe_instance
       checks:
-        NcclCheck:
+        BmNcclCheck:
           expected_gpus: 8
 
     # Training - AWS metal has 8 GPUs
     training:
       step: describe_instance
       checks:
-        TrainingCheck:
+        BmTrainingCheck:
           steps: 50
           expected_gpus: 8
 
@@ -346,11 +346,11 @@ tests:
     nvlink:
       step: describe_instance
       checks:
-        NvlinkCheck:
+        BmNvlinkCheck:
           expected_gpus: 8
 
   exclude:
     # EC2 GetConsoleOutput proves current console access, but not historical
     # one-month retention.
     tests:
-      - SerialConsoleRetentionCheck
+      - BmSerialConsoleRetentionCheck

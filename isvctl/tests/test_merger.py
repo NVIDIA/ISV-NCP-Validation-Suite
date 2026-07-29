@@ -394,11 +394,11 @@ class TestDictChecksDeepMerge:
     def test_add_new_check(self) -> None:
         """Provider can add a new check to an existing group."""
         template = {"tests": {"validations": {"gpu": {"checks": {"GpuCheck": {"expected_gpus": 8}}}}}}
-        provider = {"tests": {"validations": {"gpu": {"checks": {"GpuStressCheck": {"runtime": 30}}}}}}
+        provider = {"tests": {"validations": {"gpu": {"checks": {"BmGpuStressCheck": {"runtime": 30}}}}}}
         result = deep_merge(template, provider)
         checks = result["tests"]["validations"]["gpu"]["checks"]
         assert "GpuCheck" in checks
-        assert "GpuStressCheck" in checks
+        assert "BmGpuStressCheck" in checks
 
     def test_add_new_validation_group(self) -> None:
         """Provider can add an entirely new validation group."""
@@ -597,8 +597,8 @@ class TestImportEndToEnd:
 
         checks = result["tests"]["validations"]["serial_console"]["checks"]
         assert checks["BmSerialConsoleCheck"]["compose"] == ["SerialConsoleCheck"]
-        assert "SerialConsoleRetentionCheck" in checks
-        assert "SerialConsoleRetentionCheck" in result["tests"]["exclude"]["tests"]
+        assert "BmSerialConsoleRetentionCheck" in checks
+        assert "BmSerialConsoleRetentionCheck" in result["tests"]["exclude"]["tests"]
 
     def test_microk8s_inherits_k8s_validations(self) -> None:
         """providers/microk8s.yaml imports suites/k8s.yaml and adds overrides."""

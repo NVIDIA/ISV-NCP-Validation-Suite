@@ -23,7 +23,7 @@
 # Coverage:
 #   This example exercises only the pure JSON-contract validations
 #   (BmHostRunningCheck, BmHostListedCheck,
-#    BmHostTaggedCheck, TopologyPlacementCheck,
+#    BmHostTaggedCheck, BmTopologyPlacementCheck,
 #    BmSerialConsoleCheck, BmHostStoppedCheck,
 #    BmHostStartedCheck, BmHostRebootedCheck,
 #    BmHostPowerCycledCheck, the BmIdentifierStableAfter* checks,

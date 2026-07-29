@@ -19,14 +19,14 @@ Two provider-agnostic checks that assert a cloud's bare-metal hosts establish a
 hardware root of trust. They are modelled on the two attestation subsystems a
 GPU cloud control plane (e.g. NVIDIA's NICo / infra-controller) actually runs:
 
-- ``NonceAttestationCheck`` (SEC22-01): each host passes a *fresh* nonce-based
+- ``BmNonceAttestationCheck`` (SEC22-01): each host passes a *fresh* nonce-based
   device attestation. This mirrors NICo's **SPDM device attestation**, where the
   verifier issues a random nonce, the device's root of trust (GPU/CPU/BMC ERoT)
   returns signed evidence over that nonce, and a verifier (NRAS) checks it. The
   host passes when the nonce challenge is satisfied (``nonce_verified`` -- proves
   liveness, not a replay) and the returned evidence signature verifies
   (``attestation_signature_valid``).
-- ``FirmwareAttestationCheck`` (CNP09-02): all firmware is cryptographically
+- ``BmFirmwareAttestationCheck`` (CNP09-02): all firmware is cryptographically
   signed and its measurements are attested during boot. This mirrors NICo's
   **Measured Boot**, where firmware/bootloader/kernel measurements are extended
   into TPM PCRs during boot and verified against a golden bundle. The host passes
@@ -126,7 +126,7 @@ class _AttestationCheck(BaseValidation):
         self.set_passed(f"{self.subject} verified on {total} machine(s)")
 
 
-class NonceAttestationCheck(_AttestationCheck):
+class BmNonceAttestationCheck(_AttestationCheck):
     """Validate hardware passes a fresh nonce-based attestation (SEC22-01).
 
     Mirrors SPDM device attestation: a verifier issues a random challenge nonce
@@ -163,7 +163,7 @@ class NonceAttestationCheck(_AttestationCheck):
         return True, f"{label}: passed fresh nonce-based attestation"
 
 
-class FirmwareAttestationCheck(_AttestationCheck):
+class BmFirmwareAttestationCheck(_AttestationCheck):
     """Validate all firmware is signed and attested during boot (CNP09-02).
 
     Mirrors Measured Boot: firmware/bootloader/kernel measurements are extended
@@ -176,7 +176,7 @@ class FirmwareAttestationCheck(_AttestationCheck):
 
     Config:
         step_output: Step output containing per-machine attestation records
-            (see ``NonceAttestationCheck`` for the shared schema; this check
+            (see ``BmNonceAttestationCheck`` for the shared schema; this check
             additionally reads ``secure_boot_enabled``,
             ``boot_measurements_attested``, and the optional
             ``measured_boot_state`` diagnostic).

@@ -23,7 +23,7 @@ P_Key cannot exchange InfiniBand traffic, regardless of physical connectivity,
 so per-tenant-P_Key partitioning *is* the isolation boundary.
 
 This script lists the site's InfiniBand partitions and reports, per partition,
-the P_Key, owning tenant, and status. ``IbTenantIsolationCheck`` then asserts
+the P_Key, owning tenant, and status. ``BmIbTenantIsolationCheck`` then asserts
 that every partition is tenant-scoped, no P_Key is shared across tenants, and
 no tenant partition rides the all-ports default management partition.
 

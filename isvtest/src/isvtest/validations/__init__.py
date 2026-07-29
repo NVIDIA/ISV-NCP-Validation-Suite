@@ -27,8 +27,8 @@ All validations are also available via step_assertions for backward compatibilit
 """
 
 from isvtest.validations.attestation import (
-    FirmwareAttestationCheck,
-    NonceAttestationCheck,
+    BmFirmwareAttestationCheck,
+    BmNonceAttestationCheck,
 )
 from isvtest.validations.cluster import (
     ClusterHealthCheck,
@@ -43,11 +43,11 @@ from isvtest.validations.generic import (
     StepSuccessCheck,
 )
 from isvtest.validations.governance import (
-    GovernanceMetricsCheck,
+    BmGovernanceMetricsCheck,
 )
 from isvtest.validations.health import (
-    HealthAggregationCheck,
-    HostHealthCheck,
+    BmHealthAggregationCheck,
+    BmHostHealthCheck,
 )
 from isvtest.validations.host import (
     CloudInitCheck,
@@ -66,20 +66,20 @@ from isvtest.validations.iam import (
     TenantListedCheck,
 )
 from isvtest.validations.infiniband import (
-    IbKeysConfiguredCheck,
-    IbTenantIsolationCheck,
+    BmIbKeysConfiguredCheck,
+    BmIbTenantIsolationCheck,
 )
 from isvtest.validations.instance import (
-    InstanceCreatedCheck,
     InstanceListCheck,
     InstancePowerCycleCheck,
     InstanceRebootCheck,
-    InstanceSpecifiedKeyCheck,
     InstanceStartCheck,
     InstanceStateCheck,
     InstanceStopCheck,
     InstanceTagCheck,
     StableIdentifierCheck,
+    VmCreatedCheck,
+    VmLaunchedWithSpecifiedKeyCheck,
 )
 from isvtest.validations.k8s_conformance import (
     K8sCncfConformanceCheck,
@@ -119,11 +119,11 @@ from isvtest.validations.nim import (
     NimModelCheck,
 )
 from isvtest.validations.sanitization import (
-    DiskSanitizationCheck,
-    FirmwareResetCheck,
-    GpuMemorySanitizationCheck,
-    MemorySanitizationCheck,
-    SkipSanitizationBreakfixCheck,
+    BmDiskSanitizationCheck,
+    BmFirmwareResetCheck,
+    BmGpuMemorySanitizationCheck,
+    BmMemorySanitizationCheck,
+    BmSkipSanitizationBreakfixCheck,
 )
 from isvtest.validations.security import (
     ApiEndpointIsolationCheck,
@@ -135,7 +135,6 @@ from isvtest.validations.security import (
     BmcTenantIsolationCheck,
     CentralizedKmsCheck,
     CertRotationCycleCheck,
-    ConsoleRbacCheck,
     CustomerManagedKeyCheck,
     InsecureProtocolsCheck,
     KmsEncryptionOptionCheck,
@@ -146,11 +145,12 @@ from isvtest.validations.security import (
     OidcUserAuthCheck,
     ShortLivedCredentialsCheck,
     TenantIsolationCheck,
-    VirtualDeviceHardeningCheck,
+    VmConsoleRbacCheck,
+    VmVirtualDeviceHardeningCheck,
 )
 from isvtest.validations.storage_infra import (
-    OobFailureDetectionCheck,
-    StableStorageNodeIpCheck,
+    BmOobFailureDetectionCheck,
+    BmStableStorageNodeIpCheck,
 )
 
 __all__ = [
@@ -162,6 +162,20 @@ __all__ = [
     "AuditLogEntryCheck",
     "AuditLogRetentionCheck",
     "BackendSwitchFabricCheck",
+    "BmDiskSanitizationCheck",
+    "BmFirmwareAttestationCheck",
+    "BmFirmwareResetCheck",
+    "BmGovernanceMetricsCheck",
+    "BmGpuMemorySanitizationCheck",
+    "BmHealthAggregationCheck",
+    "BmHostHealthCheck",
+    "BmIbKeysConfiguredCheck",
+    "BmIbTenantIsolationCheck",
+    "BmMemorySanitizationCheck",
+    "BmNonceAttestationCheck",
+    "BmOobFailureDetectionCheck",
+    "BmSkipSanitizationBreakfixCheck",
+    "BmStableStorageNodeIpCheck",
     "BmcBastionAccessCheck",
     "BmcManagementNetworkCheck",
     "BmcProtocolSecurityCheck",
@@ -171,31 +185,19 @@ __all__ = [
     "CertRotationCycleCheck",
     "CloudInitCheck",
     "ClusterHealthCheck",
-    "ConsoleRbacCheck",
     "ContainerRuntimeCheck",
     "CpuInfoCheck",
     "CustomerManagedKeyCheck",
     "DhcpIpManagementCheck",
-    "DiskSanitizationCheck",
     "DriverCheck",
     "FieldExistsCheck",
     "FieldValueCheck",
-    "FirmwareAttestationCheck",
-    "FirmwareResetCheck",
     "FloatingIpCheck",
-    "GovernanceMetricsCheck",
-    "GpuMemorySanitizationCheck",
     "GpuOperatorInstalledCheck",
-    "HealthAggregationCheck",
-    "HostHealthCheck",
-    "IbKeysConfiguredCheck",
-    "IbTenantIsolationCheck",
     "InsecureProtocolsCheck",
-    "InstanceCreatedCheck",
     "InstanceListCheck",
     "InstancePowerCycleCheck",
     "InstanceRebootCheck",
-    "InstanceSpecifiedKeyCheck",
     "InstanceStartCheck",
     "InstanceStateCheck",
     "InstanceStopCheck",
@@ -204,7 +206,6 @@ __all__ = [
     "KmsEncryptionOptionCheck",
     "LeastPrivilegePolicyCheck",
     "LocalizedDnsCheck",
-    "MemorySanitizationCheck",
     "MfaEnforcedCheck",
     "MinimalRoleEnforcementCheck",
     "MutualTlsCheck",
@@ -214,10 +215,8 @@ __all__ = [
     "NimInferenceCheck",
     "NimModelCheck",
     "NodeCountCheck",
-    "NonceAttestationCheck",
     "NvlinkDomainCheck",
     "OidcUserAuthCheck",
-    "OobFailureDetectionCheck",
     "PerformanceCheck",
     "SchemaValidation",
     "SdnFilterAuditTrailCheck",
@@ -233,10 +232,8 @@ __all__ = [
     "SgSubnetScopingCheck",
     "SgWorkloadScopingCheck",
     "ShortLivedCredentialsCheck",
-    "SkipSanitizationBreakfixCheck",
     "StableIdentifierCheck",
     "StablePrivateIpCheck",
-    "StableStorageNodeIpCheck",
     "StepSuccessCheck",
     "StorageL3RoutingCheck",
     "SubnetConfigCheck",
@@ -245,7 +242,10 @@ __all__ = [
     "TenantIsolationCheck",
     "TenantListedCheck",
     "TrafficFlowCheck",
-    "VirtualDeviceHardeningCheck",
+    "VmConsoleRbacCheck",
+    "VmCreatedCheck",
+    "VmLaunchedWithSpecifiedKeyCheck",
+    "VmVirtualDeviceHardeningCheck",
     "VpcCrudCheck",
     "VpcIpConfigCheck",
     "VpcIsolationCheck",

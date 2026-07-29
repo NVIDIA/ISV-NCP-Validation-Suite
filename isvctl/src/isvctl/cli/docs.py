@@ -160,7 +160,7 @@ def tests(
         None,
         "--info",
         "-i",
-        help="Show detailed info for a specific test (e.g. -i GpuStressCheck)",
+        help="Show detailed info for a specific test (e.g. -i BmGpuStressCheck)",
     ),
 ) -> None:
     """List all available validation tests grouped by category.
@@ -170,7 +170,7 @@ def tests(
         isvctl docs tests -l kubernetes            # Only kubernetes tests
         isvctl docs tests -f isvctl/configs/suites/k8s.yaml  # Tests from config file
         isvctl docs tests --flat                   # Flat alphabetical list
-        isvctl docs tests -i GpuStressCheck     # Detailed info for a test
+        isvctl docs tests -i BmGpuStressCheck     # Detailed info for a test
     """
     all_classes = list(discover_all_tests())
 

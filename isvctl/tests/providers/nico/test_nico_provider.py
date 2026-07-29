@@ -31,19 +31,19 @@ from urllib.error import HTTPError
 from urllib.parse import parse_qs
 
 import pytest
-from isvtest.validations.attestation import FirmwareAttestationCheck, NonceAttestationCheck
-from isvtest.validations.governance import GovernanceMetricsCheck
-from isvtest.validations.hardware import HardwareSerialCheck
-from isvtest.validations.health import HealthAggregationCheck, HostHealthCheck
-from isvtest.validations.infiniband import IbKeysConfiguredCheck, IbTenantIsolationCheck
+from isvtest.validations.attestation import BmFirmwareAttestationCheck, BmNonceAttestationCheck
+from isvtest.validations.governance import BmGovernanceMetricsCheck
+from isvtest.validations.hardware import BmHardwareSerialCheck
+from isvtest.validations.health import BmHealthAggregationCheck, BmHostHealthCheck
+from isvtest.validations.infiniband import BmIbKeysConfiguredCheck, BmIbTenantIsolationCheck
 from isvtest.validations.sanitization import (
-    DiskSanitizationCheck,
-    GpuMemorySanitizationCheck,
-    MemorySanitizationCheck,
-    SkipSanitizationBreakfixCheck,
+    BmDiskSanitizationCheck,
+    BmGpuMemorySanitizationCheck,
+    BmMemorySanitizationCheck,
+    BmSkipSanitizationBreakfixCheck,
 )
-from isvtest.validations.storage_infra import OobFailureDetectionCheck, StableStorageNodeIpCheck
-from isvtest.validations.topology import FailureDomainObservabilityCheck
+from isvtest.validations.storage_infra import BmOobFailureDetectionCheck, BmStableStorageNodeIpCheck
+from isvtest.validations.topology import BmFailureDomainObservabilityCheck
 
 from isvctl.config.merger import merge_yaml_files
 from isvctl.config.schema import RunConfig
@@ -1366,7 +1366,7 @@ def test_attestation_script_output_satisfies_nonce_validation(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """End-to-end: NICo SPDM JSON should pass NonceAttestationCheck."""
+    """End-to-end: NICo SPDM JSON should pass BmNonceAttestationCheck."""
     payload = _run_attestation_script(
         monkeypatch,
         capsys,
@@ -1374,7 +1374,7 @@ def test_attestation_script_output_satisfies_nonce_validation(
         spdm_statuses=[["m-pass", "SPDM_ATT_PASSED"]],
     )
 
-    check = NonceAttestationCheck(config={"step_output": payload})
+    check = BmNonceAttestationCheck(config={"step_output": payload})
     check.run()
     assert check._passed is True, check._error
 
@@ -1408,7 +1408,7 @@ def test_attestation_script_output_satisfies_firmware_validation(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """End-to-end: NICo measured-boot JSON should pass FirmwareAttestationCheck."""
+    """End-to-end: NICo measured-boot JSON should pass BmFirmwareAttestationCheck."""
     payload = _run_attestation_script(
         monkeypatch,
         capsys,
@@ -1419,7 +1419,7 @@ def test_attestation_script_output_satisfies_firmware_validation(
         ],
     )
 
-    check = FirmwareAttestationCheck(config={"step_output": payload})
+    check = BmFirmwareAttestationCheck(config={"step_output": payload})
     check.run()
     assert check._passed is True, check._error
 
@@ -1663,7 +1663,7 @@ def test_governance_script_output_satisfies_validation_contract(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """End-to-end: NICo governance JSON should pass GovernanceMetricsCheck."""
+    """End-to-end: NICo governance JSON should pass BmGovernanceMetricsCheck."""
     payload = _run_governance_script(
         monkeypatch,
         capsys,
@@ -1673,7 +1673,7 @@ def test_governance_script_output_satisfies_validation_contract(
         ],
     )
 
-    check = GovernanceMetricsCheck(config={"step_output": payload})
+    check = BmGovernanceMetricsCheck(config={"step_output": payload})
     check.run()
     assert check._passed is True, check._error
 
@@ -1811,7 +1811,7 @@ def test_host_health_real_world_bmc_sensors_pass_by_default(
     """A healthy NICo host (BmcSensor probes, no alerts) passes by default.
 
     Mirrors a live NICo site where machine health surfaces BMC sensors and no
-    alerts. HostHealthCheck should pass: a report is returned and there are no
+    alerts. BmHostHealthCheck should pass: a report is returned and there are no
     alerts -- no dedicated memory probe is required.
     """
     module = _load_host_health_script()
@@ -1838,7 +1838,7 @@ def test_host_health_real_world_bmc_sensors_pass_by_default(
     assert host["healthy"] is True
     assert host["components"]["memory"]["present"] is False
 
-    check = HostHealthCheck(config={"step_output": payload})
+    check = BmHostHealthCheck(config={"step_output": payload})
     check.run()
     assert check._passed is True, check._error
 
@@ -1847,7 +1847,7 @@ def test_host_health_leak_alert_fails_validation_end_to_end(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """End-to-end: a leak-detection alert flows through to a HostHealthCheck failure."""
+    """End-to-end: a leak-detection alert flows through to a BmHostHealthCheck failure."""
     module = _load_host_health_script()
     machines = [
         {
@@ -1869,7 +1869,7 @@ def test_host_health_leak_alert_fails_validation_end_to_end(
 
     payload = _run_script(module, monkeypatch, capsys, script_name="query_host_health.py", machines=machines)
 
-    check = HostHealthCheck(config={"step_output": payload})
+    check = BmHostHealthCheck(config={"step_output": payload})
     check.run()
     assert check._passed is False
     assert "BmcLeakDetection" in check._error or "1 alert(s)" in check._error
@@ -1913,7 +1913,7 @@ def test_health_aggregation_script_output_satisfies_validation_contract(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """End-to-end: NICo aggregation JSON should pass HealthAggregationCheck."""
+    """End-to-end: NICo aggregation JSON should pass BmHealthAggregationCheck."""
     module = _load_health_aggregation_script()
     machines = [
         {"id": "m-1", "status": "Ready", "instanceTypeId": "it-a", "health": {"alerts": []}},
@@ -1922,7 +1922,7 @@ def test_health_aggregation_script_output_satisfies_validation_contract(
 
     payload = _run_script(module, monkeypatch, capsys, script_name="query_health_aggregation.py", machines=machines)
 
-    check = HealthAggregationCheck(config={"step_output": payload})
+    check = BmHealthAggregationCheck(config={"step_output": payload})
     check.run()
     assert check._passed is True, check._error
 
@@ -2247,7 +2247,7 @@ def test_ib_isolation_script_output_satisfies_validation_contract(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """End-to-end: NICo isolation JSON passes IbTenantIsolationCheck."""
+    """End-to-end: NICo isolation JSON passes BmIbTenantIsolationCheck."""
     module = _load_ib_tenant_isolation_script()
     partitions = [
         _ib_partition(name="a", partition_key="0x1", tenant_id="tenant-a"),
@@ -2256,7 +2256,7 @@ def test_ib_isolation_script_output_satisfies_validation_contract(
 
     payload = _run_script(module, monkeypatch, capsys, script_name="query_ib_tenant_isolation.py", machines=partitions)
 
-    check = IbTenantIsolationCheck(config={"step_output": payload})
+    check = BmIbTenantIsolationCheck(config={"step_output": payload})
     check.run()
     assert check._passed is True, check._error
 
@@ -2274,7 +2274,7 @@ def test_ib_isolation_shared_pkey_fails_validation_end_to_end(
 
     payload = _run_script(module, monkeypatch, capsys, script_name="query_ib_tenant_isolation.py", machines=partitions)
 
-    check = IbTenantIsolationCheck(config={"step_output": payload})
+    check = BmIbTenantIsolationCheck(config={"step_output": payload})
     check.run()
     assert check._passed is False
     assert "shared across tenants" in check._error
@@ -2444,13 +2444,13 @@ def test_ib_keys_script_output_satisfies_validation_contract(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """End-to-end: NICo IB-keys JSON (with UFM) passes IbKeysConfiguredCheck."""
+    """End-to-end: NICo IB-keys JSON (with UFM) passes BmIbKeysConfiguredCheck."""
     partitions = [_ib_partition(name="a", partition_key="0x1", tenant_id="tenant-a")]
     smconf = {"m_key": "0x10", "sm_key": "0x20", "sa_key": "0x30", "m_key_per_port": True}
 
     payload = _run_ib_keys_script(monkeypatch, capsys, partitions=partitions, smconf=smconf)
 
-    check = IbKeysConfiguredCheck(config={"step_output": payload, "required_keys": ["p_key", "management_key"]})
+    check = BmIbKeysConfiguredCheck(config={"step_output": payload, "required_keys": ["p_key", "management_key"]})
     check.run()
     assert check._passed is True, check._error
 
@@ -2636,12 +2636,12 @@ def test_sanitization_script_output_satisfies_memory_check(
 ) -> None:
     """End-to-end: clean NICo JSON passes the memory check; a skipped reset fails."""
     clean = _run_sanitization(monkeypatch, capsys, [_sanitization_machine()])
-    check = MemorySanitizationCheck(config={"step_output": clean})
+    check = BmMemorySanitizationCheck(config={"step_output": clean})
     check.run()
     assert check._passed is True, check._error
 
     dirty = _run_sanitization(monkeypatch, capsys, [_sanitization_machine(history_statuses=["InUse", "Ready"])])
-    bad = MemorySanitizationCheck(config={"step_output": dirty})
+    bad = BmMemorySanitizationCheck(config={"step_output": dirty})
     bad.run()
     assert bad._passed is False
     assert "1/1 machine(s)" in bad._error
@@ -2655,7 +2655,7 @@ def test_sanitization_script_output_satisfies_gpu_check(
 ) -> None:
     """End-to-end: a sanitized GPU host passes the GPU-memory check."""
     payload = _run_sanitization(monkeypatch, capsys, [_sanitization_machine(gpus=8)])
-    check = GpuMemorySanitizationCheck(config={"step_output": payload})
+    check = BmGpuMemorySanitizationCheck(config={"step_output": payload})
     check.run()
     assert check._passed is True, check._error
 
@@ -2671,12 +2671,12 @@ def test_sanitization_script_output_satisfies_disk_check(
     returns to the pool once it succeeds.
     """
     clean = _run_sanitization(monkeypatch, capsys, [_sanitization_machine()])
-    check = DiskSanitizationCheck(config={"step_output": clean})
+    check = BmDiskSanitizationCheck(config={"step_output": clean})
     check.run()
     assert check._passed is True, check._error
 
     dirty = _run_sanitization(monkeypatch, capsys, [_sanitization_machine(history_statuses=["InUse", "Ready"])])
-    bad = DiskSanitizationCheck(config={"step_output": dirty})
+    bad = BmDiskSanitizationCheck(config={"step_output": dirty})
     bad.run()
     assert bad._passed is False
     assert "1/1 machine(s)" in bad._error
@@ -2719,13 +2719,13 @@ def test_sanitization_breakfix_skip_output_satisfies_check(
             )
         ],
     )
-    check = SkipSanitizationBreakfixCheck(config={"step_output": good})
+    check = BmSkipSanitizationBreakfixCheck(config={"step_output": good})
     check.run()
     assert check._passed is True, check._error
     assert "maintenance skip" in check._output
 
     dirty = _run_sanitization(monkeypatch, capsys, [_sanitization_machine(history_statuses=["InUse", "Ready"])])
-    bad = SkipSanitizationBreakfixCheck(config={"step_output": dirty})
+    bad = BmSkipSanitizationBreakfixCheck(config={"step_output": dirty})
     bad.run()
     assert bad._passed is False
 
@@ -2798,13 +2798,13 @@ def test_stable_ips_script_output_satisfies_check(
 ) -> None:
     """End-to-end: hosts with IPs pass; a host with no IPs fails."""
     good = _run_stable_ips(monkeypatch, capsys, [_stable_ip_machine()])
-    check = StableStorageNodeIpCheck(config={"step_output": good})
+    check = BmStableStorageNodeIpCheck(config={"step_output": good})
     check.run()
     assert check._passed is True, check._error
 
     no_ip = _stable_ip_machine(interfaces=[{"id": "iface-1", "isPrimary": True, "ipAddresses": []}])
     bad_payload = _run_stable_ips(monkeypatch, capsys, [no_ip])
-    bad = StableStorageNodeIpCheck(config={"step_output": bad_payload})
+    bad = BmStableStorageNodeIpCheck(config={"step_output": bad_payload})
     bad.run()
     assert bad._passed is False
     assert "m-1" in bad._error
@@ -2898,13 +2898,13 @@ def test_oob_health_script_output_satisfies_check(
 ) -> None:
     """End-to-end: BMC coverage passes; missing BmcSensor fails."""
     good = _run_oob_health(monkeypatch, capsys, [_oob_machine()])
-    check = OobFailureDetectionCheck(config={"step_output": good})
+    check = BmOobFailureDetectionCheck(config={"step_output": good})
     check.run()
     assert check._passed is True, check._error
 
     no_bmc = _oob_machine(successes=[{"id": "BgpDaemonEnabled", "target": None}])
     bad_payload = _run_oob_health(monkeypatch, capsys, [no_bmc])
-    bad = OobFailureDetectionCheck(config={"step_output": bad_payload})
+    bad = BmOobFailureDetectionCheck(config={"step_output": bad_payload})
     bad.run()
     assert bad._passed is False
     assert "BmcSensor" in bad._error
@@ -3023,14 +3023,14 @@ def test_serial_numbers_script_output_satisfies_check(
 ) -> None:
     """End-to-end: fully-populated inventory passes; a present GPU with no serial fails."""
     good = _run_serial_numbers(monkeypatch, capsys, [_serial_api_machine()])
-    check = HardwareSerialCheck(config={"step_output": good})
+    check = BmHardwareSerialCheck(config={"step_output": good})
     check.run()
     assert check._passed is True, check._error
 
     # A GPU host whose GPU exposes no serial fails.
     gpu_no_serial = _serial_api_machine(gpus=[{"name": "NVIDIA H100 PCIe", "serial": None}])
     bad_payload = _run_serial_numbers(monkeypatch, capsys, [gpu_no_serial])
-    bad = HardwareSerialCheck(config={"step_output": bad_payload})
+    bad = BmHardwareSerialCheck(config={"step_output": bad_payload})
     bad.run()
     assert bad._passed is False
     assert "gpu" in bad._error
@@ -3111,12 +3111,12 @@ def test_topology_script_output_satisfies_check(
         capsys,
         [_topology_api_machine("m-1", {"RackIdentifier": "rack-A"})],
     )
-    check = FailureDomainObservabilityCheck(config={"step_output": good})
+    check = BmFailureDomainObservabilityCheck(config={"step_output": good})
     check.run()
     assert check._passed is True, check._error
 
     bad_payload = _run_topology(monkeypatch, capsys, [_topology_api_machine("m-1", {})])
-    bad = FailureDomainObservabilityCheck(config={"step_output": bad_payload})
+    bad = BmFailureDomainObservabilityCheck(config={"step_output": bad_payload})
     bad.run()
     assert bad._passed is False
     assert "m-1" in bad._error

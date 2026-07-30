@@ -59,7 +59,7 @@ class HostHealthCheck(BaseValidation):
         fail_on_classifications: Optional list of alert classifications that are
             blocking (e.g. ["SensorCritical", "SensorFailure", "Leak"]). When
             omitted (default), ANY alert fails the host, matching how
-            DpuHealthCheck and HardwareIngestionCheck treat alerts.
+            BmDpuHealthCheck and HardwareIngestionCheck treat alerts.
         require_probes: Optional list of probe IDs that must be present for each
             host (default: [] = coverage not enforced). Use to require specific
             signals, e.g. ["BmcSensor"] or ["BmcLeakDetection"].

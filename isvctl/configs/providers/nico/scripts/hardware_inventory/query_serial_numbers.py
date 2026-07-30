@@ -20,7 +20,7 @@ Break/fix workflows need to identify the physical hardware installed in a host:
 chassis, baseboard, network interfaces (NICs), CPU, and GPU. NICo discovers this
 inventory during ingestion and exposes it on the Machine resource. This script
 reads the per-machine hardware metadata and reduces it to a provider-neutral
-per-component identifier record so ``HardwareSerialCheck`` can assert that a
+per-component identifier record so ``BmHardwareSerialCheck`` can assert that a
 stable identifier is queryable for every component class that is present.
 
 Per BFX03-01 the identifiers may be obfuscated as long as they are stable, so

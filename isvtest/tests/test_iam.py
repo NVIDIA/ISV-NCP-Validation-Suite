@@ -54,15 +54,25 @@ def _credential_access_output(**overrides: Any) -> dict[str, Any]:
 
 
 class TestIamCredentialAccessCheck:
-    """Tests for IamCredentialAccessCheck (IAM03-01)."""
+    """Tests for IamCredentialAccessCheck (IAM01-01 identity, IAM03-01 access)."""
 
     def test_passes_with_identity_and_access(self) -> None:
         """Happy path: both identity and access probes pass."""
         result = IamCredentialAccessCheck(config={"step_output": _credential_access_output()}).execute()
 
         assert result["passed"] is True
-        assert "authenticated with authorized resource access" in result["output"]
+        assert "passed identity, access" in result["output"]
         assert "123456789012" in result["output"]
+
+    def test_reports_only_the_probes_it_required(self) -> None:
+        """``required_tests`` narrows the claim so each plan item proves its half."""
+        result = IamCredentialAccessCheck(
+            config={"step_output": _credential_access_output(), "required_tests": ["identity"]}
+        ).execute()
+
+        assert result["passed"] is True
+        assert "passed identity" in result["output"]
+        assert "access" not in result["output"]
 
     def test_fails_when_identity_missing(self) -> None:
         """Fails when the identity probe is absent."""

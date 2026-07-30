@@ -23,7 +23,7 @@ from reframe.core.builtins import run_after, sanity_function
 
 
 @rfm.simple_test
-class InfiniBandCheck(rfm.RunOnlyRegressionTest):
+class BmInfiniBandCheck(rfm.RunOnlyRegressionTest):
     """Verify InfiniBand interfaces are available."""
 
     descr = "InfiniBand interface check"

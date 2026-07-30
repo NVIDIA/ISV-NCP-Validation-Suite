@@ -56,6 +56,74 @@ Suites:
 For the domain / script-count / AWS-reference overview see the
 [my-isv scaffold README](../providers/my-isv/scripts/README.md#domains).
 
+## Naming a check
+
+A wiring name is the test's identity everywhere downstream — the catalog, the
+report, the service — so it has to be globally unique and say what it proves.
+Wiring a generic check under its class name spends that identity on the
+implementation instead, and repeating it produces several rows all called
+`StepSuccessCheck`. Name the property under test and list the generic checks
+that establish it:
+
+```yaml
+    setup_checks:
+      step: create_user
+      checks:
+        IamUserCreatedCheck:
+          test_id: "IAM01-01"
+          labels: ["iam"]
+          requires: []
+          description: "Check the IAM user is created with usable credentials"
+          compose:
+            - StepSuccessCheck
+            - FieldExistsCheck:
+                fields: ["username", "access_key_id"]
+```
+
+That is one catalog entry carrying one `test_id`, and one test. Every member
+runs against the group's step output as a subtest, so a failure still names the
+part that broke, and every member runs even after an earlier one fails. A member
+that needs parameters takes them inline (`- CheckName: {...}`); one that does
+not stays a single line.
+
+Because a composite has no validation class to borrow from, it declares its own
+`description` (the catalog uses it) and its name must not shadow a class name. A
+check that wires one purpose-built class — `SerialConsoleCheck`,
+`IamCredentialAccessCheck` — already has a name that says what it proves and
+keeps it.
+
+The generic checks — `StepSuccessCheck`, `FieldExistsCheck`, `FieldValueCheck`,
+`CrudOperationsCheck` — are marked `compose_only` in their class definition and a
+suite may only reach them from inside a `compose` list. Suffixing the class name
+(`StepSuccessCheck-teardown`) does not count: it still leaves the mechanism, not
+the property under test, as the test's public identity.
+
+### Prefixes
+
+A `Bm`/`Vm` prefix means the check asserts a property of one bare-metal host or
+one VM, so the same property can be proven for both without the two names
+colliding: `BmGpusPresentCheck` and `VmGpusPresentCheck`, `BmCloudInitCheck` and
+`VmCloudInitCheck`. The prefix follows the subject, not the suite and not the
+`test_id`'s requirement family — `BmHardwareSerialCheck` proves BFX03-01 and
+`BmCloudInitCheck` proves BOOT02-01, and both are still properties of a host.
+
+A check that asserts something about the platform, the fabric, or a service
+stays unprefixed even when it is wired into `bare_metal.yaml`, because there is
+no per-host reading of it to distinguish: `GovernanceMetricsCheck` (fleet-wide
+counts), `HealthAggregationCheck` (cluster/nodegroup/reservation level),
+`IbTenantIsolationCheck` (fabric), `StableStorageNodeIpCheck` (storage service).
+Those live here because that is where the provider supplying the step imports
+from; several already carry a `network` or `sds_controller` label for the same
+reason. Prefixing them would claim a scope their plan items do not have.
+
+Three more stay unprefixed for narrower reasons.
+`VirtualDeviceHardeningCheck` (CNP01-17) already names its subject and has no
+bare-metal reading. `HostHealthCheck` (CAP05-01) is the per-host half of a pair
+whose other half is fleet-level, and prefixing one half would hide that they are
+one requirement at two scopes. `SerialConsoleRetentionCheck` (CNP06-02) is a
+property of the console archive rather than of the host, and unlike CNP06-01/03
+its plan item is not platform-scoped.
+
 ## Test Suite Details
 
 ### IAM (`iam.yaml`)
@@ -71,6 +139,9 @@ For the domain / script-count / AWS-reference overview see the
 | Step | Phase | Script | What It Tests |
 |------|-------|--------|---------------|
 | `create_network` | setup | `providers/my-isv/scripts/network/create_vpc.py` | Shared VPC creation |
+| `list_vpcs` | test | `providers/nico/scripts/network/list_vpcs.py` | Pre-provisioned VPC inventory: `vpcs`, `count`, `found_target` |
+| `get_vpc` | test | `providers/nico/scripts/network/get_vpc.py` | Single VPC identity: `vpc_id`, `vpc_name` |
+| `subnet_assignment` | test | `providers/nico/scripts/network/check_subnet_assignment.py` | `tests.subnet_assigned.passed` for the VPC under test |
 | `vpc_crud` | test | `providers/my-isv/scripts/network/vpc_crud_test.py` | Create/Read/Update/Delete lifecycle |
 | `subnet_config` | test | `providers/my-isv/scripts/network/subnet_test.py` | Multi-AZ subnet distribution |
 | `vpc_isolation` | test | `providers/my-isv/scripts/network/isolation_test.py` | Security boundaries between VPCs |
@@ -121,7 +192,7 @@ For the domain / script-count / AWS-reference overview see the
 | `list_instances` | test | `providers/my-isv/scripts/vm/list_instances.py` | `instances`, `total_count` |
 | `verify_tags` | test | `providers/my-isv/scripts/vm/describe_tags.py` | `instance_id`, `tags`, `tag_count` |
 | `serial_console` | test | `providers/my-isv/scripts/vm/serial_console.py` | `console_available`, `serial_access_enabled` |
-| `component_key_access` | test | `providers/my-isv/scripts/vm/component_key_access.py` | `key_name`; for non-skipped results also `tests.sol_access.passed`, `tests.network_device_access.passed` (`ComponentKeyAccessCheck` / AUTH03-01; AWS may emit top-level `skipped` when serial console access is disabled) |
+| `component_key_access` | test | `providers/my-isv/scripts/vm/component_key_access.py` | `key_name`; for non-skipped results also `tests.sol_access.passed`, `tests.network_device_access.passed` (`VmComponentKeyAccessCheck` / AUTH03-01; AWS may emit top-level `skipped` when serial console access is disabled) |
 | `stop_instance` | test | `providers/my-isv/scripts/vm/stop_instance.py` | `instance_id`, `state`, `stop_initiated` |
 | `start_instance` | test | `providers/my-isv/scripts/vm/start_instance.py` | `instance_id`, `state`, `public_ip`, `ssh_ready` |
 | `reboot_instance` | test | `providers/my-isv/scripts/vm/reboot_instance.py` | `reboot_initiated`, `ssh_ready`, `uptime_seconds` |
@@ -139,6 +210,7 @@ For the domain / script-count / AWS-reference overview see the
 | `verify_tags` | test | `providers/my-isv/scripts/bare_metal/describe_tags.py` | `instance_id`, `tags`, `tag_count` |
 | `topology_placement` | test | `providers/my-isv/scripts/bare_metal/topology_placement.py` | `placement_supported`, `operations` |
 | `serial_console` | test | `providers/my-isv/scripts/bare_metal/serial_console.py` | `console_available`, `serial_access_enabled`, `console_log_queryable`, `retention_days_required`, `retention_days_configured`, `oldest_queryable_log_age_days`, `query_result_count`, `retention_evidence` |
+| `verify_image` | test | `providers/aws/scripts/image-registry/verify_image_installed.py` | `instance_id`, `image_id`, `image_name`, `instance_state` - BOOT01-03 for providers whose image-registry run cannot install a metal host |
 | `stop_instance` | test | `providers/my-isv/scripts/bare_metal/stop_instance.py` | `instance_id`, `state`, `stop_initiated` |
 | `start_instance` | test | `providers/my-isv/scripts/bare_metal/start_instance.py` | `instance_id`, `state`, `public_ip`, `ssh_ready` |
 | `reboot_instance` | test | `providers/my-isv/scripts/bare_metal/reboot_instance.py` | `reboot_initiated`, `ssh_ready`, `uptime_seconds` |
@@ -151,6 +223,7 @@ For the domain / script-count / AWS-reference overview see the
 | `verify_teardown` | teardown | `providers/my-isv/scripts/bare_metal/verify_terminated.py` | `checks.instance_terminated`, `checks.sg_deleted` |
 | `verify_ingestion` | test | `providers/nico/scripts/hardware_ingestion/verify_ingestion.py` | `expected_count`, `ingested_count`, `matched_count`, `missing`, `extra`, `machines[].status`, `machines[].health` |
 | `check_dpu_health` | test | `providers/nico/scripts/dpu/check_dpu_health.py` | `machines_checked`, `machines[].dpu_count`, `machines[].dpu_agent_heartbeat`, `machines[].health_summary`, `machines[].health_alerts` |
+| `check_dpu_network` | test | _no implementation yet_ | `interfaces[].{name,status,type}`, `bgp_enabled`, optional `dpu_extension_deployments[].{name,status,version}` |
 | `query_governance_metrics` | test | `providers/nico/scripts/governance/query_metrics.py` | `machine_count`, `metrics.delivered.{nodes,gpus}`, `metrics.healthy.{nodes,gpus}`, `metrics.reserved.{nodes,gpus}`, `metrics.active.{nodes,gpus}` |
 | `query_host_health` | test | `providers/nico/scripts/health/query_host_health.py` | `hosts_checked`, `hosts[].health_present`, `hosts[].healthy`, `hosts[].observed_age_seconds`, `hosts[].probe_ids`, `hosts[].alerts[].{id,target,message,classifications}`, `hosts[].components.{gpu,thermal,memory,cooling}` |
 | `query_health_aggregation` | test | `providers/nico/scripts/health/query_health_aggregation.py` | `aggregation_level`, `groups[].{total,healthy,unhealthy,status,unhealthy_hosts}` |

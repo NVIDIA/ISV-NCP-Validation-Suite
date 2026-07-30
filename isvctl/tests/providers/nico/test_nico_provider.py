@@ -31,15 +31,15 @@ from urllib.error import HTTPError
 from urllib.parse import parse_qs
 
 import pytest
-from isvtest.validations.attestation import FirmwareAttestationCheck, NonceAttestationCheck
+from isvtest.validations.attestation import BmFirmwareAttestationCheck, BmNonceAttestationCheck
 from isvtest.validations.governance import GovernanceMetricsCheck
-from isvtest.validations.hardware import HardwareSerialCheck
+from isvtest.validations.hardware import BmHardwareSerialCheck
 from isvtest.validations.health import HealthAggregationCheck, HostHealthCheck
 from isvtest.validations.infiniband import IbKeysConfiguredCheck, IbTenantIsolationCheck
 from isvtest.validations.sanitization import (
-    DiskSanitizationCheck,
-    GpuMemorySanitizationCheck,
-    MemorySanitizationCheck,
+    BmDiskSanitizationCheck,
+    BmGpuMemorySanitizationCheck,
+    BmMemorySanitizationCheck,
     SkipSanitizationBreakfixCheck,
 )
 from isvtest.validations.storage_infra import OobFailureDetectionCheck, StableStorageNodeIpCheck
@@ -470,7 +470,7 @@ def test_nico_control_plane_plain_suite_has_one_command_group() -> None:
 
 
 def test_nico_control_plane_config_wires_api_health() -> None:
-    """The NICo control-plane config should wire the API health probe."""
+    """The NICo control-plane config should wire the suite's API health check."""
     merged, steps = _merged_nico_config_steps("control-plane.yaml", "control_plane")
 
     assert set(steps) == {"check_api"}
@@ -479,6 +479,8 @@ def test_nico_control_plane_config_wires_api_health() -> None:
     validations = merged["tests"]["validations"]
     assert merged["tests"]["settings"]["nico_api_base"] == "{{env.NICO_API_BASE}}"
     assert validations["api_health"]["step"] == "check_api"
+    check = validations["api_health"]["checks"]["ControlPlaneApiHealthCheck"]
+    assert check["test_id"] == "CP03-01"
 
 
 def test_nico_check_api_reads_site_and_site_list(
@@ -549,31 +551,6 @@ def test_nico_check_api_reads_site_and_site_list(
     assert calls == [
         ("test-org", "site/site-1", None),
         ("test-org", "site", {"pageSize": "100"}),
-    ]
-
-
-def test_nico_iam_plain_suite_has_one_command_group() -> None:
-    """A plain suite derives execution identity from its sole command group."""
-    merged, _steps = _merged_nico_config_steps("iam.yaml", "iam")
-
-    assert "platform" not in merged["tests"]
-    assert list(merged["commands"]) == ["iam"]
-
-
-def test_nico_iam_config_wires_credential_readiness() -> None:
-    """The NICo IAM config should wire the credential readiness probe."""
-    merged, steps = _merged_nico_config_steps("iam.yaml", "iam")
-
-    assert set(steps) == {"check_credentials"}
-    _assert_steps_use_nico_api_base(steps)
-
-    validations = merged["tests"]["validations"]
-    assert merged["tests"]["settings"]["nico_api_base"] == "{{env.NICO_API_BASE}}"
-    assert validations["credential_readiness"]["step"] == "check_credentials"
-    assert validations["credential_readiness"]["checks"]["FieldExistsCheck"]["fields"] == [
-        "account_id",
-        "authenticated",
-        "tests",
     ]
 
 
@@ -847,18 +824,18 @@ def test_nico_network_plain_suite_has_one_command_group() -> None:
 
 
 def test_nico_network_config_wires_network_inventory_probes() -> None:
-    """The NICo network config should wire inventory and topology probes."""
+    """The NICo network config should wire the suite's read-only inventory checks."""
     merged, steps = _merged_nico_config_steps("network.yaml", "network")
 
-    assert set(steps) == {"list_vpcs", "get_vpc", "network_connectivity", "traffic_validation"}
+    assert set(steps) == {"list_vpcs", "get_vpc", "subnet_assignment"}
     _assert_steps_use_nico_api_base(steps)
 
     validations = merged["tests"]["validations"]
     assert merged["tests"]["settings"]["nico_api_base"] == "{{env.NICO_API_BASE}}"
-    assert validations["vpc_inventory"]["step"] == "list_vpcs"
-    assert validations["vpc_info"]["step"] == "get_vpc"
-    assert validations["network_connectivity"]["step"] == "network_connectivity"
-    assert validations["traffic_validation"]["step"] == "traffic_validation"
+    inventory = validations["network_inventory"]["checks"]
+    assert inventory["VpcListedCheck"]["step"] == "list_vpcs"
+    assert inventory["VpcReadFromInventoryCheck"]["step"] == "get_vpc"
+    assert inventory["VpcContainsExpectedSubnetCheck"]["step"] == "subnet_assignment"
 
 
 def test_nico_network_config_keeps_empty_vpc_and_subnet_ids_attached(
@@ -871,24 +848,23 @@ def test_nico_network_config_keeps_empty_vpc_and_subnet_ids_attached(
     context = Context(RunConfig.model_validate(merged))
     executor = StepExecutor()
 
-    for step_name in ("list_vpcs", "get_vpc", "network_connectivity", "traffic_validation"):
+    for step_name in ("list_vpcs", "get_vpc", "subnet_assignment"):
         rendered = executor._render_args(steps[step_name]["args"], context)
 
         assert "--vpc-id" not in rendered
         assert "--vpc-id=" in rendered
 
-    for step_name in ("network_connectivity", "traffic_validation"):
-        rendered = executor._render_args(steps[step_name]["args"], context)
+    rendered = executor._render_args(steps["subnet_assignment"]["args"], context)
 
-        assert "--subnet-id" not in rendered
-        assert "--subnet-id=" in rendered
+    assert "--subnet-id" not in rendered
+    assert "--subnet-id=" in rendered
 
 
 def test_nico_vpc_inventory_scripts_normalize_vpc_inventory(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """The VPC probes should normalize NICo fields for tenant validations."""
+    """The VPC probes should normalize NICo fields for the network inventory checks."""
     list_module = _load_nico_script("network/list_vpcs.py", "test_nico_list_vpcs")
     get_module = _load_nico_script("network/get_vpc.py", "test_nico_get_vpc")
 
@@ -927,11 +903,42 @@ def test_nico_vpc_inventory_scripts_normalize_vpc_inventory(
     assert list_payload["success"] is True
     assert list_payload["count"] == 1
     assert list_payload["found_target"] is True
-    assert list_payload["tenants"] == [{"tenant_id": "vpc-1", "tenant_name": "tenant-a"}]
+    assert list_payload["vpcs"] == [{"vpc_id": "vpc-1", "vpc_name": "tenant-a", "description": "lab network"}]
     assert get_payload["success"] is True
-    assert get_payload["tenant_id"] == "vpc-1"
-    assert get_payload["tenant_name"] == "tenant-a"
+    assert get_payload["vpc_id"] == "vpc-1"
+    assert get_payload["vpc_name"] == "tenant-a"
     assert get_payload["description"] == "lab network"
+
+
+def test_nico_list_vpcs_reports_a_missing_requested_vpc(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A requested VPC absent from the listing should fail VpcListedCheck, not pass it."""
+    module = _load_nico_script("network/list_vpcs.py", "test_nico_list_vpcs_missing")
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="test-token"))
+    monkeypatch.setattr(module, "forge_get_all", lambda *args, **kwargs: [{"id": "vpc-other"}])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "list_vpcs.py",
+            "--org",
+            "test-org",
+            "--site-id",
+            "site-1",
+            "--api-base",
+            "https://nico.example/v2/org",
+            "--vpc-id",
+            "vpc-1",
+        ],
+    )
+
+    assert module.main() == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["target_vpc"] == "vpc-1"
+    assert payload["found_target"] is False
 
 
 def test_nico_get_vpc_skips_when_site_has_no_vpcs(
@@ -970,105 +977,83 @@ def test_nico_get_vpc_skips_when_site_has_no_vpcs(
     assert "No VPCs found" in payload["skip_reason"]
 
 
-def test_nico_network_inventory_scripts_check_existing_vpc_and_subnets(
+def test_nico_subnet_assignment_passes_when_requested_subnet_exists(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Network probes should pass when the requested VPC and subnet exist."""
-    connectivity_module = _load_nico_script("network/test_connectivity.py", "test_nico_network_connectivity")
-    traffic_module = _load_nico_script("network/traffic_validation.py", "test_nico_traffic_validation")
+    """The subnet probe should pass when the requested VPC carries the requested subnet."""
+    module = _load_nico_script("network/check_subnet_assignment.py", "test_nico_subnet_assignment")
 
-    monkeypatch.setattr(connectivity_module, "resolve_auth", lambda: SimpleNamespace(token="test-token"))
-    monkeypatch.setattr(traffic_module, "resolve_auth", lambda: SimpleNamespace(token="test-token"))
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="test-token"))
+    monkeypatch.setattr(module, "forge_get", lambda *args, **kwargs: {"id": "vpc-1", "name": "tenant-a"})
     monkeypatch.setattr(
-        connectivity_module,
+        module,
         "forge_get_all",
         lambda *args, **kwargs: [{"id": "subnet-1", "vpcId": "vpc-1", "cidrBlock": "10.0.0.0/24"}],
     )
     monkeypatch.setattr(
-        traffic_module,
-        "forge_get",
-        lambda *args, **kwargs: {"id": "vpc-1", "name": "tenant-a"},
+        sys,
+        "argv",
+        [
+            "check_subnet_assignment.py",
+            "--org",
+            "test-org",
+            "--site-id",
+            "site-1",
+            "--api-base",
+            "https://nico.example/v2/org",
+            "--vpc-id",
+            "vpc-1",
+            "--subnet-id",
+            "subnet-1",
+        ],
     )
-    monkeypatch.setattr(
-        traffic_module,
-        "forge_get_all",
-        lambda *args, **kwargs: [{"id": "subnet-1", "vpcId": "vpc-1", "cidrBlock": "10.0.0.0/24"}],
-    )
 
-    base_argv = [
-        "--org",
-        "test-org",
-        "--site-id",
-        "site-1",
-        "--api-base",
-        "https://nico.example/v2/org",
-        "--vpc-id",
-        "vpc-1",
-        "--subnet-id",
-        "subnet-1",
-    ]
+    assert module.main() == 0
 
-    monkeypatch.setattr(sys, "argv", ["test_connectivity.py", *base_argv])
-    assert connectivity_module.main() == 0
-    connectivity_payload = json.loads(capsys.readouterr().out)
-
-    monkeypatch.setattr(sys, "argv", ["traffic_validation.py", *base_argv])
-    assert traffic_module.main() == 0
-    traffic_payload = json.loads(capsys.readouterr().out)
-
-    assert connectivity_payload["success"] is True
-    assert connectivity_payload["subnet_count"] == 1
-    assert connectivity_payload["tests"]["network_assigned"]["passed"] is True
-    assert traffic_payload["success"] is True
-    assert traffic_payload["tenant_id"] == "vpc-1"
-    assert traffic_payload["subnet_count"] == 1
-    assert traffic_payload["tests"]["network_setup"]["passed"] is True
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["success"] is True
+    assert payload["vpc_id"] == "vpc-1"
+    assert payload["subnet_count"] == 1
+    assert payload["tests"]["subnet_assigned"]["passed"] is True
 
 
-def test_nico_network_inventory_scripts_skip_when_site_has_no_network_inventory(
+def test_nico_subnet_assignment_skips_when_site_has_no_vpcs(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A site without VPCs or subnets should skip dependent network validations."""
-    connectivity_module = _load_nico_script("network/test_connectivity.py", "test_nico_network_connectivity_empty")
-    traffic_module = _load_nico_script("network/traffic_validation.py", "test_nico_traffic_validation_empty")
+    """A site without VPCs should skip the subnet validation instead of failing it."""
+    module = _load_nico_script("network/check_subnet_assignment.py", "test_nico_subnet_assignment_empty")
 
-    monkeypatch.setattr(connectivity_module, "resolve_auth", lambda: SimpleNamespace(token="test-token"))
-    monkeypatch.setattr(traffic_module, "resolve_auth", lambda: SimpleNamespace(token="test-token"))
-    monkeypatch.setattr(connectivity_module, "forge_get_all", lambda *args, **kwargs: [])
-    monkeypatch.setattr(traffic_module, "forge_get_all", lambda *args, **kwargs: [])
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="test-token"))
+    monkeypatch.setattr(module, "forge_get_all", lambda *args, **kwargs: [])
     monkeypatch.setattr(
-        traffic_module,
+        module,
         "forge_get",
-        lambda *args, **kwargs: pytest.fail("traffic_validation should not fetch detail when no VPC exists"),
+        lambda *args, **kwargs: pytest.fail("the subnet probe should not fetch detail when no VPC exists"),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "check_subnet_assignment.py",
+            "--org",
+            "test-org",
+            "--site-id",
+            "site-1",
+            "--api-base",
+            "https://nico.example/v2/org",
+            "--vpc-id=",
+            "--subnet-id=",
+        ],
     )
 
-    base_argv = [
-        "--org",
-        "test-org",
-        "--site-id",
-        "site-1",
-        "--api-base",
-        "https://nico.example/v2/org",
-        "--vpc-id=",
-        "--subnet-id=",
-    ]
+    assert module.main() == 0
 
-    monkeypatch.setattr(sys, "argv", ["test_connectivity.py", *base_argv])
-    assert connectivity_module.main() == 0
-    connectivity_payload = json.loads(capsys.readouterr().out)
-
-    monkeypatch.setattr(sys, "argv", ["traffic_validation.py", *base_argv])
-    assert traffic_module.main() == 0
-    traffic_payload = json.loads(capsys.readouterr().out)
-
-    assert connectivity_payload["success"] is True
-    assert connectivity_payload["skipped"] is True
-    assert "No subnets found" in connectivity_payload["skip_reason"]
-    assert traffic_payload["success"] is True
-    assert traffic_payload["skipped"] is True
-    assert "No VPCs found" in traffic_payload["skip_reason"]
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["success"] is True
+    assert payload["skipped"] is True
+    assert "No VPCs found" in payload["skip_reason"]
 
 
 @pytest.mark.parametrize(
@@ -1360,7 +1345,7 @@ def test_attestation_script_output_satisfies_nonce_validation(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """End-to-end: NICo SPDM JSON should pass NonceAttestationCheck."""
+    """End-to-end: NICo SPDM JSON should pass BmNonceAttestationCheck."""
     payload = _run_attestation_script(
         monkeypatch,
         capsys,
@@ -1368,7 +1353,7 @@ def test_attestation_script_output_satisfies_nonce_validation(
         spdm_statuses=[["m-pass", "SPDM_ATT_PASSED"]],
     )
 
-    check = NonceAttestationCheck(config={"step_output": payload})
+    check = BmNonceAttestationCheck(config={"step_output": payload})
     check.run()
     assert check._passed is True, check._error
 
@@ -1402,7 +1387,7 @@ def test_attestation_script_output_satisfies_firmware_validation(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """End-to-end: NICo measured-boot JSON should pass FirmwareAttestationCheck."""
+    """End-to-end: NICo measured-boot JSON should pass BmFirmwareAttestationCheck."""
     payload = _run_attestation_script(
         monkeypatch,
         capsys,
@@ -1413,7 +1398,7 @@ def test_attestation_script_output_satisfies_firmware_validation(
         ],
     )
 
-    check = FirmwareAttestationCheck(config={"step_output": payload})
+    check = BmFirmwareAttestationCheck(config={"step_output": payload})
     check.run()
     assert check._passed is True, check._error
 
@@ -2630,12 +2615,12 @@ def test_sanitization_script_output_satisfies_memory_check(
 ) -> None:
     """End-to-end: clean NICo JSON passes the memory check; a skipped reset fails."""
     clean = _run_sanitization(monkeypatch, capsys, [_sanitization_machine()])
-    check = MemorySanitizationCheck(config={"step_output": clean})
+    check = BmMemorySanitizationCheck(config={"step_output": clean})
     check.run()
     assert check._passed is True, check._error
 
     dirty = _run_sanitization(monkeypatch, capsys, [_sanitization_machine(history_statuses=["InUse", "Ready"])])
-    bad = MemorySanitizationCheck(config={"step_output": dirty})
+    bad = BmMemorySanitizationCheck(config={"step_output": dirty})
     bad.run()
     assert bad._passed is False
     assert "1/1 machine(s)" in bad._error
@@ -2649,7 +2634,7 @@ def test_sanitization_script_output_satisfies_gpu_check(
 ) -> None:
     """End-to-end: a sanitized GPU host passes the GPU-memory check."""
     payload = _run_sanitization(monkeypatch, capsys, [_sanitization_machine(gpus=8)])
-    check = GpuMemorySanitizationCheck(config={"step_output": payload})
+    check = BmGpuMemorySanitizationCheck(config={"step_output": payload})
     check.run()
     assert check._passed is True, check._error
 
@@ -2665,12 +2650,12 @@ def test_sanitization_script_output_satisfies_disk_check(
     returns to the pool once it succeeds.
     """
     clean = _run_sanitization(monkeypatch, capsys, [_sanitization_machine()])
-    check = DiskSanitizationCheck(config={"step_output": clean})
+    check = BmDiskSanitizationCheck(config={"step_output": clean})
     check.run()
     assert check._passed is True, check._error
 
     dirty = _run_sanitization(monkeypatch, capsys, [_sanitization_machine(history_statuses=["InUse", "Ready"])])
-    bad = DiskSanitizationCheck(config={"step_output": dirty})
+    bad = BmDiskSanitizationCheck(config={"step_output": dirty})
     bad.run()
     assert bad._passed is False
     assert "1/1 machine(s)" in bad._error
@@ -3017,14 +3002,14 @@ def test_serial_numbers_script_output_satisfies_check(
 ) -> None:
     """End-to-end: fully-populated inventory passes; a present GPU with no serial fails."""
     good = _run_serial_numbers(monkeypatch, capsys, [_serial_api_machine()])
-    check = HardwareSerialCheck(config={"step_output": good})
+    check = BmHardwareSerialCheck(config={"step_output": good})
     check.run()
     assert check._passed is True, check._error
 
     # A GPU host whose GPU exposes no serial fails.
     gpu_no_serial = _serial_api_machine(gpus=[{"name": "NVIDIA H100 PCIe", "serial": None}])
     bad_payload = _run_serial_numbers(monkeypatch, capsys, [gpu_no_serial])
-    bad = HardwareSerialCheck(config={"step_output": bad_payload})
+    bad = BmHardwareSerialCheck(config={"step_output": bad_payload})
     bad.run()
     assert bad._passed is False
     assert "gpu" in bad._error

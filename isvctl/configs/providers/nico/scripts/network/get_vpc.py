@@ -39,11 +39,11 @@ def _first_vpc_id(org: str, site_id: str, token: str, *, base_url: str) -> str:
         result_key="vpcs",
     )
     vpcs = [normalize_vpc(vpc) for vpc in raw_vpcs]
-    return first_non_empty_id(vpcs, "tenant_id")
+    return first_non_empty_id(vpcs, "vpc_id")
 
 
 def main() -> int:
-    """Fetch one NICo VPC and emit tenant-compatible detail fields."""
+    """Fetch one NICo VPC and emit its network inventory detail fields."""
     parser = argparse.ArgumentParser(description="Get NICo VPC")
     parser.add_argument("--org", required=True, help="NGC org name")
     parser.add_argument("--site-id", required=True, help="NICo site UUID")

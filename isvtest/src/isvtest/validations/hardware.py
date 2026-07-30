@@ -176,7 +176,7 @@ class HardwareIngestionCheck(BaseValidation):
             self.set_passed(f"All {matched_count} expected machines ingested and healthy")
 
 
-class HardwareSerialCheck(BaseValidation):
+class BmHardwareSerialCheck(BaseValidation):
     """Validate stable hardware serial numbers are queryable (BFX03-01).
 
     Break/fix workflows must be able to identify the physical hardware installed
@@ -273,7 +273,7 @@ class HardwareSerialCheck(BaseValidation):
         self.set_passed(f"Stable hardware identifiers queryable for all present components on {total} machine(s)")
 
 
-class DpuHealthCheck(BaseValidation):
+class BmDpuHealthCheck(BaseValidation):
     """Validate DPU health status for ingested machines.
 
     Checks that DPUs are recognized by NICo, the DPU agent heartbeat
@@ -416,7 +416,7 @@ class DpuHealthCheck(BaseValidation):
             self.set_passed(f"All {total} machine(s) have healthy DPUs")
 
 
-class DpuNetworkCheck(BaseValidation):
+class BmDpuNetworkCheck(BaseValidation):
     """Validate DPU network connectivity on active instances.
 
     Requires an active instance with EVPN overlay networking configured.

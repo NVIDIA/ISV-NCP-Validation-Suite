@@ -394,6 +394,7 @@ class Orchestrator:
         self._capability: str | None = None
         self._verbose: bool = False
         self._junitxml: str | None = None
+        self._skipped_steps: set[str] = set()
 
     def run(
         self,
@@ -538,7 +539,9 @@ class Orchestrator:
 
         # Register step phases upfront so validation phase inference works
         # even before a step has executed. Skipped steps are excluded so
-        # their validations are also skipped automatically.
+        # their validations are also skipped automatically, and recorded so the
+        # skip reads as "switched off here" rather than "no such step".
+        self._skipped_steps = {step.name for step in steps if step.skip}
         for step in steps:
             if step.skip:
                 continue
@@ -833,6 +836,7 @@ class Orchestrator:
             released_tests=released_tests,
             render_context=self.context.get_accumulated_context(),
             capability=self._capability,
+            skipped_steps=self._skipped_steps,
         )
 
     def _resolve_remaining_validation_entries(

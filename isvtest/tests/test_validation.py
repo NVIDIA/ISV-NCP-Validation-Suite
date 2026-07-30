@@ -30,7 +30,7 @@ from isvtest.tests.test_validations import (
 from isvtest.tests.test_validations import (
     test_validation as run_validation_entry_point,
 )
-from isvtest.validations.bm_host_status import BmHostStatusLog
+from isvtest.validations.bm_host_status import BmHostStatusLogCheck
 from isvtest.validations.generic import FieldValueCheck
 from isvtest.validations.instance import (
     InstanceListCheck,
@@ -54,7 +54,7 @@ from isvtest.validations.network import (
     VpcPeeringCheck,
 )
 from isvtest.validations.nim import NimHealthCheck, NimInferenceCheck, NimModelCheck
-from isvtest.validations.security import ConsoleRbacCheck, VirtualDeviceHardeningCheck
+from isvtest.validations.security import VirtualDeviceHardeningCheck, VmConsoleRbacCheck
 
 
 class ConcreteValidation(BaseValidation):
@@ -689,7 +689,7 @@ class TestInstancePowerCycleCheck:
 
 
 def _console_rbac_config(step_output: dict[str, Any] | None = None) -> dict[str, dict[str, Any]]:
-    """Build a minimal ConsoleRbacCheck config."""
+    """Build a minimal VmConsoleRbacCheck config."""
     output: dict[str, Any] = {
         "success": True,
         "platform": "vm",
@@ -710,11 +710,11 @@ def _console_rbac_config(step_output: dict[str, Any] | None = None) -> dict[str,
 
 
 class TestConsoleRbacCheck:
-    """Tests for ConsoleRbacCheck validation."""
+    """Tests for VmConsoleRbacCheck validation."""
 
     def test_all_required_fields_and_subtests_pass(self) -> None:
         """Console RBAC passes when all required proof fields are present."""
-        v = ConsoleRbacCheck(config=_console_rbac_config())
+        v = VmConsoleRbacCheck(config=_console_rbac_config())
         result = v.execute()
 
         assert result["passed"] is True
@@ -723,7 +723,7 @@ class TestConsoleRbacCheck:
 
     def test_skips_when_step_marks_skipped(self) -> None:
         """Console RBAC pytest.skips when account-level serial console access is disabled."""
-        v = ConsoleRbacCheck(
+        v = VmConsoleRbacCheck(
             config=_console_rbac_config(
                 {
                     "skipped": True,
@@ -735,7 +735,7 @@ class TestConsoleRbacCheck:
         with pytest.raises(pytest.skip.Exception, match="serial console access is disabled"):
             v.run()
 
-        v = ConsoleRbacCheck(
+        v = VmConsoleRbacCheck(
             config=_console_rbac_config(
                 {
                     "skipped": True,
@@ -749,7 +749,7 @@ class TestConsoleRbacCheck:
     @pytest.mark.parametrize("access_restricted", [None, False])
     def test_access_restricted_must_be_true(self, access_restricted: bool | None) -> None:
         """Console RBAC fails when access_restricted is missing or false."""
-        v = ConsoleRbacCheck(config=_console_rbac_config({"access_restricted": access_restricted}))
+        v = VmConsoleRbacCheck(config=_console_rbac_config({"access_restricted": access_restricted}))
         result = v.execute()
 
         assert result["passed"] is False
@@ -757,7 +757,7 @@ class TestConsoleRbacCheck:
 
     def test_restricted_actions_must_be_non_empty(self) -> None:
         """Console RBAC fails when no restricted action is reported."""
-        v = ConsoleRbacCheck(config=_console_rbac_config({"restricted_actions": []}))
+        v = VmConsoleRbacCheck(config=_console_rbac_config({"restricted_actions": []}))
         result = v.execute()
 
         assert result["passed"] is False
@@ -785,7 +785,7 @@ class TestConsoleRbacCheck:
     )
     def test_required_subtests_must_pass(self, tests: dict[str, Any], expected_error: str) -> None:
         """Console RBAC fails when a required subtest is missing or failed."""
-        v = ConsoleRbacCheck(config=_console_rbac_config({"tests": tests}))
+        v = VmConsoleRbacCheck(config=_console_rbac_config({"tests": tests}))
         result = v.execute()
 
         assert result["passed"] is False
@@ -2387,7 +2387,7 @@ class TestK8sApiServerMetricsCheck:
 
 
 def _host_status_log_output(tests: dict[str, Any] | None = None) -> dict:
-    """Build a minimal BmHostStatusLog config (mirrors the script's JSON contract)."""
+    """Build a minimal BmHostStatusLogCheck config (mirrors the script's JSON contract)."""
     step_output: dict[str, Any] = {
         "success": True,
         "platform": "bm",
@@ -2413,10 +2413,10 @@ def _host_status_log_output(tests: dict[str, Any] | None = None) -> dict:
 
 
 class TestBmHostStatusLog:
-    """Tests for BmHostStatusLog validation."""
+    """Tests for BmHostStatusLogCheck validation."""
 
     def test_both_sources_pass(self) -> None:
-        v = BmHostStatusLog(config=_host_status_log_output())
+        v = BmHostStatusLogCheck(config=_host_status_log_output())
         result = v.execute()
         assert result["passed"] is True
         assert "journalctl_recent" in result["output"]
@@ -2428,7 +2428,7 @@ class TestBmHostStatusLog:
             "journalctl_recent": {"passed": True, "message": "10 entries"},
             "dmesg_recent": {"passed": False, "message": "no entries in last 5min"},
         }
-        v = BmHostStatusLog(config=_host_status_log_output(tests=tests))
+        v = BmHostStatusLogCheck(config=_host_status_log_output(tests=tests))
         result = v.execute()
         assert result["passed"] is True
         assert "journalctl_recent" in result["output"]
@@ -2438,19 +2438,19 @@ class TestBmHostStatusLog:
             "journalctl_recent": {"passed": False, "message": "no entries in last 5min"},
             "dmesg_recent": {"passed": False, "message": "no entries in last 5min"},
         }
-        v = BmHostStatusLog(config=_host_status_log_output(tests=tests))
+        v = BmHostStatusLogCheck(config=_host_status_log_output(tests=tests))
         result = v.execute()
         assert result["passed"] is False
         assert "No status log source" in result["error"]
 
     def test_empty_tests_block_fails(self) -> None:
-        v = BmHostStatusLog(config={"step_output": {"success": True}})
+        v = BmHostStatusLogCheck(config={"step_output": {"success": True}})
         result = v.execute()
         assert result["passed"] is False
         assert "tests" in result["error"]
 
     def test_strict_mode_passes_when_all_required_pass(self) -> None:
-        v = BmHostStatusLog(
+        v = BmHostStatusLogCheck(
             config={
                 **_host_status_log_output(),
                 "required_sources": ["journalctl_recent", "dmesg_recent"],
@@ -2465,7 +2465,7 @@ class TestBmHostStatusLog:
             "journalctl_recent": {"passed": True, "message": "ok"},
             "dmesg_recent": {"passed": False, "message": "no entries"},
         }
-        v = BmHostStatusLog(
+        v = BmHostStatusLogCheck(
             config={
                 **_host_status_log_output(tests=tests),
                 "required_sources": ["journalctl_recent", "dmesg_recent"],
@@ -2478,7 +2478,7 @@ class TestBmHostStatusLog:
 
     def test_strict_mode_fails_when_required_source_missing(self) -> None:
         tests = {"journalctl_recent": {"passed": True, "message": "ok"}}
-        v = BmHostStatusLog(
+        v = BmHostStatusLogCheck(
             config={
                 **_host_status_log_output(tests=tests),
                 "required_sources": ["journalctl_recent", "dmesg_recent"],
@@ -2490,7 +2490,7 @@ class TestBmHostStatusLog:
         assert "missing" in result["error"]
 
     def test_invalid_required_sources_rejected(self) -> None:
-        v = BmHostStatusLog(config={**_host_status_log_output(), "required_sources": "journalctl_recent"})
+        v = BmHostStatusLogCheck(config={**_host_status_log_output(), "required_sources": "journalctl_recent"})
         result = v.execute()
         assert result["passed"] is False
         assert "required_sources" in result["error"]

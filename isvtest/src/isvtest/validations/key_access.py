@@ -15,7 +15,7 @@
 
 """Key-secret-management validations (requirement AUTH-XX).
 
-``SpecifiedKeyAccessCheck`` (AUTH-XX-03): verify that a tenant-specified key
+``BmComponentKeyAccessCheck`` (AUTH-XX-03): verify that a tenant-specified key
 can be used to access other components "as possible" -- the serial console
 (SOL) and network devices being the called-out examples.
 
@@ -38,7 +38,7 @@ import pytest
 from isvtest.core.validation import BaseValidation
 
 
-class SpecifiedKeyAccessCheck(BaseValidation):
+class BmComponentKeyAccessCheck(BaseValidation):
     """Validate specified-key access to out-of-band components (AUTH-XX-03).
 
     AUTH-XX-03 requires that a tenant-supplied key (e.g. an SSH key) can be used

@@ -611,7 +611,7 @@ class ApiEndpointIsolationCheck(BaseValidation):
         self.set_passed(f"API endpoints not publicly accessible ({endpoints} endpoints tested)")
 
 
-class ConsoleRbacCheck(BaseValidation):
+class VmConsoleRbacCheck(BaseValidation):
     """Validate interactive console access is restricted by RBAC.
 
     Config:

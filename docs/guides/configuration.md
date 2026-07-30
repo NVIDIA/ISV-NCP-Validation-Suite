@@ -565,19 +565,36 @@ Below is a summary by category.
 
 ### Generic (`validations/generic.py`)
 
+`StepSuccessCheck`, `FieldExistsCheck`, `FieldValueCheck`, and `CrudOperationsCheck`
+are compose-only mechanisms. Reference them under a named test instead of wiring
+their class names directly:
+
+```yaml
+checks:
+  NetworkProvisionedCheck:
+    description: "Check the network was provisioned"
+    compose:
+      - StepSuccessCheck
+      - FieldExistsCheck:
+          fields: ["network_id"]
+```
+
+`SchemaValidation` remains directly wireable, but is catalog-excluded because
+the step executor runs schema checks automatically.
+
 | Validation | Description |
 | ---------- | ----------- |
-| `StepSuccessCheck` | Check step completed successfully |
-| `FieldExistsCheck` | Check required fields exist in output |
-| `FieldValueCheck` | Check field has expected value (eq, gt, gte, lt, lte, contains, min/max) |
-| `CrudOperationsCheck` | Check all CRUD operations passed |
+| `StepSuccessCheck` | Compose-only: check step completed successfully |
+| `FieldExistsCheck` | Compose-only: check required fields exist in output |
+| `FieldValueCheck` | Compose-only: check field has expected value (eq, gt, gte, lt, lte, contains, min/max) |
+| `CrudOperationsCheck` | Compose-only: check all CRUD operations passed |
 | `SchemaValidation` | Validate output matches JSON schema |
 
 ### Instance (`validations/instance.py`)
 
 | Validation | Description |
 | ---------- | ----------- |
-| `InstanceCreatedCheck` | Check instance was created |
+| `VmInstanceIdReportedCheck` | Check instance was created |
 | `InstanceStateCheck` | Check instance is in expected state |
 | `InstanceListCheck` | Check instance list from VPC |
 | `InstanceTagCheck` | Check instance tags are present |
@@ -587,7 +604,7 @@ Below is a summary by category.
 | `InstancePowerCycleCheck` | Check instance recovered from power-cycle |
 | `StableIdentifierCheck` | Check instance ID is stable across lifecycle events |
 | `SerialConsoleCheck` | Check serial console access |
-| `TopologyPlacementCheck` | Check topology-based placement support |
+| `BmTopologyPlacementCheck` | Check topology-based placement support |
 
 ### Network (`validations/network.py`)
 
@@ -633,12 +650,12 @@ Below is a summary by category.
 | `DriverCheck` | Validates kernel and NVIDIA drivers |
 | `ContainerRuntimeCheck` | Tests container runtime and NVIDIA Docker support |
 | `CloudInitCheck` | Validates cloud-init completed and metadata service is reachable (supports non-AWS providers; see [isvtest docs](../packages/isvtest.md#available-validations) for `metadata_headers` and `metadata_url` options) |
-| `GpuStressCheck` | GPU stress test via SSH |
-| `NcclCheck` | NCCL AllReduce test via SSH |
-| `TrainingCheck` | DDP training workload via SSH |
-| `NvlinkCheck` | NVLink topology and status via SSH |
-| `InfiniBandCheck` | InfiniBand interface status via SSH |
-| `EthernetCheck` | Ethernet interfaces and connectivity via SSH |
+| `BmGpuStressCheck` | GPU stress test via SSH |
+| `BmNcclCheck` | NCCL AllReduce test via SSH |
+| `BmTrainingCheck` | DDP training workload via SSH |
+| `BmNvlinkCheck` | NVLink topology and status via SSH |
+| `BmInfiniBandCheck` | InfiniBand interface status via SSH |
+| `BmEthernetCheck` | Ethernet interfaces and connectivity via SSH |
 
 ### NIM (`validations/nim.py`)
 

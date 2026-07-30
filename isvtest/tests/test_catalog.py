@@ -171,20 +171,24 @@ tests:
 
     def test_released_only_filters_catalog(self) -> None:
         """Default catalog generation excludes tests not in the release manifest."""
-        with patch("isvtest.catalog.load_released_test_filter", return_value={"StepSuccessCheck"}):
+        with patch("isvtest.catalog.load_released_test_filter", return_value={"MfaEnforcedCheck"}):
             catalog = build_catalog()
 
         assert catalog
-        assert all(entry["name"].startswith("StepSuccessCheck") for entry in catalog)
+        assert all(entry["name"].startswith("MfaEnforcedCheck") for entry in catalog)
 
     def test_unreleased_env_includes_full_catalog(self) -> None:
-        """When the release filter is disabled, default catalog generation includes all tests."""
+        """When the release filter is disabled, default catalog generation includes all tests.
+
+        Composites are the unreleased entries in practice: they are added to the
+        release manifest by a release commit, not by the PR that wires them.
+        """
         with patch("isvtest.catalog.load_released_test_filter", return_value=None):
             catalog = build_catalog()
 
         names = {e["name"] for e in catalog}
-        assert "StepSuccessCheck" in names
-        assert "FieldExistsCheck" in names
+        assert "MfaEnforcedCheck" in names
+        assert "VolumeDeletedCheck" in names
 
     def test_labels_are_lists_of_strings(self) -> None:
         """Test that labels are lists of strings."""
@@ -204,6 +208,8 @@ tests:
                         "suite": "demo",
                         "capability": None,
                         "requires": ["vm", "bare_metal"],
+                        "composite": False,
+                        "description": "",
                     }
                 },
             ),
@@ -228,6 +234,63 @@ tests:
                 "requires": ["vm", "bare_metal"],
             }
         ]
+
+    def test_composite_entry_describes_itself(self) -> None:
+        """A composite has no class, so its description comes from the wiring."""
+        with (
+            patch("isvtest.catalog.discover_all_tests", return_value=[ExplicitLabelCatalogCheck]),
+            patch(
+                "isvtest.catalog._build_suite_map",
+                return_value={
+                    "DemoComposedCheck": {
+                        "suite": "demo",
+                        "capability": None,
+                        "requires": [],
+                        "composite": True,
+                        "description": "Check the demo thing works",
+                    }
+                },
+            ),
+            patch("isvtest.catalog.build_label_map", return_value={"DemoComposedCheck": {"demo"}}),
+            patch("isvtest.catalog.build_test_id_map", return_value={"DemoComposedCheck": {"SEC07-01"}}),
+            patch("isvtest.catalog.load_released_test_filter", return_value=None),
+        ):
+            catalog = build_catalog()
+
+        assert catalog == [
+            {
+                "name": "DemoComposedCheck",
+                "description": "Check the demo thing works",
+                "labels": ["demo"],
+                "test_ids": ["SEC07-01"],
+                "source": "isvtest.core.composite",
+                "suite": "demo",
+                "capability": None,
+                "requires": [],
+            }
+        ]
+
+    def test_composite_is_release_gated_by_name(self) -> None:
+        """A composite name is not in the manifest, so it ships unreleased."""
+        with (
+            patch("isvtest.catalog.discover_all_tests", return_value=[ExplicitLabelCatalogCheck]),
+            patch(
+                "isvtest.catalog._build_suite_map",
+                return_value={
+                    "DemoComposedCheck": {
+                        "suite": "demo",
+                        "capability": None,
+                        "requires": [],
+                        "composite": True,
+                        "description": "Check the demo thing works",
+                    }
+                },
+            ),
+            patch("isvtest.catalog.build_label_map", return_value={}),
+            patch("isvtest.catalog.build_test_id_map", return_value={}),
+            patch("isvtest.catalog.load_released_test_filter", return_value={"StepSuccessCheck"}),
+        ):
+            assert build_catalog() == []
 
     def test_sources_are_valid_python_paths(self) -> None:
         """Source paths remain useful implementation metadata, not a suite axis."""

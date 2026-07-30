@@ -17,7 +17,7 @@
 """Verify bare-metal instance terminated - TEMPLATE (replace with your platform implementation).
 
 This script is called during the "teardown" phase, after teardown.py.
-It is a post-teardown sanitization check that confirms:
+It is a post-teardown verification check that confirms:
   1. The instance is in "terminated" state (or no longer exists)
   2. The security group has been deleted
   3. The key pair has been deleted

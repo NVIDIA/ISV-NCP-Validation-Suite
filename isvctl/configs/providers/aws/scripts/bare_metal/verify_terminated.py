@@ -16,7 +16,7 @@
 
 """Verify an EC2 instance has been terminated after teardown.
 
-Post-teardown sanitization check: confirms the instance is in
+Post-teardown verification: confirms the instance is in
 'terminated' state or no longer exists (already cleaned up by AWS).
 Also verifies that the associated security group and key pair have
 been removed.

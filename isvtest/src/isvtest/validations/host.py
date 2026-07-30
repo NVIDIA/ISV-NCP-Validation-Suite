@@ -1199,7 +1199,7 @@ def _detect_ssh_container_runtime(ssh: paramiko.SSHClient) -> str:
     return "docker"
 
 
-class GpuStressCheck(BaseValidation):
+class BmGpuStressCheck(BaseValidation):
     """Run GPU stress test via SSH using PyTorch matrix multiplications.
 
     Runs the same gpu_stress_torch.py script used by Slurm/K8s workloads,
@@ -1318,7 +1318,7 @@ class GpuStressCheck(BaseValidation):
             self.set_failed(f"GPU stress failed: {e}")
 
 
-class NcclCheck(BaseValidation):
+class BmNcclCheck(BaseValidation):
     """Run single-node NCCL AllReduce test via SSH.
 
     Validates GPU-to-GPU communication (NVLink/NVSwitch) by running
@@ -1451,7 +1451,7 @@ class NcclCheck(BaseValidation):
             self.set_failed(f"NCCL test failed: {e}")
 
 
-class TrainingCheck(BaseValidation):
+class BmTrainingCheck(BaseValidation):
     """Run a DDP PyTorch training workload via SSH.
 
     Validates the full distributed training stack by running a small MLP
@@ -1616,7 +1616,7 @@ class TrainingCheck(BaseValidation):
 # =============================================================================
 
 
-class NvlinkCheck(BaseValidation):
+class BmNvlinkCheck(BaseValidation):
     """Validate NVLink topology and link status via SSH.
 
     Checks that NVLink interconnects between GPUs are present and active
@@ -1712,7 +1712,7 @@ class NvlinkCheck(BaseValidation):
                     pass
 
 
-class InfiniBandCheck(BaseValidation):
+class BmInfiniBandCheck(BaseValidation):
     """Validate InfiniBand interfaces via SSH.
 
     Checks that IB ports are present and in Active state using ``ibstat``.
@@ -1807,7 +1807,7 @@ class InfiniBandCheck(BaseValidation):
                     pass
 
 
-class EthernetCheck(BaseValidation):
+class BmEthernetCheck(BaseValidation):
     """Validate network interfaces and connectivity via SSH.
 
     Checks that expected network interfaces are up and optionally

@@ -25,7 +25,7 @@
 # Architecture:
 #   - verify_ingestion.py compares expected-machine manifest vs discovered
 #     machines (joined by machineId); HardwareIngestionCheck validates it.
-#   - check_dpu_health.py queries machine health data; DpuHealthCheck
+#   - check_dpu_health.py queries machine health data; BmDpuHealthCheck
 #     validates DPU presence, heartbeat, and alerts.
 #   - query_metrics.py aggregates per-status node and GPU counts into the
 #     Delivered / Healthy / Reserved / Active governance buckets;
@@ -42,9 +42,9 @@
 #     Management Key from UFM when configured); IbKeysConfiguredCheck
 #     validates the required keys (SDN04-05).
 #   - query_sanitization.py maps each machine's status + statusHistory into a
-#     neutral lifecycle token sequence; MemorySanitizationCheck (SEC21-04),
-#     GpuMemorySanitizationCheck (SEC21-05), FirmwareResetCheck (SEC21-06/SEC22),
-#     DiskSanitizationCheck (SEC21-02), and SkipSanitizationBreakfixCheck
+#     neutral lifecycle token sequence; BmMemorySanitizationCheck (SEC21-04),
+#     BmGpuMemorySanitizationCheck (SEC21-05), BmFirmwareResetCheck (SEC21-06/SEC22),
+#     BmDiskSanitizationCheck (SEC21-02), and SkipSanitizationBreakfixCheck
 #     (STG02-01) assert hosts are sanitized between tenants and that optional
 #     maintenance skips preserve tenancy. The same Reset stage performs the
 #     NVMe/HDD secure erase, so the disk check gates on the same lifecycle signal.
@@ -59,11 +59,12 @@
 #     tenant REST credentials used for machine enumeration.
 #   - query_key_access.py reads the site's SSH Key Groups and serial-console
 #     configuration and reports whether a tenant-specified key can access
-#     out-of-band components; SpecifiedKeyAccessCheck validates it (AUTH-XX-03).
+#     out-of-band components; BmComponentKeyAccessCheck validates it (AUTH-XX-03).
 #     This is a read-only step (like the other checks here); the auto-provisioning
 #     variant that mints a throwaway key lives in the dedicated key_access.yaml.
 #   - list_instances.py / describe_instance.py query existing instances;
-#     InstanceListCheck and InstanceStateCheck validate the JSON contract.
+#     BmHostListedCheck and BmHostStateReportedCheck validate
+#     the JSON contract.
 #
 # Prerequisites:
 #   - NICO_API_BASE set to the NICo API base URL
@@ -229,7 +230,7 @@ commands:
       # ─── Query Hardware Serial Numbers (BFX03-01) ──────────────────
       # Reads each machine's discovered hardware metadata and reduces it to a
       # per-component stable-identifier record (chassis / baseboard DMI serials,
-      # GPU serials, NIC MAC/GUID, CPU model). HardwareSerialCheck asserts a
+      # GPU serials, NIC MAC/GUID, CPU model). BmHardwareSerialCheck asserts a
       # stable identifier is queryable for every present component so break/fix
       # can identify installed hardware. Obfuscated-but-stable IDs are accepted.
       - name: query_serial_numbers
@@ -323,7 +324,7 @@ commands:
       # whether a tenant-specified key can access out-of-band components. The serial
       # console (SOL) is verifiable from the tenant API (provider-enabled +
       # SSH-key auth + key synced); network-device access is provider-managed
-      # and reported as unverified. SpecifiedKeyAccessCheck validates it.
+      # and reported as unverified. BmComponentKeyAccessCheck validates it.
       - name: query_key_access
         phase: test
         continue_on_failure: true
@@ -392,18 +393,17 @@ tests:
   exclude:
     labels: []
     tests:
-      - ConnectivityCheck
-      - OsCheck
-      - GpuCheck
-      - VcpuPinningCheck
-      - PciBusCheck
-      - HostSoftwareCheck
-      - GpuStressCheck
-      - NcclCheck
-      - TrainingCheck
-      - NvlinkCheck
-      - InfiniBandCheck
-      - EthernetCheck
-      - DriverCheck
-      - CpuInfoCheck
-      - ContainerRuntimeCheck
+      - BmHostReadyCheck
+      - BmGpusPresentCheck
+      - BmVcpuPinningCheck
+      - BmPciBusCheck
+      - BmHostSoftwareCheck
+      - BmGpuStressCheck
+      - BmNcclCheck
+      - BmTrainingCheck
+      - BmNvlinkCheck
+      - BmInfiniBandCheck
+      - BmEthernetCheck
+      - BmGpuDriverCheck
+      - BmCpuInfoCheck
+      - BmContainerRuntimeCheck

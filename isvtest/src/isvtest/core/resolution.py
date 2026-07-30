@@ -28,6 +28,8 @@ from typing import Any
 from jinja2 import ChainableUndefined, Environment, Undefined
 
 from isvtest.config.loader import _ternary
+from isvtest.core.composite import is_composite
+from isvtest.core.discovery import discover_all_tests
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +83,7 @@ class SkipReason(StrEnum):
     RUNTIME_SKIP = "runtime_skip"  # validation called pytest.skip(...) at runtime
     STEP_NO_OUTPUT = "step_no_output"  # step ran but produced no JSON output
     STEP_NOT_CONFIGURED = "step_not_configured"  # step the entry binds to isn't in the platform's step list
+    STEP_SKIPPED = "step_skipped"  # step is configured but carries skip: true
     UNRELEASED = "unreleased"  # not in released_tests.json (gated until release)
     CAPABILITY_REQUIREMENT = "capability_requirement"  # declared capabilities do not satisfy ``requires``
 
@@ -160,6 +163,29 @@ def requirements_satisfied(requires: Iterable[str], capability: str) -> bool:
     return not required or capability in required
 
 
+@cache
+def _compose_only_check_names() -> frozenset[str]:
+    """Return validation class names that may only be used in composites."""
+    return frozenset(cls.__name__ for cls in discover_all_tests() if getattr(cls, "compose_only", False))
+
+
+def _compose_only_error(name: str, params: Any) -> str | None:
+    """Return an error when a ``compose_only`` check is wired under its own name.
+
+    ``validate_suite_wiring`` enforces this in-tree, but an ISV's own config is
+    never linted, and a generic check wired directly would report a pass under a
+    name that says nothing about the property proven.
+    """
+    if is_composite(params):
+        return None
+    if resolve_class_key(name, _compose_only_check_names()) is not None:
+        return (
+            f"'{name}' is compose_only and cannot be wired directly; "
+            "name the property under test and list it under 'compose:'"
+        )
+    return None
+
+
 def parse_validations(raw_config: Mapping[str, Any]) -> list[ValidationEntry]:
     """Parse raw validation config into ordered validation entries.
 
@@ -193,6 +219,10 @@ def parse_validations(raw_config: Mapping[str, Any]) -> list[ValidationEntry]:
             else:
                 params_template = copy.deepcopy(params_template)
 
+            if compose_only_error := _compose_only_error(name, params_template):
+                entries.append(_invalid_entry(name, category, compose_only_error))
+                continue
+
             labels = _wiring_labels(params_template)
             requires = _wiring_requires(params_template)
             entries.append(
@@ -222,6 +252,7 @@ def resolve_entries(
     released_tests: AbstractSet[str] | None,
     render_context: Mapping[str, Any],
     capability: str | None = None,
+    skipped_steps: AbstractSet[str] = frozenset(),
 ) -> list[ResolvedEntry]:
     """Resolve validation entries into ready or terminal outcomes.
 
@@ -236,6 +267,9 @@ def resolve_entries(
         released_tests: Released test manifest, or None when unreleased checks are included.
         render_context: Jinja context for validation parameter rendering.
         capability: Declared capability context (a single platform), or None to disable requirement filtering.
+        skipped_steps: Steps the config declares with ``skip: true``. They are absent from
+            ``step_phases`` like an unconfigured step, so name them separately to distinguish
+            "switched off here" from "this provider has no such step".
 
     Returns:
         A resolved entry for every input entry, in input order.
@@ -298,6 +332,16 @@ def resolve_entries(
                     entry,
                     SkipReason.EXCLUDED,
                     f"validation '{entry.name}' is excluded by label: {label_list}",
+                )
+            )
+            continue
+
+        if entry.step and entry.step in skipped_steps:
+            resolved.append(
+                _skip(
+                    entry,
+                    SkipReason.STEP_SKIPPED,
+                    f"step '{entry.step}' is configured but skipped (skip: true)",
                 )
             )
             continue

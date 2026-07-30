@@ -25,7 +25,7 @@ gRPC API, not on the tenant REST API. This script bridges the two surfaces:
 3. Use ``nico-admin-cli attestation measured-boot machine show`` to read
    measured-boot machine states.
 4. Emit the provider-neutral ``query_attestation`` contract consumed by
-   ``NonceAttestationCheck`` and ``FirmwareAttestationCheck``.
+   ``BmNonceAttestationCheck`` and ``BmFirmwareAttestationCheck``.
 
 The admin CLI must be configured with a Forge control-plane URL and an authorized
 client certificate. The script accepts explicit CLI TLS arguments, but also works

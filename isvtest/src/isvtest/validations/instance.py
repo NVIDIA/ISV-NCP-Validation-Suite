@@ -61,7 +61,7 @@ class InstanceStateCheck(BaseValidation):
             self.set_failed(f"Instance {instance_id} state: expected {expected_state}, got {actual_state}")
 
 
-class InstanceSpecifiedKeyCheck(BaseValidation):
+class VmLaunchedWithSpecifiedKeyCheck(BaseValidation):
     """Validate that an instance was launched with a requested SSH key.
 
     Config:
@@ -100,7 +100,7 @@ class InstanceSpecifiedKeyCheck(BaseValidation):
         self.set_passed(f"Instance {instance_id} launched with specified key '{requested_key_name}'")
 
 
-class ComponentKeyAccessCheck(BaseValidation):
+class VmComponentKeyAccessCheck(BaseValidation):
     """Validate a specified key can access other components (SOL, network devices).
 
     Proves AUTH03-01 after AUTH02 launches an instance with a requested key.
@@ -324,8 +324,12 @@ class StableIdentifierCheck(BaseValidation):
             self.set_failed(f"Instance ID changed: expected {reference_id}, got {instance_id}")
 
 
-class InstanceCreatedCheck(BaseValidation):
-    """Validate instance was created successfully.
+class VmInstanceIdReportedCheck(BaseValidation):
+    """Validate the platform returned an identifier for the created instance.
+
+    One half of CNP01-09: the ``VmCreatedCheck`` composite pairs it with
+    ``InstanceStateCheck`` so creation and reaching the running state are one
+    test rather than two catalog rows over the same launch event.
 
     Config:
         step_output: The step output to check
@@ -607,7 +611,7 @@ class SerialConsoleRetentionCheck(BaseValidation):
         )
 
 
-class TopologyPlacementCheck(BaseValidation):
+class BmTopologyPlacementCheck(BaseValidation):
     """Validate topology-based placement support for an instance.
 
     Checks that the platform supports placement groups (or equivalent

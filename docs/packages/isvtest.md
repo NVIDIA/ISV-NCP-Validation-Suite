@@ -61,13 +61,18 @@ Validations are platform-agnostic checks that inspect JSON step output. They are
 ### Generic (`validations/generic.py`)
 
 Utility checks that work with any step output.
+`StepSuccessCheck`, `FieldExistsCheck`, `FieldValueCheck`, and
+`CrudOperationsCheck` are compose-only: list them under a named test's
+`compose:` block rather than wiring their class names directly.
+`SchemaValidation` remains directly wireable, but is catalog-excluded because
+the step executor runs schema checks automatically.
 
 | Validation | Platforms | Description |
 | ---------- | --------- | ----------- |
-| `StepSuccessCheck` | all | Check step completed successfully |
-| `FieldExistsCheck` | all | Check required fields exist in output |
-| `FieldValueCheck` | all | Check field has expected value |
-| `CrudOperationsCheck` | all | Check all CRUD operations passed |
+| `StepSuccessCheck` | all | Compose-only: check step completed successfully |
+| `FieldExistsCheck` | all | Compose-only: check required fields exist in output |
+| `FieldValueCheck` | all | Compose-only: check field has expected value |
+| `CrudOperationsCheck` | all | Compose-only: check all CRUD operations passed |
 | `SchemaValidation` | all | Validate output matches JSON schema |
 
 ### Instance (`validations/instance.py`)
@@ -76,7 +81,7 @@ Instance lifecycle validations for VMs and bare metal.
 
 | Validation | Platforms | Description |
 | ---------- | --------- | ----------- |
-| `InstanceCreatedCheck` | vm | Check instance was created |
+| `VmInstanceIdReportedCheck` | vm | Check instance was created |
 | `InstanceStateCheck` | vm, bare_metal | Check instance is in expected state |
 | `InstanceListCheck` | vm, bare_metal | Check instance list from VPC |
 | `InstanceTagCheck` | vm, bare_metal | Check instance tags are present |
@@ -86,7 +91,7 @@ Instance lifecycle validations for VMs and bare metal.
 | `InstancePowerCycleCheck` | bare_metal | Check instance recovered from power-cycle |
 | `StableIdentifierCheck` | vm, bare_metal | Check instance ID is stable across lifecycle events |
 | `SerialConsoleCheck` | vm, bare_metal | Check serial console access |
-| `TopologyPlacementCheck` | bare_metal | Check topology-based placement support |
+| `BmTopologyPlacementCheck` | bare_metal | Check topology-based placement support |
 
 ### Network (`validations/network.py`)
 
@@ -138,12 +143,12 @@ SSH-based host validations for GPU, driver, OS, networking, and workloads.
 | `DriverCheck` | vm, bare_metal | Validates kernel and NVIDIA drivers |
 | `ContainerRuntimeCheck` | vm, bare_metal | Tests container runtime and NVIDIA Docker support |
 | `CloudInitCheck` | vm, bare_metal | Validates cloud-init completed and metadata service is reachable. Supports `metadata_headers` (custom HTTP headers for non-AWS providers) and optional `metadata_url` override |
-| `GpuStressCheck` | bare_metal | GPU stress test via SSH |
-| `NcclCheck` | bare_metal | NCCL AllReduce test via SSH |
-| `TrainingCheck` | bare_metal | DDP training workload via SSH |
-| `NvlinkCheck` | bare_metal | NVLink topology and status via SSH |
-| `InfiniBandCheck` | bare_metal | InfiniBand interface status via SSH |
-| `EthernetCheck` | bare_metal | Ethernet interfaces and connectivity via SSH |
+| `BmGpuStressCheck` | bare_metal | GPU stress test via SSH |
+| `BmNcclCheck` | bare_metal | NCCL AllReduce test via SSH |
+| `BmTrainingCheck` | bare_metal | DDP training workload via SSH |
+| `BmNvlinkCheck` | bare_metal | NVLink topology and status via SSH |
+| `BmInfiniBandCheck` | bare_metal | InfiniBand interface status via SSH |
+| `BmEthernetCheck` | bare_metal | Ethernet interfaces and connectivity via SSH |
 
 ### NIM (`validations/nim.py`)
 

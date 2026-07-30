@@ -21,12 +21,10 @@
 # this example runs end-to-end without any real cloud / BMaaS.
 #
 # Coverage:
-#   This example exercises the pure JSON-contract validations
-#   (StepSuccessCheck, FieldExistsCheck, CrudOperationsCheck,
-#    InstanceStateCheck) on all 7 steps. The vm_ssh validation group
-#    (ConnectivityCheck + OsCheck on launch_instance) is excluded via
-#    `exclude.labels: [ssh]` because a dummy stub cannot stand up a
-#    real VM to SSH into.
+#   This example exercises the pure JSON-contract validations on all
+#   steps. SSH-based checks that need a real SSH-reachable VM are
+#   excluded via `exclude.labels: [ssh]` because a dummy stub cannot
+#   stand up a real VM to SSH into.
 #
 # ACTION: Remove `exclude.labels: [ssh]` at the bottom once your
 #   stubs provision real instances with SSH access.
@@ -159,7 +157,7 @@ tests:
     region: "my-isv-region-1"
     instance_type: "my-isv.gpu.1x"
 
-  # Skip SSH-based vm_ssh check (ConnectivityCheck + OsCheck on
+  # Skip SSH-based vm_ssh check (VmFromCustomImageReadyCheck on
   # launch_instance) - would try to SSH into the dummy public_ip.
   # Real ISVs remove this exclusion as their stubs come online.
   exclude:

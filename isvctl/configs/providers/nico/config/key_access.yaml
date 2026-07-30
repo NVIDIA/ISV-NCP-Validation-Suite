@@ -21,13 +21,13 @@
 # key, runs the check, then tears the key down -- so it can go green in CI
 # without any manual key setup on the cluster.
 #
-# Architecture (imports the bare_metal suite for the SpecifiedKeyAccessCheck):
+# Architecture (imports the bare_metal suite for the BmComponentKeyAccessCheck):
 #   setup    setup_key_access.py    - create an ephemeral SSH key + SSH Key
 #                                      Group synced to the site (private key is
 #                                      generated and discarded immediately).
 #   test     query_key_access.py    - report whether the specified key can
 #                                      access the serial console (SOL);
-#                                      SpecifiedKeyAccessCheck validates it.
+#                                      BmComponentKeyAccessCheck validates it.
 #   teardown teardown_key_access.py - delete the key group + key created in
 #                                      setup (IDs come from the setup output).
 #
@@ -75,7 +75,7 @@ commands:
         timeout: 360
 
       # ─── Specified-Key Access (AUTH-XX-03, test) ────────────────────
-      # Same step the bare_metal suite validates with SpecifiedKeyAccessCheck.
+      # Same step the bare_metal suite validates with BmComponentKeyAccessCheck.
       - name: query_key_access
         phase: test
         command: "python ../scripts/auth/query_key_access.py"

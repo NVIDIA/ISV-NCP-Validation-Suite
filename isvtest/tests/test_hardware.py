@@ -20,10 +20,10 @@ from __future__ import annotations
 from typing import Any
 
 from isvtest.validations.hardware import (
-    DpuHealthCheck,
-    DpuNetworkCheck,
+    BmDpuHealthCheck,
+    BmDpuNetworkCheck,
+    BmHardwareSerialCheck,
     HardwareIngestionCheck,
-    HardwareSerialCheck,
 )
 
 # ---------------------------------------------------------------------------
@@ -162,7 +162,7 @@ class TestHardwareIngestionCheck:
         check.run()
         assert check._passed is True
         assert "2 expected machines ingested" in check._output
-        # Each OK machine emits passing status + health subtests (parity with DpuHealthCheck)
+        # Each OK machine emits passing status + health subtests (parity with BmDpuHealthCheck)
         status_subtests = [r for r in check._subtest_results if r.get("name", "").startswith("machine_status_")]
         health_subtests = [r for r in check._subtest_results if r.get("name", "").startswith("machine_health_")]
         assert len(status_subtests) == 2
@@ -322,30 +322,30 @@ class TestHardwareIngestionCheck:
 
 
 # ===========================================================================
-# DpuHealthCheck tests
+# BmDpuHealthCheck tests
 # ===========================================================================
 
 
 class TestDpuHealthCheck:
-    """Tests for DpuHealthCheck validation."""
+    """Tests for BmDpuHealthCheck validation."""
 
     def test_healthy_dpus(self) -> None:
         """All DPUs healthy with active heartbeat."""
-        check = DpuHealthCheck(config={"step_output": _dpu_health_output()})
+        check = BmDpuHealthCheck(config={"step_output": _dpu_health_output()})
         check.run()
         assert check._passed is True
         assert "healthy DPUs" in check._output
 
     def test_step_failure(self) -> None:
         """Step failed -- validation should fail with error detail."""
-        check = DpuHealthCheck(config={"step_output": _dpu_health_output(success=False, error="Cannot reach API")})
+        check = BmDpuHealthCheck(config={"step_output": _dpu_health_output(success=False, error="Cannot reach API")})
         check.run()
         assert check._passed is False
         assert "Cannot reach API" in check._error
 
     def test_no_machines(self) -> None:
         """No machines in output."""
-        check = DpuHealthCheck(config={"step_output": _dpu_health_output(machines=[])})
+        check = BmDpuHealthCheck(config={"step_output": _dpu_health_output(machines=[])})
         check.run()
         assert check._passed is False
         assert "No machines" in check._error
@@ -365,14 +365,14 @@ class TestDpuHealthCheck:
                 "dpu_agent_heartbeat": False,
             },
         ]
-        check = DpuHealthCheck(config={"step_output": _dpu_health_output(machines=machines)})
+        check = BmDpuHealthCheck(config={"step_output": _dpu_health_output(machines=machines)})
         check.run()
         assert check._passed is False
         assert "m-001" in check._error
 
     def test_wrong_dpu_count(self) -> None:
         """DPU count doesn't match expected -- still checks heartbeat and alerts."""
-        check = DpuHealthCheck(
+        check = BmDpuHealthCheck(
             config={
                 "step_output": _dpu_health_output(),
                 "expected_dpu_count": 4,
@@ -400,7 +400,7 @@ class TestDpuHealthCheck:
                 "dpu_agent_heartbeat": False,
             },
         ]
-        check = DpuHealthCheck(config={"step_output": _dpu_health_output(machines=machines)})
+        check = BmDpuHealthCheck(config={"step_output": _dpu_health_output(machines=machines)})
         check.run()
         assert check._passed is False
         assert any("heartbeat" in r.get("message", "").lower() for r in check._subtest_results)
@@ -426,7 +426,7 @@ class TestDpuHealthCheck:
                 "dpu_agent_heartbeat": False,
             },
         ]
-        check = DpuHealthCheck(config={"step_output": _dpu_health_output(machines=machines)})
+        check = BmDpuHealthCheck(config={"step_output": _dpu_health_output(machines=machines)})
         check.run()
         assert check._passed is False
 
@@ -445,7 +445,7 @@ class TestDpuHealthCheck:
                 "dpu_agent_heartbeat": False,
             },
         ]
-        check = DpuHealthCheck(
+        check = BmDpuHealthCheck(
             config={
                 "step_output": _dpu_health_output(machines=machines),
                 "require_heartbeat": False,
@@ -493,7 +493,7 @@ class TestDpuHealthCheck:
                 "dpu_agent_heartbeat": True,
             },
         ]
-        check = DpuHealthCheck(config={"step_output": _dpu_health_output(machines=machines)})
+        check = BmDpuHealthCheck(config={"step_output": _dpu_health_output(machines=machines)})
         check.run()
         assert check._passed is False
         assert "1/3" in check._error
@@ -517,41 +517,43 @@ class TestDpuHealthCheck:
                 "dpu_agent_heartbeat": True,
             },
         ]
-        check = DpuHealthCheck(config={"step_output": _dpu_health_output(machines=machines)})
+        check = BmDpuHealthCheck(config={"step_output": _dpu_health_output(machines=machines)})
         check.run()
         assert check._passed is False
 
     def test_empty_step_output(self) -> None:
         """Empty step_output should fail."""
-        check = DpuHealthCheck(config={"step_output": {}})
+        check = BmDpuHealthCheck(config={"step_output": {}})
         check.run()
         assert check._passed is False
 
 
 # ===========================================================================
-# DpuNetworkCheck tests
+# BmDpuNetworkCheck tests
 # ===========================================================================
 
 
 class TestDpuNetworkCheck:
-    """Tests for DpuNetworkCheck validation."""
+    """Tests for BmDpuNetworkCheck validation."""
 
     def test_all_healthy(self) -> None:
         """All interfaces Ready, BGP enabled, extensions running."""
-        check = DpuNetworkCheck(config={"step_output": _dpu_network_output()})
+        check = BmDpuNetworkCheck(config={"step_output": _dpu_network_output()})
         check.run()
         assert check._passed is True
 
     def test_step_failure(self) -> None:
         """Step failed."""
-        check = DpuNetworkCheck(config={"step_output": _dpu_network_output(success=False, error="EVPN not configured")})
+        check = BmDpuNetworkCheck(
+            config={"step_output": _dpu_network_output(success=False, error="EVPN not configured")}
+        )
         check.run()
         assert check._passed is False
         assert "EVPN not configured" in check._error
 
     def test_no_interfaces(self) -> None:
         """No interfaces found."""
-        check = DpuNetworkCheck(config={"step_output": _dpu_network_output(interfaces=[])})
+        check = BmDpuNetworkCheck(config={"step_output": _dpu_network_output(interfaces=[])})
         check.run()
         assert check._passed is False
         assert "No network interfaces" in check._error
@@ -562,19 +564,19 @@ class TestDpuNetworkCheck:
             {"name": "eth0", "status": "Ready", "type": "ethernet"},
             {"name": "ib0", "status": "Error", "type": "infiniband"},
         ]
-        check = DpuNetworkCheck(config={"step_output": _dpu_network_output(interfaces=interfaces)})
+        check = BmDpuNetworkCheck(config={"step_output": _dpu_network_output(interfaces=interfaces)})
         check.run()
         assert check._passed is False
 
     def test_bgp_not_enabled(self) -> None:
         """BGP daemon not running when required."""
-        check = DpuNetworkCheck(config={"step_output": _dpu_network_output(bgp_enabled=False)})
+        check = BmDpuNetworkCheck(config={"step_output": _dpu_network_output(bgp_enabled=False)})
         check.run()
         assert check._passed is False
 
     def test_bgp_not_required(self) -> None:
         """BGP not required -- should pass without it."""
-        check = DpuNetworkCheck(
+        check = BmDpuNetworkCheck(
             config={
                 "step_output": _dpu_network_output(bgp_enabled=False),
                 "require_bgp": False,
@@ -585,7 +587,7 @@ class TestDpuNetworkCheck:
 
     def test_bgp_field_missing(self) -> None:
         """Missing bgp_enabled field should fail (malformed payload)."""
-        check = DpuNetworkCheck(config={"step_output": _dpu_network_output(include_bgp=False)})
+        check = BmDpuNetworkCheck(config={"step_output": _dpu_network_output(include_bgp=False)})
         check.run()
         assert check._passed is False
         assert any("not reported" in r.get("message", "") for r in check._subtest_results)
@@ -595,7 +597,7 @@ class TestDpuNetworkCheck:
         deployments = [
             {"name": "monitoring", "status": "Error", "version": "v1"},
         ]
-        check = DpuNetworkCheck(config={"step_output": _dpu_network_output(dpu_extension_deployments=deployments)})
+        check = BmDpuNetworkCheck(config={"step_output": _dpu_network_output(dpu_extension_deployments=deployments)})
         check.run()
         assert check._passed is False
 
@@ -604,7 +606,7 @@ class TestDpuNetworkCheck:
         deployments = [
             {"name": "monitoring", "status": "Pending", "version": "v1"},
         ]
-        check = DpuNetworkCheck(config={"step_output": _dpu_network_output(dpu_extension_deployments=deployments)})
+        check = BmDpuNetworkCheck(config={"step_output": _dpu_network_output(dpu_extension_deployments=deployments)})
         check.run()
         assert check._passed is True
 
@@ -615,7 +617,7 @@ class TestDpuNetworkCheck:
             {"name": "logging", "status": "Error", "version": "v2"},
             {"name": "metrics", "status": "Running", "version": "v1"},
         ]
-        check = DpuNetworkCheck(config={"step_output": _dpu_network_output(dpu_extension_deployments=deployments)})
+        check = BmDpuNetworkCheck(config={"step_output": _dpu_network_output(dpu_extension_deployments=deployments)})
         check.run()
         assert check._passed is False
         # Should mention only the failed one
@@ -626,25 +628,25 @@ class TestDpuNetworkCheck:
         deployments = [
             {"name": "monitoring", "version": "v1"},  # No status field
         ]
-        check = DpuNetworkCheck(config={"step_output": _dpu_network_output(dpu_extension_deployments=deployments)})
+        check = BmDpuNetworkCheck(config={"step_output": _dpu_network_output(dpu_extension_deployments=deployments)})
         check.run()
         assert check._passed is False
 
     def test_no_extensions(self) -> None:
         """No DPU extensions deployed -- should still pass."""
-        check = DpuNetworkCheck(config={"step_output": _dpu_network_output(dpu_extension_deployments=[])})
+        check = BmDpuNetworkCheck(config={"step_output": _dpu_network_output(dpu_extension_deployments=[])})
         check.run()
         assert check._passed is True
 
     def test_empty_step_output(self) -> None:
         """Empty step_output should fail."""
-        check = DpuNetworkCheck(config={"step_output": {}})
+        check = BmDpuNetworkCheck(config={"step_output": {}})
         check.run()
         assert check._passed is False
 
 
 # ---------------------------------------------------------------------------
-# HardwareSerialCheck (BFX03-01)
+# BmHardwareSerialCheck (BFX03-01)
 # ---------------------------------------------------------------------------
 
 
@@ -696,25 +698,25 @@ def _serial_output(
 
 
 class TestHardwareSerialCheck:
-    """Tests for HardwareSerialCheck (BFX03-01)."""
+    """Tests for BmHardwareSerialCheck (BFX03-01)."""
 
     def test_all_identifiers_present_passes(self) -> None:
         """A fully-populated inventory passes."""
-        check = HardwareSerialCheck(config={"step_output": _serial_output()})
+        check = BmHardwareSerialCheck(config={"step_output": _serial_output()})
         check.run()
         assert check._passed is True
 
     def test_missing_gpu_is_skipped_not_failed(self) -> None:
         """A CPU-only host (no GPU present) passes; GPU is skipped, not failed."""
         machine = _serial_machine(gpu_present=False, gpu=[])
-        check = HardwareSerialCheck(config={"step_output": _serial_output(machines=[machine])})
+        check = BmHardwareSerialCheck(config={"step_output": _serial_output(machines=[machine])})
         check.run()
         assert check._passed is True
 
     def test_present_component_without_identifier_fails(self) -> None:
         """A present GPU with no queryable serial fails."""
         machine = _serial_machine(gpu_present=True, gpu=[])
-        check = HardwareSerialCheck(config={"step_output": _serial_output(machines=[machine])})
+        check = BmHardwareSerialCheck(config={"step_output": _serial_output(machines=[machine])})
         check.run()
         assert check._passed is False
         assert "gpu" in check._error
@@ -722,7 +724,7 @@ class TestHardwareSerialCheck:
     def test_missing_chassis_serial_fails(self) -> None:
         """A host with no chassis identifier fails (chassis is always required)."""
         machine = _serial_machine(chassis=[])
-        check = HardwareSerialCheck(config={"step_output": _serial_output(machines=[machine])})
+        check = BmHardwareSerialCheck(config={"step_output": _serial_output(machines=[machine])})
         check.run()
         assert check._passed is False
         assert "chassis" in check._error
@@ -730,7 +732,7 @@ class TestHardwareSerialCheck:
     def test_required_components_scoping(self) -> None:
         """Restricting required_components ignores an unlisted missing identifier."""
         machine = _serial_machine(nic=[])  # NIC has no identifier
-        check = HardwareSerialCheck(
+        check = BmHardwareSerialCheck(
             config={
                 "step_output": _serial_output(machines=[machine]),
                 "required_components": ["chassis", "cpu"],
@@ -741,19 +743,19 @@ class TestHardwareSerialCheck:
 
     def test_step_failure_fails(self) -> None:
         """A failed step output fails the check."""
-        check = HardwareSerialCheck(config={"step_output": _serial_output(success=False, error="boom")})
+        check = BmHardwareSerialCheck(config={"step_output": _serial_output(success=False, error="boom")})
         check.run()
         assert check._passed is False
         assert "boom" in check._error
 
     def test_missing_machines_list_fails(self) -> None:
         """Step output without a machines list fails."""
-        check = HardwareSerialCheck(config={"step_output": {"success": True}})
+        check = BmHardwareSerialCheck(config={"step_output": {"success": True}})
         check.run()
         assert check._passed is False
 
     def test_min_machines_enforced(self) -> None:
         """Fewer machines than min_machines fails."""
-        check = HardwareSerialCheck(config={"step_output": _serial_output(machines=[]), "min_machines": 1})
+        check = BmHardwareSerialCheck(config={"step_output": _serial_output(machines=[]), "min_machines": 1})
         check.run()
         assert check._passed is False

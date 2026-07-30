@@ -68,72 +68,71 @@ uv run isvctl test run -f isvctl/configs/providers/aws/config/bare_metal.yaml --
 | 4 | `topology_placement` | test | `providers/aws/scripts/bare_metal/topology_placement.py` | Validate placement group support |
 | 5 | `serial_console` | test | `providers/aws/scripts/bare_metal/serial_console.py` | Retrieve serial console output; retention proof requires an external log archive |
 | 6 | `verify_image` | test | `providers/aws/scripts/image-registry/verify_image_installed.py` | Verify OS image installed on BM |
-| 7 | `verify_config` | test | `providers/aws/scripts/image-registry/verify_config_installable.py` | Verify install config can provision BM |
-| 8 | `stop_instance` | test | `providers/aws/scripts/bare_metal/stop_instance.py` | Power off node, verify stopped state |
-| 9 | `start_instance` | test | `providers/aws/scripts/bare_metal/start_instance.py` | Power on node, verify recovery |
-| 10 | `reboot_instance` | test | `providers/aws/scripts/bare_metal/reboot_instance.py` | Reboot instance, validate recovery |
-| 11 | `power_cycle_instance` | test | `providers/aws/scripts/bare_metal/power_cycle_instance.py` | Force stop + start, validate recovery |
-| 12 | `describe_instance` | test | `providers/aws/scripts/bare_metal/describe_instance.py` | Describe post-power-cycle state + SSH info |
+| 7 | `stop_instance` | test | `providers/aws/scripts/bare_metal/stop_instance.py` | Power off node, verify stopped state |
+| 8 | `start_instance` | test | `providers/aws/scripts/bare_metal/start_instance.py` | Power on node, verify recovery |
+| 9 | `reboot_instance` | test | `providers/aws/scripts/bare_metal/reboot_instance.py` | Reboot instance, validate recovery |
+| 10 | `power_cycle_instance` | test | `providers/aws/scripts/bare_metal/power_cycle_instance.py` | Force stop + start, validate recovery |
+| 11 | `describe_instance` | test | `providers/aws/scripts/bare_metal/describe_instance.py` | Describe post-power-cycle state + SSH info |
+| 12 | `host_status_log` | test | `providers/aws/scripts/bare_metal/host_status_log.py` | Capture recent host status events |
 | 13 | `reinstall_instance` | test | `providers/aws/scripts/bare_metal/reinstall_instance.py` | Reinstall OS (skip: true by default) |
 | 14 | `deploy_nim` | test | `providers/shared/deploy_nim.py` | Deploy NIM container via SSH |
 | 15 | `teardown_nim` | teardown | `providers/shared/teardown_nim.py` | Stop NIM container |
 | 16 | `teardown` | teardown | `providers/aws/scripts/bare_metal/teardown.py` | Terminate instance, delete resources |
 | 17 | `verify_teardown` | teardown | `providers/aws/scripts/bare_metal/verify_terminated.py` | Confirm instance terminated + SG deleted |
 
-Steps 6-7 (`verify_image`, `verify_config`) cross-reference the image-registry domain to validate
-BM provisioning from OS images. Step 13 (`reinstall_instance`) is skipped by default because
-root volume replacement is slow on AWS metal (~30-45 min).
+Step 6 (`verify_image`) cross-references the image-registry domain: it is how AWS proves
+BOOT01-03, since its image-registry run launches a VM rather than a metal host. Step 13
+(`reinstall_instance`) is skipped by default because root volume replacement is slow on
+AWS metal (~30-45 min).
 
 ## Validations
 
 `SerialConsoleRetentionCheck` requires evidence from a historical serial console
-log archive. The AWS config currently overrides the canonical bare-metal suite
-to run only `SerialConsoleCheck` because EC2 `GetConsoleOutput` does not prove
-one-month retention by itself. Add an external archive integration before
-re-enabling the retention check for AWS.
+log archive. The AWS config excludes that check because EC2 `GetConsoleOutput`
+does not prove one-month retention by itself; the canonical
+`BmSerialConsoleCheck` composite remains intact. Add an external archive
+integration before re-enabling the retention check for AWS.
 
 | Validation Group | Check | Step | Description |
 |------------------|-------|------|-------------|
-| `setup_checks` | `InstanceStateCheck` | launch_instance | Instance is running |
-| `list_instances` | `InstanceListCheck` | list_instances | Target instance found in VPC |
-| `tag_checks` | `InstanceTagCheck` | verify_tags | Instance has required tags (Name, CreatedBy) |
-| `topology_placement` | `TopologyPlacementCheck` | topology_placement | Placement group CRUD operations |
-| `serial_console` | `SerialConsoleCheck` | serial_console | Console output available |
-| `cloud_init` | `CloudInitCheck` | launch_instance | Cloud-init completed |
-| `image_installed` | `StepSuccessCheck`, `FieldExistsCheck`, `InstanceStateCheck` | verify_image | OS image verified on BM |
-| `config_installable` | `StepSuccessCheck`, `FieldExistsCheck` | verify_config | Install config dry-run passed |
-| `instance_info` | `InstanceStateCheck` | describe_instance | Post-start state is running |
-| `ssh` | `ConnectivityCheck`, `OsCheck` | describe_instance | SSH works, OS is ubuntu |
-| `gpu` | `GpuCheck` | describe_instance | GPU visibility (8 GPUs) |
-| `host_os` | `HostSoftwareCheck` | describe_instance | Kernel, drivers, BIOS |
-| `gpu_stress` | `GpuStressCheck` | describe_instance | PyTorch matrix multiply on all 8 GPUs |
-| `nccl` | `NcclCheck` | describe_instance | NCCL AllReduce (NVLink/NVSwitch) |
-| `training` | `TrainingCheck` | describe_instance | DDP training workload (50 steps) |
-| `nvlink` | `NvlinkCheck` | describe_instance | NVLink topology and bandwidth |
-| `infiniband` | `InfiniBandCheck` | describe_instance | InfiniBand device presence |
-| `ethernet` | `EthernetCheck` | describe_instance | Network connectivity (ping 8.8.8.8) |
-| `stop_checks` | `InstanceStopCheck` | stop_instance | Power-off confirmed |
-| `start_checks` | `InstanceStartCheck`, `StableIdentifierCheck` | start_instance | Power-on confirmed, instance ID stable |
-| `start_ssh` | `ConnectivityCheck`, `OsCheck` | start_instance | SSH works after start |
-| `start_gpu` | `GpuCheck` | start_instance | GPUs visible after start (8 GPUs) |
-| `reboot_checks` | `InstanceRebootCheck`, `StableIdentifierCheck` | reboot_instance | Reboot confirmed, instance ID stable |
-| `reboot_state` | `InstanceStateCheck` | reboot_instance | Instance running after reboot |
-| `reboot_ssh` | `ConnectivityCheck`, `OsCheck` | reboot_instance | SSH works after reboot |
-| `reboot_gpu` | `GpuCheck` | reboot_instance | GPUs visible after reboot (8 GPUs) |
+| `setup_checks` | `BmHostRunningCheck` | launch_instance | Instance is running |
+| `list_instances` | `BmHostListedCheck` | list_instances | Target instance found in VPC |
+| `tag_checks` | `BmHostTaggedCheck` | verify_tags | Instance has required tags (Name, CreatedBy) |
+| `topology_placement` | `BmTopologyPlacementCheck` | topology_placement | Placement group CRUD operations |
+| `serial_console` | `BmSerialConsoleCheck` | serial_console | Console output available |
+| `cloud_init` | `BmCloudInitCheck` | launch_instance | Cloud-init completed |
+| `image_installed` | `BmHostRunsExpectedImageCheck` | verify_image | Running host reports the configured image |
+| `instance_info` | `BmHostStateReportedCheck` | describe_instance | Post-start state is running |
+| `ssh` | `BmHostReadyCheck` | describe_instance | SSH works, OS is ubuntu |
+| `gpu` | `BmGpusPresentCheck` | describe_instance | GPU visibility (8 GPUs) |
+| `host_os` | `BmVcpuPinningCheck`, `BmPciBusCheck`, `BmHostSoftwareCheck` | describe_instance | vCPU pinning, PCI bus, kernel/drivers/BIOS |
+| `host_status_logs` | `BmHostStatusLogCheck` | host_status_log | Recent host status log sources are present |
+| `gpu_stress` | `BmGpuStressCheck` | describe_instance | PyTorch matrix multiply on all 8 GPUs |
+| `nccl` | `BmNcclCheck` | describe_instance | NCCL AllReduce (NVLink/NVSwitch) |
+| `training` | `BmTrainingCheck` | describe_instance | DDP training workload (50 steps) |
+| `nvlink` | `BmNvlinkCheck` | describe_instance | NVLink topology and bandwidth |
+| `infiniband` | `BmInfiniBandCheck` | describe_instance | InfiniBand device presence |
+| `ethernet` | `BmEthernetCheck` | describe_instance | Network connectivity (ping 8.8.8.8) |
+| `stop_checks` | `BmHostStoppedCheck` | stop_instance | Power-off confirmed |
+| `start_checks` | `BmHostStartedCheck`, `BmIdentifierStableAfterStartCheck` | start_instance | Power-on confirmed, instance ID stable |
+| `start_ssh` | `BmHostReadyAfterStartCheck` | start_instance | SSH works after start |
+| `start_gpu` | `BmGpusPresentAfterStartCheck` | start_instance | GPUs visible after start (8 GPUs) |
+| `reboot_checks` | `BmHostRebootedCheck`, `BmIdentifierStableAfterRebootCheck` | reboot_instance | Reboot confirmed, instance ID stable |
+| `reboot_state` | `BmHostRunningAfterRebootCheck` | reboot_instance | Instance running after reboot |
+| `reboot_ssh` | `BmHostReadyAfterRebootCheck` | reboot_instance | SSH works after reboot |
+| `reboot_gpu` | `BmGpusPresentAfterRebootCheck` | reboot_instance | GPUs visible after reboot (8 GPUs) |
 | `reboot_host_os` | `HostSoftwareCheck` | reboot_instance | Host OS persisted after reboot |
-| `power_cycle_checks` | `InstancePowerCycleCheck`, `StableIdentifierCheck` | power_cycle_instance | Power-cycle recovery, instance ID stable |
-| `power_cycle_state` | `InstanceStateCheck` | power_cycle_instance | Instance running after power-cycle |
-| `power_cycle_ssh` | `ConnectivityCheck`, `OsCheck` | power_cycle_instance | SSH works after power-cycle |
-| `power_cycle_gpu` | `GpuCheck` | power_cycle_instance | GPUs visible after power-cycle |
-| `reinstall_state` | `InstanceStateCheck` | reinstall_instance | Running after reinstall (if enabled) |
-| `reinstall_ssh` | `ConnectivityCheck`, `OsCheck` | reinstall_instance | SSH works after reinstall |
-| `reinstall_gpu` | `GpuCheck` | reinstall_instance | GPUs visible after reinstall |
-| `nim_health` | `NimHealthCheck` | deploy_nim | NIM `/v1/health/ready` |
-| `nim_models` | `NimModelCheck` | deploy_nim | NIM `/v1/models` returns model |
-| `nim_inference` | `NimInferenceCheck` | deploy_nim | Chat completion works |
-| `nim_teardown` | `StepSuccessCheck` | teardown_nim | NIM container removed |
-| `teardown_checks` | `StepSuccessCheck` | teardown | Instance terminated |
-| `sanitization` | `StepSuccessCheck` | verify_teardown | SG, key pair confirmed deleted |
+| `power_cycle_checks` | `BmHostPowerCycledCheck`, `BmIdentifierStableAfterPowerCycleCheck` | power_cycle_instance | Power-cycle recovery, instance ID stable |
+| `power_cycle_state` | `BmHostRunningAfterPowerCycleCheck` | power_cycle_instance | Instance running after power-cycle |
+| `power_cycle_ssh` | `BmHostReadyAfterPowerCycleCheck` | power_cycle_instance | SSH works after power-cycle |
+| `power_cycle_gpu` | `BmGpusPresentAfterPowerCycleCheck` | power_cycle_instance | GPUs visible after power-cycle |
+| `reinstall_state` | `BmHostRunningAfterReinstallCheck`, `BmIdentifierStableAfterReinstallCheck` | reinstall_instance | Running with a stable ID after reinstall (if enabled) |
+| `reinstall_ssh` | `BmHostReadyAfterReinstallCheck` | reinstall_instance | SSH works after reinstall |
+| `reinstall_gpu` | `BmGpusPresentAfterReinstallCheck` | reinstall_instance | GPUs visible after reinstall |
+| `nim_inference` | `BmNimInferenceReadyCheck` | deploy_nim | NIM is healthy, exposes its model, and answers inference |
+| `nim_teardown` | `BmNimDeploymentDeletedCheck` | teardown_nim | NIM container removed |
+| `teardown_checks` | `BmResourcesDeletedCheck` | teardown | Instance terminated |
+| `teardown_verification` | `BmHostTerminatedCheck` | verify_teardown | Instance, SG, and key pair confirmed deleted |
 
 ## Dev Workflow (Instance Reuse)
 
@@ -176,7 +175,7 @@ AWS_BM_INSTANCE_ID=i-xxx AWS_BM_KEY_FILE=/tmp/isv-bm-test-key.pem \
 | List Instances | ~5s | Verify instance visible in VPC |
 | Topology Placement | ~10s | Placement group CRUD |
 | Serial Console | ~5s | Retrieve console output |
-| Image/Config Verify | ~15s | Cross-check image registry (verify_image, verify_config) |
+| Image Verify | ~10s | Cross-check image registry (verify_image) |
 | SSH/GPU/Host OS | ~1 min | SSH, GPU, kernel, drivers, cloud-init |
 | GPU Stress/NCCL/Training | 2-5 min | All GPU workload validations |
 | NVLink/IB/Ethernet | ~30s | Interconnect and network checks |

@@ -18,13 +18,13 @@
 Four provider-agnostic checks that assert a cloud does not hand a host to a
 new tenant until it has been sanitized since the previous tenancy:
 
-- ``MemorySanitizationCheck`` (SEC21-04): host (RAM) memory is sanitized
+- ``BmMemorySanitizationCheck`` (SEC21-04): host (RAM) memory is sanitized
   between tenants.
-- ``GpuMemorySanitizationCheck`` (SEC21-05): GPU/SRAM memory is sanitized
+- ``BmGpuMemorySanitizationCheck`` (SEC21-05): GPU/SRAM memory is sanitized
   between tenants (scoped to GPU-equipped hosts).
-- ``FirmwareResetCheck`` (SEC21-06 / SEC22): TPM is cleared and BIOS/UEFI is
+- ``BmFirmwareResetCheck`` (SEC21-06 / SEC22): TPM is cleared and BIOS/UEFI is
   recommitted during tenant transitions or hardware replacement.
-- ``DiskSanitizationCheck`` (SEC21-02): storage/disk is sanitized on delete, so
+- ``BmDiskSanitizationCheck`` (SEC21-02): storage/disk is sanitized on delete, so
   a prior tenant's on-disk data cannot leak to the next tenant.
 
 All four share one provider-neutral signal: a host that has served a tenant
@@ -185,7 +185,7 @@ class SkipSanitizationBreakfixCheck(_TenantSanitizationCheck):
 
     Config:
         step_output: Step output containing per-machine sanitization records
-            (see ``MemorySanitizationCheck``), plus ``breakfix_skip_observed``
+            (see ``BmMemorySanitizationCheck``), plus ``breakfix_skip_observed``
             and ``tenancy_preserved``.
 
     Step output (from query_sanitization.py):
@@ -230,7 +230,7 @@ class SkipSanitizationBreakfixCheck(_TenantSanitizationCheck):
         )
 
 
-class MemorySanitizationCheck(_TenantSanitizationCheck):
+class BmMemorySanitizationCheck(_TenantSanitizationCheck):
     """Validate host memory is sanitized between tenants (SEC21-04).
 
     Asserts that every managed host that has served a tenant is not returned to
@@ -265,10 +265,10 @@ class MemorySanitizationCheck(_TenantSanitizationCheck):
     subtest_prefix: ClassVar[str] = "memory"
 
 
-class GpuMemorySanitizationCheck(_TenantSanitizationCheck):
+class BmGpuMemorySanitizationCheck(_TenantSanitizationCheck):
     """Validate SRAM/GPU memory is sanitized between tenants (SEC21-05).
 
-    Identical tenant-transition gate to ``MemorySanitizationCheck`` but scoped
+    Identical tenant-transition gate to ``BmMemorySanitizationCheck`` but scoped
     to GPU-equipped hosts, so it asserts that accelerator (GPU/SRAM) memory is
     scrubbed by the platform's sanitizing stage before a GPU host is offered to
     a new tenant. Fails when no GPU-equipped host is present (nothing to
@@ -276,7 +276,7 @@ class GpuMemorySanitizationCheck(_TenantSanitizationCheck):
 
     Config:
         step_output: Step output containing per-machine sanitization records
-            (see ``MemorySanitizationCheck`` for the schema; ``has_gpu`` selects
+            (see ``BmMemorySanitizationCheck`` for the schema; ``has_gpu`` selects
             the in-scope machines).
     """
 
@@ -287,7 +287,7 @@ class GpuMemorySanitizationCheck(_TenantSanitizationCheck):
     gpu_only: ClassVar[bool] = True
 
 
-class FirmwareResetCheck(_TenantSanitizationCheck):
+class BmFirmwareResetCheck(_TenantSanitizationCheck):
     """Validate TPM and BIOS are reset during tenant transitions (SEC21-06/SEC22).
 
     Uses the same sanitization-gate audit (TPM clear and BIOS/UEFI recommit run
@@ -299,7 +299,7 @@ class FirmwareResetCheck(_TenantSanitizationCheck):
 
     Config:
         step_output: Step output containing per-machine sanitization records
-            (see ``MemorySanitizationCheck``); also reads ``vendor``,
+            (see ``BmMemorySanitizationCheck``); also reads ``vendor``,
             ``product_name``, and ``bios_version`` for the firmware evidence
             subtest.
     """
@@ -332,10 +332,10 @@ class FirmwareResetCheck(_TenantSanitizationCheck):
             )
 
 
-class DiskSanitizationCheck(_TenantSanitizationCheck):
+class BmDiskSanitizationCheck(_TenantSanitizationCheck):
     """Validate storage is sanitized on delete between tenants (SEC21-02).
 
-    Uses the same tenant-transition gate as ``MemorySanitizationCheck`` but is
+    Uses the same tenant-transition gate as ``BmMemorySanitizationCheck`` but is
     storage-framed. On platforms like NICo the between-tenant sanitizing stage
     (the machine ``Reset`` status) performs the NVMe/HDD secure erase, and a
     host is only returned to the allocatable pool (``Ready`` + usable) once that
@@ -352,7 +352,7 @@ class DiskSanitizationCheck(_TenantSanitizationCheck):
 
     Config:
         step_output: Step output containing per-machine sanitization records
-            (see ``MemorySanitizationCheck``).
+            (see ``BmMemorySanitizationCheck``).
     """
 
     catalog_exclude: ClassVar[bool] = False

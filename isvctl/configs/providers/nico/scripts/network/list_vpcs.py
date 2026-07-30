@@ -29,7 +29,7 @@ from common.nico_client import NicoAuthError, forge_get_all, resolve_auth
 
 
 def main() -> int:
-    """Fetch NICo VPCs and emit tenant-compatible list fields."""
+    """Fetch NICo VPCs and emit the network inventory list fields."""
     parser = argparse.ArgumentParser(description="List NICo VPCs")
     parser.add_argument("--org", required=True, help="NGC org name")
     parser.add_argument("--site-id", required=True, help="NICo site UUID")
@@ -41,13 +41,12 @@ def main() -> int:
         "success": False,
         "platform": "nico",
         "site_id": args.site_id,
-        "tenants": [],
         "vpcs": [],
         "count": 0,
+        # With no target requested, listing the site's VPCs is the whole test.
+        "target_vpc": args.vpc_id,
+        "found_target": False,
     }
-    if args.vpc_id:
-        result["target_tenant"] = args.vpc_id
-        result["found_target"] = False
 
     try:
         auth = resolve_auth()
@@ -60,15 +59,12 @@ def main() -> int:
             result_key="vpcs",
         )
         vpcs = [normalize_vpc(vpc) for vpc in raw_vpcs]
-        tenants = [{"tenant_id": vpc["tenant_id"], "tenant_name": vpc["tenant_name"]} for vpc in vpcs]
 
         result["vpcs"] = vpcs
-        result["tenants"] = tenants
         result["count"] = len(vpcs)
-        if args.vpc_id:
-            result["found_target"] = any(
-                vpc["tenant_id"] == args.vpc_id or vpc["tenant_name"] == args.vpc_id for vpc in vpcs
-            )
+        result["found_target"] = (
+            any(vpc["vpc_id"] == args.vpc_id or vpc["vpc_name"] == args.vpc_id for vpc in vpcs) if args.vpc_id else True
+        )
         result["success"] = True
 
     except NicoAuthError as e:

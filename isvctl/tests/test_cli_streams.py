@@ -82,6 +82,58 @@ def test_dry_run_stdout_is_human_readable(tmp_path: Path) -> None:
     assert "Validating configuration" not in result.stdout
 
 
+def test_dry_run_applies_the_config_exclude_block(tmp_path: Path) -> None:
+    """A plan that ignored the config's own excludes would promise skipped checks."""
+    config = tmp_path / "excludes.yaml"
+    config.write_text(
+        """
+commands:
+  kubernetes:
+    phases: [test]
+    steps:
+      - name: test_step
+        command: echo
+        args: ['{"success": true}']
+        phase: test
+tests:
+  capability: kubernetes
+  validations:
+    checks_group:
+      step: test_step
+      checks:
+        K8sNodeCountCheck:
+          test_id: "N/A"
+          labels: ["kubernetes"]
+        K8sCncfConformanceCheck:
+          test_id: "N/A"
+          labels: ["kubernetes", "slow"]
+  exclude:
+    labels: [slow]
+    tests: [K8sNodeCountCheck]
+""",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(test_cli.app, ["run", "-f", str(config), "--no-upload", "--dry-run"])
+
+    assert result.exit_code == 0, result.output
+    assert "Excluded labels: slow" in result.stdout
+    assert "Excluded tests: K8sNodeCountCheck" in result.stdout
+    assert "[SKIP] K8sNodeCountCheck: excluded by name" in result.stdout
+    assert "[SKIP] K8sCncfConformanceCheck: excluded by label: slow" in result.stdout
+
+    for selection in (["--label", "kubernetes"], ["--", "-m", "kubernetes"]):
+        selected = runner.invoke(
+            test_cli.app,
+            ["run", "-f", str(config), "--no-upload", "--dry-run", *selection],
+        )
+
+        assert selected.exit_code == 0, selected.output
+        assert "Excluded labels: slow" not in selected.stdout
+        assert "[SKIP] K8sNodeCountCheck: excluded by name" in selected.stdout
+        assert "[RUN]  K8sCncfConformanceCheck" in selected.stdout
+
+
 def test_catalog_list_json_stdout_is_pure_json() -> None:
     """`catalog list --json` keeps stdout free of diagnostics."""
     with (

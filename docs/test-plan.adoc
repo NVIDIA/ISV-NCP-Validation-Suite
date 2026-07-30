@@ -75,7 +75,7 @@ a| https://github.com/NVIDIA/ai-cloud-validation/issues/104[#104]
 | [[BOOT01-03]]BOOT01-03
 | BOOT01
 | https://github.com/NVIDIA/ai-cloud-validation/issues/41[#41]
-| image_registry, min_req
+| bare_metal, image_registry, min_req
 |
 | P0
 a| https://github.com/NVIDIA/ai-cloud-validation/issues/41[#41]
@@ -221,7 +221,7 @@ a| https://github.com/NVIDIA/ai-cloud-validation/issues/21[#21]
 | [[IAM02-01]]IAM02-01
 | IAM02
 | https://github.com/NVIDIA/ai-cloud-validation/issues/23[#23]
-|
+| iam
 |
 | P0
 a| https://github.com/NVIDIA/ai-cloud-validation/issues/23[#23]
@@ -318,7 +318,7 @@ a|
 | [[CP03-01]]CP03-01
 | CP03
 | https://github.com/NVIDIA/ai-cloud-validation/issues/26[#26]
-|
+| control_plane, min_req
 |
 | P0
 a| https://github.com/NVIDIA/ai-cloud-validation/issues/26[#26] +
@@ -980,7 +980,7 @@ https://github.com/NVIDIA/ai-cloud-validation/issues/185[#185]
 | [[CNP08-02]]CNP08-02
 | CNP08
 |
-| min_req
+| bare_metal, min_req
 |
 | P0
 a|
@@ -3680,7 +3680,7 @@ a|
 | [[K8S23-04]]K8S23-04
 | K8S23
 | https://github.com/NVIDIA/ai-cloud-validation/issues/273[#273]
-| kubernetes, min_req
+| kubernetes, min_req, storage
 |
 | P0
 a| https://github.com/NVIDIA/ai-cloud-validation/issues/273[#273]
@@ -3694,7 +3694,7 @@ a| https://github.com/NVIDIA/ai-cloud-validation/issues/273[#273]
 | [[K8S23-05]]K8S23-05
 | K8S23
 | https://github.com/NVIDIA/ai-cloud-validation/issues/274[#274]
-| kubernetes, min_req
+| kubernetes, min_req, storage
 |
 | P0
 a| https://github.com/NVIDIA/ai-cloud-validation/issues/274[#274]
@@ -3708,7 +3708,7 @@ a| https://github.com/NVIDIA/ai-cloud-validation/issues/274[#274]
 | [[K8S23-06]]K8S23-06
 | K8S23
 | https://github.com/NVIDIA/ai-cloud-validation/issues/275[#275]
-| kubernetes, min_req
+| kubernetes, min_req, storage
 |
 | P0
 a| https://github.com/NVIDIA/ai-cloud-validation/issues/275[#275]
@@ -3722,7 +3722,7 @@ a| https://github.com/NVIDIA/ai-cloud-validation/issues/275[#275]
 | [[K8S23-07]]K8S23-07
 | K8S23
 | https://github.com/NVIDIA/ai-cloud-validation/issues/276[#276]
-| kubernetes, min_req
+| kubernetes, min_req, storage
 |
 | P0
 a| https://github.com/NVIDIA/ai-cloud-validation/issues/276[#276]

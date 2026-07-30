@@ -24,7 +24,7 @@ from isvtest.core.validation import BaseValidation
 DEFAULT_SOURCES: tuple[str, ...] = ("journalctl_recent", "dmesg_recent")
 
 
-class BmHostStatusLog(BaseValidation):
+class BmHostStatusLogCheck(BaseValidation):
     """Verify the BM host emits a per-host status log over time.
 
     Default: pass if at least one configured source has fresh entries.

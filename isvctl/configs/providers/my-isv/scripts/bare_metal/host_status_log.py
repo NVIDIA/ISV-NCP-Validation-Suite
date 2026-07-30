@@ -17,7 +17,7 @@
 """Per-host status log sampler for bare-metal - TEMPLATE.
 
 Samples journalctl and dmesg on the BM host and emits per-source status
-so the BmHostStatusLog validation can assert that at least one status
+so the BmHostStatusLogCheck validation can assert that at least one status
 log is producing fresh entries within the configured recency window.
 
 Required JSON output fields:

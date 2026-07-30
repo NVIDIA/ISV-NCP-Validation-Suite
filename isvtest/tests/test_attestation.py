@@ -22,8 +22,8 @@ from typing import Any
 import pytest
 
 from isvtest.validations.attestation import (
-    FirmwareAttestationCheck,
-    NonceAttestationCheck,
+    BmFirmwareAttestationCheck,
+    BmNonceAttestationCheck,
 )
 
 
@@ -68,16 +68,16 @@ def _output(
 
 
 # ===========================================================================
-# NonceAttestationCheck (SEC22-01)
+# BmNonceAttestationCheck (SEC22-01)
 # ===========================================================================
 
 
 class TestNonceAttestationCheck:
-    """Tests for NonceAttestationCheck validation."""
+    """Tests for BmNonceAttestationCheck validation."""
 
     def test_fresh_attestation_passes(self) -> None:
         """A host that satisfied the nonce challenge and verified passes."""
-        check = NonceAttestationCheck(config={"step_output": _output()})
+        check = BmNonceAttestationCheck(config={"step_output": _output()})
         check.run()
         assert check._passed is True, check._error
         sub = next(r for r in check._subtest_results if r["name"] == "nonce_m-001")
@@ -85,7 +85,7 @@ class TestNonceAttestationCheck:
 
     def test_unverified_nonce_fails(self) -> None:
         """A stale/unsatisfied nonce challenge fails."""
-        check = NonceAttestationCheck(config={"step_output": _output(machines=[_machine(nonce_verified=False)])})
+        check = BmNonceAttestationCheck(config={"step_output": _output(machines=[_machine(nonce_verified=False)])})
         check.run()
         assert check._passed is False
         assert "1/1 machine(s)" in check._error
@@ -94,7 +94,7 @@ class TestNonceAttestationCheck:
 
     def test_invalid_signature_fails(self) -> None:
         """Attestation evidence whose signature does not verify fails."""
-        check = NonceAttestationCheck(
+        check = BmNonceAttestationCheck(
             config={"step_output": _output(machines=[_machine(attestation_signature_valid=False)])}
         )
         check.run()
@@ -104,7 +104,9 @@ class TestNonceAttestationCheck:
 
     def test_unsupported_attestation_fails(self) -> None:
         """Hardware that cannot attest fails the requirement."""
-        check = NonceAttestationCheck(config={"step_output": _output(machines=[_machine(attestation_supported=False)])})
+        check = BmNonceAttestationCheck(
+            config={"step_output": _output(machines=[_machine(attestation_supported=False)])}
+        )
         check.run()
         assert check._passed is False
         sub = next(r for r in check._subtest_results if r["name"].startswith("nonce_"))
@@ -112,14 +114,14 @@ class TestNonceAttestationCheck:
 
     def test_step_failure(self) -> None:
         """A failed step is reported with its error detail."""
-        check = NonceAttestationCheck(config={"step_output": _output(success=False, error="API timeout")})
+        check = BmNonceAttestationCheck(config={"step_output": _output(success=False, error="API timeout")})
         check.run()
         assert check._passed is False
         assert "API timeout" in check._error
 
     def test_skipped_step_skips_validation(self) -> None:
         """A provider-level skip should become a pytest runtime skip."""
-        check = NonceAttestationCheck(
+        check = BmNonceAttestationCheck(
             config={"step_output": {"success": True, "skipped": True, "skip_reason": "admin CLI unavailable"}}
         )
         with pytest.raises(pytest.skip.Exception, match="admin CLI unavailable"):
@@ -129,14 +131,14 @@ class TestNonceAttestationCheck:
         """A non-list machines field fails."""
         output = _output()
         output["machines"] = None
-        check = NonceAttestationCheck(config={"step_output": output})
+        check = BmNonceAttestationCheck(config={"step_output": output})
         check.run()
         assert check._passed is False
         assert "machines" in check._error
 
     def test_no_machines_fails(self) -> None:
         """An empty machine list fails -- nothing was validated."""
-        check = NonceAttestationCheck(config={"step_output": _output(machines=[])})
+        check = BmNonceAttestationCheck(config={"step_output": _output(machines=[])})
         check.run()
         assert check._passed is False
         assert "No machines" in check._error
@@ -145,7 +147,7 @@ class TestNonceAttestationCheck:
         """One failing host fails the check while the clean host still passes."""
         good = _machine(machine_id="m-good")
         bad = _machine(machine_id="m-bad", nonce_verified=False)
-        check = NonceAttestationCheck(config={"step_output": _output(machines=[good, bad])})
+        check = BmNonceAttestationCheck(config={"step_output": _output(machines=[good, bad])})
         check.run()
         assert check._passed is False
         assert "1/2 machine(s)" in check._error
@@ -155,16 +157,16 @@ class TestNonceAttestationCheck:
 
 
 # ===========================================================================
-# FirmwareAttestationCheck (CNP09-02)
+# BmFirmwareAttestationCheck (CNP09-02)
 # ===========================================================================
 
 
 class TestFirmwareAttestationCheck:
-    """Tests for FirmwareAttestationCheck validation."""
+    """Tests for BmFirmwareAttestationCheck validation."""
 
     def test_measured_fleet_passes(self) -> None:
         """A fleet with secure boot and attested boot measurements passes."""
-        check = FirmwareAttestationCheck(config={"step_output": _output()})
+        check = BmFirmwareAttestationCheck(config={"step_output": _output()})
         check.run()
         assert check._passed is True, check._error
         sub = next(r for r in check._subtest_results if r["name"] == "firmware_m-001")
@@ -174,7 +176,7 @@ class TestFirmwareAttestationCheck:
     def test_secure_boot_disabled_fails(self) -> None:
         """A host without secure boot fails."""
         machine = _machine(secure_boot_enabled=False)
-        check = FirmwareAttestationCheck(config={"step_output": _output(machines=[machine])})
+        check = BmFirmwareAttestationCheck(config={"step_output": _output(machines=[machine])})
         check.run()
         assert check._passed is False
         sub = next(r for r in check._subtest_results if r["name"].startswith("firmware_"))
@@ -183,7 +185,7 @@ class TestFirmwareAttestationCheck:
     def test_unattested_measurements_fail_and_surface_state(self) -> None:
         """A host whose boot measurements were not attested fails and surfaces its state."""
         machine = _machine(boot_measurements_attested=False, measured_boot_state="pending_bundle")
-        check = FirmwareAttestationCheck(config={"step_output": _output(machines=[machine])})
+        check = BmFirmwareAttestationCheck(config={"step_output": _output(machines=[machine])})
         check.run()
         assert check._passed is False
         sub = next(r for r in check._subtest_results if r["name"].startswith("firmware_"))
@@ -193,7 +195,7 @@ class TestFirmwareAttestationCheck:
     def test_unsupported_attestation_fails(self) -> None:
         """Hardware that cannot attest fails the requirement."""
         machine = _machine(attestation_supported=False)
-        check = FirmwareAttestationCheck(config={"step_output": _output(machines=[machine])})
+        check = BmFirmwareAttestationCheck(config={"step_output": _output(machines=[machine])})
         check.run()
         assert check._passed is False
         sub = next(r for r in check._subtest_results if r["name"].startswith("firmware_"))
@@ -201,7 +203,7 @@ class TestFirmwareAttestationCheck:
 
     def test_step_failure(self) -> None:
         """A failed step fails the check with its error detail."""
-        check = FirmwareAttestationCheck(config={"step_output": _output(success=False, error="API down")})
+        check = BmFirmwareAttestationCheck(config={"step_output": _output(success=False, error="API down")})
         check.run()
         assert check._passed is False
         assert "API down" in check._error

@@ -45,6 +45,15 @@ _FAKE_ENTRIES = [
         "capability": None,
         "requires": ["vm", "bare_metal"],
     },
+    {
+        "name": "GammaCheck",
+        "description": "Core plain-suite check",
+        "labels": ["iam"],
+        "source": "isvtest.validations.gamma",
+        "suite": "iam",
+        "capability": None,
+        "requires": [],
+    },
 ]
 
 
@@ -56,7 +65,7 @@ def test_catalog_help() -> None:
 
 
 def test_catalog_list_table() -> None:
-    """`catalog list` renders a table containing the discovered tests."""
+    """`catalog list` renders suite vs requires correctly for each entry kind."""
     with (
         patch("isvctl.cli.catalog.build_catalog", return_value=_FAKE_ENTRIES),
         patch("isvctl.cli.catalog.get_catalog_version", return_value="1.2.3"),
@@ -66,7 +75,13 @@ def test_catalog_list_table() -> None:
     assert result.exit_code == 0, result.output
     assert "AlphaCheck" in result.output
     assert "BetaCheck" in result.output
+    assert "GammaCheck" in result.output
     assert "1.2.3" in result.output
+    # Platform suite: capability identity only (not "kubernetes / kubernetes").
+    assert "kubernetes /" not in result.output
+    # Plain suite with requires, and core (empty requires).
+    assert "storage / vm, bare_metal" in result.output
+    assert "iam / core" in result.output
 
 
 def test_catalog_list_json() -> None:
@@ -161,7 +176,7 @@ def test_catalog_list_unreleased_json() -> None:
     assert result.exit_code == 0, result.output
     build_catalog.assert_called_once_with(released_only=False)
     payload = json.loads(result.output)
-    assert payload["entries"] == [_FAKE_ENTRIES[1]]
+    assert payload["entries"] == _FAKE_ENTRIES[1:]
 
 
 @pytest.mark.parametrize("flag", ["--dry-run", "--no-upload"])

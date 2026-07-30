@@ -50,35 +50,47 @@ tests:
     setup_checks:
       step: create_user
       checks:
-        FieldExistsCheck:
-          test_id: "IAM01-01"
+        IamUserCreatedCheck:
+          test_id: "N/A"
           labels: ["iam", "min_req"]
           requires: []
-          fields: ["username", "access_key_id"]
-        StepSuccessCheck:
-          test_id: "N/A"
-          labels: ["iam"]
-          requires: []
+          description: "Check the IAM user is created and its access key is returned"
+          compose:
+            - StepSuccessCheck
+            - FieldExistsCheck:
+                fields: ["username", "access_key_id"]
 
     credentials:
       step: test_credentials
       checks:
-        IamCredentialAccessCheck:
+        IamUserAuthenticatedCheck:
+          test_id: "IAM01-01"
+          labels: ["iam", "min_req"]
+          requires: []
+          description: "Check the created user can log in with the credentials it was issued"
+          compose:
+            - StepSuccessCheck
+            - IamCredentialAccessCheck:
+                required_tests: ["identity"]
+        IamUserApiAccessCheck:
           test_id: "IAM03-01"
           labels: ["iam"]
           requires: []
-        StepSuccessCheck:
-          test_id: "N/A"
-          labels: ["iam"]
-          requires: []
+          description: "Check the logged-in user can reach its authorized resources"
+          compose:
+            - IamCredentialAccessCheck:
+                required_tests: ["access"]
 
     teardown_checks:
       step: teardown
       checks:
-        StepSuccessCheck:
-          test_id: "N/A"
+        IamUserDeletedCheck:
+          test_id: "IAM02-01"
           labels: ["iam"]
           requires: []
+          description: "Check the IAM user and its credentials are deleted"
+          compose:
+            - StepSuccessCheck
 
   exclude:
     labels: []

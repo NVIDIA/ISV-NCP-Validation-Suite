@@ -55,62 +55,70 @@ tests:
   #   -> lifecycle (stop / start / reboot)
   #   -> NIM -> teardown
   validations:
+    # One row for one launch event: CNP01-09 is "create a VM node", which the
+    # platform returning an id and the VM reaching running together establish.
     setup_checks:
       step: launch_instance
       checks:
-        InstanceStateCheck:
-          test_id: "N/A"
-          labels: ["vm"]
+        VmCreatedCheck:
+          test_id: "CNP01-09"
+          labels: ["min_req", "vm"]
           expected_state: "running"
+          description: "Check the VM is created and reaches the running state"
+          compose:
+            - VmInstanceIdReportedCheck
+            - InstanceStateCheck
 
     specified_key:
       step: launch_instance
       checks:
-        InstanceSpecifiedKeyCheck:
+        VmLaunchedWithSpecifiedKeyCheck:
           test_id: "AUTH02-01"
           labels: ["vm"]
 
     component_key_access:
       step: component_key_access
       checks:
-        ComponentKeyAccessCheck:
+        VmComponentKeyAccessCheck:
           test_id: "AUTH03-01"
           labels: ["bare_metal", "iam", "security", "vm"]
-
-    instance_created:
-      step: launch_instance
-      checks:
-        InstanceCreatedCheck:
-          test_id: "CNP01-09"
-          labels: ["min_req", "vm"]
 
     list_instances:
       step: list_instances
       checks:
-        InstanceListCheck:
+        VmListedCheck:
           test_id: "CNP01-11"
           labels: ["min_req", "vm"]
           min_count: 1
+          description: "Check the VM appears when instances are listed"
+          compose:
+            - InstanceListCheck
 
     tag_checks:
       step: verify_tags
       checks:
-        InstanceTagCheck:
+        VmTaggedCheck:
           test_id: "CNP05-02"
           labels: ["min_req", "vm"]
           required_keys: ["Name", "CreatedBy"]
+          description: "Check the VM carries the required tags"
+          compose:
+            - InstanceTagCheck
 
     serial_console:
       step: serial_console
       checks:
-        SerialConsoleCheck:
+        VmSerialConsoleCheck:
           test_id: "CNP06-03"
           labels: ["min_req", "vm"]
+          description: "Check the VM's serial console is reachable"
+          compose:
+            - SerialConsoleCheck
 
     console_rbac:
       step: console_rbac
       checks:
-        ConsoleRbacCheck:
+        VmConsoleRbacCheck:
           test_id: "CNP01-16"
           labels: ["iam", "min_req", "security", "vm"]
 
@@ -124,9 +132,12 @@ tests:
     cloud_init:
       step: launch_instance
       checks:
-        CloudInitCheck:
+        VmCloudInitCheck:
           test_id: "BOOT02-02"
           labels: ["min_req", "ssh", "vm"]
+          description: "Check cloud-init completed on the VM"
+          compose:
+            - CloudInitCheck
 
     # ─── Host-level validations anchored to describe_instance ────────
     # describe_instance runs AFTER reboot, so these checks prove the
@@ -134,185 +145,231 @@ tests:
     instance_info:
       step: describe_instance
       checks:
-        InstanceStateCheck:
+        VmStateReportedCheck:
           test_id: "N/A"
           labels: ["vm"]
           expected_state: "running"
+          description: "Check the platform reports the VM as running when described"
+          compose:
+            - InstanceStateCheck
 
     ssh:
       step: describe_instance
       checks:
-        ConnectivityCheck:
+        # Reachability and the OS image are separate plan items here, so they
+        # stay separate tests.
+        VmReachableOverSshCheck:
           test_id: "VMAAS01-01"
           labels: ["vm", "ssh"]
-        OsCheck:
+          description: "Check the VM answers SSH and runs commands"
+          compose:
+            - ConnectivityCheck
+        VmOsImageCheck:
           test_id: "VMAAS05-01"
           labels: ["vm", "ssh"]
           expected_os: "ubuntu"
+          description: "Check the VM runs the expected OS image"
+          compose:
+            - OsCheck
 
     gpu:
       step: describe_instance
       checks:
-        GpuCheck:
+        VmGpusPresentCheck:
           test_id: "VMAAS06-01"
           labels: ["vm", "ssh", "gpu"]
           expected_gpus: 1
+          description: "Check the VM exposes the expected number of GPUs"
+          compose:
+            - GpuCheck
 
     host_os:
       step: describe_instance
       checks:
-        VcpuPinningCheck:
+        VmComputeTopologyCheck:
           test_id: "VMAAS09-01"
           labels: ["gpu", "ssh", "vm"]
-        PciBusCheck:
-          test_id: "VMAAS09-01"
-          labels: ["vm", "ssh", "gpu"]
-          expected_gpus: 1
-        HostSoftwareCheck:
+          description: "Check the VM reports valid vCPU pinning, NUMA, and PCI/GPU topology"
+          compose:
+            - VcpuPinningCheck
+            - PciBusCheck:
+                expected_gpus: 1
+        VmSoftwareStackCheck:
           test_id: "VMAAS07-01"
           labels: ["gpu", "ssh", "vm"]
-
-    driver_info:
-      step: describe_instance
-      checks:
-        DriverCheck:
-          test_id: "VMAAS07-01"
-          labels: ["vm", "ssh", "gpu"]
+          description: "Check the VM reports a usable host, kernel, and GPU software stack"
+          compose:
+            - HostSoftwareCheck
+            - DriverCheck
 
     cpu_info:
       step: describe_instance
       checks:
-        CpuInfoCheck:
+        VmCpuInfoCheck:
           test_id: "N/A"
           labels: ["vm", "ssh"]
+          description: "Check the VM reports its CPU topology"
+          compose:
+            - CpuInfoCheck
 
     container_runtime:
       step: describe_instance
       checks:
-        ContainerRuntimeCheck:
+        VmContainerRuntimeCheck:
           test_id: "N/A"
           labels: ["vm", "ssh", "gpu", "workload", "slow"]
+          description: "Check the VM runs a GPU-enabled container"
+          compose:
+            - ContainerRuntimeCheck
 
     # ─── Lifecycle validations ───────────────────────────────────────
     stop_checks:
       step: stop_instance
       checks:
-        InstanceStopCheck:
+        VmStoppedCheck:
           test_id: "CNP01-14"
           labels: ["min_req", "vm"]
+          description: "Check the VM stops on request"
+          compose:
+            - InstanceStopCheck
 
     start_checks:
       step: start_instance
       checks:
-        InstanceStartCheck:
+        VmStartedCheck:
           test_id: "CNP01-15"
           labels: ["min_req", "vm"]
-        StableIdentifierCheck:
+          description: "Check the VM starts again after being stopped"
+          compose:
+            - InstanceStartCheck
+        VmIdentifierStableAfterStartCheck:
           test_id: "CNP08-03"
           labels: ["min_req", "vm"]
           reference_id: "{{steps.launch_instance.instance_id}}"
+          description: "Check the VM keeps its identifier across a start"
+          compose:
+            - StableIdentifierCheck
 
     start_ssh:
       step: start_instance
       checks:
-        # ConnectivityCheck -> VMAAS-XX-01, OsCheck -> VMAAS-XX-05 (declared in the "ssh" section)
-        ConnectivityCheck:
+        VmReachableOverSshAfterStartCheck:
           test_id: "VMAAS01-01"
           labels: ["vm", "ssh"]
-        OsCheck:
+          description: "Check the VM answers SSH after a start"
+          compose:
+            - ConnectivityCheck
+        VmOsImageAfterStartCheck:
           test_id: "VMAAS05-01"
           labels: ["vm", "ssh"]
           expected_os: "ubuntu"
+          description: "Check the VM still runs the expected OS image after a start"
+          compose:
+            - OsCheck
 
     start_gpu:
       step: start_instance
       checks:
-        # GpuCheck -> VMAAS-XX-06 (declared in the "gpu" section)
-        GpuCheck:
+        VmGpusPresentAfterStartCheck:
           test_id: "VMAAS06-01"
           labels: ["vm", "ssh", "gpu"]
           expected_gpus: 1
+          description: "Check the GPUs are still present after a start"
+          compose:
+            - GpuCheck
 
     reboot_checks:
       step: reboot_instance
       checks:
-        InstanceRebootCheck:
+        VmRebootedCheck:
           test_id: "CNP01-13"
           labels: ["vm"]
           max_uptime: 600
-        # StableIdentifierCheck -> CNP08-03 (declared in the "start_checks" section)
-        StableIdentifierCheck:
-          test_id: "CNP08-03"
+          description: "Check the VM reboots on request"
+          compose:
+            - InstanceRebootCheck
+        VmIdentifierStableAfterRebootCheck:
+          test_id: "N/A"
           labels: ["min_req", "vm"]
           reference_id: "{{steps.launch_instance.instance_id}}"
+          description: "Check the VM keeps its identifier across a reboot"
+          compose:
+            - StableIdentifierCheck
 
     reboot_state:
       step: reboot_instance
       checks:
-        InstanceStateCheck:
+        VmRunningAfterRebootCheck:
           test_id: "N/A"
           labels: ["vm"]
           expected_state: "running"
+          description: "Check the VM returns to the running state after a reboot"
+          compose:
+            - InstanceStateCheck
 
     reboot_ssh:
       step: reboot_instance
       checks:
-        # ConnectivityCheck -> VMAAS-XX-01, OsCheck -> VMAAS-XX-05 (declared in the "ssh" section)
-        ConnectivityCheck:
+        VmReachableOverSshAfterRebootCheck:
           test_id: "VMAAS01-01"
           labels: ["vm", "ssh"]
-        OsCheck:
+          description: "Check the VM answers SSH after a reboot"
+          compose:
+            - ConnectivityCheck
+        VmOsImageAfterRebootCheck:
           test_id: "VMAAS05-01"
           labels: ["vm", "ssh"]
           expected_os: "ubuntu"
+          description: "Check the VM still runs the expected OS image after a reboot"
+          compose:
+            - OsCheck
 
     reboot_gpu:
       step: reboot_instance
       checks:
-        # GpuCheck -> VMAAS-XX-06 (declared in the "gpu" section)
-        GpuCheck:
+        VmGpusPresentAfterRebootCheck:
           test_id: "VMAAS06-01"
           labels: ["vm", "ssh", "gpu"]
           expected_gpus: 1
+          description: "Check the GPUs are still present after a reboot"
+          compose:
+            - GpuCheck
 
     # ─── NIM validations ─────────────────────────────────────────────
-    nim_health:
-      step: deploy_nim
-      checks:
-        NimHealthCheck:
-          test_id: "VMAAS12-01"
-          labels: ["gpu", "slow", "ssh", "vm", "workload"]
-
-    nim_models:
-      step: deploy_nim
-      checks:
-        NimModelCheck:
-          test_id: "VMAAS12-01"
-          labels: ["gpu", "slow", "ssh", "vm", "workload"]
-
     nim_inference:
       step: deploy_nim
       checks:
-        NimInferenceCheck:
+        VmNimInferenceReadyCheck:
           test_id: "VMAAS12-01"
           labels: ["vm", "ssh", "gpu", "workload", "slow"]
-          prompt: "What is CUDA?"
-          max_tokens: 50
+          description: "Check the deployed NIM is healthy, exposes its model, and answers an inference request"
+          compose:
+            - NimHealthCheck
+            - NimModelCheck
+            - NimInferenceCheck:
+                prompt: "What is CUDA?"
+                max_tokens: 50
 
     # ─── Teardown validations ────────────────────────────────────────
     nim_teardown:
       step: teardown_nim
       checks:
-        StepSuccessCheck:
+        VmNimDeploymentDeletedCheck:
           test_id: "N/A"
           labels: ["vm"]
+          description: "Check the NIM deployment on the VM is removed"
+          compose:
+            - StepSuccessCheck
 
     teardown_checks:
       step: teardown
       checks:
-        StepSuccessCheck:
+        VmResourcesDeletedCheck:
           test_id: "N/A"
           labels: ["vm"]
+          description: "Check the VM and its associated resources are deleted"
+          compose:
+            - StepSuccessCheck
 
   exclude:
     labels: []

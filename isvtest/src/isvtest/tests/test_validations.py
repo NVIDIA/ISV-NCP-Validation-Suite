@@ -21,6 +21,7 @@ import pytest
 
 from isvtest.config.constants import RESOLVED_ENTRIES_FLAG
 from isvtest.config.loader import ConfigLoader
+from isvtest.core.composite import CompositeCheck, is_composite
 from isvtest.core.discovery import discover_all_tests
 from isvtest.core.resolution import ADAPTER_HANDLED_CATEGORIES, resolve_class_key
 from isvtest.core.runners import LocalRunner
@@ -71,9 +72,16 @@ def _pytest_marks_for_validation(
 
 def _resolve_validation_class(
     validation_name: str,
+    validation_config: Any,
     test_classes_map: dict[str, type[BaseValidation]],
 ) -> type[BaseValidation] | None:
-    """Resolve a configured validation name to a discovered validation class."""
+    """Resolve a configured validation name to a discovered validation class.
+
+    A composite names no class of its own - its ``compose`` list names the
+    classes - so it resolves to the composite runner instead.
+    """
+    if is_composite(validation_config):
+        return CompositeCheck
     key = resolve_class_key(validation_name, test_classes_map)
     return test_classes_map[key] if key is not None else None
 
@@ -176,7 +184,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
         if filtering_enabled:
             # 1. Process configured validations (including aliases/variants)
             for validation_name, validation_config in enabled_validations_config.items():
-                target_class = _resolve_validation_class(validation_name, test_classes_map)
+                target_class = _resolve_validation_class(validation_name, validation_config, test_classes_map)
                 if target_class is not None:
                     configured_classes.add(target_class.__name__)
 
@@ -219,7 +227,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
                         continue
 
                     # If class was not configured by exact or variant match, treat it as skipped.
-                    if cls_name not in configured_classes:
+                    if cls_name not in configured_classes and not getattr(cls, "compose_only", False):
                         pytest_marks = _pytest_marks_for_validation(metafunc.config)
                         pytest_marks.append(pytest.mark.skip(reason="Not configured in config YAML"))
 

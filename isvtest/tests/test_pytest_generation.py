@@ -15,7 +15,7 @@
 
 """Tests for dynamic pytest validation generation."""
 
-from typing import Any
+from typing import Any, ClassVar
 from unittest.mock import patch
 
 from isvtest.config.constants import RESOLVED_ENTRIES_FLAG
@@ -33,6 +33,16 @@ class ReleasedValidation(BaseValidation):
 
 class UnreleasedValidation(BaseValidation):
     """Unreleased validation used by pytest generation tests."""
+
+    def run(self) -> None:
+        """Pass the test validation."""
+        self.set_passed()
+
+
+class ComposeOnlyValidation(BaseValidation):
+    """Generic validation that must only run as a composite member."""
+
+    compose_only: ClassVar[bool] = True
 
     def run(self) -> None:
         """Pass the test validation."""
@@ -150,6 +160,24 @@ def test_unreleased_configured_variant_is_not_labeled_not_configured() -> None:
         validation_tests.pytest_generate_tests(metafunc)
 
     assert metafunc.ids == ["NO_VALIDATIONS"]
+
+
+def test_show_skipped_omits_compose_only_classes() -> None:
+    """Compose-only machinery is not emitted as an unconfigured top-level test."""
+    metafunc = FakeMetafunc()
+
+    with (
+        patch.object(validation_tests, "ConfigLoader", ShowSkippedLiteralVariantLoader),
+        patch.object(validation_tests, "discover_all_tests", return_value=[ReleasedValidation, ComposeOnlyValidation]),
+        patch.object(
+            validation_tests,
+            "load_released_test_filter",
+            return_value={"ReleasedValidation-experimental", "ComposeOnlyValidation"},
+        ),
+    ):
+        validation_tests.pytest_generate_tests(metafunc)
+
+    assert metafunc.ids == ["ReleasedValidation-experimental"]
 
 
 def test_resolved_entries_bypass_pytest_release_filter_and_show_skipped() -> None:

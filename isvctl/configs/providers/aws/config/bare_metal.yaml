@@ -17,26 +17,27 @@
 #
 # Imports validations from the provider-agnostic BM canonical config.
 # This file only provides AWS-specific commands (boto3 stubs), settings,
-# and validation overrides (expected_gpus, image registry checks).
+# and validation overrides (expected_gpus).
 #
 # Steps:
 #   1. launch_instance - boto3: Provisions bare-metal EC2, outputs IP/key (setup)
 #   2. list_instances - boto3: Lists instances in VPC, verifies target exists (test)
-#   3. topology_placement - boto3: Validates placement group support (test)
-#   4. serial_console - boto3: Retrieves serial console output (test)
-#   5. verify_image - boto3: Verifies OS image installed on BM instance (test)
-#   6. verify_config - boto3: Verifies install config can provision BM (test)
+#   3. verify_tags - boto3: Verifies instance tags (test)
+#   4. topology_placement - boto3: Validates placement group support (test)
+#   5. serial_console - boto3: Retrieves serial console output (test)
+#   6. verify_image - boto3: Verifies OS image installed on BM instance (test)
 #   7. stop_instance - boto3: Powers off BM node, verifies stopped state (test)
 #   8. start_instance - boto3: Powers on BM node, verifies recovery (test)
 #   9. reboot_instance - boto3: Reboots instance, validates recovery (test)
 #  10. power_cycle_instance - boto3: Hard power off + on, validates cold-start (test)
 #  11. describe_instance - boto3: Describes current state, passes SSH info (test)
 #                          (runs after power_cycle so IP is current)
-#  12. reinstall_instance - boto3: Reinstalls OS from stock AMI (test)
-#  13. deploy_nim - paramiko: Deploys NIM container via SSH (test)
-#  14. teardown_nim - paramiko: Stops NIM container via SSH (teardown)
-#  15. teardown - boto3: Terminates bare-metal EC2 (teardown)
-#  16. verify_teardown - boto3: Confirms instance terminated (teardown)
+#  12. host_status_log - boto3: Captures recent host status events (test)
+#  13. reinstall_instance - boto3: Reinstalls OS from stock AMI (test)
+#  14. deploy_nim - paramiko: Deploys NIM container via SSH (test)
+#  15. teardown_nim - paramiko: Stops NIM container via SSH (teardown)
+#  16. teardown - boto3: Terminates bare-metal EC2 (teardown)
+#  17. verify_teardown - boto3: Confirms instance terminated (teardown)
 #
 # Dev workflow (reuse existing instance):
 #   # Run 1: launch + test, keep instance alive
@@ -134,17 +135,6 @@ commands:
           - "--region"
           - "{{region}}"
         timeout: 60
-
-      # Verify install config can provision BM
-      - name: verify_config
-        phase: test
-        command: "python3 ../scripts/image-registry/verify_config_installable.py"
-        args:
-          - "--instance-id"
-          - "{{steps.launch_instance.instance_id}}"
-          - "--region"
-          - "{{region}}"
-        timeout: 120
 
       # Stop BM node and verify powered-off state (boto3)
       # BM-specific: longer waiter timeout for full hardware power-down
@@ -290,7 +280,7 @@ commands:
           - "{{teardown_flag}}"
         timeout: 2400
 
-      # Post-teardown sanitization: verify instance terminated and resources deleted
+      # Post-teardown verification: confirm the instance and resources are gone.
       - name: verify_teardown
         phase: teardown
         command: "python3 ../scripts/bare_metal/verify_terminated.py"
@@ -316,19 +306,11 @@ tests:
 
   # Overrides only - all other validations inherited from ../bare_metal.yaml
   validations:
-    # AWS EC2 GetConsoleOutput can validate current console access, but it does
-    # not prove historical one-month retention. Override the canonical BM group
-    # until an external serial-console archive integration is wired in.
-    serial_console:
-      step: serial_console
-      checks:
-        - SerialConsoleCheck: {}
-
     # GPU stress - AWS metal has 8 GPUs
     gpu_stress:
       step: describe_instance
       checks:
-        GpuStressCheck:
+        BmGpuStressCheck:
           runtime: 30
           memory_gb: 16
           expected_gpus: 8
@@ -337,14 +319,14 @@ tests:
     nccl:
       step: describe_instance
       checks:
-        NcclCheck:
+        BmNcclCheck:
           expected_gpus: 8
 
     # Training - AWS metal has 8 GPUs
     training:
       step: describe_instance
       checks:
-        TrainingCheck:
+        BmTrainingCheck:
           steps: 50
           expected_gpus: 8
 
@@ -352,37 +334,25 @@ tests:
     start_gpu:
       step: start_instance
       checks:
-        GpuCheck:
+        BmGpusPresentAfterStartCheck:
           expected_gpus: 8
 
     # Power-cycle GPU - AWS metal has 8 GPUs
     power_cycle_gpu:
       step: power_cycle_instance
       checks:
-        GpuCheck:
+        BmGpusPresentAfterPowerCycleCheck:
           expected_gpus: 8
 
     # NVLink - AWS metal has 8 GPUs
     nvlink:
       step: describe_instance
       checks:
-        NvlinkCheck:
+        BmNvlinkCheck:
           expected_gpus: 8
 
-    # AWS-specific: verify OS image installed on BM instance
-    image_installed:
-      step: verify_image
-      checks:
-        StepSuccessCheck: {}
-        FieldExistsCheck:
-          fields: ["instance_id", "image_id", "image_name", "instance_state"]
-        InstanceStateCheck:
-          expected_state: "running"
-
-    # AWS-specific: verify install config can provision BM
-    config_installable:
-      step: verify_config
-      checks:
-        StepSuccessCheck: {}
-        FieldExistsCheck:
-          fields: ["config_id", "config_name", "dry_run_passed"]
+  exclude:
+    # EC2 GetConsoleOutput proves current console access, but not historical
+    # one-month retention.
+    tests:
+      - SerialConsoleRetentionCheck

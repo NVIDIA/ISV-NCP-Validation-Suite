@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Resolve one platform or plain suite to a provider configuration."""
+"""Resolve one platform or plain suite to a canonical or provider configuration."""
 
 from dataclasses import dataclass
 from functools import cache
@@ -25,7 +25,7 @@ class SuiteResolutionError(Exception):
 
 @dataclass(frozen=True)
 class ResolvedSuite:
-    """A provider configuration selected for one logical suite."""
+    """A configuration selected for one logical suite."""
 
     config_path: Path
     name: str
@@ -146,10 +146,11 @@ def resolve_suite_name(config_paths: list[Path], configs_root: Path) -> str | No
     return _normalize_name(config_paths[0].stem)
 
 
-def resolve_suite(provider: str, suite: str, *, configs_root: Path) -> ResolvedSuite:
-    """Resolve exactly one provider config for a platform or plain suite."""
-    config_dir = configs_root / "providers" / provider / "config"
-    if not config_dir.is_dir():
+def resolve_suite(provider: str | None, suite: str, *, configs_root: Path) -> ResolvedSuite:
+    """Resolve one canonical suite, or one provider config when a provider is selected."""
+    config_dir = configs_root / "providers" / provider / "config" if provider is not None else configs_root / "suites"
+    source = f"Provider {provider!r}" if provider is not None else "Canonical suite catalog"
+    if provider is not None and not config_dir.is_dir():
         raise SuiteResolutionError(f"Provider {provider!r} has no config directory at {config_dir}.")
 
     requested = _normalize_name(suite)
@@ -166,12 +167,12 @@ def resolve_suite(provider: str, suite: str, *, configs_root: Path) -> ResolvedS
     if not matches:
         available = sorted({name for _, name, _ in classified})
         raise SuiteResolutionError(
-            f"Provider {provider!r} has no {requested!r} suite. Available suites: {', '.join(available) or '(none)'}."
+            f"{source} has no {requested!r} suite. Available suites: {', '.join(available) or '(none)'}."
         )
     if len(matches) > 1:
         paths = ", ".join(str(path) for path, _, _ in matches)
         raise SuiteResolutionError(
-            f"Provider {provider!r} has multiple {requested!r} suite configs ({paths}). Disambiguate with --config/-f."
+            f"{source} has multiple {requested!r} suite configs ({paths}). Disambiguate with --config/-f."
         )
     path, name, platform = matches[0]
     return ResolvedSuite(config_path=path, name=name, platform=platform)

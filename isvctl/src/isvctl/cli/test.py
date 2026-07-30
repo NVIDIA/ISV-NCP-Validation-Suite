@@ -245,14 +245,14 @@ def run(
         str | None,
         typer.Option(
             "--provider",
-            help="Provider name for --suite selection or --label discovery when no --config/-f is supplied.",
+            help="Use provider-backed --suite selection or provider-scoped --label discovery.",
         ),
     ] = None,
     suite: Annotated[
         str | None,
         typer.Option(
             "--suite",
-            help="Run one platform or plain suite from the selected provider.",
+            help="Run a canonical suite directly, or its provider-backed config with --provider.",
         ),
     ] = None,
     capability: Annotated[
@@ -378,6 +378,7 @@ def run(
     Use -- to pass additional arguments to pytest/isvtest.
 
     Examples:
+        isvctl test run --suite storage --capability kubernetes --phase test
         isvctl test run --provider aws --suite k8s
         isvctl test run --provider aws --suite storage --label min_req
         isvctl test run --provider aws --label network
@@ -399,9 +400,6 @@ def run(
     suite_label: str | None = None
 
     if suite:
-        if not provider:
-            print_error("--suite requires --provider.")
-            raise typer.Exit(code=1)
         if config_files:
             print_error("--suite cannot be combined with --config/-f.")
             raise typer.Exit(code=1)
@@ -410,7 +408,10 @@ def run(
         except SuiteResolutionError as exc:
             print_error(str(exc))
             raise typer.Exit(code=1)
-        print_progress(f"Selected {selected_suite.name!r} suite for provider {provider!r}.")
+        if provider:
+            print_progress(f"Selected {selected_suite.name!r} suite for provider {provider!r}.")
+        else:
+            print_progress(f"Selected canonical {selected_suite.name!r} suite.")
         suite_label = selected_suite.name
         config_files = [selected_suite.config_path]
         provider = None

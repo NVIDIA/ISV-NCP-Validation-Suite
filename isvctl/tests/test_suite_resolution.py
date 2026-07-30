@@ -33,17 +33,23 @@ def _write_catalog(root: Path) -> None:
     (configs / "storage.yaml").write_text("import: ../../../suites/storage.yaml\ncommands: {}\n")
 
 
-def test_one_suite_flag_resolves_platform_and_plain_suites(tmp_path: Path) -> None:
-    """The same selector resolves both suite kinds by effective YAML identity."""
+def test_one_suite_flag_resolves_canonical_and_provider_suites(tmp_path: Path) -> None:
+    """The selector resolves canonical and provider suites by effective YAML identity."""
     _write_catalog(tmp_path)
 
     platform = resolve_suite("acme", "kubernetes", configs_root=tmp_path)
     plain = resolve_suite("acme", "storage", configs_root=tmp_path)
+    canonical_platform = resolve_suite(None, "kubernetes", configs_root=tmp_path)
+    canonical_plain = resolve_suite(None, "storage", configs_root=tmp_path)
 
     assert platform.config_path.name == "eks.yaml"
     assert platform.platform == "kubernetes"
     assert plain.config_path.name == "storage.yaml"
     assert plain.platform is None
+    assert canonical_platform.config_path == tmp_path / "suites" / "k8s.yaml"
+    assert canonical_platform.platform == "kubernetes"
+    assert canonical_plain.config_path == tmp_path / "suites" / "storage.yaml"
+    assert canonical_plain.platform is None
 
 
 def test_capability_uses_catalog_vocabulary(tmp_path: Path) -> None:

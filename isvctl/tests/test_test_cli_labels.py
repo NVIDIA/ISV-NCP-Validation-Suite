@@ -317,6 +317,43 @@ def test_provider_without_suite_or_label_mentions_both_options(monkeypatch: pyte
     assert _FakeOrchestrator.calls == []
 
 
+def test_suite_without_provider_runs_the_canonical_config(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Providerless --suite selects the commandless canonical suite directly."""
+    configs_root = tmp_path / "configs"
+    _write_suite(configs_root, "storage.yaml", ["storage"], "K8sCsiStorageTypesCheck")
+    (configs_root / "suites" / "k8s.yaml").write_text(
+        "tests:\n  capability: kubernetes\n  validations: {}\n",
+        encoding="utf-8",
+    )
+    _FakeOrchestrator.calls = []
+    monkeypatch.setattr(test_cli, "CONFIGS_ROOT", configs_root)
+    monkeypatch.setattr(test_cli, "Orchestrator", _FakeOrchestrator)
+
+    result = runner.invoke(
+        test_cli.app,
+        [
+            "run",
+            "--suite",
+            "storage",
+            "--capability",
+            "kubernetes",
+            "--phase",
+            "test",
+            "--no-upload",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Selected canonical 'storage' suite." in result.output
+    assert len(_FakeOrchestrator.calls) == 1
+    assert _FakeOrchestrator.calls[0]["working_dir"] == configs_root / "suites"
+    assert _FakeOrchestrator.calls[0]["run_kwargs"]["phases"] == [Phase.TEST]
+    assert _FakeOrchestrator.calls[0]["run_kwargs"]["capability"] == "kubernetes"
+
+
 def test_plain_suite_without_capability_defaults_to_core(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

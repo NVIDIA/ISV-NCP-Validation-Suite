@@ -324,10 +324,15 @@ and `--label` discovery behave identically:
 > capability to add the checks gated on it.
 
 ```bash
+isvctl test run --suite storage --capability kubernetes --phase test    # canonical suite, no provider lifecycle
 isvctl test run --provider acme --suite storage                         # core only
 isvctl test run --provider acme --suite storage --capability vm         # core + vm checks
 isvctl test run --provider acme --suite kubernetes                      # the platform suite
 ```
+
+Without `--provider`, `--suite` selects the canonical file in
+`configs/suites/`. With `--provider`, it selects the provider config and its
+lifecycle commands.
 
 There is no "run everything" context: a plain suite always carries exactly one.
 Passing a capability no check in the suite requires is allowed but warns, since

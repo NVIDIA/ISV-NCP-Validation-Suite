@@ -43,15 +43,14 @@ some contexts need, so a core run neither provisions nor leaks it.
 
 ## Running against a system that is already up
 
-A commandless canonical suite such as `storage` can be run directly with `-f`;
-it drives no lifecycle. That is a supported way to run: ssh to a cluster you
-already have, and only the test phase runs — no provider setup or teardown
-commands execute. For example, run selected Kubernetes storage probes against
-the cluster selected by `KUBECTL`:
+A commandless canonical suite such as `storage` can be run directly with
+`--suite` (or `-f`); it drives no lifecycle. That is a supported way to run:
+ssh to a cluster you already have, and only the test phase runs — no provider
+setup or teardown commands execute. For example, run selected Kubernetes
+storage probes against the cluster selected by `KUBECTL`:
 
 ```bash
-ISVTEST_INCLUDE_UNRELEASED=1 uv run isvctl test run \
-  -f isvctl/configs/suites/storage.yaml \
+ISVTEST_INCLUDE_UNRELEASED=1 uv run isvctl test run --suite storage \
   --capability kubernetes --phase test -- \
   -k "K8sNfsMountOptionsCheck or K8sCsiStorageTypesCheck"
 ```
@@ -59,6 +58,8 @@ ISVTEST_INCLUDE_UNRELEASED=1 uv run isvctl test run \
 Set `K8S_CSI_BLOCK_SC`, `K8S_CSI_SHARED_FS_SC`, and/or `K8S_CSI_NFS_SC` when
 the selected checks need StorageClass names. Checks bound to provider-produced
 step output still skip as `step_not_configured` when their provider is absent.
+The equivalent explicit-file form is
+`-f isvctl/configs/suites/storage.yaml`.
 
 Suites:
 [`iam`](iam.yaml),

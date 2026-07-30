@@ -232,6 +232,9 @@ full model.
 ## Running Validations
 
 ```bash
+# Canonical suite against an already-running system - no provider lifecycle
+isvctl test run --suite storage --capability kubernetes --phase test
+
 # One suite for your provider - the form the UI emits
 isvctl test run --provider acme --suite storage                         # core checks
 isvctl test run --provider acme --suite storage --capability kubernetes # + k8s checks
@@ -272,6 +275,10 @@ isvctl test run --provider acme --suite storage --capability kubernetes -- -k K8
 # Debug: full output on failure
 isvctl test run -f config.yaml -v -- -s --tb=long
 ```
+
+`--suite` on its own resolves the canonical file in `configs/suites/`.
+Adding `--provider` resolves that provider's config instead, including any
+lifecycle commands it defines.
 
 Re-running a single failed check is pytest passthrough after `--`; there are no
 dedicated rerun flags. Setup steps re-run, which is the deliberate trade for not

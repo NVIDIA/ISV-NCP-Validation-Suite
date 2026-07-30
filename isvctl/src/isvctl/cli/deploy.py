@@ -29,10 +29,19 @@ from typing import Annotated
 import typer
 from isvreporter.config import get_endpoint, get_ssa_issuer
 from isvreporter.platform import get_platform_from_config
+from isvtest.core.ngc import get_ngc_api_key
+from isvtest.release_manifest import INCLUDE_UNRELEASED_ENV
 
 from isvctl.cli import setup_logging
 from isvctl.cli.common import get_output_dir, print_error, print_progress, print_step, print_warning
-from isvctl.config.suite_resolution import CONFIGS_ROOT, platform_vocabulary, resolve_suite_name
+from isvctl.config.suite_resolution import (
+    CONFIGS_ROOT,
+    SuiteResolutionError,
+    parse_capability,
+    platform_vocabulary,
+    resolve_suite_name,
+    select_suite,
+)
 from isvctl.orchestrator.loop import Phase
 from isvctl.remote import SCPTransfer, SSHClient, TarArchive
 from isvctl.remote.archive import DEFAULT_EXCLUDES as DEFAULT_ARCHIVE_EXCLUDES
@@ -59,11 +68,54 @@ app = typer.Typer(
 )
 
 
-def _reporting_suite_and_capability(config_files: list[Path]) -> tuple[str | None, str | None]:
-    """Return the suite and platform-suite capability recorded for a deploy."""
+def _pytest_passthrough(args: list[str]) -> str:
+    """Render the args collected after ``--`` for the remote ``test run`` command.
+
+    The separator has to be reproduced remotely: ``test run`` rejects unknown
+    options, so a bare ``-s`` appended to its command line is read as an isvctl
+    option and fails the run before pytest sees it.
+    """
+    return f"-- {shlex.join(args)}" if args else ""
+
+
+def _capability_option(capability: str | None) -> str:
+    """Render the capability context for the remote ``test run`` command."""
+    return f"--capability {shlex.quote(capability)}" if capability else ""
+
+
+def _remote_env_assignments() -> str:
+    """Render the environment the remote ``test run`` needs from this process.
+
+    Only values the target cannot obtain on its own: a credential and the
+    release gate, both set per invocation by whoever runs the deploy. Quoted
+    because they end up on a shell command line. Path-valued variables are
+    deliberately not forwarded, since they name files that exist only here.
+    """
+    forwarded: dict[str, str] = {}
+    ngc_api_key = get_ngc_api_key()
+    if ngc_api_key:
+        forwarded["NGC_API_KEY"] = ngc_api_key
+    include_unreleased = os.environ.get(INCLUDE_UNRELEASED_ENV, "")
+    if include_unreleased:
+        forwarded[INCLUDE_UNRELEASED_ENV] = include_unreleased
+    return " ".join(f"{name}={shlex.quote(value)}" for name, value in forwarded.items())
+
+
+def _reporting_suite_and_capability(config_files: list[Path], capability: str | None) -> tuple[str | None, str | None]:
+    """Return the (suite, capability) identity a deploy runs and reports under.
+
+    A platform suite runs under the capability it declares, and so rejects an
+    explicit one; a plain suite runs under whatever ``--capability`` names, and
+    is core when it names none.
+    """
     suite = resolve_suite_name(config_files, CONFIGS_ROOT)
-    capability = suite if suite in platform_vocabulary(CONFIGS_ROOT) else None
-    return suite, capability
+    if suite not in platform_vocabulary(CONFIGS_ROOT):
+        return suite, capability
+    if capability:
+        raise SuiteResolutionError(
+            f"--capability cannot be used with platform suite {suite!r}; it already runs under capability {suite!r}."
+        )
+    return suite, suite
 
 
 def _resolve_config_paths(
@@ -140,7 +192,12 @@ def _print_configuration(
     print_progress("")
 
 
-@app.command("run", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+@app.command(
+    "run",
+    # Allow pytest args after `--`, but reject unknown options before it so a
+    # flag this command does not have fails here instead of reaching pytest.
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": False},
+)
 def run(
     ctx: typer.Context,
     remote_ip: Annotated[
@@ -183,6 +240,20 @@ def run(
             file_okay=True,
             dir_okay=False,
             readable=True,
+        ),
+    ] = None,
+    suite: Annotated[
+        str | None,
+        typer.Option(
+            "--suite",
+            help="Run one canonical suite instead of naming its file with --config/-f.",
+        ),
+    ] = None,
+    capability: Annotated[
+        str | None,
+        typer.Option(
+            "--capability",
+            help="Capability context for the remote run (one of the platform suites). Plain suites only.",
         ),
     ] = None,
     lab_id: Annotated[
@@ -251,7 +322,9 @@ def run(
     extracts and runs the validation tests, then downloads results.
 
     Examples:
-        isvctl deploy run 192.168.1.100 -f isvctl/configs/suites/k8s.yaml
+        isvctl deploy run 192.168.1.100 --suite kubernetes
+
+        isvctl deploy run 192.168.1.100 --suite storage --capability kubernetes
 
         isvctl deploy run 7.243.33.191 -j 202.56.94.106:2260 -u ubuntu -f isvctl/configs/suites/k8s.yaml
 
@@ -260,7 +333,21 @@ def run(
     setup_logging(verbose)
 
     # Collect extra pytest args from context (after --)
-    pytest_extra_args = shlex.join(ctx.args) if ctx.args else ""
+    pytest_extra_args = _pytest_passthrough(ctx.args)
+
+    # Resolve the suite selection before anything is archived or uploaded, so a
+    # rejected combination costs no SSH round trip.
+    config_files = list(config or [])
+    try:
+        capability_context = parse_capability(capability, CONFIGS_ROOT)
+        if suite:
+            selected_suite, selection_message = select_suite(suite, config_files, None, configs_root=CONFIGS_ROOT)
+            print_progress(selection_message)
+            config_files = [selected_suite.config_path]
+        reported_suite, reported_capability = _reporting_suite_and_capability(config_files, capability_context)
+    except SuiteResolutionError as exc:
+        print_error(str(exc))
+        raise typer.Exit(code=1)
 
     # Set working directory to workspace root
     working_dir = Path.cwd()
@@ -269,7 +356,6 @@ def run(
     effective_remote_dir = remote_dir or f"/home/{user}/ai-cloud-validation"
 
     # Resolve config paths
-    config_files = config or []
     try:
         configs = _resolve_config_paths(config_files, working_dir)
     except typer.BadParameter as e:
@@ -396,7 +482,6 @@ def run(
             print_step("Creating test run in isvreporter...")
             # Derive platform from first config file
             platform = get_platform_from_config(config_files[0]) if config_files else "kubernetes"
-            suite, capability = _reporting_suite_and_capability(list(config_files))
             test_run_id = create_test_run(
                 lab_id=lab_id,
                 platform=platform,
@@ -405,10 +490,8 @@ def run(
                 executed_by="isvctl deploy",
                 ci_reference="local-deployment",
                 isv_software_version=isv_software_version,
-                # deploy has no --capability of its own; the remote `test run`
-                # it invokes is core-only unless the config is a platform suite.
-                suite=suite,
-                capability=capability,
+                suite=reported_suite,
+                capability=reported_capability,
             )
             if not test_run_id:
                 print_warning("Failed to create test run, continuing without upload")
@@ -419,10 +502,9 @@ def run(
 
         # Build config args for isvctl
         config_args = " ".join(f"-f {c}" for c in configs)
+        capability_arg = _capability_option(capability_context)
 
-        # Handle NGC API key securely - use shlex.quote to prevent shell injection
-        ngc_api_key = os.environ.get("NGC_API_KEY", "") or os.environ.get("NGC_NIM_API_KEY", "")
-        env_vars = f"NGC_API_KEY={shlex.quote(ngc_api_key)}" if ngc_api_key else ""
+        env_vars = _remote_env_assignments()
 
         # Note: Variables like $PATH and $TEST_RESULT expand on the remote shell
         remote_script = f"""
@@ -443,11 +525,11 @@ echo "Running uv sync..."
 uv sync --quiet
 
 echo "Running validation tests with isvctl..."
-echo "Command: isvctl test run {config_args} --phase {phase.value}"
+echo "Command: isvctl test run {config_args} --phase {phase.value} {capability_arg} {pytest_extra_args}"
 
 set +e
 set -o pipefail
-sudo -E env PATH="$PATH" PYTHONUNBUFFERED=1 {env_vars} uv run isvctl test run {config_args} --phase {phase.value} --color=yes --junitxml=junit-validation.xml {pytest_extra_args} 2>&1 | tee pytest-output.log
+sudo -E env PATH="$PATH" PYTHONUNBUFFERED=1 {env_vars} uv run isvctl test run {config_args} --phase {phase.value} {capability_arg} --color=yes --junitxml=junit-validation.xml {pytest_extra_args} 2>&1 | tee pytest-output.log
 TEST_RESULT=${{PIPESTATUS[0]}}
 set +o pipefail
 

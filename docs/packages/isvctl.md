@@ -248,8 +248,11 @@ print(json.dumps({
 See [Remote Deployment Guide](../guides/remote-deployment.md) for full details.
 
 ```bash
-# Deploy and run tests on remote machine
-uv run isvctl deploy run 192.168.1.100 -u ubuntu -f isvctl/configs/suites/k8s.yaml
+# Deploy and run one suite on a remote machine
+uv run isvctl deploy run 192.168.1.100 -u ubuntu --suite kubernetes
+
+# A plain suite under a capability
+uv run isvctl deploy run 192.168.1.100 -u ubuntu --suite storage --capability kubernetes
 
 # With jumphost
 uv run isvctl deploy run 192.168.1.100 -j jumphost.example.com -u ubuntu -f isvctl/configs/suites/k8s.yaml

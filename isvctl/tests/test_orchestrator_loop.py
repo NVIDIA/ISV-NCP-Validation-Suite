@@ -27,9 +27,11 @@ from isvtest.core.resolution import (
     ValidationEntry,
 )
 
+from isvctl.cli.test import CORE_REQUIREMENT_CONTEXT
 from isvctl.config.schema import PlatformCommands, RunConfig, StepConfig, ValidationConfig
 from isvctl.orchestrator.context import Context
 from isvctl.orchestrator.loop import (
+    VALIDATIONS_ONLY_PLATFORM,
     Orchestrator,
     Phase,
     _apply_capability_step_gates,
@@ -157,6 +159,20 @@ class TestOrchestrator:
 
         platform = orchestrator._detect_platform()
         assert platform == "kubernetes"
+
+    def test_commandless_run_is_identified_by_its_environment_not_its_context(self) -> None:
+        """A commandless config borrows its identity from the capability, if it names one.
+
+        ``core`` is the CLI's word for "no capability", so it names no environment
+        and must not surface as one in logs and JUnit suite names.
+        """
+        orchestrator = Orchestrator(RunConfig(tests=ValidationConfig()))
+
+        orchestrator._capability = "kubernetes"
+        assert orchestrator._detect_platform() == "kubernetes"
+
+        orchestrator._capability = CORE_REQUIREMENT_CONTEXT
+        assert orchestrator._detect_platform() == VALIDATIONS_ONLY_PLATFORM
 
     def test_run_setup_phase_success(self, tmp_path: Path) -> None:
         """Test successful setup phase execution."""
@@ -388,9 +404,16 @@ EOF
         assert teardown_phases[0].success
 
     def test_platform_detection_missing(self) -> None:
-        """Test error when platform cannot be detected."""
+        """Test error when platform cannot be detected.
+
+        Commands are present, so the run does drive a lifecycle - but nothing says
+        which one, and guessing between them would run the wrong scripts.
+        """
         config = RunConfig(
-            commands={},
+            commands={
+                "kubernetes": PlatformCommands(steps=[StepConfig(name="setup", command="echo", phase="setup")]),
+                "slurm": PlatformCommands(steps=[StepConfig(name="setup", command="echo", phase="setup")]),
+            },
             tests=ValidationConfig(),  # No platform specified
         )
         orchestrator = Orchestrator(config)
@@ -399,6 +422,40 @@ EOF
 
         assert not result.success
         assert "Cannot determine platform" in result.phases[0].message
+
+    def test_config_without_commands_runs_live_validations_only(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A suite config can probe an already-running system without a provider lifecycle."""
+        monkeypatch.setattr("isvctl.orchestrator.loop.load_released_test_filter", lambda: None)
+        config = RunConfig(
+            tests=ValidationConfig(
+                validations={
+                    "k8s_storage": {
+                        "checks": {
+                            "K8sCsiStorageTypesCheck": {
+                                "requires": ["kubernetes"],
+                            }
+                        },
+                    }
+                },
+            ),
+        )
+        orchestrator = Orchestrator(config)
+
+        result = orchestrator.run(phases=[Phase.TEST], capability="kubernetes")
+
+        assert result.success
+        assert [phase.phase for phase in result.phases] == [Phase.TEST]
+        assert [entry.entry.name for entry in result.validations] == ["K8sCsiStorageTypesCheck"]
+        assert result.validations[0].state is State.PASSED
+
+    def test_config_without_commands_or_validations_is_not_a_pass(self) -> None:
+        """Validations are all a commandless run has, so wiring none asserts nothing."""
+        orchestrator = Orchestrator(RunConfig(tests=ValidationConfig(validations={})))
+
+        result = orchestrator.run(phases=[Phase.TEST], capability="kubernetes")
+
+        assert not result.success
+        assert "would assert nothing" in result.phases[0].message
 
     def test_teardown_runs_when_setup_validation_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Teardown must run when setup steps succeed but setup validations fail.

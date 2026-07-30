@@ -52,8 +52,8 @@ from isvctl.config.suite_resolution import (
     CONFIGS_ROOT,
     SuiteResolutionError,
     parse_capability,
-    resolve_suite,
     resolve_suite_name,
+    select_suite,
 )
 from isvctl.orchestrator.loop import Orchestrator, Phase, _has_explicit_pytest_selection
 from isvctl.reporting import check_upload_credentials, create_test_run, get_environment_config, update_test_run
@@ -245,14 +245,14 @@ def run(
         str | None,
         typer.Option(
             "--provider",
-            help="Provider name for --suite selection or --label discovery when no --config/-f is supplied.",
+            help="Use provider-backed --suite selection or provider-scoped --label discovery.",
         ),
     ] = None,
     suite: Annotated[
         str | None,
         typer.Option(
             "--suite",
-            help="Run one platform or plain suite from the selected provider.",
+            help="Run a canonical suite directly, or its provider-backed config with --provider.",
         ),
     ] = None,
     capability: Annotated[
@@ -378,6 +378,7 @@ def run(
     Use -- to pass additional arguments to pytest/isvtest.
 
     Examples:
+        isvctl test run --suite storage --capability kubernetes --phase test
         isvctl test run --provider aws --suite k8s
         isvctl test run --provider aws --suite storage --label min_req
         isvctl test run --provider aws --label network
@@ -390,6 +391,13 @@ def run(
     setup_logging(verbose)
     apply_user_config(no_user_config)
 
+    # --color governs this command's own output, not just the pytest args built
+    # from it below. click otherwise auto-detects a terminal, and under `deploy`
+    # stdout is a pipe: the results summary would arrive unstyled in the log
+    # while pytest, told explicitly, keeps its colors.
+    if color in ("yes", "no"):
+        ctx.color = color == "yes"
+
     try:
         capability_context = parse_capability(capability, CONFIGS_ROOT)
     except SuiteResolutionError as exc:
@@ -399,18 +407,12 @@ def run(
     suite_label: str | None = None
 
     if suite:
-        if not provider:
-            print_error("--suite requires --provider.")
-            raise typer.Exit(code=1)
-        if config_files:
-            print_error("--suite cannot be combined with --config/-f.")
-            raise typer.Exit(code=1)
         try:
-            selected_suite = resolve_suite(provider, suite, configs_root=CONFIGS_ROOT)
+            selected_suite, selection_message = select_suite(suite, config_files, provider, configs_root=CONFIGS_ROOT)
         except SuiteResolutionError as exc:
             print_error(str(exc))
             raise typer.Exit(code=1)
-        print_progress(f"Selected {selected_suite.name!r} suite for provider {provider!r}.")
+        print_progress(selection_message)
         suite_label = selected_suite.name
         config_files = [selected_suite.config_path]
         provider = None

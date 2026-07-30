@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 from pathlib import Path
 from types import ModuleType
 
@@ -25,6 +26,11 @@ import pytest
 
 ISVCTL_ROOT = Path(__file__).resolve().parents[1]
 AWS_SCRIPTS = ISVCTL_ROOT / "configs" / "providers" / "aws" / "scripts"
+
+# Typer forces rich styling under GITHUB_ACTIONS, which splices escape codes into
+# the middle of the strings CLI tests assert on. Also used to assert on styling
+# itself, so the pattern is shared rather than a strip-only helper.
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 
 _LOADED_MODULES: dict[str, ModuleType] = {}
 

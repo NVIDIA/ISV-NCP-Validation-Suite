@@ -18,23 +18,43 @@ The `isvctl deploy run` command packages and transfers the tools to a remote tar
 
 ## Environment Variables
 
-Environment variables required by tests must be set on the local machine - they are forwarded to the remote session automatically:
+Set these on the local machine. The upload variables are read here, since
+`deploy` reports the test run itself; the others are forwarded to the remote
+`isvctl test run`:
 
-| Variable | Description |
-| -------- | ----------- |
-| `ISV_SERVICE_ENDPOINT` | Required for result upload to ISV Lab Service |
-| `ISV_SSA_ISSUER` | Required for result upload to ISV Lab Service |
-| `ISV_CLIENT_ID` | Required for result upload to ISV Lab Service |
-| `ISV_CLIENT_SECRET` | Required for result upload to ISV Lab Service |
-| `NGC_API_KEY` | Required for NIM model benchmarks |
+| Variable | Description | Read |
+| -------- | ----------- | ---- |
+| `ISV_SERVICE_ENDPOINT` | Required for result upload to ISV Lab Service | locally |
+| `ISV_SSA_ISSUER` | Required for result upload to ISV Lab Service | locally |
+| `ISV_CLIENT_ID` | Required for result upload to ISV Lab Service | locally |
+| `ISV_CLIENT_SECRET` | Required for result upload to ISV Lab Service | locally |
+| `NGC_API_KEY` | Required for NIM model benchmarks | forwarded |
+| `ISVTEST_INCLUDE_UNRELEASED` | Include checks not yet in `released_tests.json` | forwarded |
+
+Anything else the tests need has to reach the target another way - a config file
+under `isvctl/` travels in the deployment archive, so `-f` overrides are the
+reliable route for values like StorageClass names.
 
 ## Usage
 
 ### Basic Deployment
 
 ```bash
-# Deploy and run tests on remote machine
+# Deploy and run one suite on the remote machine
+uv run isvctl deploy run <target-ip> --suite kubernetes
+
+# Or name the config file directly
 uv run isvctl deploy run <target-ip> -f isvctl/configs/suites/k8s.yaml
+```
+
+### Selecting a Capability
+
+A plain suite such as `storage` runs its core checks unless a capability is
+named; `--capability` is forwarded to the remote run. A platform suite already
+runs under the capability it declares, so combining the two is rejected.
+
+```bash
+uv run isvctl deploy run <target-ip> --suite storage --capability kubernetes
 ```
 
 ### With Jumphost
@@ -80,6 +100,8 @@ Run `uv run isvctl deploy run --help` for all available options:
 | Option | Description |
 | ------ | ----------- |
 | `<target>` | Target machine IP or hostname |
+| `--suite` | Canonical suite to run, instead of `-f` |
+| `--capability` | Capability context for the remote run (plain suites only) |
 | `-f, --config` | Config file(s) to use (can be specified multiple times) |
 | `-u, --user` | SSH user on target machine |
 | `-j, --jumphost` | Jumphost for air-gapped environments |

@@ -556,6 +556,17 @@ def _render_string(env: Environment, value: str, render_context: Mapping[str, An
     return env.from_string(value).render(**render_context)
 
 
+def _looked_up_in_nothing(value: Undefined) -> bool:
+    """Return whether the reference was resolved against a container with no contents.
+
+    A name missing from something empty cannot be a misspelling of what is in
+    there. A validation-only run has no steps at all, so every
+    ``steps.<name>`` is undefined by construction and the default is the
+    designed path rather than a masked mistake.
+    """
+    return isinstance(value._undefined_obj, Mapping) and not value._undefined_obj
+
+
 def _warning_default(value: Any, default_value: Any = "", boolean: bool = False) -> Any:
     """Drop-in replacement for Jinja's ``default`` filter that warns when it
     catches an Undefined value. Without this, a typo like
@@ -563,7 +574,7 @@ def _warning_default(value: Any, default_value: Any = "", boolean: bool = False)
     the default for the missing field instead of surfacing the mistake.
     """
     if isinstance(value, Undefined):
-        if value._undefined_message:
+        if value._undefined_message and not _looked_up_in_nothing(value):
             logger.warning(f"default(...) masked: {value._undefined_message}")
         return default_value
     if boolean and not value:

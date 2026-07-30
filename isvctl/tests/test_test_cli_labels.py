@@ -16,7 +16,6 @@
 """Tests for isvctl test CLI label filtering."""
 
 import json
-import re
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -26,9 +25,9 @@ from typer.testing import CliRunner
 import isvctl.cli.test as test_cli
 from isvctl.orchestrator.loop import OrchestratorResult, Phase, PhaseResult
 
-runner = CliRunner()
+from .conftest import ANSI_ESCAPE
 
-_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
+runner = CliRunner()
 
 
 def _write_config(tmp_path: Path) -> Path:
@@ -315,6 +314,43 @@ def test_provider_without_suite_or_label_mentions_both_options(monkeypatch: pyte
     assert "--suite NAME" in result.output
     assert "--label/-l" in result.output
     assert _FakeOrchestrator.calls == []
+
+
+def test_suite_without_provider_runs_the_canonical_config(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Providerless --suite selects the canonical suite file directly."""
+    configs_root = tmp_path / "configs"
+    _write_suite(configs_root, "storage.yaml", ["storage"], "K8sCsiStorageTypesCheck")
+    (configs_root / "suites" / "k8s.yaml").write_text(
+        "tests:\n  capability: kubernetes\n  validations: {}\n",
+        encoding="utf-8",
+    )
+    _FakeOrchestrator.calls = []
+    monkeypatch.setattr(test_cli, "CONFIGS_ROOT", configs_root)
+    monkeypatch.setattr(test_cli, "Orchestrator", _FakeOrchestrator)
+
+    result = runner.invoke(
+        test_cli.app,
+        [
+            "run",
+            "--suite",
+            "storage",
+            "--capability",
+            "kubernetes",
+            "--phase",
+            "test",
+            "--no-upload",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Selected canonical 'storage' suite." in result.output
+    assert len(_FakeOrchestrator.calls) == 1
+    assert _FakeOrchestrator.calls[0]["working_dir"] == configs_root / "suites"
+    assert _FakeOrchestrator.calls[0]["run_kwargs"]["phases"] == [Phase.TEST]
+    assert _FakeOrchestrator.calls[0]["run_kwargs"]["capability"] == "kubernetes"
 
 
 def test_plain_suite_without_capability_defaults_to_core(
@@ -617,7 +653,7 @@ def test_unknown_option_before_separator_is_rejected(monkeypatch: pytest.MonkeyP
 
     # Typer forces rich styling under GITHUB_ACTIONS, which splices escape
     # codes into the middle of the reported option name.
-    output = _ANSI_ESCAPE.sub("", result.output)
+    output = ANSI_ESCAPE.sub("", result.output)
 
     assert result.exit_code != 0, output
     assert "No such option" in output or "no such option" in output.lower()
@@ -639,3 +675,30 @@ def test_pytest_args_after_separator_are_forwarded(monkeypatch: pytest.MonkeyPat
 
     assert result.exit_code == 0, result.output
     assert _FakeOrchestrator.captured["extra_pytest_args"] == ["-k", "K8sNodeCountCheck"]
+
+
+@pytest.mark.parametrize(("color", "styled"), [("yes", True), ("no", False)])
+def test_color_choice_applies_to_the_results_summary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    color: str,
+    styled: bool,
+) -> None:
+    """--color governs this command's output, not only the pytest args it builds.
+
+    Under `deploy` the remote stdout is a pipe, so click's auto-detection would
+    hand back an unstyled summary alongside colored pytest output.
+    """
+    config = _write_config(tmp_path)
+    _FakeOrchestrator.calls = []
+    monkeypatch.setattr(test_cli, "Orchestrator", _FakeOrchestrator)
+
+    result = runner.invoke(
+        test_cli.app,
+        ["run", "-f", str(config), "--no-upload", f"--color={color}"],
+        color=True,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert bool(ANSI_ESCAPE.search(result.output)) is styled
+    assert _FakeOrchestrator.captured["extra_pytest_args"] == [f"--color={color}"]

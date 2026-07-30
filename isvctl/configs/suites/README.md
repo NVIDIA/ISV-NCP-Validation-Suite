@@ -41,6 +41,29 @@ at once, so a run always carries exactly one context. Steps follow the same
 rule — give a step `requires:` when it builds or tears down a fixture only
 some contexts need, so a core run neither provisions nor leaks it.
 
+## Running against a system that is already up
+
+A canonical suite can be run directly with `--suite` (or `-f`), against a
+cluster you already have and with no provider selected. Whether any lifecycle
+runs depends on the file: a suite that declares no `commands:` runs its test
+phase only, and one that declares them supplies a scaffold fixture that reports
+on the current system rather than provisioning anything. For example, run
+selected Kubernetes storage probes against the cluster `KUBECTL` selects:
+
+```bash
+ISVTEST_INCLUDE_UNRELEASED=1 uv run isvctl test run --suite storage \
+  --capability kubernetes -- \
+  -k "K8sNfsMountOptionsCheck or K8sCsiStorageTypesCheck"
+```
+
+`storage` gets its StorageClass names from its `setup_cluster` fixture, which
+reports the classes already installed on the cluster. Set `K8S_CSI_BLOCK_SC`,
+`K8S_CSI_SHARED_FS_SC`, or `K8S_CSI_NFS_SC` to name them yourself, and add
+`--phase test` to skip the fixture entirely. Checks bound to provider-produced
+step output still skip as `step_not_configured` when their provider is absent.
+The equivalent explicit-file form is
+`-f isvctl/configs/suites/storage.yaml`.
+
 Suites:
 [`iam`](iam.yaml),
 [`network`](network.yaml),

@@ -62,6 +62,11 @@ Config (YAML) → Script (any language) → JSON output → Validations (asserti
 - **Teardown is best-effort** - one failing teardown step does not block the others.
 - **Standalone teardown** (`isvctl test run -f config.yaml --phase teardown`) runs
   unconditionally - useful after a previous run with `AWS_SKIP_TEARDOWN`.
+- **A config with no `commands:` runs validations only** against a system that is
+  already up. Only the test phase runs. Live probes run directly; validations
+  wired to provider step output still skip as `step_not_configured`. Declaring
+  commands is per file - some canonical suites carry a scaffold fixture, others
+  none - so read the file rather than inferring from the kind of suite.
 - Multiple `-f` configs merge; later files override earlier ones.
 
 ## Architecture

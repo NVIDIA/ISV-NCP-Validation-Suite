@@ -6,7 +6,7 @@
 from pathlib import Path
 
 import pytest
-from isvtest.core.resolution import DECLARABLE_CAPABILITIES
+from isvtest.core.resolution import DECLARABLE_CAPABILITIES, parse_validations
 from pydantic import ValidationError
 
 from isvctl.config.merger import merge_yaml_files
@@ -33,17 +33,23 @@ def _write_catalog(root: Path) -> None:
     (configs / "storage.yaml").write_text("import: ../../../suites/storage.yaml\ncommands: {}\n")
 
 
-def test_one_suite_flag_resolves_platform_and_plain_suites(tmp_path: Path) -> None:
-    """The same selector resolves both suite kinds by effective YAML identity."""
+def test_one_suite_flag_resolves_canonical_and_provider_suites(tmp_path: Path) -> None:
+    """The selector resolves canonical and provider suites by effective YAML identity."""
     _write_catalog(tmp_path)
 
     platform = resolve_suite("acme", "kubernetes", configs_root=tmp_path)
     plain = resolve_suite("acme", "storage", configs_root=tmp_path)
+    canonical_platform = resolve_suite(None, "kubernetes", configs_root=tmp_path)
+    canonical_plain = resolve_suite(None, "storage", configs_root=tmp_path)
 
     assert platform.config_path.name == "eks.yaml"
     assert platform.platform == "kubernetes"
     assert plain.config_path.name == "storage.yaml"
     assert plain.platform is None
+    assert canonical_platform.config_path == tmp_path / "suites" / "k8s.yaml"
+    assert canonical_platform.platform == "kubernetes"
+    assert canonical_plain.config_path == tmp_path / "suites" / "storage.yaml"
+    assert canonical_plain.platform is None
 
 
 def test_capability_uses_catalog_vocabulary(tmp_path: Path) -> None:
@@ -103,6 +109,39 @@ def test_storage_cleanup_steps_have_explicit_capability_gates(provider: str) -> 
 
     assert steps["teardown_volume"].requires == ["vm", "bare_metal"]
     assert steps["teardown"].requires == ["vm", "bare_metal"]
+
+
+def test_kubernetes_storage_groups_are_live_test_phase_probes() -> None:
+    """Kubernetes storage groups must also run directly on an existing cluster.
+
+    Binding them to a provider's cluster fixture would skip every one of them as
+    ``step_not_configured`` on a validation-only run, which is how these checks
+    are reached when the cluster is already up.
+    """
+    config = RunConfig.model_validate(merge_yaml_files([str(CONFIGS_ROOT / "suites" / "storage.yaml")]))
+    entries = parse_validations(config.tests.validations if config.tests else {})
+    selected = [entry for entry in entries if entry.category in {"k8s_storage", "k8s_filesystem"}]
+
+    assert selected, "storage.yaml no longer wires the kubernetes storage groups"
+    assert all(entry.step is None for entry in selected)
+
+
+def test_storage_suite_supplies_the_csi_fixture_those_probes_read() -> None:
+    """The suite names its own StorageClasses, so a run needs no provider to do it.
+
+    Without this fixture the templates behind the kubernetes storage checks have
+    no producer, and the classes can only arrive through K8S_CSI_* env vars.
+    """
+    config = RunConfig.model_validate(merge_yaml_files([str(CONFIGS_ROOT / "suites" / "storage.yaml")]))
+    steps = {step.name: step for step in config.get_steps("storage")}
+
+    assert "setup_cluster" in steps, "storage.yaml no longer produces steps.setup_cluster.csi"
+    assert steps["setup_cluster"].requires == ["kubernetes"]
+    assert steps["setup_cluster"].phase == "setup"
+
+    # Both providers pair the fixture with a release; the suite they copy shows it.
+    assert steps["teardown_cluster"].requires == ["kubernetes"]
+    assert steps["teardown_cluster"].phase == "teardown"
 
 
 @pytest.mark.parametrize("capability", sorted(DECLARABLE_CAPABILITIES))

@@ -527,6 +527,20 @@ class Orchestrator:
         if self.config.tests and self.config.tests.validations:
             all_validations = self.config.tests.validations
         validation_entries = parse_validations(all_validations)
+        # A run with no commands has only its validations to offer, so wiring none
+        # asserts nothing. Reporting that as a pass would make a miswired -f look
+        # like a green run; a lifecycle run still has its steps to answer for.
+        if not self.config.commands and not validation_entries:
+            return OrchestratorResult(
+                success=False,
+                phases=[
+                    PhaseResult(
+                        phase=Phase.TEST,
+                        success=False,
+                        message="No validations configured: a run without commands would assert nothing",
+                    )
+                ],
+            )
         steps = _apply_capability_step_gates(steps, validation_entries, self._capability)
 
         logger.info(f"Configured phases: {config_phases}")

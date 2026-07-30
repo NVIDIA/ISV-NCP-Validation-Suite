@@ -448,6 +448,15 @@ EOF
         assert [entry.entry.name for entry in result.validations] == ["K8sCsiStorageTypesCheck"]
         assert result.validations[0].state is State.PASSED
 
+    def test_config_without_commands_or_validations_is_not_a_pass(self) -> None:
+        """Validations are all a commandless run has, so wiring none asserts nothing."""
+        orchestrator = Orchestrator(RunConfig(tests=ValidationConfig(validations={})))
+
+        result = orchestrator.run(phases=[Phase.TEST], capability="kubernetes")
+
+        assert not result.success
+        assert "would assert nothing" in result.phases[0].message
+
     def test_teardown_runs_when_setup_validation_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Teardown must run when setup steps succeed but setup validations fail.
 

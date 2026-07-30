@@ -27,9 +27,11 @@ from isvtest.core.resolution import (
     ValidationEntry,
 )
 
+from isvctl.cli.test import CORE_REQUIREMENT_CONTEXT
 from isvctl.config.schema import PlatformCommands, RunConfig, StepConfig, ValidationConfig
 from isvctl.orchestrator.context import Context
 from isvctl.orchestrator.loop import (
+    VALIDATIONS_ONLY_PLATFORM,
     Orchestrator,
     Phase,
     _apply_capability_step_gates,
@@ -157,6 +159,20 @@ class TestOrchestrator:
 
         platform = orchestrator._detect_platform()
         assert platform == "kubernetes"
+
+    def test_commandless_run_is_identified_by_its_environment_not_its_context(self) -> None:
+        """A commandless config borrows its identity from the capability, if it names one.
+
+        ``core`` is the CLI's word for "no capability", so it names no environment
+        and must not surface as one in logs and JUnit suite names.
+        """
+        orchestrator = Orchestrator(RunConfig(tests=ValidationConfig()))
+
+        orchestrator._capability = "kubernetes"
+        assert orchestrator._detect_platform() == "kubernetes"
+
+        orchestrator._capability = CORE_REQUIREMENT_CONTEXT
+        assert orchestrator._detect_platform() == VALIDATIONS_ONLY_PLATFORM
 
     def test_run_setup_phase_success(self, tmp_path: Path) -> None:
         """Test successful setup phase execution."""

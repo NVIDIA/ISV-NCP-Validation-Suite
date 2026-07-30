@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from isvtest.core.resolution import (
+    DECLARABLE_CAPABILITIES,
     ErrorReason,
     ResolvedEntry,
     SkipReason,
@@ -52,7 +53,8 @@ from isvctl.redaction import redact_dict, redact_junit_xml_tree
 
 logger = logging.getLogger(__name__)
 
-# Platform label for a run whose config declares no commands and no capability.
+# Platform label for a run whose config declares no commands, when the requirement
+# context names no execution environment either ("core" is a context, not a platform).
 VALIDATIONS_ONLY_PLATFORM = "validations"
 
 
@@ -918,7 +920,8 @@ class Orchestrator:
         1. tests.capability (isvctl schema)
         2. Root-level platform (legacy isvtest schema)
         3. The sole commands mapping key (plain suites)
-        4. The capability context, when the config declares no commands at all
+        4. The capability context, when the config declares no commands at all,
+           falling back to ``VALIDATIONS_ONLY_PLATFORM`` for a core context
 
         Returns:
             Platform string (e.g., 'kubernetes', 'slurm', 'bare_metal') or None
@@ -934,9 +937,11 @@ class Orchestrator:
         if not platform and len(self.config.commands) == 1:
             platform = next(iter(self.config.commands))
         # A config with no commands names no platform because it drives no lifecycle.
-        # It still has an identity for logs and reports: the context it asserts under.
+        # It still has an identity for logs and reports: the environment it asserts
+        # against, when the context names one.
         if not platform and not self.config.commands:
-            platform = self._capability or VALIDATIONS_ONLY_PLATFORM
+            in_capability = self._capability in DECLARABLE_CAPABILITIES
+            platform = self._capability if in_capability else VALIDATIONS_ONLY_PLATFORM
 
         if platform:
             # Normalize 'k8s' to 'kubernetes'

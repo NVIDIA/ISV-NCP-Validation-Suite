@@ -124,7 +124,6 @@ reason. Prefixing them would claim a scope their plan items do not have.
 |------|-------|--------|-----------------|
 | `create_user` | setup | `providers/my-isv/scripts/iam/create_user.py` | `username`, `user_id`, `access_key_id`, `secret_access_key` |
 | `test_credentials` | test | `providers/my-isv/scripts/iam/test_credentials.py` | `account_id`, `tests.identity.passed`, `tests.access.passed` (`IamCredentialAccessCheck` / IAM03-01) |
-| `check_credentials` | test | `providers/nico/scripts/iam/check_credentials.py` | `account_id`, `identity_id`, `authenticated` - the run's own credentials, for platforms with read-only IAM |
 | `teardown` | teardown | `providers/my-isv/scripts/iam/delete_user.py` | `resources_deleted`, `message` |
 
 ### Network (`network.yaml`)

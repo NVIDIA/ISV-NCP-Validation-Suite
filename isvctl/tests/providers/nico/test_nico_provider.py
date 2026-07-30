@@ -554,27 +554,6 @@ def test_nico_check_api_reads_site_and_site_list(
     ]
 
 
-def test_nico_iam_plain_suite_has_one_command_group() -> None:
-    """A plain suite derives execution identity from its sole command group."""
-    merged, _steps = _merged_nico_config_steps("iam.yaml", "iam")
-
-    assert "platform" not in merged["tests"]
-    assert list(merged["commands"]) == ["iam"]
-
-
-def test_nico_iam_config_wires_caller_identity() -> None:
-    """The NICo IAM config should wire the suite's caller-identity check."""
-    merged, steps = _merged_nico_config_steps("iam.yaml", "iam")
-
-    assert set(steps) == {"check_credentials"}
-    _assert_steps_use_nico_api_base(steps)
-
-    validations = merged["tests"]["validations"]
-    assert merged["tests"]["settings"]["nico_api_base"] == "{{env.NICO_API_BASE}}"
-    assert validations["caller_identity"]["step"] == "check_credentials"
-    assert "IamCredentialsAuthenticateCheck" in validations["caller_identity"]["checks"]
-
-
 def test_nico_check_credentials_reports_api_readiness(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

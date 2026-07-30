@@ -50,12 +50,6 @@ tests:
     setup_checks:
       step: create_user
       checks:
-        # No plan item for creation alone: IAM01-01 is "create user and log in as
-        # that user", and issuing an access key does not establish the login.
-        # IamUserAuthenticatedCheck claims it from the test_credentials step.
-        # Keeps min_req so a min_req-only run still creates the user the
-        # credential checks need - setup steps are skipped when every check bound
-        # to them is filtered out.
         IamUserCreatedCheck:
           test_id: "N/A"
           labels: ["iam", "min_req"]
@@ -66,30 +60,6 @@ tests:
             - FieldExistsCheck:
                 fields: ["username", "access_key_id"]
 
-    # Whoami on the credentials the run itself is configured with, before any
-    # user is created. Platforms that only expose read-only IAM can wire this
-    # step alone and skip the lifecycle checks above.
-    caller_identity:
-      step: check_credentials
-      checks:
-        IamCredentialsAuthenticateCheck:
-          # No plan item for "the operator's own credentials work"; user
-          # lifecycle is IAM01-01/IAM02-01 and user API access is IAM03-01.
-          test_id: "N/A"
-          labels: ["iam"]
-          requires: []
-          description: "Check the configured credentials authenticate and resolve to an account identity"
-          compose:
-            - StepSuccessCheck
-            - FieldExistsCheck:
-                fields: ["account_id", "identity_id"]
-            - FieldValueCheck:
-                field: "authenticated"
-                expected: true
-
-    # The step reports identity and access as separate probes, so each plan item
-    # gets the half that proves it: logging in (IAM01-01) and reaching an
-    # authorized resource once logged in (IAM03-01).
     credentials:
       step: test_credentials
       checks:

@@ -36,8 +36,19 @@ def test_plain_suite_deploy_reports_no_capability(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """A plain-suite deploy remains a core run when it has no capability option."""
+    """A plain-suite deploy with no --capability is a core run."""
     _, plain = _write_catalog(tmp_path)
     monkeypatch.setattr(deploy_cli, "CONFIGS_ROOT", tmp_path)
 
     assert deploy_cli._reporting_suite_and_capability([plain]) == ("storage", None)
+
+
+def test_plain_suite_deploy_reports_the_selected_capability(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """`--capability` changes which checks run, so the run must record it."""
+    _, plain = _write_catalog(tmp_path)
+    monkeypatch.setattr(deploy_cli, "CONFIGS_ROOT", tmp_path)
+
+    assert deploy_cli._reporting_suite_and_capability([plain], "vm") == ("storage", "vm")

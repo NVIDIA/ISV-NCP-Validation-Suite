@@ -444,3 +444,25 @@ def test_resolve_entries_warns_when_default_filter_masks_missing_step_field(
 
     assert "default(" in caplog.text, "default(...) wrapper should log a warning when masking Undefined"
     assert "node_count_invalid" in caplog.text, "warning must surface the missing field name"
+
+
+def test_resolve_entries_is_quiet_when_the_run_has_no_steps(
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A validation-only run has no steps, so a step reference cannot be a typo.
+
+    The suites wire provider step output behind ``default(...)`` so the same
+    check also runs against a system that is already up. Warning once per
+    reference there buries the results under a page of identical lines.
+    """
+    monkeypatch.setattr(logging.getLogger("isvtest"), "propagate", True)
+
+    entry = _entry(params={"storage_class": "{{ steps.setup_cluster.csi.block_sc | default('', true) }}"})
+
+    with caplog.at_level("WARNING", logger="isvtest.core.resolution"):
+        resolved = _resolve(entry, render_context={"steps": {}})
+
+    assert resolved.rendered_params is not None
+    assert resolved.rendered_params["storage_class"] == ""
+    assert "default(" not in caplog.text

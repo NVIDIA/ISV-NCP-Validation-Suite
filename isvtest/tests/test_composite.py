@@ -17,8 +17,18 @@
 
 from typing import Any
 
+import pytest
+
 from isvtest.core.composite import CompositeCheck, composed_members, is_composite
+from isvtest.core.discovery import discover_all_tests
 from isvtest.core.resolution import parse_validations
+from isvtest.validations.generic import (
+    CrudOperationsCheck,
+    FieldExistsCheck,
+    FieldValueCheck,
+    StepSuccessCheck,
+)
+from isvtest.validations.iam import IamCredentialAccessCheck
 
 
 def _config(compose: Any, step_output: dict[str, Any] | None = None, **extra: Any) -> dict[str, Any]:
@@ -47,6 +57,13 @@ class TestComposeOnlyAtParseTime:
     def test_rejects_a_directly_wired_compose_only_check(self) -> None:
         """The entry becomes an invalid-config error naming the fix."""
         entry = self._parse({"StepSuccessCheck": {}})[0]
+
+        assert "compose_only" in entry.params_template["_invalid_config"]
+        assert "compose:" in entry.params_template["_invalid_config"]
+
+    def test_rejects_a_directly_wired_compose_only_variant(self) -> None:
+        """A variant suffix must not bypass the compose-only restriction."""
+        entry = self._parse({"StepSuccessCheck-teardown": {}})[0]
 
         assert "compose_only" in entry.params_template["_invalid_config"]
         assert "compose:" in entry.params_template["_invalid_config"]
@@ -226,8 +243,6 @@ class TestCompositeCheck:
 
     def test_skips_with_the_step_reason_when_the_step_skipped(self) -> None:
         """A skipped step skips the composite before any member runs."""
-        import pytest
-
         composite = CompositeCheck(
             config=_config(["StepSuccessCheck"], step_output={"skipped": True, "skip_reason": "not supported"})
         )
@@ -243,24 +258,13 @@ class TestCompositeCheck:
         on ``StepSuccessCheck`` again, which the wiring validator only catches
         while the marker is present.
         """
-        from isvtest.validations.generic import (
-            CrudOperationsCheck,
-            FieldExistsCheck,
-            FieldValueCheck,
-            StepSuccessCheck,
-        )
-
         for check in (FieldExistsCheck, FieldValueCheck, StepSuccessCheck, CrudOperationsCheck):
             assert check.compose_only is True, f"{check.__name__} must stay compose-only"
 
     def test_purpose_built_checks_are_not_compose_only(self) -> None:
         """A check whose name already says what it proves is wired directly."""
-        from isvtest.validations.iam import IamCredentialAccessCheck
-
         assert IamCredentialAccessCheck.compose_only is False
 
     def test_is_excluded_from_discovery(self) -> None:
         """The runner is machinery: it must never be discovered or catalogued."""
-        from isvtest.core.discovery import discover_all_tests
-
         assert CompositeCheck.__name__ not in {cls.__name__ for cls in discover_all_tests()}

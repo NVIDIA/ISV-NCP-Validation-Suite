@@ -29,7 +29,7 @@ from jinja2 import ChainableUndefined, Environment, Undefined
 
 from isvtest.config.loader import _ternary
 from isvtest.core.composite import is_composite
-from isvtest.core.validation import get_validation_class
+from isvtest.core.discovery import discover_all_tests
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +163,12 @@ def requirements_satisfied(requires: Iterable[str], capability: str) -> bool:
     return not required or capability in required
 
 
+@cache
+def _compose_only_check_names() -> frozenset[str]:
+    """Return validation class names that may only be used in composites."""
+    return frozenset(cls.__name__ for cls in discover_all_tests() if getattr(cls, "compose_only", False))
+
+
 def _compose_only_error(name: str, params: Any) -> str | None:
     """Return an error when a ``compose_only`` check is wired under its own name.
 
@@ -172,8 +178,7 @@ def _compose_only_error(name: str, params: Any) -> str | None:
     """
     if is_composite(params):
         return None
-    target = get_validation_class(name)
-    if target is not None and getattr(target, "compose_only", False):
+    if resolve_class_key(name, _compose_only_check_names()) is not None:
         return (
             f"'{name}' is compose_only and cannot be wired directly; "
             "name the property under test and list it under 'compose:'"

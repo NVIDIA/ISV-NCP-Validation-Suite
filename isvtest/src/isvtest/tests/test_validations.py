@@ -227,7 +227,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
                         continue
 
                     # If class was not configured by exact or variant match, treat it as skipped.
-                    if cls_name not in configured_classes:
+                    if cls_name not in configured_classes and not getattr(cls, "compose_only", False):
                         pytest_marks = _pytest_marks_for_validation(metafunc.config)
                         pytest_marks.append(pytest.mark.skip(reason="Not configured in config YAML"))
 

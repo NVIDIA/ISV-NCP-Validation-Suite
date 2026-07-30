@@ -57,6 +57,7 @@ import yaml
 from isvctl.config.merger import merge_yaml_files
 from isvtest.catalog import iter_checks_from_data
 from isvtest.core.composite import COMPOSE_KEY, composed_members, is_composite
+from isvtest.core.discovery import discover_all_tests
 from isvtest.core.resolution import (
     DECLARABLE_CAPABILITIES,
     canonical_suite_name,
@@ -122,16 +123,12 @@ def required_suite_label(config_path: Path) -> str | None:
 @cache
 def discovered_check_names() -> frozenset[str]:
     """Return the names of every discoverable validation class."""
-    from isvtest.core.discovery import discover_all_tests
-
     return frozenset(cls.__name__ for cls in discover_all_tests())
 
 
 @cache
 def compose_only_check_names() -> frozenset[str]:
     """Return the checks that may only be reached from inside a composite."""
-    from isvtest.core.discovery import discover_all_tests
-
     return frozenset(cls.__name__ for cls in discover_all_tests() if getattr(cls, "compose_only", False))
 
 

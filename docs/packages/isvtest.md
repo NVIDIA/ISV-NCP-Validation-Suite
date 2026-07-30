@@ -61,13 +61,18 @@ Validations are platform-agnostic checks that inspect JSON step output. They are
 ### Generic (`validations/generic.py`)
 
 Utility checks that work with any step output.
+`StepSuccessCheck`, `FieldExistsCheck`, `FieldValueCheck`, and
+`CrudOperationsCheck` are compose-only: list them under a named test's
+`compose:` block rather than wiring their class names directly.
+`SchemaValidation` remains directly wireable, but is catalog-excluded because
+the step executor runs schema checks automatically.
 
 | Validation | Platforms | Description |
 | ---------- | --------- | ----------- |
-| `StepSuccessCheck` | all | Check step completed successfully |
-| `FieldExistsCheck` | all | Check required fields exist in output |
-| `FieldValueCheck` | all | Check field has expected value |
-| `CrudOperationsCheck` | all | Check all CRUD operations passed |
+| `StepSuccessCheck` | all | Compose-only: check step completed successfully |
+| `FieldExistsCheck` | all | Compose-only: check required fields exist in output |
+| `FieldValueCheck` | all | Compose-only: check field has expected value |
+| `CrudOperationsCheck` | all | Compose-only: check all CRUD operations passed |
 | `SchemaValidation` | all | Validate output matches JSON schema |
 
 ### Instance (`validations/instance.py`)

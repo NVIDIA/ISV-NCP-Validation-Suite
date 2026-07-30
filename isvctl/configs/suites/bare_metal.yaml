@@ -337,6 +337,7 @@ tests:
           labels: ["bare_metal", "ssh", "gpu"]
           host: "{{steps.describe_instance.public_ip}}"
           key_file: "{{steps.describe_instance.key_file}}"
+          expected_gpus: 8
           description: "Check the GPUs are still present after a start"
           compose:
             - GpuCheck
@@ -486,6 +487,7 @@ tests:
         BmGpusPresentAfterReinstallCheck:
           test_id: "BMAAS08-01"
           labels: ["bare_metal", "ssh", "gpu"]
+          expected_gpus: 8
           description: "Check the GPUs are still present after a reinstall"
           compose:
             - GpuCheck

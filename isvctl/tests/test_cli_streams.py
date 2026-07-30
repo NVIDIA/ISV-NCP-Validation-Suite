@@ -122,6 +122,17 @@ tests:
     assert "[SKIP] K8sNodeCountCheck: excluded by name" in result.stdout
     assert "[SKIP] K8sCncfConformanceCheck: excluded by label: slow" in result.stdout
 
+    for selection in (["--label", "kubernetes"], ["--", "-m", "kubernetes"]):
+        selected = runner.invoke(
+            test_cli.app,
+            ["run", "-f", str(config), "--no-upload", "--dry-run", *selection],
+        )
+
+        assert selected.exit_code == 0, selected.output
+        assert "Excluded labels: slow" not in selected.stdout
+        assert "[SKIP] K8sNodeCountCheck: excluded by name" in selected.stdout
+        assert "[RUN]  K8sCncfConformanceCheck" in selected.stdout
+
 
 def test_catalog_list_json_stdout_is_pure_json() -> None:
     """`catalog list --json` keeps stdout free of diagnostics."""

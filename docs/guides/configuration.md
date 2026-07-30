@@ -565,12 +565,29 @@ Below is a summary by category.
 
 ### Generic (`validations/generic.py`)
 
+`StepSuccessCheck`, `FieldExistsCheck`, `FieldValueCheck`, and `CrudOperationsCheck`
+are compose-only mechanisms. Reference them under a named test instead of wiring
+their class names directly:
+
+```yaml
+checks:
+  NetworkProvisionedCheck:
+    description: "Check the network was provisioned"
+    compose:
+      - StepSuccessCheck
+      - FieldExistsCheck:
+          fields: ["network_id"]
+```
+
+`SchemaValidation` remains directly wireable, but is catalog-excluded because
+the step executor runs schema checks automatically.
+
 | Validation | Description |
 | ---------- | ----------- |
-| `StepSuccessCheck` | Check step completed successfully |
-| `FieldExistsCheck` | Check required fields exist in output |
-| `FieldValueCheck` | Check field has expected value (eq, gt, gte, lt, lte, contains, min/max) |
-| `CrudOperationsCheck` | Check all CRUD operations passed |
+| `StepSuccessCheck` | Compose-only: check step completed successfully |
+| `FieldExistsCheck` | Compose-only: check required fields exist in output |
+| `FieldValueCheck` | Compose-only: check field has expected value (eq, gt, gte, lt, lte, contains, min/max) |
+| `CrudOperationsCheck` | Compose-only: check all CRUD operations passed |
 | `SchemaValidation` | Validate output matches JSON schema |
 
 ### Instance (`validations/instance.py`)

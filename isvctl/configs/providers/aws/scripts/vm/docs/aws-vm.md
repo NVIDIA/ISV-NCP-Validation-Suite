@@ -176,7 +176,7 @@ Validates PCI bus configuration for GPU passthrough.
 | `expected_gpus` | int | `1` | Expected number of GPU PCI devices |
 | `expected_link_width` | string | *(none)* | Expected PCIe link width, e.g. `"x16"` |
 
-### HostSoftwareCheck
+### VmSoftwareStackCheck
 
 Validates the full software stack: kernel, libvirt/QEMU, SBIOS, NVIDIA drivers.
 

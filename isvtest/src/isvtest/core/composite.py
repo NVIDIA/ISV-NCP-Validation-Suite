@@ -86,6 +86,7 @@ class CompositeCheck(BaseValidation):
     _exclude_from_discovery: ClassVar[bool] = True
 
     def run(self) -> None:
+        """Run every configured member and fail the composite on invalid or failed members."""
         raw = self.config.get(COMPOSE_KEY)
         members = composed_members(raw)
         if not members:

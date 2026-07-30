@@ -73,14 +73,15 @@ uv run isvctl test run -f isvctl/configs/providers/aws/config/bare_metal.yaml --
 | 9 | `reboot_instance` | test | `providers/aws/scripts/bare_metal/reboot_instance.py` | Reboot instance, validate recovery |
 | 10 | `power_cycle_instance` | test | `providers/aws/scripts/bare_metal/power_cycle_instance.py` | Force stop + start, validate recovery |
 | 11 | `describe_instance` | test | `providers/aws/scripts/bare_metal/describe_instance.py` | Describe post-power-cycle state + SSH info |
-| 12 | `reinstall_instance` | test | `providers/aws/scripts/bare_metal/reinstall_instance.py` | Reinstall OS (skip: true by default) |
-| 13 | `deploy_nim` | test | `providers/shared/deploy_nim.py` | Deploy NIM container via SSH |
-| 14 | `teardown_nim` | teardown | `providers/shared/teardown_nim.py` | Stop NIM container |
-| 15 | `teardown` | teardown | `providers/aws/scripts/bare_metal/teardown.py` | Terminate instance, delete resources |
-| 16 | `verify_teardown` | teardown | `providers/aws/scripts/bare_metal/verify_terminated.py` | Confirm instance terminated + SG deleted |
+| 12 | `host_status_log` | test | `providers/aws/scripts/bare_metal/host_status_log.py` | Capture recent host status events |
+| 13 | `reinstall_instance` | test | `providers/aws/scripts/bare_metal/reinstall_instance.py` | Reinstall OS (skip: true by default) |
+| 14 | `deploy_nim` | test | `providers/shared/deploy_nim.py` | Deploy NIM container via SSH |
+| 15 | `teardown_nim` | teardown | `providers/shared/teardown_nim.py` | Stop NIM container |
+| 16 | `teardown` | teardown | `providers/aws/scripts/bare_metal/teardown.py` | Terminate instance, delete resources |
+| 17 | `verify_teardown` | teardown | `providers/aws/scripts/bare_metal/verify_terminated.py` | Confirm instance terminated + SG deleted |
 
 Step 6 (`verify_image`) cross-references the image-registry domain: it is how AWS proves
-BOOT01-03, since its image-registry run launches a VM rather than a metal host. Step 12
+BOOT01-03, since its image-registry run launches a VM rather than a metal host. Step 13
 (`reinstall_instance`) is skipped by default because root volume replacement is slow on
 AWS metal (~30-45 min).
 
@@ -105,6 +106,7 @@ integration before re-enabling the retention check for AWS.
 | `ssh` | `BmHostReadyCheck` | describe_instance | SSH works, OS is ubuntu |
 | `gpu` | `BmGpusPresentCheck` | describe_instance | GPU visibility (8 GPUs) |
 | `host_os` | `BmVcpuPinningCheck`, `BmPciBusCheck`, `BmHostSoftwareCheck` | describe_instance | vCPU pinning, PCI bus, kernel/drivers/BIOS |
+| `host_status_logs` | `BmHostStatusLogCheck` | host_status_log | Recent host status log sources are present |
 | `gpu_stress` | `BmGpuStressCheck` | describe_instance | PyTorch matrix multiply on all 8 GPUs |
 | `nccl` | `BmNcclCheck` | describe_instance | NCCL AllReduce (NVLink/NVSwitch) |
 | `training` | `BmTrainingCheck` | describe_instance | DDP training workload (50 steps) |

@@ -75,7 +75,7 @@ a| https://github.com/NVIDIA/ai-cloud-validation/issues/104[#104]
 | [[BOOT01-03]]BOOT01-03
 | BOOT01
 | https://github.com/NVIDIA/ai-cloud-validation/issues/41[#41]
-| image_registry, min_req
+| bare_metal, image_registry, min_req
 |
 | P0
 a| https://github.com/NVIDIA/ai-cloud-validation/issues/41[#41]

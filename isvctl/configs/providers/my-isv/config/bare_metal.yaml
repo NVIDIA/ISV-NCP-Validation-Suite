@@ -28,9 +28,7 @@
 #    BmHostStartedCheck, BmHostRebootedCheck,
 #    BmHostPowerCycledCheck, the BmIdentifierStableAfter* checks,
 #    BmResourcesDeletedCheck, BmHostTerminatedCheck). SSH-based
-#    host checks (BmHostReady*, BmGpusPresent*, GpuStress,
-#    Nccl, Training, Nvlink, InfiniBand, Ethernet, the host OS/driver/CPU
-#    and container-runtime checks, cloud-init, NIM) are excluded via
+#    host checks that need a real SSH-reachable node are excluded via
 #    `exclude.labels: [ssh]` because
 #    a dummy stub cannot spin up a real host to SSH into. The
 #    deploy_nim / teardown_nim / reinstall_instance steps are also
@@ -283,9 +281,7 @@ tests:
     region: "my-isv-region-1"
     instance_type: "my-isv.bm.gpu.8x"
 
-  # Skip SSH-based host checks (Connectivity, Os, Gpu, Driver, CpuInfo,
-  # HostSoftware, GpuStress, Nccl, Training, Nvlink, InfiniBand,
-  # Ethernet, ContainerRuntime, CloudInit, NIM*). Real ISVs remove this
-  # exclusion as their stubs come online.
+  # Skip host checks that need a real SSH-reachable node. Real ISVs
+  # remove this exclusion as their stubs come online.
   exclude:
     labels: ["ssh"]

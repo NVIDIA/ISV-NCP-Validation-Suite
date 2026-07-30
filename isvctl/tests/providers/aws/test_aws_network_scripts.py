@@ -53,6 +53,21 @@ def _client_error(operation_name: str, code: str = "AccessDenied", message: str 
     return ClientError({"Error": {"Code": code, "Message": message}}, operation_name)
 
 
+def test_create_vpc_owned_tag_specification() -> None:
+    """Network fixtures must receive ownership tags in their create API call."""
+    module = _load_network_script("create_vpc.py")
+
+    assert module.owned_tag_specification("vpc", "isv-shared-vpc-12345678") == [
+        {
+            "ResourceType": "vpc",
+            "Tags": [
+                {"Key": "Name", "Value": "isv-shared-vpc-12345678"},
+                {"Key": "CreatedBy", "Value": "isvtest"},
+            ],
+        }
+    ]
+
+
 def _assert_stable_egress_contract(result: dict[str, Any]) -> None:
     """Assert stable egress scripts emit the minimal provider JSON contract."""
     assert set(result) == STABLE_EGRESS_TOP_LEVEL_KEYS

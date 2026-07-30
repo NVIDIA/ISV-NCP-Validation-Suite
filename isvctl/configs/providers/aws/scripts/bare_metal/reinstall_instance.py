@@ -478,14 +478,20 @@ def main() -> int:
         result["success"] = True
         print("Reinstall completed successfully!", file=sys.stderr)
 
-        # Step 10: Clean up old root volume (post-success only)
+        # Step 10: Clean up old root volume (post-success only). Nothing else
+        # reclaims it: it is detached, so the instance's DeleteOnTermination no
+        # longer covers it and teardown only terminates instances. Report a
+        # failed delete in the JSON so a leak is visible instead of stderr-only.
         if old_volume_id:
             print(f"Cleaning up old volume {old_volume_id}...", file=sys.stderr)
-            try:
-                ec2.delete_volume(VolumeId=old_volume_id)
+            if delete_with_retry(
+                ec2.delete_volume,
+                VolumeId=old_volume_id,
+                resource_desc=f"old root volume {old_volume_id}",
+            ):
                 print("  Old volume deleted", file=sys.stderr)
-            except ClientError as e:
-                print(f"  Warning: could not delete old volume: {e}", file=sys.stderr)
+            else:
+                result.setdefault("cleanup_errors", []).append(f"old root volume {old_volume_id} not deleted")
 
     except Exception as e:
         result["error"] = str(e)

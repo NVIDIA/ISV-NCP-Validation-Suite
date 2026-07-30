@@ -66,6 +66,7 @@ provider "aws" {
       Environment = var.environment
       Project     = "isv-lab-tools"
       ManagedBy   = "terraform"
+      CreatedBy   = "isvtest"
     }
   }
 }
@@ -152,6 +153,7 @@ locals {
   tags = {
     ClusterName = local.cluster_name
     Environment = var.environment
+    CreatedBy   = "isvtest"
   }
 }
 
@@ -705,9 +707,14 @@ resource "kubernetes_storage_class_v1" "gp3" {
   volume_binding_mode    = "WaitForFirstConsumer"
   allow_volume_expansion = true
 
+  # tagSpecification_1 stamps CreatedBy onto every dynamically provisioned
+  # volume. Without it, a PVC whose PV is deleted while the volume is still
+  # detaching survives carrying only kubernetes.io/* tags, invisible to the
+  # CreatedBy=isvtest cleanup sweeps.
   parameters = {
-    type      = "gp3"
-    encrypted = "true"
+    type               = "gp3"
+    encrypted          = "true"
+    tagSpecification_1 = "CreatedBy=isvtest"
   }
 
   depends_on = [module.eks]

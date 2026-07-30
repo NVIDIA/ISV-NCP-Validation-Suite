@@ -65,6 +65,7 @@ from common.ec2 import (
     create_security_group,
     get_architecture_for_instance_type,
     get_default_vpc_and_subnets,
+    owned_tag_specifications,
 )
 
 
@@ -272,16 +273,10 @@ def main() -> int:
                     SubnetId=subnet_id,
                     SecurityGroupIds=[sg_id],
                     Monitoring={"Enabled": args.detailed_monitoring},
-                    TagSpecifications=[
-                        {
-                            "ResourceType": "instance",
-                            "Tags": [
-                                {"Key": "Name", "Value": args.name},
-                                {"Key": "Platform", "Value": "bare-metal"},
-                                {"Key": "CreatedBy", "Value": "isvtest"},
-                            ],
-                        }
-                    ],
+                    TagSpecifications=owned_tag_specifications(
+                        args.name,
+                        extra_tags=[{"Key": "Platform", "Value": "bare-metal"}],
+                    ),
                     BlockDeviceMappings=[
                         {
                             "DeviceName": "/dev/sda1",

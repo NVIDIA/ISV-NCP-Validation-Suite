@@ -57,6 +57,19 @@ from botocore.exceptions import ClientError
 from common.errors import classify_aws_error, handle_aws_errors
 
 
+def owned_tag_specification(resource_type: str, name: str) -> list[dict[str, Any]]:
+    """Return creation-time tags for an isvtest-owned EC2 resource."""
+    return [
+        {
+            "ResourceType": resource_type,
+            "Tags": [
+                {"Key": "Name", "Value": name},
+                {"Key": "CreatedBy", "Value": "isvtest"},
+            ],
+        }
+    ]
+
+
 def create_vpc(ec2: Any, name: str, cidr: str) -> dict[str, Any]:
     """Create VPC with all required components."""
     result = {
@@ -75,7 +88,10 @@ def create_vpc(ec2: Any, name: str, cidr: str) -> dict[str, Any]:
 
     try:
         # Create VPC
-        vpc = ec2.create_vpc(CidrBlock=cidr)
+        vpc = ec2.create_vpc(
+            CidrBlock=cidr,
+            TagSpecifications=owned_tag_specification("vpc", f"{name}-{tag_suffix}"),
+        )
         vpc_id = vpc["Vpc"]["VpcId"]
         result["network_id"] = vpc_id  # Generic field for validation
 
@@ -83,31 +99,17 @@ def create_vpc(ec2: Any, name: str, cidr: str) -> dict[str, Any]:
         waiter = ec2.get_waiter("vpc_available")
         waiter.wait(VpcIds=[vpc_id])
 
-        # Tag VPC
-        ec2.create_tags(
-            Resources=[vpc_id],
-            Tags=[
-                {"Key": "Name", "Value": f"{name}-{tag_suffix}"},
-                {"Key": "CreatedBy", "Value": "isvtest"},
-            ],
-        )
-
         # Enable DNS hostnames
         ec2.modify_vpc_attribute(VpcId=vpc_id, EnableDnsHostnames={"Value": True})
 
         # Create Internet Gateway
-        igw = ec2.create_internet_gateway()
+        igw = ec2.create_internet_gateway(
+            TagSpecifications=owned_tag_specification("internet-gateway", f"{name}-igw-{tag_suffix}")
+        )
         igw_id = igw["InternetGateway"]["InternetGatewayId"]
         result["internet_gateway_id"] = igw_id
 
         ec2.attach_internet_gateway(InternetGatewayId=igw_id, VpcId=vpc_id)
-        ec2.create_tags(
-            Resources=[igw_id],
-            Tags=[
-                {"Key": "Name", "Value": f"{name}-igw-{tag_suffix}"},
-                {"Key": "CreatedBy", "Value": "isvtest"},
-            ],
-        )
 
         # Get availability zones
         azs = ec2.describe_availability_zones(Filters=[{"Name": "state", "Values": ["available"]}])
@@ -116,16 +118,13 @@ def create_vpc(ec2: Any, name: str, cidr: str) -> dict[str, Any]:
         # Create subnets
         subnet_cidrs = ["10.0.1.0/24", "10.0.2.0/24"]
         for i, (az, subnet_cidr) in enumerate(zip(az_names, subnet_cidrs)):
-            subnet = ec2.create_subnet(VpcId=vpc_id, CidrBlock=subnet_cidr, AvailabilityZone=az)
-            subnet_id = subnet["Subnet"]["SubnetId"]
-
-            ec2.create_tags(
-                Resources=[subnet_id],
-                Tags=[
-                    {"Key": "Name", "Value": f"{name}-subnet-{i}-{tag_suffix}"},
-                    {"Key": "CreatedBy", "Value": "isvtest"},
-                ],
+            subnet = ec2.create_subnet(
+                VpcId=vpc_id,
+                CidrBlock=subnet_cidr,
+                AvailabilityZone=az,
+                TagSpecifications=owned_tag_specification("subnet", f"{name}-subnet-{i}-{tag_suffix}"),
             )
+            subnet_id = subnet["Subnet"]["SubnetId"]
 
             # Enable auto-assign public IP
             ec2.modify_subnet_attribute(SubnetId=subnet_id, MapPublicIpOnLaunch={"Value": True})
@@ -145,17 +144,12 @@ def create_vpc(ec2: Any, name: str, cidr: str) -> dict[str, Any]:
             )
 
         # Create route table
-        rtb = ec2.create_route_table(VpcId=vpc_id)
+        rtb = ec2.create_route_table(
+            VpcId=vpc_id,
+            TagSpecifications=owned_tag_specification("route-table", f"{name}-rtb-{tag_suffix}"),
+        )
         rtb_id = rtb["RouteTable"]["RouteTableId"]
         result["route_table_id"] = rtb_id
-
-        ec2.create_tags(
-            Resources=[rtb_id],
-            Tags=[
-                {"Key": "Name", "Value": f"{name}-rtb-{tag_suffix}"},
-                {"Key": "CreatedBy", "Value": "isvtest"},
-            ],
-        )
 
         # Add route to internet gateway
         ec2.create_route(
@@ -173,6 +167,7 @@ def create_vpc(ec2: Any, name: str, cidr: str) -> dict[str, Any]:
             GroupName=f"{name}-sg-{tag_suffix}",
             Description="Test security group",
             VpcId=vpc_id,
+            TagSpecifications=owned_tag_specification("security-group", f"{name}-sg-{tag_suffix}"),
         )
         sg_id = sg["GroupId"]
         result["security_group_id"] = sg_id

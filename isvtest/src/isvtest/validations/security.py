@@ -667,7 +667,7 @@ class VmConsoleRbacCheck(BaseValidation):
         )
 
 
-class VmVirtualDeviceHardeningCheck(BaseValidation):
+class VirtualDeviceHardeningCheck(BaseValidation):
     """Validate unnecessary VM virtual-device surfaces are disabled.
 
     Config:

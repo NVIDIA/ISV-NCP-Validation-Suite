@@ -597,8 +597,8 @@ class TestImportEndToEnd:
 
         checks = result["tests"]["validations"]["serial_console"]["checks"]
         assert checks["BmSerialConsoleCheck"]["compose"] == ["SerialConsoleCheck"]
-        assert "BmSerialConsoleRetentionCheck" in checks
-        assert "BmSerialConsoleRetentionCheck" in result["tests"]["exclude"]["tests"]
+        assert "SerialConsoleRetentionCheck" in checks
+        assert "SerialConsoleRetentionCheck" in result["tests"]["exclude"]["tests"]
 
     def test_microk8s_inherits_k8s_validations(self) -> None:
         """providers/microk8s.yaml imports suites/k8s.yaml and adds overrides."""

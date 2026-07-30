@@ -416,7 +416,7 @@ class BmDpuHealthCheck(BaseValidation):
             self.set_passed(f"All {total} machine(s) have healthy DPUs")
 
 
-class BmDpuNetworkReadinessCheck(BaseValidation):
+class BmDpuNetworkCheck(BaseValidation):
     """Validate DPU network connectivity on active instances.
 
     Requires an active instance with EVPN overlay networking configured.

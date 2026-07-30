@@ -98,7 +98,7 @@ tests:
           description: "Check the bare metal host's serial console is reachable"
           compose:
             - SerialConsoleCheck
-        BmSerialConsoleRetentionCheck:
+        SerialConsoleRetentionCheck:
           test_id: "CNP06-02"
           labels: ["bare_metal", "min_req"]
 
@@ -564,7 +564,7 @@ tests:
     dpu_network:
       step: check_dpu_network
       checks:
-        BmDpuNetworkReadinessCheck:
+        BmDpuNetworkCheck:
           test_id: "N/A"
           labels: ["bare_metal", "dpu", "network"]
           require_bgp: true
@@ -590,7 +590,7 @@ tests:
     host_health:
       step: query_host_health
       checks:
-        BmHostHealthCheck:
+        HostHealthCheck:
           test_id: "CAP05-01"
           labels: ["bare_metal", "health", "min_req"]
           require_report: true

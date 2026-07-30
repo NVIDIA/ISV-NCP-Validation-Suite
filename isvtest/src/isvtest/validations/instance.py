@@ -538,7 +538,7 @@ class SerialConsoleCheck(BaseValidation):
         self.set_passed(f"Serial console available for {instance_id} ({', '.join(details)})")
 
 
-class BmSerialConsoleRetentionCheck(BaseValidation):
+class SerialConsoleRetentionCheck(BaseValidation):
     """Validate serial console logs are queryable for the required retention window.
 
     Config:

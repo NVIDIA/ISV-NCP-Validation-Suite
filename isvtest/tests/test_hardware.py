@@ -21,7 +21,7 @@ from typing import Any
 
 from isvtest.validations.hardware import (
     BmDpuHealthCheck,
-    BmDpuNetworkReadinessCheck,
+    BmDpuNetworkCheck,
     BmHardwareSerialCheck,
     HardwareIngestionCheck,
 )
@@ -529,22 +529,22 @@ class TestDpuHealthCheck:
 
 
 # ===========================================================================
-# BmDpuNetworkReadinessCheck tests
+# BmDpuNetworkCheck tests
 # ===========================================================================
 
 
 class TestDpuNetworkCheck:
-    """Tests for BmDpuNetworkReadinessCheck validation."""
+    """Tests for BmDpuNetworkCheck validation."""
 
     def test_all_healthy(self) -> None:
         """All interfaces Ready, BGP enabled, extensions running."""
-        check = BmDpuNetworkReadinessCheck(config={"step_output": _dpu_network_output()})
+        check = BmDpuNetworkCheck(config={"step_output": _dpu_network_output()})
         check.run()
         assert check._passed is True
 
     def test_step_failure(self) -> None:
         """Step failed."""
-        check = BmDpuNetworkReadinessCheck(
+        check = BmDpuNetworkCheck(
             config={"step_output": _dpu_network_output(success=False, error="EVPN not configured")}
         )
         check.run()
@@ -553,7 +553,7 @@ class TestDpuNetworkCheck:
 
     def test_no_interfaces(self) -> None:
         """No interfaces found."""
-        check = BmDpuNetworkReadinessCheck(config={"step_output": _dpu_network_output(interfaces=[])})
+        check = BmDpuNetworkCheck(config={"step_output": _dpu_network_output(interfaces=[])})
         check.run()
         assert check._passed is False
         assert "No network interfaces" in check._error
@@ -564,19 +564,19 @@ class TestDpuNetworkCheck:
             {"name": "eth0", "status": "Ready", "type": "ethernet"},
             {"name": "ib0", "status": "Error", "type": "infiniband"},
         ]
-        check = BmDpuNetworkReadinessCheck(config={"step_output": _dpu_network_output(interfaces=interfaces)})
+        check = BmDpuNetworkCheck(config={"step_output": _dpu_network_output(interfaces=interfaces)})
         check.run()
         assert check._passed is False
 
     def test_bgp_not_enabled(self) -> None:
         """BGP daemon not running when required."""
-        check = BmDpuNetworkReadinessCheck(config={"step_output": _dpu_network_output(bgp_enabled=False)})
+        check = BmDpuNetworkCheck(config={"step_output": _dpu_network_output(bgp_enabled=False)})
         check.run()
         assert check._passed is False
 
     def test_bgp_not_required(self) -> None:
         """BGP not required -- should pass without it."""
-        check = BmDpuNetworkReadinessCheck(
+        check = BmDpuNetworkCheck(
             config={
                 "step_output": _dpu_network_output(bgp_enabled=False),
                 "require_bgp": False,
@@ -587,7 +587,7 @@ class TestDpuNetworkCheck:
 
     def test_bgp_field_missing(self) -> None:
         """Missing bgp_enabled field should fail (malformed payload)."""
-        check = BmDpuNetworkReadinessCheck(config={"step_output": _dpu_network_output(include_bgp=False)})
+        check = BmDpuNetworkCheck(config={"step_output": _dpu_network_output(include_bgp=False)})
         check.run()
         assert check._passed is False
         assert any("not reported" in r.get("message", "") for r in check._subtest_results)
@@ -597,9 +597,7 @@ class TestDpuNetworkCheck:
         deployments = [
             {"name": "monitoring", "status": "Error", "version": "v1"},
         ]
-        check = BmDpuNetworkReadinessCheck(
-            config={"step_output": _dpu_network_output(dpu_extension_deployments=deployments)}
-        )
+        check = BmDpuNetworkCheck(config={"step_output": _dpu_network_output(dpu_extension_deployments=deployments)})
         check.run()
         assert check._passed is False
 
@@ -608,9 +606,7 @@ class TestDpuNetworkCheck:
         deployments = [
             {"name": "monitoring", "status": "Pending", "version": "v1"},
         ]
-        check = BmDpuNetworkReadinessCheck(
-            config={"step_output": _dpu_network_output(dpu_extension_deployments=deployments)}
-        )
+        check = BmDpuNetworkCheck(config={"step_output": _dpu_network_output(dpu_extension_deployments=deployments)})
         check.run()
         assert check._passed is True
 
@@ -621,9 +617,7 @@ class TestDpuNetworkCheck:
             {"name": "logging", "status": "Error", "version": "v2"},
             {"name": "metrics", "status": "Running", "version": "v1"},
         ]
-        check = BmDpuNetworkReadinessCheck(
-            config={"step_output": _dpu_network_output(dpu_extension_deployments=deployments)}
-        )
+        check = BmDpuNetworkCheck(config={"step_output": _dpu_network_output(dpu_extension_deployments=deployments)})
         check.run()
         assert check._passed is False
         # Should mention only the failed one
@@ -634,21 +628,19 @@ class TestDpuNetworkCheck:
         deployments = [
             {"name": "monitoring", "version": "v1"},  # No status field
         ]
-        check = BmDpuNetworkReadinessCheck(
-            config={"step_output": _dpu_network_output(dpu_extension_deployments=deployments)}
-        )
+        check = BmDpuNetworkCheck(config={"step_output": _dpu_network_output(dpu_extension_deployments=deployments)})
         check.run()
         assert check._passed is False
 
     def test_no_extensions(self) -> None:
         """No DPU extensions deployed -- should still pass."""
-        check = BmDpuNetworkReadinessCheck(config={"step_output": _dpu_network_output(dpu_extension_deployments=[])})
+        check = BmDpuNetworkCheck(config={"step_output": _dpu_network_output(dpu_extension_deployments=[])})
         check.run()
         assert check._passed is True
 
     def test_empty_step_output(self) -> None:
         """Empty step_output should fail."""
-        check = BmDpuNetworkReadinessCheck(config={"step_output": {}})
+        check = BmDpuNetworkCheck(config={"step_output": {}})
         check.run()
         assert check._passed is False
 

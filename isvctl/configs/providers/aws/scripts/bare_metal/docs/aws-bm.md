@@ -87,7 +87,7 @@ AWS metal (~30-45 min).
 
 ## Validations
 
-`BmSerialConsoleRetentionCheck` requires evidence from a historical serial console
+`SerialConsoleRetentionCheck` requires evidence from a historical serial console
 log archive. The AWS config excludes that check because EC2 `GetConsoleOutput`
 does not prove one-month retention by itself; the canonical
 `BmSerialConsoleCheck` composite remains intact. Add an external archive

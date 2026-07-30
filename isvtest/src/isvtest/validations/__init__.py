@@ -46,8 +46,8 @@ from isvtest.validations.governance import (
     GovernanceMetricsCheck,
 )
 from isvtest.validations.health import (
-    BmHostHealthCheck,
     HealthAggregationCheck,
+    HostHealthCheck,
 )
 from isvtest.validations.host import (
     CloudInitCheck,
@@ -145,8 +145,8 @@ from isvtest.validations.security import (
     OidcUserAuthCheck,
     ShortLivedCredentialsCheck,
     TenantIsolationCheck,
+    VirtualDeviceHardeningCheck,
     VmConsoleRbacCheck,
-    VmVirtualDeviceHardeningCheck,
 )
 from isvtest.validations.storage_infra import (
     OobFailureDetectionCheck,
@@ -166,7 +166,6 @@ __all__ = [
     "BmFirmwareAttestationCheck",
     "BmFirmwareResetCheck",
     "BmGpuMemorySanitizationCheck",
-    "BmHostHealthCheck",
     "BmMemorySanitizationCheck",
     "BmNonceAttestationCheck",
     "BmcBastionAccessCheck",
@@ -189,6 +188,7 @@ __all__ = [
     "GovernanceMetricsCheck",
     "GpuOperatorInstalledCheck",
     "HealthAggregationCheck",
+    "HostHealthCheck",
     "IbKeysConfiguredCheck",
     "IbTenantIsolationCheck",
     "InsecureProtocolsCheck",
@@ -242,10 +242,10 @@ __all__ = [
     "TenantIsolationCheck",
     "TenantListedCheck",
     "TrafficFlowCheck",
+    "VirtualDeviceHardeningCheck",
     "VmConsoleRbacCheck",
     "VmInstanceIdReportedCheck",
     "VmLaunchedWithSpecifiedKeyCheck",
-    "VmVirtualDeviceHardeningCheck",
     "VpcCrudCheck",
     "VpcIpConfigCheck",
     "VpcIsolationCheck",

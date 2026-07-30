@@ -18,7 +18,7 @@
 Two provider-agnostic checks that assert a cloud's health API surfaces the
 signals NVIDIA requires:
 
-- ``BmHostHealthCheck`` (CAP05-01): the per-host health API returns real-time
+- ``HostHealthCheck`` (CAP05-01): the per-host health API returns real-time
   GPU state, thermal status, and memory health for every host.
 - ``HealthAggregationCheck`` (CAP05-02): health can be rolled up to a
   primitive level (cluster, nodegroup, or reservation) with internally
@@ -40,7 +40,7 @@ def _host_label(host: dict[str, Any]) -> str:
     return host.get("host_id") or host.get("machine_id") or host.get("chassis_serial") or "unknown"
 
 
-class BmHostHealthCheck(BaseValidation):
+class HostHealthCheck(BaseValidation):
     """Validate the per-host health API returns a fresh, alert-free report.
 
     NICo exposes host health as an alert-driven report keyed on probe IDs

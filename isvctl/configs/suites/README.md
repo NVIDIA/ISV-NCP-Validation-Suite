@@ -116,6 +116,14 @@ Those live here because that is where the provider supplying the step imports
 from; several already carry a `network` or `sds_controller` label for the same
 reason. Prefixing them would claim a scope their plan items do not have.
 
+Three more stay unprefixed for narrower reasons.
+`VirtualDeviceHardeningCheck` (CNP01-17) already names its subject and has no
+bare-metal reading. `HostHealthCheck` (CAP05-01) is the per-host half of a pair
+whose other half is fleet-level, and prefixing one half would hide that they are
+one requirement at two scopes. `SerialConsoleRetentionCheck` (CNP06-02) is a
+property of the console archive rather than of the host, and unlike CNP06-01/03
+its plan item is not platform-scoped.
+
 ## Test Suite Details
 
 ### IAM (`iam.yaml`)

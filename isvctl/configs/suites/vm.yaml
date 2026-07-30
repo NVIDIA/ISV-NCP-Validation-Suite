@@ -125,7 +125,7 @@ tests:
     virtual_device_hardening:
       step: virtual_device_hardening
       checks:
-        VmVirtualDeviceHardeningCheck:
+        VirtualDeviceHardeningCheck:
           test_id: "CNP01-17"
           labels: ["min_req", "security", "vm"]
 

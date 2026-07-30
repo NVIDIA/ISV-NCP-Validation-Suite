@@ -23,8 +23,8 @@ import pytest
 
 from isvtest.validations.instance import (
     SERIAL_CONSOLE_RETENTION_DAYS_REQUIRED,
-    BmSerialConsoleRetentionCheck,
     InstanceRebootCheck,
+    SerialConsoleRetentionCheck,
     VmComponentKeyAccessCheck,
     VmLaunchedWithSpecifiedKeyCheck,
 )
@@ -295,7 +295,7 @@ class TestSerialConsoleRetentionCheck:
 
     def test_passes_with_complete_retention_evidence(self) -> None:
         """Happy path: queryable logs satisfy the required retention window."""
-        v = BmSerialConsoleRetentionCheck(
+        v = SerialConsoleRetentionCheck(
             config={
                 "step_output": _retention_output(),
                 "retention_days_required": SERIAL_CONSOLE_RETENTION_DAYS_REQUIRED,
@@ -311,21 +311,21 @@ class TestSerialConsoleRetentionCheck:
         """The provider output must identify the node being checked."""
         out = _retention_output()
         del out["instance_id"]
-        v = BmSerialConsoleRetentionCheck(config={"step_output": out})
+        v = SerialConsoleRetentionCheck(config={"step_output": out})
         result = v.execute()
         assert result["passed"] is False
         assert "No 'instance_id'" in result["error"]
 
     def test_fails_when_console_logs_are_not_queryable(self) -> None:
         """A provider must prove historical logs can be queried."""
-        v = BmSerialConsoleRetentionCheck(config={"step_output": _retention_output(console_log_queryable=False)})
+        v = SerialConsoleRetentionCheck(config={"step_output": _retention_output(console_log_queryable=False)})
         result = v.execute()
         assert result["passed"] is False
         assert "not queryable" in result["error"]
 
     def test_fails_when_configured_retention_is_below_required(self) -> None:
         """Configured retention must meet the required minimum."""
-        v = BmSerialConsoleRetentionCheck(
+        v = SerialConsoleRetentionCheck(
             config={
                 "step_output": _retention_output(retention_days_configured=14),
                 "retention_days_required": SERIAL_CONSOLE_RETENTION_DAYS_REQUIRED,
@@ -337,7 +337,7 @@ class TestSerialConsoleRetentionCheck:
 
     def test_fails_when_oldest_queryable_age_is_below_required(self) -> None:
         """The returned evidence must cover the full retention window."""
-        v = BmSerialConsoleRetentionCheck(
+        v = SerialConsoleRetentionCheck(
             config={
                 "step_output": _retention_output(oldest_queryable_log_age_days=7),
                 "retention_days_required": SERIAL_CONSOLE_RETENTION_DAYS_REQUIRED,
@@ -350,7 +350,7 @@ class TestSerialConsoleRetentionCheck:
 
     def test_fails_when_query_returns_no_records(self) -> None:
         """A configured retention policy alone is insufficient without query results."""
-        v = BmSerialConsoleRetentionCheck(config={"step_output": _retention_output(query_result_count=0)})
+        v = SerialConsoleRetentionCheck(config={"step_output": _retention_output(query_result_count=0)})
         result = v.execute()
         assert result["passed"] is False
         assert "returned no records" in result["error"]
@@ -359,7 +359,7 @@ class TestSerialConsoleRetentionCheck:
         """Passing retention fields still require an evidence source."""
         out = _retention_output()
         del out["retention_evidence"]
-        v = BmSerialConsoleRetentionCheck(config={"step_output": out})
+        v = SerialConsoleRetentionCheck(config={"step_output": out})
         result = v.execute()
         assert result["passed"] is False
         assert "No 'retention_evidence'" in result["error"]

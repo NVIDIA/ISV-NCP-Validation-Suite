@@ -54,7 +54,7 @@ from isvtest.validations.network import (
     VpcPeeringCheck,
 )
 from isvtest.validations.nim import NimHealthCheck, NimInferenceCheck, NimModelCheck
-from isvtest.validations.security import VmConsoleRbacCheck, VmVirtualDeviceHardeningCheck
+from isvtest.validations.security import VirtualDeviceHardeningCheck, VmConsoleRbacCheck
 
 
 class ConcreteValidation(BaseValidation):
@@ -793,7 +793,7 @@ class TestConsoleRbacCheck:
 
 
 def _virtual_device_hardening_config(step_output: dict[str, Any] | None = None) -> dict[str, dict[str, Any]]:
-    """Build a minimal VmVirtualDeviceHardeningCheck config."""
+    """Build a minimal VirtualDeviceHardeningCheck config."""
     output: dict[str, Any] = {
         "success": True,
         "platform": "vm",
@@ -810,11 +810,11 @@ def _virtual_device_hardening_config(step_output: dict[str, Any] | None = None) 
 
 
 class TestVirtualDeviceHardeningCheck:
-    """Tests for VmVirtualDeviceHardeningCheck validation."""
+    """Tests for VirtualDeviceHardeningCheck validation."""
 
     def test_all_required_subtests_pass(self) -> None:
         """Virtual device hardening passes when all required subtests pass."""
-        v = VmVirtualDeviceHardeningCheck(config=_virtual_device_hardening_config())
+        v = VirtualDeviceHardeningCheck(config=_virtual_device_hardening_config())
         result = v.execute()
 
         assert result["passed"] is True
@@ -851,7 +851,7 @@ class TestVirtualDeviceHardeningCheck:
     )
     def test_failure_modes(self, override: dict[str, Any], expected_error_contains: str) -> None:
         """Virtual device hardening fails on missing/failed subtests or success=False."""
-        v = VmVirtualDeviceHardeningCheck(config=_virtual_device_hardening_config(override))
+        v = VirtualDeviceHardeningCheck(config=_virtual_device_hardening_config(override))
         result = v.execute()
 
         assert result["passed"] is False

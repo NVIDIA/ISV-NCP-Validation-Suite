@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from isvtest.validations.health import BmHostHealthCheck, HealthAggregationCheck
+from isvtest.validations.health import HealthAggregationCheck, HostHealthCheck
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -126,16 +126,16 @@ def _aggregation_output(
 
 
 # ===========================================================================
-# BmHostHealthCheck tests (CAP05-01)
+# HostHealthCheck tests (CAP05-01)
 # ===========================================================================
 
 
 class TestHostHealthCheck:
-    """Tests for BmHostHealthCheck validation."""
+    """Tests for HostHealthCheck validation."""
 
     def test_healthy_host_passes(self) -> None:
         """A host with a fresh report and no alerts passes."""
-        check = BmHostHealthCheck(config={"step_output": _host_health_output()})
+        check = HostHealthCheck(config={"step_output": _host_health_output()})
         check.run()
         assert check._passed is True, check._error
         # report + alerts subtests, both passing.
@@ -145,14 +145,14 @@ class TestHostHealthCheck:
 
     def test_step_failure(self) -> None:
         """A failed step is reported with its error detail."""
-        check = BmHostHealthCheck(config={"step_output": _host_health_output(success=False, error="API timeout")})
+        check = HostHealthCheck(config={"step_output": _host_health_output(success=False, error="API timeout")})
         check.run()
         assert check._passed is False
         assert "API timeout" in check._error
 
     def test_no_hosts(self) -> None:
         """An empty host list fails -- nothing was validated."""
-        check = BmHostHealthCheck(config={"step_output": _host_health_output(hosts=[])})
+        check = HostHealthCheck(config={"step_output": _host_health_output(hosts=[])})
         check.run()
         assert check._passed is False
         assert "No hosts" in check._error
@@ -160,7 +160,7 @@ class TestHostHealthCheck:
     def test_missing_report_fails(self) -> None:
         """A host the health API returns nothing for fails the baseline check."""
         host = _host(health_present=False, probe_ids=[])
-        check = BmHostHealthCheck(config={"step_output": _host_health_output(hosts=[host])})
+        check = HostHealthCheck(config={"step_output": _host_health_output(hosts=[host])})
         check.run()
         assert check._passed is False
         assert "no health report" in check._error
@@ -170,7 +170,7 @@ class TestHostHealthCheck:
     def test_any_alert_fails_by_default(self) -> None:
         """By default any alert (regardless of classification) fails the host."""
         host = _host(alerts=[_alert(probe_id="HeartbeatTimeout", message="dpu agent silent")])
-        check = BmHostHealthCheck(config={"step_output": _host_health_output(hosts=[host])})
+        check = HostHealthCheck(config={"step_output": _host_health_output(hosts=[host])})
         check.run()
         assert check._passed is False
         assert "HeartbeatTimeout" in check._error
@@ -191,7 +191,7 @@ class TestHostHealthCheck:
                 )
             ],
         )
-        check = BmHostHealthCheck(config={"step_output": _host_health_output(hosts=[host])})
+        check = HostHealthCheck(config={"step_output": _host_health_output(hosts=[host])})
         check.run()
         assert check._passed is False
         alerts_sub = next(r for r in check._subtest_results if r["name"] == "host_m-001_alerts")
@@ -206,7 +206,7 @@ class TestHostHealthCheck:
                 _alert(probe_id="BmcSensor", message="warn", classifications=["SensorWarning"]),
             ],
         )
-        check = BmHostHealthCheck(
+        check = HostHealthCheck(
             config={
                 "step_output": _host_health_output(hosts=[host]),
                 "fail_on_classifications": ["SensorCritical", "SensorFailure", "Leak"],
@@ -222,7 +222,7 @@ class TestHostHealthCheck:
         host = _host(
             alerts=[_alert(probe_id="BmcSensor", message="crit", classifications=["SensorCritical"])],
         )
-        check = BmHostHealthCheck(
+        check = HostHealthCheck(
             config={
                 "step_output": _host_health_output(hosts=[host]),
                 "fail_on_classifications": ["SensorCritical"],
@@ -235,7 +235,7 @@ class TestHostHealthCheck:
     def test_require_probes_coverage(self) -> None:
         """require_probes enforces that specific probe IDs are present."""
         host = _host(probe_ids=["BgpDaemonEnabled"])
-        check = BmHostHealthCheck(
+        check = HostHealthCheck(
             config={
                 "step_output": _host_health_output(hosts=[host]),
                 "require_probes": ["BmcSensor"],
@@ -250,7 +250,7 @@ class TestHostHealthCheck:
     def test_require_probes_present_passes(self) -> None:
         """require_probes passes when the required probe IDs are present."""
         host = _host(probe_ids=["BmcSensor", "BgpDaemonEnabled"])
-        check = BmHostHealthCheck(
+        check = HostHealthCheck(
             config={
                 "step_output": _host_health_output(hosts=[host]),
                 "require_probes": ["BmcSensor"],
@@ -262,7 +262,7 @@ class TestHostHealthCheck:
     def test_freshness_stale_fails(self) -> None:
         """An observation older than max_observation_age_seconds fails."""
         host = _host(observed_age_seconds=600)
-        check = BmHostHealthCheck(
+        check = HostHealthCheck(
             config={
                 "step_output": _host_health_output(hosts=[host]),
                 "max_observation_age_seconds": 300,
@@ -276,7 +276,7 @@ class TestHostHealthCheck:
 
     def test_freshness_fresh_passes(self) -> None:
         """A recent observation passes the freshness subtest."""
-        check = BmHostHealthCheck(
+        check = HostHealthCheck(
             config={
                 "step_output": _host_health_output(hosts=[_host(observed_age_seconds=30)]),
                 "max_observation_age_seconds": 300,
@@ -289,7 +289,7 @@ class TestHostHealthCheck:
 
     def test_freshness_missing_timestamp_fails(self) -> None:
         """When freshness is enforced, a missing timestamp is a failure."""
-        check = BmHostHealthCheck(
+        check = HostHealthCheck(
             config={
                 "step_output": _host_health_output(hosts=[_host(observed_age_seconds=None)]),
                 "max_observation_age_seconds": 300,
@@ -301,7 +301,7 @@ class TestHostHealthCheck:
 
     def test_freshness_not_enforced_by_default(self) -> None:
         """Without max_observation_age_seconds, a null timestamp does not fail."""
-        check = BmHostHealthCheck(config={"step_output": _host_health_output(hosts=[_host(observed_age_seconds=None)])})
+        check = HostHealthCheck(config={"step_output": _host_health_output(hosts=[_host(observed_age_seconds=None)])})
         check.run()
         assert check._passed is True, check._error
         assert not any(r["name"].endswith("_freshness") for r in check._subtest_results)

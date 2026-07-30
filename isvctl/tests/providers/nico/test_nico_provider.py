@@ -34,7 +34,7 @@ import pytest
 from isvtest.validations.attestation import BmFirmwareAttestationCheck, BmNonceAttestationCheck
 from isvtest.validations.governance import GovernanceMetricsCheck
 from isvtest.validations.hardware import BmHardwareSerialCheck
-from isvtest.validations.health import BmHostHealthCheck, HealthAggregationCheck
+from isvtest.validations.health import HealthAggregationCheck, HostHealthCheck
 from isvtest.validations.infiniband import IbKeysConfiguredCheck, IbTenantIsolationCheck
 from isvtest.validations.sanitization import (
     BmDiskSanitizationCheck,
@@ -1790,7 +1790,7 @@ def test_host_health_real_world_bmc_sensors_pass_by_default(
     """A healthy NICo host (BmcSensor probes, no alerts) passes by default.
 
     Mirrors a live NICo site where machine health surfaces BMC sensors and no
-    alerts. BmHostHealthCheck should pass: a report is returned and there are no
+    alerts. HostHealthCheck should pass: a report is returned and there are no
     alerts -- no dedicated memory probe is required.
     """
     module = _load_host_health_script()
@@ -1817,7 +1817,7 @@ def test_host_health_real_world_bmc_sensors_pass_by_default(
     assert host["healthy"] is True
     assert host["components"]["memory"]["present"] is False
 
-    check = BmHostHealthCheck(config={"step_output": payload})
+    check = HostHealthCheck(config={"step_output": payload})
     check.run()
     assert check._passed is True, check._error
 
@@ -1826,7 +1826,7 @@ def test_host_health_leak_alert_fails_validation_end_to_end(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """End-to-end: a leak-detection alert flows through to a BmHostHealthCheck failure."""
+    """End-to-end: a leak-detection alert flows through to a HostHealthCheck failure."""
     module = _load_host_health_script()
     machines = [
         {
@@ -1848,7 +1848,7 @@ def test_host_health_leak_alert_fails_validation_end_to_end(
 
     payload = _run_script(module, monkeypatch, capsys, script_name="query_host_health.py", machines=machines)
 
-    check = BmHostHealthCheck(config={"step_output": payload})
+    check = HostHealthCheck(config={"step_output": payload})
     check.run()
     assert check._passed is False
     assert "BmcLeakDetection" in check._error or "1 alert(s)" in check._error

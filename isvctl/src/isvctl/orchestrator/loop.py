@@ -52,6 +52,9 @@ from isvctl.redaction import redact_dict, redact_junit_xml_tree
 
 logger = logging.getLogger(__name__)
 
+# Platform label for a run whose config declares no commands and no capability.
+VALIDATIONS_ONLY_PLATFORM = "validations"
+
 
 class Phase(StrEnum):
     """Test lifecycle phases."""
@@ -476,8 +479,14 @@ class Orchestrator:
         """
         logger.info(f"Running in steps mode for platform: {platform}")
 
-        config_phases = self.config.get_phases(platform)
-        if self.config.commands[platform].skip:
+        has_lifecycle = bool(self.config.commands)
+        if has_lifecycle:
+            config_phases = self.config.get_phases(platform)
+        else:
+            logger.info("No commands configured; running validations only against the current system")
+            config_phases = [Phase.TEST.value]
+
+        if has_lifecycle and self.config.commands[platform].skip:
             skipped_phases = _requested_config_phases(config_phases, requested_phases)
             return OrchestratorResult(
                 success=True,
@@ -492,8 +501,8 @@ class Orchestrator:
                 inventory={},
             )
 
-        steps = self.config.get_steps(platform)
-        if not steps:
+        steps = self.config.get_steps(platform) if has_lifecycle else []
+        if has_lifecycle and not steps:
             return OrchestratorResult(
                 success=False,
                 phases=[
@@ -909,6 +918,7 @@ class Orchestrator:
         1. tests.capability (isvctl schema)
         2. Root-level platform (legacy isvtest schema)
         3. The sole commands mapping key (plain suites)
+        4. The capability context, when the config declares no commands at all
 
         Returns:
             Platform string (e.g., 'kubernetes', 'slurm', 'bare_metal') or None
@@ -923,6 +933,10 @@ class Orchestrator:
             platform = self.config.model_extra.get("platform")
         if not platform and len(self.config.commands) == 1:
             platform = next(iter(self.config.commands))
+        # A config with no commands names no platform because it drives no lifecycle.
+        # It still has an identity for logs and reports: the context it asserts under.
+        if not platform and not self.config.commands:
+            platform = self._capability or VALIDATIONS_ONLY_PLATFORM
 
         if platform:
             # Normalize 'k8s' to 'kubernetes'

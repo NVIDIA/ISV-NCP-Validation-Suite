@@ -6,7 +6,7 @@
 from pathlib import Path
 
 import pytest
-from isvtest.core.resolution import DECLARABLE_CAPABILITIES
+from isvtest.core.resolution import DECLARABLE_CAPABILITIES, parse_validations
 from pydantic import ValidationError
 
 from isvctl.config.merger import merge_yaml_files
@@ -103,6 +103,16 @@ def test_storage_cleanup_steps_have_explicit_capability_gates(provider: str) -> 
 
     assert steps["teardown_volume"].requires == ["vm", "bare_metal"]
     assert steps["teardown"].requires == ["vm", "bare_metal"]
+
+
+def test_kubernetes_storage_groups_are_live_test_phase_probes() -> None:
+    """Kubernetes storage groups must also run directly on an existing cluster."""
+    config = RunConfig.model_validate(merge_yaml_files([str(CONFIGS_ROOT / "suites" / "storage.yaml")]))
+    entries = parse_validations(config.tests.validations if config.tests else {})
+    selected = [entry for entry in entries if entry.category in {"k8s_storage", "k8s_filesystem"}]
+
+    assert {entry.category for entry in selected} == {"k8s_storage", "k8s_filesystem"}
+    assert all(entry.step is None for entry in selected)
 
 
 @pytest.mark.parametrize("capability", sorted(DECLARABLE_CAPABILITIES))

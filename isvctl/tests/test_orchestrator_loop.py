@@ -388,9 +388,16 @@ EOF
         assert teardown_phases[0].success
 
     def test_platform_detection_missing(self) -> None:
-        """Test error when platform cannot be detected."""
+        """Test error when platform cannot be detected.
+
+        Commands are present, so the run does drive a lifecycle - but nothing says
+        which one, and guessing between them would run the wrong scripts.
+        """
         config = RunConfig(
-            commands={},
+            commands={
+                "kubernetes": PlatformCommands(steps=[StepConfig(name="setup", command="echo", phase="setup")]),
+                "slurm": PlatformCommands(steps=[StepConfig(name="setup", command="echo", phase="setup")]),
+            },
             tests=ValidationConfig(),  # No platform specified
         )
         orchestrator = Orchestrator(config)
@@ -399,6 +406,31 @@ EOF
 
         assert not result.success
         assert "Cannot determine platform" in result.phases[0].message
+
+    def test_config_without_commands_runs_live_validations_only(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A suite config can probe an already-running system without a provider lifecycle."""
+        monkeypatch.setattr("isvctl.orchestrator.loop.load_released_test_filter", lambda: None)
+        config = RunConfig(
+            tests=ValidationConfig(
+                validations={
+                    "k8s_storage": {
+                        "checks": {
+                            "K8sCsiStorageTypesCheck": {
+                                "requires": ["kubernetes"],
+                            }
+                        },
+                    }
+                },
+            ),
+        )
+        orchestrator = Orchestrator(config)
+
+        result = orchestrator.run(phases=[Phase.TEST], capability="kubernetes")
+
+        assert result.success
+        assert [phase.phase for phase in result.phases] == [Phase.TEST]
+        assert [entry.entry.name for entry in result.validations] == ["K8sCsiStorageTypesCheck"]
+        assert result.validations[0].state is State.PASSED
 
     def test_teardown_runs_when_setup_validation_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Teardown must run when setup steps succeed but setup validations fail.

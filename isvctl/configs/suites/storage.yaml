@@ -227,9 +227,10 @@ tests:
           requires: [vm, bare_metal]
           step: multipath
 
-    # Kubernetes storage checks use a normal provider-owned cluster fixture.
+    # Kubernetes storage checks probe the current cluster. Provider runs may
+    # populate steps.setup_cluster.csi with StorageClass defaults first, while
+    # on-cluster validation-only runs can supply the equivalent K8S_CSI_* env vars.
     k8s_storage:
-      step: setup_cluster
       checks:
         K8sCsiStorageTypesCheck:
           test_id: "K8S23-04"
@@ -365,7 +366,6 @@ tests:
           expected_read_ahead_kb: ""
 
     k8s_filesystem:
-      step: setup_cluster
       checks:
         # Shared-filesystem POSIX-semantics checks (multi-pod, RWX PVC).
         K8sFileLockingCheck:

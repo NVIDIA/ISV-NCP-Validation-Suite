@@ -29,6 +29,7 @@ from typing import Annotated
 import typer
 from isvreporter.config import get_endpoint, get_ssa_issuer
 from isvreporter.platform import get_platform_from_config
+from isvtest.core.ngc import get_ngc_api_key
 from isvtest.release_manifest import INCLUDE_UNRELEASED_ENV
 
 from isvctl.cli import setup_logging
@@ -38,8 +39,8 @@ from isvctl.config.suite_resolution import (
     SuiteResolutionError,
     parse_capability,
     platform_vocabulary,
-    resolve_suite,
     resolve_suite_name,
+    select_suite,
 )
 from isvctl.orchestrator.loop import Phase
 from isvctl.remote import SCPTransfer, SSHClient, TarArchive
@@ -91,7 +92,7 @@ def _remote_env_assignments() -> str:
     deliberately not forwarded, since they name files that exist only here.
     """
     forwarded: dict[str, str] = {}
-    ngc_api_key = os.environ.get("NGC_API_KEY", "") or os.environ.get("NGC_NIM_API_KEY", "")
+    ngc_api_key = get_ngc_api_key()
     if ngc_api_key:
         forwarded["NGC_API_KEY"] = ngc_api_key
     include_unreleased = os.environ.get(INCLUDE_UNRELEASED_ENV, "")
@@ -100,18 +101,21 @@ def _remote_env_assignments() -> str:
     return " ".join(f"{name}={shlex.quote(value)}" for name, value in forwarded.items())
 
 
-def _reporting_suite_and_capability(
-    config_files: list[Path],
-    capability: str | None = None,
-) -> tuple[str | None, str | None]:
-    """Return the suite and capability recorded for a deploy.
+def _reporting_suite_and_capability(config_files: list[Path], capability: str | None) -> tuple[str | None, str | None]:
+    """Return the (suite, capability) identity a deploy runs and reports under.
 
-    A platform suite runs under the capability it declares; a plain suite runs
-    under the one ``--capability`` names, and is core when it names none.
+    A platform suite runs under the capability it declares, and so rejects an
+    explicit one; a plain suite runs under whatever ``--capability`` names, and
+    is core when it names none.
     """
     suite = resolve_suite_name(config_files, CONFIGS_ROOT)
-    declared = suite if suite in platform_vocabulary(CONFIGS_ROOT) else None
-    return suite, declared or capability
+    if suite not in platform_vocabulary(CONFIGS_ROOT):
+        return suite, capability
+    if capability:
+        raise SuiteResolutionError(
+            f"--capability cannot be used with platform suite {suite!r}; it already runs under capability {suite!r}."
+        )
+    return suite, suite
 
 
 def _resolve_config_paths(
@@ -337,17 +341,10 @@ def run(
     try:
         capability_context = parse_capability(capability, CONFIGS_ROOT)
         if suite:
-            if config_files:
-                raise SuiteResolutionError("--suite cannot be combined with --config/-f.")
-            selected_suite = resolve_suite(None, suite, configs_root=CONFIGS_ROOT)
-            print_progress(f"Selected canonical {selected_suite.name!r} suite.")
+            selected_suite, selection_message = select_suite(suite, config_files, None, configs_root=CONFIGS_ROOT)
+            print_progress(selection_message)
             config_files = [selected_suite.config_path]
         reported_suite, reported_capability = _reporting_suite_and_capability(config_files, capability_context)
-        if capability_context and reported_suite in platform_vocabulary(CONFIGS_ROOT):
-            raise SuiteResolutionError(
-                f"--capability cannot be used with platform suite {reported_suite!r}; "
-                f"it already runs under capability {reported_capability!r}."
-            )
     except SuiteResolutionError as exc:
         print_error(str(exc))
         raise typer.Exit(code=1)

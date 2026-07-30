@@ -29,7 +29,7 @@ def test_platform_deploy_reports_its_suite_as_capability(
     platform, _ = _write_catalog(tmp_path)
     monkeypatch.setattr(deploy_cli, "CONFIGS_ROOT", tmp_path)
 
-    assert deploy_cli._reporting_suite_and_capability([platform]) == ("vm", "vm")
+    assert deploy_cli._reporting_suite_and_capability([platform], None) == ("vm", "vm")
 
 
 def test_plain_suite_deploy_reports_no_capability(
@@ -40,7 +40,7 @@ def test_plain_suite_deploy_reports_no_capability(
     _, plain = _write_catalog(tmp_path)
     monkeypatch.setattr(deploy_cli, "CONFIGS_ROOT", tmp_path)
 
-    assert deploy_cli._reporting_suite_and_capability([plain]) == ("storage", None)
+    assert deploy_cli._reporting_suite_and_capability([plain], None) == ("storage", None)
 
 
 def test_plain_suite_deploy_reports_the_selected_capability(

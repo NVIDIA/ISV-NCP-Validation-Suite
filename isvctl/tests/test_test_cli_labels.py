@@ -16,7 +16,6 @@
 """Tests for isvctl test CLI label filtering."""
 
 import json
-import re
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -26,9 +25,9 @@ from typer.testing import CliRunner
 import isvctl.cli.test as test_cli
 from isvctl.orchestrator.loop import OrchestratorResult, Phase, PhaseResult
 
-runner = CliRunner()
+from .conftest import ANSI_ESCAPE
 
-_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
+runner = CliRunner()
 
 
 def _write_config(tmp_path: Path) -> Path:
@@ -654,7 +653,7 @@ def test_unknown_option_before_separator_is_rejected(monkeypatch: pytest.MonkeyP
 
     # Typer forces rich styling under GITHUB_ACTIONS, which splices escape
     # codes into the middle of the reported option name.
-    output = _ANSI_ESCAPE.sub("", result.output)
+    output = ANSI_ESCAPE.sub("", result.output)
 
     assert result.exit_code != 0, output
     assert "No such option" in output or "no such option" in output.lower()
@@ -701,5 +700,5 @@ def test_color_choice_applies_to_the_results_summary(
     )
 
     assert result.exit_code == 0, result.output
-    assert bool(_ANSI_ESCAPE.search(result.output)) is styled
+    assert bool(ANSI_ESCAPE.search(result.output)) is styled
     assert _FakeOrchestrator.captured["extra_pytest_args"] == [f"--color={color}"]

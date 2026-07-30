@@ -148,10 +148,14 @@ def resolve_suite_name(config_paths: list[Path], configs_root: Path) -> str | No
 
 def resolve_suite(provider: str | None, suite: str, *, configs_root: Path) -> ResolvedSuite:
     """Resolve one canonical suite, or one provider config when a provider is selected."""
-    config_dir = configs_root / "providers" / provider / "config" if provider is not None else configs_root / "suites"
-    source = f"Provider {provider!r}" if provider is not None else "Canonical suite catalog"
-    if provider is not None and not config_dir.is_dir():
-        raise SuiteResolutionError(f"Provider {provider!r} has no config directory at {config_dir}.")
+    if provider is None:
+        config_dir = configs_root / "suites"
+        source = "Canonical suite catalog"
+    else:
+        config_dir = configs_root / "providers" / provider / "config"
+        source = f"Provider {provider!r}"
+        if not config_dir.is_dir():
+            raise SuiteResolutionError(f"Provider {provider!r} has no config directory at {config_dir}.")
 
     requested = _normalize_name(suite)
     declarable = platform_vocabulary(configs_root)
@@ -176,3 +180,24 @@ def resolve_suite(provider: str | None, suite: str, *, configs_root: Path) -> Re
         )
     path, name, platform = matches[0]
     return ResolvedSuite(config_path=path, name=name, platform=platform)
+
+
+def select_suite(
+    suite: str,
+    config_files: list[Path],
+    provider: str | None,
+    *,
+    configs_root: Path,
+) -> tuple[ResolvedSuite, str]:
+    """Resolve ``--suite`` for a CLI command, with the line announcing the choice.
+
+    ``test run`` and ``deploy run`` both offer ``--suite``; the rule it excludes
+    and the wording of the announcement belong to the selection, not to either
+    command, so neither can drift from the other.
+    """
+    if config_files:
+        raise SuiteResolutionError("--suite cannot be combined with --config/-f.")
+    selected = resolve_suite(provider, suite, configs_root=configs_root)
+    if provider:
+        return selected, f"Selected {selected.name!r} suite for provider {provider!r}."
+    return selected, f"Selected canonical {selected.name!r} suite."

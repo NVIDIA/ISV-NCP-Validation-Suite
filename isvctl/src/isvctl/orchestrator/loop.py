@@ -45,7 +45,7 @@ from isvtest.core.resolution import (
 from isvtest.main import run_validations_via_pytest
 from isvtest.release_manifest import INCLUDE_UNRELEASED_ENV, load_released_test_filter
 
-from isvctl.config.schema import RunConfig
+from isvctl.config.schema import RunConfig, StepConfig
 from isvctl.orchestrator.commands import CommandExecutor
 from isvctl.orchestrator.context import Context
 from isvctl.orchestrator.step_executor import StepExecutor, StepResults
@@ -481,40 +481,42 @@ class Orchestrator:
         """
         logger.info(f"Running in steps mode for platform: {platform}")
 
-        has_lifecycle = bool(self.config.commands)
-        if has_lifecycle:
-            config_phases = self.config.get_phases(platform)
-        else:
+        if not self.config.commands:
+            # No lifecycle to drive: the run asserts against the current system.
+            # Every question below is about the commands mapping, so all of them
+            # are answered at once here rather than guarded one at a time.
             logger.info("No commands configured; running validations only against the current system")
             config_phases = [Phase.TEST.value]
+            steps: list[StepConfig] = []
+        else:
+            config_phases = self.config.get_phases(platform)
+            if self.config.commands[platform].skip:
+                skipped_phases = _requested_config_phases(config_phases, requested_phases)
+                return OrchestratorResult(
+                    success=True,
+                    phases=[
+                        PhaseResult(
+                            phase=_phase_enum_for_name(phase_name),
+                            success=True,
+                            message=f"SKIPPED: platform '{platform}' is skipped by configuration",
+                        )
+                        for phase_name in skipped_phases
+                    ],
+                    inventory={},
+                )
 
-        if has_lifecycle and self.config.commands[platform].skip:
-            skipped_phases = _requested_config_phases(config_phases, requested_phases)
-            return OrchestratorResult(
-                success=True,
-                phases=[
-                    PhaseResult(
-                        phase=_phase_enum_for_name(phase_name),
-                        success=True,
-                        message=f"SKIPPED: platform '{platform}' is skipped by configuration",
-                    )
-                    for phase_name in skipped_phases
-                ],
-                inventory={},
-            )
-
-        steps = self.config.get_steps(platform) if has_lifecycle else []
-        if has_lifecycle and not steps:
-            return OrchestratorResult(
-                success=False,
-                phases=[
-                    PhaseResult(
-                        phase=Phase.SETUP,
-                        success=False,
-                        message=f"No steps defined for platform: {platform}",
-                    )
-                ],
-            )
+            steps = self.config.get_steps(platform)
+            if not steps:
+                return OrchestratorResult(
+                    success=False,
+                    phases=[
+                        PhaseResult(
+                            phase=Phase.SETUP,
+                            success=False,
+                            message=f"No steps defined for platform: {platform}",
+                        )
+                    ],
+                )
 
         released_tests = load_released_test_filter()
         if released_tests is None:
@@ -940,8 +942,7 @@ class Orchestrator:
         # It still has an identity for logs and reports: the environment it asserts
         # against, when the context names one.
         if not platform and not self.config.commands:
-            in_capability = self._capability in DECLARABLE_CAPABILITIES
-            platform = self._capability if in_capability else VALIDATIONS_ONLY_PLATFORM
+            platform = self._capability if self._capability in DECLARABLE_CAPABILITIES else VALIDATIONS_ONLY_PLATFORM
 
         if platform:
             # Normalize 'k8s' to 'kubernetes'

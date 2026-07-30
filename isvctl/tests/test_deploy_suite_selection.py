@@ -7,7 +7,6 @@ Every case here is rejected before the archive is built, so none of them reach
 SSH.
 """
 
-import re
 from pathlib import Path
 
 import pytest
@@ -15,9 +14,9 @@ from typer.testing import CliRunner
 
 import isvctl.cli.deploy as deploy_cli
 
-runner = CliRunner()
+from .conftest import ANSI_ESCAPE
 
-_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
+runner = CliRunner()
 
 
 def _write_catalog(root: Path) -> Path:
@@ -37,9 +36,7 @@ def test_unknown_option_is_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path: P
 
     result = runner.invoke(deploy_cli.app, ["run", "1.2.3.4", "--suite", "storage", "--bogus", "x"])
 
-    # Typer forces rich styling under GITHUB_ACTIONS, which splices escape
-    # codes into the middle of the reported option name.
-    output = _ANSI_ESCAPE.sub("", result.output)
+    output = ANSI_ESCAPE.sub("", result.output)
 
     assert result.exit_code != 0, output
     assert "No such option" in output

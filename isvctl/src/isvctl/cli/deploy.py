@@ -59,6 +59,16 @@ app = typer.Typer(
 )
 
 
+def _pytest_passthrough(args: list[str]) -> str:
+    """Render the args collected after ``--`` for the remote ``test run`` command.
+
+    The separator has to be reproduced remotely: ``test run`` rejects unknown
+    options, so a bare ``-s`` appended to its command line is read as an isvctl
+    option and fails the run before pytest sees it.
+    """
+    return f"-- {shlex.join(args)}" if args else ""
+
+
 def _reporting_suite_and_capability(config_files: list[Path]) -> tuple[str | None, str | None]:
     """Return the suite and platform-suite capability recorded for a deploy."""
     suite = resolve_suite_name(config_files, CONFIGS_ROOT)
@@ -260,7 +270,7 @@ def run(
     setup_logging(verbose)
 
     # Collect extra pytest args from context (after --)
-    pytest_extra_args = shlex.join(ctx.args) if ctx.args else ""
+    pytest_extra_args = _pytest_passthrough(ctx.args)
 
     # Set working directory to workspace root
     working_dir = Path.cwd()
@@ -443,7 +453,7 @@ echo "Running uv sync..."
 uv sync --quiet
 
 echo "Running validation tests with isvctl..."
-echo "Command: isvctl test run {config_args} --phase {phase.value}"
+echo "Command: isvctl test run {config_args} --phase {phase.value} {pytest_extra_args}"
 
 set +e
 set -o pipefail

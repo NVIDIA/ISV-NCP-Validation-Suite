@@ -21,17 +21,11 @@
 # real cloud infrastructure.
 #
 # Coverage:
-#   This example exercises only the pure JSON-contract validations
-#   (VmCreatedCheck, VmListedCheck, VmTaggedCheck,
-#    VmStoppedCheck, VmStartedCheck, VmRebootedCheck, the
-#    VmIdentifierStableAfter* checks, VmSerialConsoleCheck,
-#    VmConsoleRbacCheck, VmComponentKeyAccessCheck,
-#    VmResourcesDeletedCheck). SSH-based host checks
-#    (VmReachableOverSsh*, VmGpusPresent*, VmSoftwareStackCheck,
-#    VmCpuInfoCheck, the NIM checks, etc.) are excluded
-#    via `exclude.labels: [ssh]` because a dummy-success stub cannot
-#    spin up a real host to SSH into. The deploy_nim / teardown_nim
-#    steps are also skipped for the same reason.
+#   This example exercises only the pure JSON-contract validations.
+#   SSH-based host checks that need a real SSH-reachable node are
+#   excluded via `exclude.labels: [ssh]` because a dummy-success stub
+#   cannot spin up a real host to SSH into. The deploy_nim /
+#   teardown_nim steps are also skipped for the same reason.
 #
 # ACTION: Remove `exclude.labels: [ssh]` at the bottom once your
 #   stubs provision real instances with SSH access.

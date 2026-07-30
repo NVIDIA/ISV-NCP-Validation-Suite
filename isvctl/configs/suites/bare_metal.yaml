@@ -558,14 +558,9 @@ tests:
           labels: ["bare_metal", "dpu"]
           require_heartbeat: true
 
-    # DPU overlay readiness as the platform API reports it: interface status,
-    # BGP daemon, and DPU extension deployments. No provider implements
-    # check_dpu_network yet, so this skips as step_not_configured until one
-    # emits interfaces[].status, bgp_enabled, and (optionally)
-    # dpu_extension_deployments[].status.
-    # Not BMAAS06-01: that is proven over SSH by the nvlink/infiniband/ethernet
-    # checks above, and an API reporting an interface "Ready" does not
-    # establish that nodes can communicate over it.
+    # DPU overlay readiness as the platform API reports it. No provider
+    # implements check_dpu_network yet (skips as step_not_configured).
+    # Not BMAAS06-01 — that is proven over SSH by the fabric checks above.
     dpu_network:
       step: check_dpu_network
       checks:

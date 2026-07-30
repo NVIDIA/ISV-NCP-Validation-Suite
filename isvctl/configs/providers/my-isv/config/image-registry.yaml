@@ -21,13 +21,10 @@
 # this example runs end-to-end without any real cloud / BMaaS.
 #
 # Coverage:
-#   This example exercises the pure JSON-contract validations on all 7
-#   steps. They are wired as composites (CustomOsImageUploadedCheck and friends)
-#   over StepSuccessCheck, FieldExistsCheck, CrudOperationsCheck and
-#   InstanceStateCheck. The vm_ssh validation group
-#    (VmFromCustomImageReadyCheck on launch_instance) is excluded via
-#    `exclude.labels: [ssh]` because a dummy stub cannot stand up a
-#    real VM to SSH into.
+#   This example exercises the pure JSON-contract validations on all
+#   steps. SSH-based checks that need a real SSH-reachable VM are
+#   excluded via `exclude.labels: [ssh]` because a dummy stub cannot
+#   stand up a real VM to SSH into.
 #
 # ACTION: Remove `exclude.labels: [ssh]` at the bottom once your
 #   stubs provision real instances with SSH access.

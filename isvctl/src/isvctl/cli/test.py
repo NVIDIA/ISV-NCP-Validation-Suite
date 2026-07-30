@@ -391,6 +391,13 @@ def run(
     setup_logging(verbose)
     apply_user_config(no_user_config)
 
+    # --color governs this command's own output, not just the pytest args built
+    # from it below. click otherwise auto-detects a terminal, and under `deploy`
+    # stdout is a pipe: the results summary would arrive unstyled in the log
+    # while pytest, told explicitly, keeps its colors.
+    if color in ("yes", "no"):
+        ctx.color = color == "yes"
+
     try:
         capability_context = parse_capability(capability, CONFIGS_ROOT)
     except SuiteResolutionError as exc:

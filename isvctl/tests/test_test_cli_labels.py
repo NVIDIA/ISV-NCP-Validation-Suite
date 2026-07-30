@@ -676,3 +676,30 @@ def test_pytest_args_after_separator_are_forwarded(monkeypatch: pytest.MonkeyPat
 
     assert result.exit_code == 0, result.output
     assert _FakeOrchestrator.captured["extra_pytest_args"] == ["-k", "K8sNodeCountCheck"]
+
+
+@pytest.mark.parametrize(("color", "styled"), [("yes", True), ("no", False)])
+def test_color_choice_applies_to_the_results_summary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    color: str,
+    styled: bool,
+) -> None:
+    """--color governs this command's output, not only the pytest args it builds.
+
+    Under `deploy` the remote stdout is a pipe, so click's auto-detection would
+    hand back an unstyled summary alongside colored pytest output.
+    """
+    config = _write_config(tmp_path)
+    _FakeOrchestrator.calls = []
+    monkeypatch.setattr(test_cli, "Orchestrator", _FakeOrchestrator)
+
+    result = runner.invoke(
+        test_cli.app,
+        ["run", "-f", str(config), "--no-upload", f"--color={color}"],
+        color=True,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert bool(_ANSI_ESCAPE.search(result.output)) is styled
+    assert _FakeOrchestrator.captured["extra_pytest_args"] == [f"--color={color}"]

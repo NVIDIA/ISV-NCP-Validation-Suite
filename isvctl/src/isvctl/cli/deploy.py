@@ -29,6 +29,7 @@ from typing import Annotated
 import typer
 from isvreporter.config import get_endpoint, get_ssa_issuer
 from isvreporter.platform import get_platform_from_config
+from isvtest.release_manifest import INCLUDE_UNRELEASED_ENV
 
 from isvctl.cli import setup_logging
 from isvctl.cli.common import get_output_dir, print_error, print_progress, print_step, print_warning
@@ -79,6 +80,24 @@ def _pytest_passthrough(args: list[str]) -> str:
 def _capability_option(capability: str | None) -> str:
     """Render the capability context for the remote ``test run`` command."""
     return f"--capability {shlex.quote(capability)}" if capability else ""
+
+
+def _remote_env_assignments() -> str:
+    """Render the environment the remote ``test run`` needs from this process.
+
+    Only values the target cannot obtain on its own: a credential and the
+    release gate, both set per invocation by whoever runs the deploy. Quoted
+    because they end up on a shell command line. Path-valued variables are
+    deliberately not forwarded, since they name files that exist only here.
+    """
+    forwarded: dict[str, str] = {}
+    ngc_api_key = os.environ.get("NGC_API_KEY", "") or os.environ.get("NGC_NIM_API_KEY", "")
+    if ngc_api_key:
+        forwarded["NGC_API_KEY"] = ngc_api_key
+    include_unreleased = os.environ.get(INCLUDE_UNRELEASED_ENV, "")
+    if include_unreleased:
+        forwarded[INCLUDE_UNRELEASED_ENV] = include_unreleased
+    return " ".join(f"{name}={shlex.quote(value)}" for name, value in forwarded.items())
 
 
 def _reporting_suite_and_capability(
@@ -488,9 +507,7 @@ def run(
         config_args = " ".join(f"-f {c}" for c in configs)
         capability_arg = _capability_option(capability_context)
 
-        # Handle NGC API key securely - use shlex.quote to prevent shell injection
-        ngc_api_key = os.environ.get("NGC_API_KEY", "") or os.environ.get("NGC_NIM_API_KEY", "")
-        env_vars = f"NGC_API_KEY={shlex.quote(ngc_api_key)}" if ngc_api_key else ""
+        env_vars = _remote_env_assignments()
 
         # Note: Variables like $PATH and $TEST_RESULT expand on the remote shell
         remote_script = f"""

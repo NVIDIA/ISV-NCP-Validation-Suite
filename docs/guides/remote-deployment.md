@@ -18,15 +18,22 @@ The `isvctl deploy run` command packages and transfers the tools to a remote tar
 
 ## Environment Variables
 
-Environment variables required by tests must be set on the local machine - they are forwarded to the remote session automatically:
+Set these on the local machine. The upload variables are read here, since
+`deploy` reports the test run itself; the others are forwarded to the remote
+`isvctl test run`:
 
-| Variable | Description |
-| -------- | ----------- |
-| `ISV_SERVICE_ENDPOINT` | Required for result upload to ISV Lab Service |
-| `ISV_SSA_ISSUER` | Required for result upload to ISV Lab Service |
-| `ISV_CLIENT_ID` | Required for result upload to ISV Lab Service |
-| `ISV_CLIENT_SECRET` | Required for result upload to ISV Lab Service |
-| `NGC_API_KEY` | Required for NIM model benchmarks |
+| Variable | Description | Read |
+| -------- | ----------- | ---- |
+| `ISV_SERVICE_ENDPOINT` | Required for result upload to ISV Lab Service | locally |
+| `ISV_SSA_ISSUER` | Required for result upload to ISV Lab Service | locally |
+| `ISV_CLIENT_ID` | Required for result upload to ISV Lab Service | locally |
+| `ISV_CLIENT_SECRET` | Required for result upload to ISV Lab Service | locally |
+| `NGC_API_KEY` | Required for NIM model benchmarks | forwarded |
+| `ISVTEST_INCLUDE_UNRELEASED` | Include checks not yet in `released_tests.json` | forwarded |
+
+Anything else the tests need has to reach the target another way - a config file
+under `isvctl/` travels in the deployment archive, so `-f` overrides are the
+reliable route for values like StorageClass names.
 
 ## Usage
 

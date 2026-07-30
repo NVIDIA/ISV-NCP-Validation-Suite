@@ -320,7 +320,7 @@ def test_suite_without_provider_runs_the_canonical_config(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """Providerless --suite selects the commandless canonical suite directly."""
+    """Providerless --suite selects the canonical suite file directly."""
     configs_root = tmp_path / "configs"
     _write_suite(configs_root, "storage.yaml", ["storage"], "K8sCsiStorageTypesCheck")
     (configs_root / "suites" / "k8s.yaml").write_text(

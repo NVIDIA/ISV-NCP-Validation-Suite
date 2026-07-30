@@ -52,6 +52,30 @@
 
 version: "1.0"
 
+# The kubernetes storage checks read StorageClass names from
+# steps.setup_cluster.csi, so the suite supplies the fixture that produces them
+# rather than leaving the names to K8S_CSI_* env vars on a run with no provider.
+# Same scaffold stub k8s.yaml uses: it reports the classes already installed on
+# the current cluster and provisions nothing, so it is safe to run unattended.
+# A provider's own steps replace this list wholesale when it defines them.
+commands:
+  storage:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: setup_cluster
+        phase: setup
+        command: "../providers/my-isv/scripts/k8s/setup.sh"
+        requires: [kubernetes]
+        # Storage reads only the csi block, so do not hold this fixture to the
+        # `cluster` inventory schema its step name would otherwise select.
+        output_schema: generic
+        timeout: 120
+      - name: teardown_cluster
+        phase: teardown
+        command: "../providers/my-isv/scripts/k8s/teardown.sh"
+        requires: [kubernetes]
+        timeout: 30
+
 tests:
   cluster_name: "storage-validation"
   description: "Storage: block volumes and high-speed / parallel filesystem services"

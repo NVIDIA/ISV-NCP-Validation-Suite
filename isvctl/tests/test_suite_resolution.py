@@ -126,6 +126,24 @@ def test_kubernetes_storage_groups_are_live_test_phase_probes() -> None:
     assert all(entry.step is None for entry in selected)
 
 
+def test_storage_suite_supplies_the_csi_fixture_those_probes_read() -> None:
+    """The suite names its own StorageClasses, so a run needs no provider to do it.
+
+    Without this fixture the templates behind the kubernetes storage checks have
+    no producer, and the classes can only arrive through K8S_CSI_* env vars.
+    """
+    config = RunConfig.model_validate(merge_yaml_files([str(CONFIGS_ROOT / "suites" / "storage.yaml")]))
+    steps = {step.name: step for step in config.get_steps("storage")}
+
+    assert "setup_cluster" in steps, "storage.yaml no longer produces steps.setup_cluster.csi"
+    assert steps["setup_cluster"].requires == ["kubernetes"]
+    assert steps["setup_cluster"].phase == "setup"
+
+    # Both providers pair the fixture with a release; the suite they copy shows it.
+    assert steps["teardown_cluster"].requires == ["kubernetes"]
+    assert steps["teardown_cluster"].phase == "teardown"
+
+
 @pytest.mark.parametrize("capability", sorted(DECLARABLE_CAPABILITIES))
 def test_my_isv_scaffold_covers_every_declarable_capability(capability: str) -> None:
     """Every capability an ISV can declare has a my-isv platform suite to copy.

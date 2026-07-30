@@ -169,7 +169,8 @@ cat << EOF
     "shared_fs_storage_class": "${CSI_SHARED_FS_SC}",
     "nfs_storage_class": "${CSI_NFS_SC}",
     "static_volume_handle": "",
-    "static_driver_name": ""
+    "static_driver_name": "",
+    "static_volume_az": ""
   }
 }
 EOF

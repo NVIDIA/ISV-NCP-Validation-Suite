@@ -30,6 +30,35 @@ Workflow:
 > attached to a milestone. The file you are reading now is the canonical
 > per-tag changelog.
 
+## [0.10.0] - 2026-08-03
+
+### Added
+
+- **Provider-managed Kubernetes autoscaler validation** ([#553](https://github.com/NVIDIA/ai-cloud-validation/pull/553))
+  Extends `K8sClusterAutoscalerCheck` with a provider-managed mode that verifies provider-neutral evidence for enabled status, node-pool identity, and scaling bounds while preserving in-cluster Deployment discovery as the default.
+
+### Changed
+
+- **Suite- and capability-aware catalogs and validation selection** ([#561](https://github.com/NVIDIA/ai-cloud-validation/pull/561), [#563](https://github.com/NVIDIA/ai-cloud-validation/pull/563))
+  Replaces per-check platform selection with `isvctl test run --provider P --suite S [--capability C]`, catalog schema v2 suite and requirement metadata, and suite/capability reporting. Every public validation now has a globally unique, descriptive catalog name, with reusable assertions composed as subtests to prevent catalog and result collisions.
+
+### Fixed
+
+- **Storage capability catalog registration** ([#547](https://github.com/NVIDIA/ai-cloud-validation/pull/547))
+  Publishes STORAGE in catalog capability metadata and preserves storage normalization in reports, so storage suites and their validations are discoverable instead of appearing uncategorized.
+- **CRD webhook validation startup** ([#549](https://github.com/NVIDIA/ai-cloud-validation/pull/549))
+  Runs the webhook helper with an explicit non-root user so images without user metadata no longer prevent `K8sCrdWebhookCheck` from exercising admission, mutation, and rejection behavior.
+- **Actionable Kubernetes CSI failure diagnostics** ([#550](https://github.com/NVIDIA/ai-cloud-validation/pull/550))
+  Captures bounded, redacted pod and PVC descriptions plus scoped events before cleanup, preserving the cause of storage-validation failures without changing their verdict or cleanup behavior.
+- **AWS fixture ownership tagging** ([#559](https://github.com/NVIDIA/ai-cloud-validation/pull/559))
+  Applies `CreatedBy=isvtest` at creation time to AWS volume, CSI, EKS, FSx security-group, and VPC fixtures so interrupted runs leave resources that cleanup and operators can reliably attribute.
+- **Direct and remote storage-suite execution** ([#564](https://github.com/NVIDIA/ai-cloud-validation/pull/564))
+  Restores validation-only execution of commandless canonical suites and allows Kubernetes storage probes to run against an existing cluster without provider setup steps. Remote `deploy run` now accepts `--suite` and `--capability` and correctly forwards pytest arguments and the unreleased-validation gate.
+
+### Internal
+
+- Add the NVIDIA Requirements for AI Clouds v2.3 reference ([#551](https://github.com/NVIDIA/ai-cloud-validation/pull/551)).
+
 ## [0.9.0] - 2026-07-15
 
 ### Added

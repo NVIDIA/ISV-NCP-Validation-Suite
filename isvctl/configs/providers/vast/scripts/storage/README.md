@@ -9,6 +9,12 @@ Storage Provider Shim for VAST Data. Drives
 [`StorageProviderApiCheck`](../../../../../../isvtest/src/isvtest/validations/storage_provider.py)
 against a live VAST cluster via the VMS REST API.
 
+This implementation is a working reference example for exercising the storage
+provider contract against representative VAST environments. It is not an
+officially supported integration or a compatibility guarantee; validate the
+behavior against your VAST release, topology, CSI driver, API permissions, and
+quota model before relying on the results.
+
 ## How it works
 
 The manifest at [`../../config/storage-provider-manifest.yaml`](../../config/storage-provider-manifest.yaml)

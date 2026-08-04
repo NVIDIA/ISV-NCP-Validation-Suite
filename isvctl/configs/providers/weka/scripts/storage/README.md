@@ -9,6 +9,12 @@ Storage Provider Shim for WEKA. Drives
 [`StorageProviderApiCheck`](../../../../../../isvtest/src/isvtest/validations/storage_provider.py)
 against a live WEKA cluster via the REST API (`/api/v2`).
 
+This implementation is a working reference example for exercising the storage
+provider contract against representative WEKA environments. It is not an
+officially supported integration or a compatibility guarantee; validate the
+behavior against your WEKA release, topology, CSI driver, API permissions, and
+quota model before relying on the results.
+
 ## How it works
 
 The manifest at [`../../config/storage-provider-manifest.yaml`](../../config/storage-provider-manifest.yaml)

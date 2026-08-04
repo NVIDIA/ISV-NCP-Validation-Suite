@@ -1,0 +1,83 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Storage Provider Manifest - my-isv living example.
+#
+# v1alpha2 mirrors the upstream StorageProvider package manifest: a package-level
+# namespace + vendor, a per-provider `provider` identity block, and a
+# hierarchical `capabilities` block (native | default | none). At handover this
+# file ships as data["manifest.yaml"] inside a ConfigMap (default name:
+# storage-provider-manifest); in bare-metal mode isvtest reads it from disk.
+#
+# The declared identity + capabilities are a CONTRACT: StorageProviderApiCheck
+# cross-checks them against the running shim's properties(). Keep this in sync
+# with scripts/storage/api.py (MyStorageApi's ProviderProperties core).
+
+schema_version: v1alpha2
+
+# Package identity (the package manifest namespace + vendor). With each provider's id
+# this forms the registration key <namespace>/<id>.
+namespace: my-isv.example.com
+vendor:
+  vendorName: My ISV
+
+providers:
+  # Single sample provider for the my-isv living example. Real handovers
+  # typically list one entry per backend (e.g. a managed shared-FS plus
+  # FSx/EBS for block).
+  - id: my-isv-shared-fs
+    name: my-isv-shared-fs
+    # Cross-check assertion only (NOT the knob): the shim resolves its tenant
+    # from STORAGE_TENANT_ID (default `my-isv-tenant`). StorageProviderApiCheck
+    # fails if get_tenant_quota().tenant_id disagrees, so keep the two in sync.
+    tenant_id: my-isv-tenant
+    sdk_version: v1beta1
+
+    # Implementor identity (mirrors ProviderProperties / VersionMetadata). type
+    # + protocols + version are cross-checked against the shim's properties().
+    provider:
+      name: My ISV Shared FS
+      description: my-isv managed shared filesystem (living example)
+      type: file
+      protocols: [nfsv4]
+      version: 0.1.0
+
+    shim:
+      kind: python
+      # Resolved relative to this manifest's parent directory. In a real
+      # cluster this names a key inside the per-provider ConfigMap
+      # (providers[].shim.configmap) instead.
+      module: ../scripts/storage/api.py
+
+    # Hierarchical capabilities (native | default | none), lowered by the loader
+    # to a cap_id -> supported? map. This example backs tenant-quota visibility
+    # and volume read (list/get); the CSI driver owns volume lifecycle, so
+    # create/delete are `none` (flip them to native only if your shim provisions
+    # volumes itself). No tenant enumeration or directory/user quotas - matching
+    # the MyStorageApi surface in scripts/storage/api.py.
+    capabilities:
+      tenantManagement:
+        list: none
+        get: none
+        getQuota: native
+      volumeManagement:
+        list: native
+        get: native
+        create: none # CSI driver owns volume lifecycle
+        delete: none
+      quotaManagement: none
+
+    attributes:
+      region: my-isv-region

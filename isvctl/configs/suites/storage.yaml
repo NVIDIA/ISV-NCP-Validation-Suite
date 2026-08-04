@@ -363,6 +363,36 @@ tests:
           bind_timeout_s: 120
           expand_timeout_s: 180
           namespace_prefix: "isvtest-csi-expand"
+        StorageProviderApiCheck:
+          test_id: "N/A"
+          labels: ["kubernetes", "storage", "storage_provider_api"]
+          requires: [kubernetes]
+          # Drives StorageProvider API contract conformity. The manifest enumerates
+          # one or more backend providers; this check imports each provider's shim
+          # Python file in-process and runs health_check / create+delete_volume /
+          # get_tenant_quota against it.
+          # manifest_path is empty by default so the check is skipped
+          # cleanly on providers that haven't onboarded the shim yet. Set
+          # steps.setup.storage.manifest_path (or override this key in a
+          # provider config) to the path of the mounted ConfigMap file (K8s) or to the on-disk manifest (bare-metal).
+          manifest_path: "{{ steps.setup.storage.manifest_path | default('', true) }}"
+          volume_size_bytes: 1073741824 # 1 GiB
+        StorageDirectoryQuotaEnforcementCheck:
+          test_id: "N/A"
+          labels: ["kubernetes", "storage", "storage_provider_api", "slow"]
+          requires: [kubernetes]
+          # Real directory-quota lifecycle + enforcement (vs. the bogus-id probes
+          # in StorageProviderApiCheck). Provisions an RWX PVC on the shared-fs
+          # StorageClass, mounts it, then drives set/get/update/list/delete over
+          # the shim and writes data through the mount to prove the hard limit is
+          # enforced. Skipped cleanly when no provider declares
+          # quota.directory.set, no shared-fs StorageClass is configured, or no
+          # cluster is reachable. storage_class falls back to K8S_CSI_SHARED_FS_SC.
+          manifest_path: "{{ steps.setup.storage.manifest_path | default('', true) }}"
+          storage_class: "{{ steps.setup_cluster.csi.shared_fs_storage_class | default('', true) }}"
+          pvc_size: "5Gi"
+          create_hard_bytes: 1073741824 # 1 GiB
+          enforcement_hard_bytes: 67108864 # 64 MiB
         K8sNodeKernelModulesCheck:
           test_id: "HSS11-04"
           labels: ["kubernetes", "storage"]

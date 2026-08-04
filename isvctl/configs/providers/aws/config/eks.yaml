@@ -34,8 +34,15 @@
 #   - AWS_SKIP_TEARDOWN: Set to "true" to skip teardown and preserve resources (default: false)
 #   - NGC_API_KEY: NGC API key for NIM workloads
 #   - AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY: AWS credentials (if not using IAM roles)
+#   - AWS_REGION: Region for the FSx Lustre storage shim (required when running StorageProviderApiCheck)
+#   - FSX_DEPLOYMENT_TYPE: FSx deployment type for quota code resolution (default: PERSISTENT_2)
+#   - FSX_QUOTA_CODE: Override the quota code directly (optional)
+#   - AWS_ACCOUNT_ID: Override STS-resolved account id (optional)
 
-import: ../../../suites/k8s.yaml
+import:
+  - ../../../suites/k8s.yaml
+  # StorageProviderApiCheck + CSI/filesystem checks live in the storage suite.
+  - ../../../suites/storage.yaml
 
 version: "1.0"
 
@@ -210,6 +217,11 @@ tests:
   description: "AWS EKS GPU cluster validation"
 
   validations:
+    k8s_storage:
+      checks:
+        K8sCsiDriverHealthCheck: {}
+        StorageProviderApiCheck:
+          manifest_path: "isvctl/configs/providers/aws/config/storage-provider-manifest.yaml"
     k8s_multi_cluster:
       checks:
         K8sMultiClusterSameVpcCheck:

@@ -1,0 +1,142 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# =============================================================================
+# Storage Provider Manifest - FULLY-POPULATED EXAMPLE (schema v1alpha2)
+# =============================================================================
+#
+# This file is a reference showing every field a customer can supply. It is NOT
+# wired into any test config - copy `storage-provider-manifest.yaml` (the blank
+# template) instead and fill it in for your environment. See
+# `../scripts/storage/README.md` and the schema
+# `isvctl/schemas/storage-provider-manifest.schema.json`.
+#
+# v1alpha2 mirrors the upstream StorageProvider package manifest:
+#   * package-level `namespace` + `vendor` (registration domain + vendor meta);
+#   * an optional package-wide `defaultCapabilities` policy;
+#   * a per-provider `provider` identity block (name / description / type /
+#     protocols / version) + optional `backend` metadata;
+#   * a hierarchical `capabilities` block using native | default | none with
+#     group cascade, plus optional L2 `capability_qualifiers`.
+#
+# The manifest drives `StorageProviderApiCheck` (N-019/N-020/N-021) ONLY: it
+# imports each provider's `shim.module` in-process and exercises the StorageApi
+# contract. The declared identity + capabilities are a CONTRACT cross-checked
+# against the shim's properties(). The CSI / NFS / POSIX filesystem checks get
+# their StorageClass names and protocol expectations from their own config
+# (suite/provider YAML literals or K8S_CSI_* env vars), NOT from this manifest.
+#
+# It models a multi-backend cluster: one managed shared-filesystem provider with
+# a management-API shim, and one backend that has no management shim yet (so the
+# StorageProvider API check skips it).
+
+schema_version: v1alpha2
+
+# Package identity (the package manifest namespace + vendor). With each provider's id
+# this forms the registration key <namespace>/<id>.
+namespace: acme.example.com
+vendor:
+  vendorName: ACME Storage
+  vendorDocs: https://docs.acme.example.com/storage
+
+# Package-wide capability policy. A provider's own capabilities block overrides
+# this; a `default:` here applies to any leaf neither block declares.
+defaultCapabilities:
+  default: none
+
+providers:
+  # ---------------------------------------------------------------------------
+  # Provider 1: managed shared filesystem (NFS/RWX) with a management shim.
+  # The shim drives the StorageProvider API checks; the CSI driver owns the
+  # volume lifecycle, so volume.create/volume.delete are declared `none`
+  # (create_volume raises NotSupportedError and the check falls back to
+  # list_volumes()).
+  # ---------------------------------------------------------------------------
+  - id: shared-fs
+    name: acme-shared-fs
+    # Default backend tenant. Round-trips on Volume.tenant_id / TenantQuota.
+    tenant_id: tenant-a
+    sdk_version: v1alpha1
+
+    # Implementor identity (mirrors ProviderProperties / VersionMetadata). type
+    # + protocols + version are cross-checked against the shim's properties().
+    provider:
+      name: ACME Shared FS
+      description: ACME managed shared filesystem fronting VAST
+      type: file # file | block (FILE/BLOCK also accepted)
+      protocols: [nfsv4] # lustre | nfsv4 | nfsv3 | smb | nvme | iscsi ...
+      version: 1.2.0 # implementor semver
+
+    # The storage system fronted (optional, may differ from the implementor).
+    # version is an opaque vendor passthrough.
+    backend:
+      vendorName: VAST Data
+      name: VAST
+      version: "5.1"
+
+    shim:
+      kind: python # python (in-process) | rest (Phase 2 endpoint, skipped today)
+      # Resolved relative to this manifest's parent directory. In a real
+      # cluster this names a key inside the per-provider ConfigMap below.
+      module: ../scripts/storage/api.py
+      configmap: shim-acme-shared-fs # (k8s) ConfigMap holding the shim
+      credentials_secret: creds-acme-shared-fs # (k8s) Secret holding the credentials
+
+    # Hierarchical capabilities (native | default | none). Lowered by the loader
+    # to a cap_id -> supported? map and cross-checked against properties():
+    # StorageProviderApiCheck fails if a declared surface disagrees with the
+    # shim. A group state cascades to its leaves; a leaf overrides its group.
+    capabilities:
+      tenantManagement: native # tenant.list / tenant.get / tenant.getQuota / tenant.listQuotas
+      volumeManagement:
+        list: native
+        get: native
+        create: none # CSI driver owns provisioning
+        delete: none
+      quotaManagement: native # quota.directory.* + quota.user.*
+
+    # Optional L2 semantic facts (ProviderProperties capability qualifiers),
+    # keyed by capability id or dotted group prefix.
+    capability_qualifiers:
+      quota.directory:
+        idAssignment: backend # VAST mints directory-quota ids (vs "caller" for Lustre)
+
+    tiers: ["standard", "performance"]
+
+    attributes:
+      region: us-east-1
+      storage_path: /tenant-a
+
+  # ---------------------------------------------------------------------------
+  # Provider 2: a block backend with no management shim yet. The StorageProvider
+  # API checks skip it (nothing to test at the management layer). It is listed
+  # here to show how a not-yet-onboarded provider appears in the manifest.
+  # ---------------------------------------------------------------------------
+  - id: block
+    name: acme-block
+    type: block
+    tenant_id: "123456789012" # quoted so YAML keeps leading zeros
+
+    provider:
+      name: ACME Block
+      type: block
+      protocols: [nvme]
+      version: 1.2.0
+
+    # No `shim:` block -> backend has no management API to test, so its
+    # capabilities are not contract-checked.
+
+    attributes:
+      region: us-east-1

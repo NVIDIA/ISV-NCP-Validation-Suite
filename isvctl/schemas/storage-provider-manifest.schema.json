@@ -1,0 +1,245 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NVIDIA/ISV-NCP-Validation-Suite/schemas/storage-provider-manifest.schema.json",
+  "title": "Storage Provider Manifest",
+  "description": "Manifest describing a provider's storage shims. The same YAML is consumed on disk (bare-metal) and inside a ConfigMap (K8s). It feeds StorageProviderApiCheck (shim contract) only; the CSI / NFS / POSIX filesystem checks get their StorageClass names and protocol expectations from their own config (suite/provider YAML or K8S_CSI_* env vars). The schema is informational and is NOT enforced at runtime by isvtest (the loader does targeted validation only). v1alpha2 mirrors the upstream StorageProvider package manifest: package-level namespace / vendor / default_capabilities, a per-provider provider block (name / description / type / protocols / version), and a hierarchical capabilities block using native | default | none. v1alpha1 remains valid as the original shim-only shape.",
+  "type": "object",
+  "required": ["schema_version", "providers"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "description": "Manifest schema version. v1alpha1 is the original shim-only shape; v1alpha2 adds the package-manifest-mirroring identity (namespace / vendor / provider / backend) and capability (native|default|none) model.",
+      "type": "string",
+      "enum": ["v1alpha1", "v1alpha2"]
+    },
+    "namespace": {
+      "description": "Package DNS namespace you control (the package manifest namespace). With each provider's id it forms the registration key <namespace>/<id>. Maps to ProviderProperties.provider_namespace.",
+      "type": "string"
+    },
+    "vendor": {
+      "description": "Package-level vendor metadata (the package manifest vendor), inherited by every provider that does not override it.",
+      "$ref": "#/$defs/Vendor"
+    },
+    "defaultCapabilities": {
+      "description": "Package-wide capability policy (the package manifest defaultCapabilities). A provider's capabilities block overrides these; a `default:` fallback here applies to any capability neither block declares. This is the canonical camelCase key mirroring the upstream package manifest.",
+      "$ref": "#/$defs/Capabilities"
+    },
+    "default_capabilities": {
+      "description": "DEPRECATED snake_case alias of `defaultCapabilities`, accepted for backward compatibility. Prefer `defaultCapabilities`.",
+      "$ref": "#/$defs/Capabilities"
+    },
+    "providers": {
+      "description": "One entry per storage provider exposed by this cluster / IaaS handover.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/Provider" }
+    }
+  },
+  "$defs": {
+    "Provider": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "description": "DNS-label provider id (the package manifest provider map key). With the package namespace it forms the registration key <namespace>/<id>. Maps to ProviderProperties.provider_id. Defaults the subtest tag name when `name` is omitted.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Stable provider tag (used as the per-provider tag in StorageProviderApiCheck subtest IDs). When omitted, the loader derives it from id / provider.id.",
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "description": "Storage type. Accepts 'file' and 'block'. When omitted, the loader derives it from provider.type then identity.storage_type.",
+          "type": "string",
+          "enum": ["file", "block"]
+        },
+        "tenant_id": {
+          "description": "Default backend tenant for this provider. Round-trips on Volume.tenant_id / TenantQuota.tenant_id. Quote AWS account IDs to keep YAML from stripping leading zeros.",
+          "type": ["string", "integer", "null"]
+        },
+        "namespace": {
+          "description": "Optional per-provider override of the package namespace (registration domain).",
+          "type": "string"
+        },
+        "sdk_version": {
+          "description": "StorageProvider SPI/contract version the shim speaks. Maps to ProviderProperties.sdk_version.",
+          "type": "string"
+        },
+        "provider": { "$ref": "#/$defs/ProviderIdentity" },
+        "backend": { "$ref": "#/$defs/BackendIdentity" },
+        "vendor": { "$ref": "#/$defs/Vendor" },
+        "identity": { "$ref": "#/$defs/Identity" },
+        "shim": { "$ref": "#/$defs/Shim" },
+        "capabilities": { "$ref": "#/$defs/Capabilities" },
+        "capability_qualifiers": { "$ref": "#/$defs/CapabilityQualifiers" },
+        "tiers": {
+          "description": "Optional, informational list of vendor tiers this provider exposes.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "attributes": {
+          "description": "Opaque vendor metadata (region, account email, etc.). Values are string-coerced by the loader. Maps to ProviderProperties.attributes (L3, advisory only).",
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "ProviderIdentity": {
+      "description": "The StorageProvider implementor identity (the package manifest providers.<id>.provider). Maps to the static facet of ProviderProperties + provider_metadata.",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "id": { "description": "DNS-label provider id (alternative to the entry-level id).", "type": "string" },
+        "namespace": { "description": "DNS namespace (alternative to entry/package namespace).", "type": "string" },
+        "name": { "description": "Human-facing offering name, e.g. 'AWS FSx Lustre'.", "type": "string" },
+        "description": { "description": "Optional brief, human-facing description.", "type": "string" },
+        "type": {
+          "description": "Storage category. Accepts 'file'/'block' (and the uppercase FILE/BLOCK proto forms).",
+          "type": "string",
+          "enum": ["file", "block", "FILE", "BLOCK"]
+        },
+        "protocols": {
+          "description": "Wire protocols served. file -> 'lustre' | 'nfsv4' | 'nfsv3' | 'smb'; block -> 'nvme' | 'iscsi' | 'nvme-of' | 'fc'. Maps to ProviderProperties.storage_protocols.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "version": {
+          "description": "Implementor semver, e.g. '0.1.0'. Maps to provider_metadata.version.",
+          "type": "string"
+        }
+      }
+    },
+    "BackendIdentity": {
+      "description": "Optional identity of the storage system fronted (distinct from the implementor). Maps to ProviderProperties.backend_metadata; version is an opaque vendor passthrough.",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "vendorName": { "description": "Canonical camelCase key.", "type": "string" },
+        "vendorDocs": { "description": "Canonical camelCase key.", "type": "string" },
+        "vendor_name": { "description": "DEPRECATED snake_case alias of vendorName.", "type": "string" },
+        "vendor_docs": { "description": "DEPRECATED snake_case alias of vendorDocs.", "type": "string" },
+        "name": { "type": "string" },
+        "version": { "type": "string" }
+      }
+    },
+    "Vendor": {
+      "description": "Vendor metadata (the package manifest vendor). Maps to ProviderProperties.provider_metadata vendor fields. The camelCase keys (vendorName / vendorDocs) mirror the upstream package manifest; the snake_case forms are accepted for backward compatibility.",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "vendorName": { "description": "Org display name, e.g. 'NVIDIA', 'VAST Data'. Canonical camelCase key.", "type": "string" },
+        "vendorDocs": { "description": "URL to the vendor's API / product docs. Canonical camelCase key.", "type": "string" },
+        "vendor_name": { "description": "DEPRECATED snake_case alias of vendorName.", "type": "string" },
+        "vendor_docs": { "description": "DEPRECATED snake_case alias of vendorDocs.", "type": "string" }
+      }
+    },
+    "Identity": {
+      "description": "DEPRECATED legacy v1alpha2 identity block, retained as a fallback source. Prefer the top-level namespace/vendor and per-provider provider/backend blocks (package-manifest shape). provider.domain is read as the namespace; storage_protocol (scalar) is read as a single-element protocols list.",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "provider": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "domain": { "type": "string" },
+            "namespace": { "type": "string" },
+            "id": { "type": "string" },
+            "version": { "type": "string" },
+            "name": { "type": "string" }
+          }
+        },
+        "backend": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "storage_type": {
+          "type": "string",
+          "enum": ["file", "block", "FILE", "BLOCK"]
+        },
+        "storage_protocol": { "type": "string" },
+        "storage_protocols": { "type": "array", "items": { "type": "string" } },
+        "sdk_version": { "type": "string" }
+      }
+    },
+    "Shim": {
+      "description": "Management-API shim for this provider. Omit entirely for CSI-only providers; isvtest skips the StorageProviderApiCheck shim subtests for them and runs the CSI-level checks only.",
+      "type": "object",
+      "required": ["kind"],
+      "additionalProperties": true,
+      "properties": {
+        "kind": {
+          "description": "Transport. 'python' drives the in-process Python file. 'rest' is a future provider-hosted endpoint - declared in the manifest but skipped by the in-process loader.",
+          "type": "string",
+          "enum": ["python", "rest"]
+        },
+        "module": {
+          "description": "shim.kind=python only. Key inside the shim ConfigMap (K8s) or relative path on disk (bare-metal). Resolved against the manifest's parent directory.",
+          "type": "string",
+          "minLength": 1
+        },
+        "endpoint": {
+          "description": "shim.kind=rest only. URL of the provider-hosted canonical REST API.",
+          "type": "string",
+          "format": "uri"
+        },
+        "configmap": {
+          "description": "K8s only; provider-chosen ConfigMap name holding the shim file (+ optional config.yaml). Informational - the manifest references it by name.",
+          "type": "string"
+        },
+        "credentials_secret": {
+          "description": "K8s only; provider-chosen Secret name mounted into the shim sidecar. Informational.",
+          "type": "string"
+        }
+      }
+    },
+    "Capabilities": {
+      "description": "Hierarchical capability declaration mirroring the package manifest. Each node is a state (native | default | none) or a subgroup of finer nodes. A group state cascades to its descendants; a more-specific node overrides it. native/default mean the surface is serviceable (StorageProviderApiCheck expects it advertised supported); none opts out. The loader lowers this tree to a cap_id -> supported? map (tenant.list, volume.create, quota.directory.set, quota.user.get, ...). An optional `default:` key sets the fallback for any leaf neither this block nor default_capabilities declares.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default": { "$ref": "#/$defs/CapabilityState" },
+        "tenantManagement": {
+          "description": "tenant.* surfaces. State or { list, get, getQuota, listQuotas }.",
+          "$ref": "#/$defs/CapabilityNode"
+        },
+        "volumeManagement": {
+          "description": "volume.* surfaces. State or { list, get, create, delete }.",
+          "$ref": "#/$defs/CapabilityNode"
+        },
+        "quotaManagement": {
+          "description": "quota.* surfaces. State or { directory: {...}, user: {...} } where each subgroup is a state or { list, get, set, delete }.",
+          "$ref": "#/$defs/CapabilityNode"
+        }
+      }
+    },
+    "CapabilityState": {
+      "description": "Build-manifest capability state. native = backend-native implementation; default = served by the SDK default (composable getters); none = not offered.",
+      "type": "string",
+      "enum": ["native", "default", "none"]
+    },
+    "CapabilityNode": {
+      "description": "A capability group node: either a single state that cascades to all descendants, or a mapping of finer nodes (each itself a state or subgroup).",
+      "oneOf": [
+        { "$ref": "#/$defs/CapabilityState" },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              { "$ref": "#/$defs/CapabilityState" },
+              { "type": "object", "additionalProperties": { "$ref": "#/$defs/CapabilityState" } }
+            ]
+          }
+        }
+      ]
+    },
+    "CapabilityQualifiers": {
+      "description": "Optional L2 semantic facts (ProviderProperties capability qualifiers), keyed by capability id or dotted group prefix (e.g. 'quota.directory'). Values are string maps such as { idAssignment: backend } / { inodes: 'false' } / { defaultUserSlot: 'true' }. Cross-checked behaviourally by the suite where relevant.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": { "type": "string" }
+      }
+    }
+  }
+}

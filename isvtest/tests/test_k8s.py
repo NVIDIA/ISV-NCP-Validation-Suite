@@ -18,17 +18,21 @@
 import json
 import os
 import subprocess
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import yaml
 
 from isvtest.core.k8s import (
     TERMINAL_WAITING_REASONS,
     TRANSIENT_WAITING_REASONS,
     KubectlParseError,
+    ensure_incluster_kubeconfig,
     get_k8s_provider,
     get_kubectl_base_shell,
     get_kubectl_command,
+    is_k8s_available,
     kubectl_items_or_fail,
     parse_kubectl_json,
     parse_kubectl_json_items,
@@ -50,9 +54,11 @@ class _StubValidation:
     """Minimal stand-in exposing ``set_failed`` for parser-helper tests."""
 
     def __init__(self) -> None:
+        """Initialize the object with its configured dependencies."""
         self.error: str | None = None
 
     def set_failed(self, error: str, output: str = "") -> None:
+        """Handle set failed."""
         self.error = error
 
 
@@ -157,10 +163,156 @@ class TestGetKubectlCommandOverride:
                 get_kubectl_command()
 
 
+class TestEnsureInclusterKubeconfig:
+    """Tests for the in-cluster kubeconfig bootstrap."""
+
+    @staticmethod
+    def _sa_dir(tmp_path: Path) -> Path:
+        """Build a stand-in for the projected ServiceAccount mount."""
+        sa = tmp_path / "serviceaccount"
+        sa.mkdir()
+        (sa / "token").write_text("sa-token-value")
+        (sa / "ca.crt").write_text("ca-pem")
+        (sa / "namespace").write_text("storage-system\n")
+        return sa
+
+    def _run(self, sa_dir: Path, env: dict[str, str], home: Path) -> str | None:
+        """Invoke the bootstrap with a patched SA mount and HOME."""
+        ensure_incluster_kubeconfig.cache_clear()
+        with (
+            patch.dict(os.environ, {**env, "HOME": str(home)}, clear=True),
+            patch("isvtest.core.k8s._INCLUSTER_SA_DIR", sa_dir),
+        ):
+            path = ensure_incluster_kubeconfig()
+            self._kubeconfig_env = os.environ.get("KUBECONFIG")
+        return path
+
+    def test_generates_kubeconfig_in_pod(self, tmp_path: Path) -> None:
+        """In a pod with no kubeconfig, one is written and KUBECONFIG points at it."""
+        sa = self._sa_dir(tmp_path)
+        path = self._run(
+            sa,
+            {"KUBERNETES_SERVICE_HOST": "10.0.0.1", "KUBERNETES_SERVICE_PORT": "443"},
+            tmp_path / "home",
+        )
+
+        assert path is not None
+        assert self._kubeconfig_env == path
+        cfg = yaml.safe_load(Path(path).read_text())
+        assert cfg["clusters"][0]["cluster"]["server"] == "https://10.0.0.1:443"
+        assert cfg["clusters"][0]["cluster"]["certificate-authority"] == str(sa / "ca.crt")
+        assert cfg["contexts"][0]["context"]["namespace"] == "storage-system"
+
+    def test_references_token_by_path_not_value(self, tmp_path: Path) -> None:
+        """The token is referenced via tokenFile so it neither leaks nor goes stale."""
+        sa = self._sa_dir(tmp_path)
+        path = self._run(sa, {"KUBERNETES_SERVICE_HOST": "10.0.0.1"}, tmp_path / "home")
+
+        assert path is not None
+        raw = Path(path).read_text()
+        assert "sa-token-value" not in raw
+        cfg = yaml.safe_load(raw)
+        assert cfg["users"][0]["user"]["tokenFile"] == str(sa / "token")
+
+    def test_defaults_port_when_unset(self, tmp_path: Path) -> None:
+        """A pod exposing only KUBERNETES_SERVICE_HOST still gets a usable server URL."""
+        sa = self._sa_dir(tmp_path)
+        path = self._run(sa, {"KUBERNETES_SERVICE_HOST": "10.0.0.1"}, tmp_path / "home")
+
+        assert path is not None
+        cfg = yaml.safe_load(Path(path).read_text())
+        assert cfg["clusters"][0]["cluster"]["server"] == "https://10.0.0.1:443"
+
+    def test_brackets_ipv6_host(self, tmp_path: Path) -> None:
+        """On an IPv6 cluster the bare literal must be bracketed to form a valid URL."""
+        sa = self._sa_dir(tmp_path)
+        path = self._run(
+            sa,
+            {"KUBERNETES_SERVICE_HOST": "fd00::1", "KUBERNETES_SERVICE_PORT": "443"},
+            tmp_path / "home",
+        )
+
+        assert path is not None
+        cfg = yaml.safe_load(Path(path).read_text())
+        assert cfg["clusters"][0]["cluster"]["server"] == "https://[fd00::1]:443"
+
+    def test_existing_kubeconfig_env_wins(self, tmp_path: Path) -> None:
+        """An explicit KUBECONFIG is never overwritten."""
+        sa = self._sa_dir(tmp_path)
+        path = self._run(
+            sa,
+            {"KUBERNETES_SERVICE_HOST": "10.0.0.1", "KUBECONFIG": "/explicit/config"},
+            tmp_path / "home",
+        )
+
+        assert path is None
+        assert self._kubeconfig_env == "/explicit/config"
+
+    def test_existing_home_kubeconfig_wins(self, tmp_path: Path) -> None:
+        """A ~/.kube/config on disk takes precedence over the generated one."""
+        home = tmp_path / "home"
+        (home / ".kube").mkdir(parents=True)
+        (home / ".kube" / "config").write_text("apiVersion: v1\n")
+        sa = self._sa_dir(tmp_path)
+
+        path = self._run(sa, {"KUBERNETES_SERVICE_HOST": "10.0.0.1"}, home)
+
+        assert path is None
+        assert self._kubeconfig_env is None
+
+    def test_noop_outside_cluster(self, tmp_path: Path) -> None:
+        """Off-cluster (no KUBERNETES_SERVICE_HOST) the bootstrap does nothing."""
+        sa = self._sa_dir(tmp_path)
+        path = self._run(sa, {}, tmp_path / "home")
+
+        assert path is None
+        assert self._kubeconfig_env is None
+
+    def test_noop_without_serviceaccount_mount(self, tmp_path: Path) -> None:
+        """The env vars alone are not enough; the token/CA must actually be mounted."""
+        path = self._run(tmp_path / "absent", {"KUBERNETES_SERVICE_HOST": "10.0.0.1"}, tmp_path / "home")
+
+        assert path is None
+        assert self._kubeconfig_env is None
+
+
+class TestIsK8sAvailable:
+    """Tests for the cluster-reachability probe."""
+
+    @staticmethod
+    def _completed(returncode: int) -> subprocess.CompletedProcess[str]:
+        """Build a minimal CompletedProcess for kubectl probe tests."""
+        return subprocess.CompletedProcess(args=[], returncode=returncode, stdout="", stderr="")
+
+    def test_probes_version_endpoint_not_cluster_info(self) -> None:
+        """Reachability must use ``/version``, not ``cluster-info`` (RBAC)."""
+        with patch("isvtest.core.k8s.run_kubectl", return_value=self._completed(0)) as run:
+            assert is_k8s_available() is True
+        args = run.call_args[0][0]
+        assert args == ["get", "--raw", "/version"]
+        assert "cluster-info" not in args
+
+    def test_false_when_unreachable(self) -> None:
+        """Verify false when unreachable."""
+        with patch("isvtest.core.k8s.run_kubectl", return_value=self._completed(1)):
+            assert is_k8s_available() is False
+
+    def test_false_when_kubectl_missing(self) -> None:
+        """Verify false when kubectl missing."""
+        with patch("isvtest.core.k8s.run_kubectl", side_effect=FileNotFoundError):
+            assert is_k8s_available() is False
+
+    def test_false_on_timeout(self) -> None:
+        """Verify false on timeout."""
+        with patch("isvtest.core.k8s.run_kubectl", side_effect=subprocess.TimeoutExpired(cmd="kubectl", timeout=10)):
+            assert is_k8s_available() is False
+
+
 class TestGetKubectlBaseShellArgs:
     """Tests for get_kubectl_base_shell() args composition."""
 
     def test_composes_args_with_quoting(self) -> None:
+        """Verify composes args with quoting."""
         with (
             patch.dict(os.environ, {"KUBECTL": "kubectl"}, clear=True),
             patch("isvtest.core.k8s.shutil.which", return_value="/usr/bin/kubectl"),
@@ -169,6 +321,7 @@ class TestGetKubectlBaseShellArgs:
         assert result == "kubectl get pod my-pod -n default"
 
     def test_quotes_arg_with_spaces(self) -> None:
+        """Verify quotes arg with spaces."""
         with (
             patch.dict(os.environ, {"KUBECTL": "kubectl"}, clear=True),
             patch("isvtest.core.k8s.shutil.which", return_value="/usr/bin/kubectl"),
@@ -182,19 +335,23 @@ class TestKubectlJsonParsers:
     """Tests for structured kubectl JSON parser helpers."""
 
     def test_parse_kubectl_json_object(self) -> None:
+        """Verify parse kubectl json object."""
         payload = parse_kubectl_json(_command_result(json.dumps({"kind": "Pod"})), "pod")
         assert payload == {"kind": "Pod"}
 
     def test_parse_kubectl_json_reports_invalid_json(self) -> None:
+        """Verify parse kubectl json reports invalid json."""
         with pytest.raises(KubectlParseError, match="Failed to parse pod"):
             parse_kubectl_json(_command_result("not-json"), "pod")
 
     def test_parse_kubectl_json_items_extracts_items(self) -> None:
+        """Verify parse kubectl json items extracts items."""
         payload = json.dumps({"items": [{"metadata": {"name": "n1"}}]})
         items = parse_kubectl_json_items(_command_result(payload), "node list")
         assert items == [{"metadata": {"name": "n1"}}]
 
     def test_parse_kubectl_json_items_requires_items_list(self) -> None:
+        """Verify parse kubectl json items requires items list."""
         with pytest.raises(KubectlParseError, match="expected 'items' list"):
             parse_kubectl_json_items(_command_result(json.dumps({"items": {}})), "node list")
 
@@ -203,6 +360,7 @@ class TestKubectlItemsOrFail:
     """Tests for the validation-aware ``kubectl_items_or_fail`` helper."""
 
     def test_returns_items_on_success(self) -> None:
+        """Verify returns items on success."""
         validation = _StubValidation()
         payload = json.dumps({"items": [{"metadata": {"name": "n1"}}]})
         items = kubectl_items_or_fail(validation, _command_result(payload), "node list")
@@ -210,6 +368,7 @@ class TestKubectlItemsOrFail:
         assert validation.error is None
 
     def test_routes_exec_failure_to_set_failed(self) -> None:
+        """Verify routes exec failure to set failed."""
         validation = _StubValidation()
         result = _command_result("", exit_code=1, stderr="cluster unavailable")
         items = kubectl_items_or_fail(validation, result, "node list")
@@ -217,6 +376,7 @@ class TestKubectlItemsOrFail:
         assert validation.error == "Failed to get node list: cluster unavailable"
 
     def test_routes_parse_failure_to_set_failed(self) -> None:
+        """Verify routes parse failure to set failed."""
         validation = _StubValidation()
         items = kubectl_items_or_fail(validation, _command_result("not-json"), "node list")
         assert items is None
@@ -228,6 +388,7 @@ class TestPodStatusReason:
     """Tests for ``pod_status_reason`` kubectl STATUS-column emulation."""
 
     def test_container_waiting_reason_wins_over_phase(self) -> None:
+        """Verify container waiting reason wins over phase."""
         pod = {
             "status": {
                 "phase": "Pending",
@@ -240,14 +401,17 @@ class TestPodStatusReason:
         # Regression: evicted pods carry ``status.reason: Evicted`` but no
         # informative container state; kubectl shows "Evicted" in STATUS so
         # ``error_states: [Evicted]`` configs must still match.
+        """Verify pod level reason overrides phase when no container state."""
         pod = {"status": {"phase": "Failed", "reason": "Evicted"}}
         assert pod_status_reason(pod) == "Evicted"
 
     def test_falls_back_to_phase_when_reason_absent(self) -> None:
+        """Verify falls back to phase when reason absent."""
         pod = {"status": {"phase": "Running"}}
         assert pod_status_reason(pod) == "Running"
 
     def test_returns_unknown_when_phase_missing(self) -> None:
+        """Verify returns unknown when phase missing."""
         assert pod_status_reason({}) == "Unknown"
 
 
@@ -255,25 +419,32 @@ class TestPodStateFromResult:
     """Tests for the result-aware ``pod_state_from_result`` wrapper."""
 
     def test_parses_command_result_stdout_on_success(self) -> None:
+        """Verify parses command result stdout on success."""
         payload = json.dumps({"status": {"phase": "Running"}})
         assert pod_state_from_result(_command_result(payload)) == ("Running", "", "")
 
     def test_inspects_stderr_on_command_result_failure(self) -> None:
+        """Verify inspects stderr on command result failure."""
         result = _command_result("", exit_code=1, stderr='Error from server (NotFound): pods "x" not found')
         assert pod_state_from_result(result) == ("NotFound", "", "")
 
     def test_accepts_completed_process(self) -> None:
+        """Verify accepts completed process."""
         payload = json.dumps({"status": {"phase": "Succeeded"}})
         completed = subprocess.CompletedProcess(args=["kubectl"], returncode=0, stdout=payload, stderr="")
         assert pod_state_from_result(completed) == ("Succeeded", "", "")
 
     def test_completed_process_failure_uses_stderr(self) -> None:
+        """Verify completed process failure uses stderr."""
         completed = subprocess.CompletedProcess(args=["kubectl"], returncode=1, stdout="", stderr="boom")
         assert pod_state_from_result(completed) == ("Unknown", "", "")
 
 
 class TestWaitForMultiplePodsCompletion:
+    """Tests for WaitForMultiplePodsCompletion."""
+
     def test_duplicate_targets_complete_after_unique_pods_finish(self) -> None:
+        """Verify duplicate targets complete after unique pods finish."""
         payload = json.dumps(
             {
                 "items": [
@@ -298,11 +469,15 @@ class TestWaitForMultiplePodsCompletion:
 
 
 class TestParsePodState:
+    """Tests for ParsePodState."""
+
     def test_running_pod(self) -> None:
+        """Verify running pod."""
         payload = json.dumps({"status": {"phase": "Running"}})
         assert parse_pod_state(payload, "") == ("Running", "", "")
 
     def test_pending_with_waiting_reason(self) -> None:
+        """Verify pending with waiting reason."""
         payload = json.dumps(
             {
                 "status": {
@@ -319,45 +494,61 @@ class TestParsePodState:
         assert msg == "back-off"
 
     def test_notfound_from_stderr(self) -> None:
+        """Verify notfound from stderr."""
         stderr = 'Error from server (NotFound): pods "my-pod" not found'
         assert parse_pod_state("", stderr) == ("NotFound", "", "")
 
     def test_unknown_on_generic_failure(self) -> None:
+        """Verify unknown on generic failure."""
         assert parse_pod_state("", "connection refused") == ("Unknown", "", "")
 
     def test_unknown_on_malformed_json(self) -> None:
+        """Verify unknown on malformed json."""
         assert parse_pod_state("not json", "") == ("Unknown", "", "")
 
     def test_missing_container_statuses(self) -> None:
+        """Verify missing container statuses."""
         payload = json.dumps({"status": {"phase": "Pending"}})
         assert parse_pod_state(payload, "") == ("Pending", "", "")
 
 
 class TestParseServerVersion:
+    """Tests for ParseServerVersion."""
+
     def test_strips_build_metadata(self) -> None:
+        """Verify strips build metadata."""
         assert parse_server_version(json.dumps({"serverVersion": {"gitVersion": "v1.30.2+abc"}})) == "v1.30.2"
 
     def test_plain_git_version(self) -> None:
+        """Verify plain git version."""
         assert parse_server_version(json.dumps({"serverVersion": {"gitVersion": "v1.31.3"}})) == "v1.31.3"
 
     def test_missing_server_version(self) -> None:
+        """Verify missing server version."""
         assert parse_server_version(json.dumps({})) is None
 
     def test_malformed_json(self) -> None:
+        """Verify malformed json."""
         assert parse_server_version("not json") is None
 
     def test_unexpected_format(self) -> None:
+        """Verify unexpected format."""
         assert parse_server_version(json.dumps({"serverVersion": {"gitVersion": "1.x.y"}})) is None
 
 
 class TestWaitingReasonConstants:
+    """Tests for WaitingReasonConstants."""
+
     def test_terminal_reasons_are_frozen(self) -> None:
+        """Verify terminal reasons are frozen."""
         assert "ImagePullBackOff" in TERMINAL_WAITING_REASONS
         assert isinstance(TERMINAL_WAITING_REASONS, frozenset)
 
     def test_transient_reasons_are_frozen(self) -> None:
+        """Verify transient reasons are frozen."""
         assert "ErrImagePull" in TRANSIENT_WAITING_REASONS
         assert isinstance(TRANSIENT_WAITING_REASONS, frozenset)
 
     def test_terminal_and_transient_are_disjoint(self) -> None:
+        """Verify terminal and transient are disjoint."""
         assert TERMINAL_WAITING_REASONS.isdisjoint(TRANSIENT_WAITING_REASONS)

@@ -216,13 +216,9 @@ class TestReportedCapability:
         assert _reported_capability(config, CORE_REQUIREMENT_CONTEXT) is None
 
     def test_platform_suite_reports_its_own_platform(self) -> None:
-        """A platform suite gets no explicit context because its platform is one.
-
-        Passing the resolved context straight through would record NULL for
-        every platform-suite run and lose the axis entirely.
-        """
+        """A platform suite records its declaration as the run capability."""
         config = self._config("vm")
-        assert _reported_capability(config, None) == "vm"
+        assert _reported_capability(config, "vm") == "vm"
 
     def test_plain_suite_reports_explicit_capability(self) -> None:
         """A plain suite reports its explicit capability context."""

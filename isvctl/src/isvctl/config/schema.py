@@ -395,7 +395,7 @@ class ValidationConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_suite_shape(self) -> "ValidationConfig":
-        """Reject legacy axes and requirements on platform suite checks."""
+        """Reject legacy axes and validate check requirement declarations."""
         if self.model_extra and "module" in self.model_extra:
             raise ValueError("tests.module is no longer supported; plain suites have no axis key")
         # Extras are allowed, so an unmigrated `tests.platform:` would be ignored
@@ -405,18 +405,15 @@ class ValidationConfig(BaseModel):
         if self.capability is not None and self.capability not in DECLARABLE_CAPABILITIES:
             raise ValueError(f"tests.capability must be one of: {', '.join(sorted(DECLARABLE_CAPABILITIES))}")
         entries = parse_validations(self.validations)
-        if self.capability and any("requires" in entry.params_template for entry in entries):
-            raise ValueError("requires is not allowed in platform suites")
         if any("platforms" in entry.params_template for entry in entries):
             raise ValueError("per-check platforms is no longer supported; use requires in plain suites")
-        if not self.capability:
-            for entry in entries:
-                raw_requires = entry.params_template.get("requires")
-                if raw_requires is None:
-                    continue
-                message = requires_error(raw_requires)
-                if message:
-                    raise ValueError(message)
+        for entry in entries:
+            raw_requires = entry.params_template.get("requires")
+            if raw_requires is None:
+                continue
+            message = requires_error(raw_requires)
+            if message:
+                raise ValueError(message)
         return self
 
 

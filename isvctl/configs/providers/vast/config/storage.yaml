@@ -46,7 +46,6 @@ commands:
 tests:
   cluster_name: "vast-storage-validation"
   description: "VAST storage shim validation"
-  platform: storage
 
   validations:
     storage_provider_api:

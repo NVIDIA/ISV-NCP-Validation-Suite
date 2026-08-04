@@ -16,7 +16,7 @@
 # =============================================================================
 # K8s storage validation - WEKA
 # =============================================================================
-# Runs the canonical Kubernetes suite against the EXISTING cluster your kubectl
+# Runs the canonical storage suite Kubernetes checks against the EXISTING cluster your kubectl
 # points at. Two independent inputs:
 #
 #   1. StorageProviderApiCheck is driven from storage-provider-manifest.yaml
@@ -35,10 +35,10 @@
 #   ISVTEST_INCLUDE_UNRELEASED=1 \
 #     uv run isvctl test run \
 #       -f isvctl/configs/providers/weka/config/storage-k8s.yaml \
+#       --capability kubernetes \
 #       -- -v -s -k "K8sCsiDriverHealth or K8sCsiProvisioningModes or K8sCsiStorageTypes or K8sPosixCompliance"
 
 import:
-  - ../../../suites/k8s.yaml
   - ../../../suites/storage.yaml
 
 version: "1.0"

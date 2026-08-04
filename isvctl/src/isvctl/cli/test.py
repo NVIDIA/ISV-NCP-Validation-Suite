@@ -128,8 +128,9 @@ def _resolve_capability_context(config: RunConfig, capability: str | None, suite
     One rule for every entry path: a plain suite with no ``--capability`` runs
     its core checks. "Unfiltered" corresponds to no real ISV situation - nobody
     runs on vm and kubernetes at once - so a plain suite always has a context.
-    Platform suites declare no ``requires:``, so they are left alone and reject
-    an explicit capability context.
+    Platform suites run under their declared capability and reject an explicit
+    capability context. This still matters when a provider config imports a
+    plain suite whose checks carry ``requires:`` metadata.
     """
     if config.tests and config.tests.capability:
         if capability is not None:
@@ -137,7 +138,7 @@ def _resolve_capability_context(config: RunConfig, capability: str | None, suite
                 f"--capability cannot be used with platform suite {suite_label!r}; "
                 f"it already runs under capability {config.tests.capability!r}."
             )
-        return None
+        return config.tests.capability
 
     if capability is None:
         print_progress(f"No capability selected; running {suite_label!r} core checks.")
@@ -154,9 +155,8 @@ def _reported_capability(config: RunConfig, capability_context: str | None) -> s
 
     Two client-side spellings have to be translated before they leave the process.
     ``CORE_REQUIREMENT_CONTEXT`` is this module's word for "no capability", which
-    the service records as NULL. A platform suite is left with no explicit context
-    because the capability it declares *is* the one it runs under, so report that
-    rather than losing the axis for every platform-suite run.
+    the service records as NULL. A platform suite reports its declaration rather
+    than the resolved filter context so the run cannot be mislabeled.
     """
     if config.tests and config.tests.capability:
         return config.tests.capability
@@ -520,8 +520,8 @@ def run(
 
     # Resolve the requirement context here rather than per entry path, so the
     # same config behaves identically whether it was reached via --suite, -f,
-    # or --label discovery. Platform suites carry no `requires:`, so they keep
-    # the unfiltered context (filtering there would be a no-op anyway).
+    # or --label discovery. Platform suites use their declared capability, which
+    # lets imported plain-suite checks filter on their `requires:` metadata.
     suite_name = suite_label or resolve_suite_name(config_files, CONFIGS_ROOT)
     try:
         capability_context = _resolve_capability_context(

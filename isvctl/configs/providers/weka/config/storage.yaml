@@ -47,7 +47,6 @@ commands:
 tests:
   cluster_name: "weka-storage-validation"
   description: "WEKA storage shim validation"
-  platform: storage
 
   validations:
     storage_provider_api:

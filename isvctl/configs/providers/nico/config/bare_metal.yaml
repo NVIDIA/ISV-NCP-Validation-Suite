@@ -61,8 +61,11 @@
 #   - query_key_access.py reads the site's SSH Key Groups and serial-console
 #     configuration and reports whether a tenant-specified key can access
 #     out-of-band components; BmComponentKeyAccessCheck validates it (AUTH-XX-03).
-#     This is a read-only step (like the other checks here); the auto-provisioning
-#     variant that mints a throwaway key lives in the dedicated key_access.yaml.
+#     This is a read-only step (like the other checks here), and it skips when no
+#     SSH key group is synced to the site. setup_key_access.py /
+#     teardown_key_access.py mint and remove a throwaway key so AUTH-XX-03 can
+#     pass without manual key setup; they are wired but skipped by default to
+#     keep a routine run read-only. Drop their `skip: true` to enable them.
 #   - list_instances.py / describe_instance.py query existing instances;
 #     BmHostListedCheck and BmHostStateReportedCheck validate
 #     the JSON contract.
@@ -74,6 +77,8 @@
 #   - Expected machines pre-registered; machines ingested and DPUs initialized
 #   - NICO_ORGANIZATION and NICO_SITE_ID environment variables set
 #   - Optional NICO_INSTANCE_ID narrows inventory checks to a known instance
+#   - ssh-keygen on the host, only when the opt-in key-provisioning steps are
+#     unskipped (used to mint the throwaway key)
 #
 # Usage:
 #   NICO_BEARER_TOKEN=<token> NICO_ORGANIZATION=<org-name> NICO_SITE_ID=<uuid> \
@@ -86,7 +91,7 @@ version: "1.0"
 
 commands:
   bare_metal:
-    phases: ["test"]
+    phases: ["setup", "test", "teardown"]
     steps:
       # ─── Verify Hardware Ingestion ─────────────────────────────────
       # Compares expected-machine manifest against discovered machines.
@@ -381,7 +386,6 @@ commands:
           - "{{nico_api_base}}"
         timeout: 120
 
-
       - name: return_node_maintenance
         phase: test
         continue_on_failure: true
@@ -460,6 +464,25 @@ commands:
           - "{{nico_api_base}}"
         timeout: 120
 
+      # ─── Provision a Throwaway Specified Key (setup, opt-in) ────────
+      # Creates an ephemeral SSH key and a key group that syncs it to the site,
+      # so query_key_access below reports a real result instead of skipping.
+      # Mutates the site (POST sshkey + sshkeygroup, best-effort PATCH of the
+      # site's SSH-key SOL flag), so it is skipped by default. Emits
+      # sshkey_id / sshkeygroup_id / restore_ssh_keys_enabled for teardown.
+      - name: setup_key_access
+        phase: setup
+        skip: true
+        command: "python ../scripts/auth/setup_key_access.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+        timeout: 360
+
       # ─── Specified-Key Access (AUTH-XX-03) ──────────────────────────
       # Reads the site's SSH Key Groups and serial-console configuration from
       # the NICo API (/carbide/ segment, like the other NICo steps) and reports
@@ -478,6 +501,29 @@ commands:
           - "{{site_id}}"
           - "--api-base"
           - "{{nico_api_base}}"
+        timeout: 120
+
+      # ─── Remove the Throwaway Specified Key (teardown, opt-in) ──────
+      # Best-effort cleanup of the key group + key created by setup_key_access,
+      # and restores the site's SSH-key SOL flag when setup flipped it. Unskip
+      # this whenever setup_key_access is unskipped.
+      - name: teardown_key_access
+        phase: teardown
+        skip: true
+        command: "python ../scripts/auth/teardown_key_access.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+          - "--sshkeygroup-id"
+          - "{{steps.setup_key_access.sshkeygroup_id}}"
+          - "--sshkey-id"
+          - "{{steps.setup_key_access.sshkey_id}}"
+          - "--restore-ssh-keys-enabled"
+          - "{{steps.setup_key_access.restore_ssh_keys_enabled}}"
         timeout: 120
 
       # ─── List Existing Instances ───────────────────────────────────

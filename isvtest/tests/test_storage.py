@@ -173,7 +173,7 @@ class TestLoadProviderRegistry:
             tmp_path / "m.yaml",
             {"schema_version": "v1alpha2", "providers": [{"type": "file"}]},
         )
-        with pytest.raises(ManifestError, match="name .*is required"):
+        with pytest.raises(ManifestError, match=r"name .*is required"):
             load_provider_registry({"manifest_path": str(path)})
 
     def test_invalid_provider_type_raises(self, tmp_path: Path) -> None:
@@ -250,7 +250,7 @@ class TestLoadProviderRegistry:
                 "providers": [{"name": "weird", "type": "file", "shim": {"kind": "binary", "module": "x"}}],
             },
         )
-        with pytest.raises(ManifestError, match="shim.kind"):
+        with pytest.raises(ManifestError, match=r"shim.kind"):
             load_provider_registry({"manifest_path": str(path)})
 
     def test_python_shim_requires_module(self, tmp_path: Path) -> None:
@@ -261,7 +261,7 @@ class TestLoadProviderRegistry:
                 "providers": [{"name": "p", "type": "file", "shim": {"kind": "python"}}],
             },
         )
-        with pytest.raises(ManifestError, match="shim.module is required"):
+        with pytest.raises(ManifestError, match=r"shim.module is required"):
             load_provider_registry({"manifest_path": str(path)})
 
 
@@ -337,7 +337,7 @@ class TestIdentityAndCapabilities:
             tmp_path / "m.yaml",
             {"schema_version": "v1alpha2", "providers": [{"provider": {"type": "file"}}]},
         )
-        with pytest.raises(ManifestError, match="name .*is required"):
+        with pytest.raises(ManifestError, match=r"name .*is required"):
             load_provider_registry({"manifest_path": str(path)})
 
     def test_hierarchical_capabilities_lowered_to_cap_ids(self, tmp_path: Path) -> None:

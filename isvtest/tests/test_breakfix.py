@@ -43,6 +43,14 @@ class TestMaintenanceEventsCheck:
         with pytest.raises(pytest.skip.Exception):
             check.run()
 
+    def test_skips_when_no_events(self) -> None:
+        """Zero events cannot demonstrate the query API, so this must not pass."""
+        check = MaintenanceEventsCheck(
+            config={"step_output": {"success": True, "events_queryable": True, "events": []}}
+        )
+        with pytest.raises(pytest.skip.Exception):
+            check.run()
+
 
 class TestRepairHistoryCheck:
     def test_passes_when_history_queryable(self) -> None:
@@ -57,6 +65,12 @@ class TestRepairHistoryCheck:
         )
         check.run()
         assert check.passed
+
+    def test_skips_when_no_records(self) -> None:
+        """Zero repair records cannot demonstrate the query API, so this must not pass."""
+        check = RepairHistoryCheck(config={"step_output": {"success": True, "history_queryable": True, "records": []}})
+        with pytest.raises(pytest.skip.Exception):
+            check.run()
 
 
 class TestGpuResetCheck:

@@ -38,7 +38,7 @@ def _repair_entries(machine: dict[str, Any]) -> list[dict[str, Any]]:
         )
     for item in history_entries(machine):
         status = str(item.get("status") or "")
-        if status not in _REPAIR_STATUSES and status != "InUse":
+        if status not in _REPAIR_STATUSES:
             continue
         entries.append(
             {

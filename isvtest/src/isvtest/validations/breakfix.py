@@ -58,6 +58,10 @@ class MaintenanceEventsCheck(BaseValidation):
     Step output:
         success, events: list[{machine_id, hardware_id, status, message, opened_at?}]
         events_queryable: bool -- API exposes maintenance event records
+
+    An empty event list skips rather than passes: a site with no maintenance
+    events is indistinguishable from one with no maintenance API at all, so a
+    pass there would assert nothing.
     """
 
     description: ClassVar[str] = "Query upcoming or current maintenance events for a node"
@@ -70,9 +74,10 @@ class MaintenanceEventsCheck(BaseValidation):
         if not step_output.get("events_queryable"):
             self.set_failed("Maintenance events are not queryable via the break-fix API")
             return
-        self.set_passed(
-            f"Maintenance event query API available ({len(step_output.get('events') or [])} event(s) at site)"
-        )
+        events = step_output.get("events") or []
+        if not events:
+            pytest.skip("No maintenance events at the site; the query API cannot be demonstrated")
+        self.set_passed(f"Maintenance event query API returned {len(events)} event(s)")
 
 
 class RetirementNoticesCheck(BaseValidation):
@@ -102,6 +107,9 @@ class RepairHistoryCheck(BaseValidation):
 
     Step output:
         success, history_queryable: bool, records: list[{machine_id, entries: list[dict]}]
+
+    An empty record list skips rather than passes, for the same reason as
+    MaintenanceEventsCheck: no repair evidence means the API is undemonstrated.
     """
 
     description: ClassVar[str] = "Query historical repair status for a node"
@@ -115,7 +123,9 @@ class RepairHistoryCheck(BaseValidation):
             self.set_failed("Repair history is not queryable via the break-fix API")
             return
         records = step_output.get("records") or []
-        self.set_passed(f"Repair history query API available ({len(records)} machine record(s))")
+        if not records:
+            pytest.skip("No repair history at the site; the query API cannot be demonstrated")
+        self.set_passed(f"Repair history query API returned {len(records)} machine record(s)")
 
 
 class NvSwitchFirmwareCheck(BaseValidation):

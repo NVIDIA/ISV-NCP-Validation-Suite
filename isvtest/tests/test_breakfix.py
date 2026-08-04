@@ -1,13 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for break-fix / remediation validations (BFX01-BFX06)."""
+"""Unit tests for break-fix / break-fix validations (BFX01-BFX06)."""
 
 from __future__ import annotations
 
 import pytest
 
-from isvtest.validations.remediation import (
+from isvtest.validations.breakfix import (
     FailureNotificationCheck,
     GpuResetCheck,
     MaintenanceEventsCheck,

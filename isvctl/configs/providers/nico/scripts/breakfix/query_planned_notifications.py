@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Host replacement (BFX01-05) - NICo mutating workflow gap."""
+"""Planned maintenance notifications (BFX05-01) - NICo gap."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from remediation._common import emit, skip_result
+from breakfix._common import emit, skip_result
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
@@ -20,8 +20,8 @@ if __name__ == "__main__":
     a, _ = p.parse_known_args()
     r = skip_result(
         a.site_id,
-        "Host replacement workflow is mutating and requires dedicated NICo lab fixtures (BFX01-05 gap)",
-        gap="BFX01-05",
+        "Planned maintenance notification channel is not exposed via NICo REST (BFX05-01 gap)",
+        gap="BFX05-01",
     )
-    r["operation"] = {"requested": False, "node_removed_from_pool": False}
+    r["notification_channel_observable"] = False
     sys.exit(emit(r))

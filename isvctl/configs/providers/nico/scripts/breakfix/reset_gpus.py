@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Planned maintenance notifications (BFX05-01) - NICo gap."""
+"""GPU reset (BFX01-01) - NICo gap (Maestro/k8s mutating workflow)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from remediation._common import emit, skip_result
+from breakfix._common import emit, skip_result
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
@@ -20,8 +20,8 @@ if __name__ == "__main__":
     a, _ = p.parse_known_args()
     r = skip_result(
         a.site_id,
-        "Planned maintenance notification channel is not exposed via NICo REST (BFX05-01 gap)",
-        gap="BFX05-01",
+        "GPU reset via breakfix API requires Maestro/k8s integration (BFX01-01 gap on NICo)",
+        gap="BFX01-01",
     )
-    r["notification_channel_observable"] = False
+    r["operation"] = {"requested": False, "completed": False}
     sys.exit(emit(r))

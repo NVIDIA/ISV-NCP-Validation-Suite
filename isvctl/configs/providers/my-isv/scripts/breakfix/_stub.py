@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Shared helpers for my-isv remediation scaffold scripts."""
+"""Shared helpers for my-isv break-fix scaffold scripts."""
 
 from __future__ import annotations
 

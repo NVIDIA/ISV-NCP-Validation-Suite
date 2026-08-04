@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Break-fix / remediation validations (BFX01-BFX06).
+"""Break-fix / break-fix validations (BFX01-BFX06).
 
 Provider-agnostic checks over step JSON output. Lifecycle steps may emit
 ``skipped`` when a platform lacks the mutating break-fix API (for example
@@ -40,7 +40,7 @@ def _record_label(record: dict[str, Any], *keys: str) -> str:
 
 def _maybe_skip(step_output: dict[str, Any]) -> None:
     if step_output.get("skipped") is True:
-        pytest.skip(step_output.get("skip_reason") or "Remediation step skipped (not configured on this platform)")
+        pytest.skip(step_output.get("skip_reason") or "Break-fix step skipped (not configured on this platform)")
 
 
 def _require_success(step_output: dict[str, Any], check: BaseValidation) -> bool:
@@ -48,7 +48,7 @@ def _require_success(step_output: dict[str, Any], check: BaseValidation) -> bool
     _maybe_skip(step_output)
     if step_output.get("success"):
         return True
-    check.set_failed(step_output.get("error") or "Remediation step failed")
+    check.set_failed(step_output.get("error") or "Break-fix step failed")
     return False
 
 

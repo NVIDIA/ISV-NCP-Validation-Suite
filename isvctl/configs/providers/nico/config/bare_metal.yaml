@@ -18,7 +18,8 @@
 # Imports the provider-agnostic bare_metal contract and wires the NICo
 # hardware-lifecycle and inventory steps. NICo currently implements hardware
 # ingestion, DPU health, governance metrics, unified host-health, InfiniBand
-# fabric security, tenant-transition sanitization, attestation, and existing
+# fabric security, tenant-transition sanitization, attestation, break-fix
+# observability (with documented gaps for mutating workflows), and existing
 # instance inventory checks. Full lifecycle and SSH-host validations remain
 # excluded until those steps are wired for NICo.
 #
@@ -299,6 +300,166 @@ commands:
           - "{{nico_api_base}}"
         timeout: 120
 
+      # ─── Break-fix observability / lifecycle (BFX01–BFX06) ────────
+      # Read-only where NICo exposes signals; mutating actions and missing
+      # APIs emit structured skips with gap IDs (see scripts/breakfix/).
+      - name: query_serial_numbers
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/hardware_inventory/query_serial_numbers.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+        timeout: 120
+
+      - name: query_maintenance_events
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/query_maintenance_events.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+        timeout: 120
+
+      - name: query_retirement_notices
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/query_retirement_notices.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+        timeout: 120
+
+      - name: query_repair_history
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/query_repair_history.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+        timeout: 120
+
+      - name: query_switch_firmware
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/query_switch_firmware.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+        timeout: 120
+
+      - name: query_bmc_kernel_logs
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/query_bmc_kernel_logs.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+        timeout: 120
+
+
+      - name: return_node_maintenance
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/return_node_maintenance.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+        timeout: 600
+
+      - name: return_rack_maintenance
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/return_rack_maintenance.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+        timeout: 600
+
+      - name: request_host_replacement
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/request_host_replacement.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+        timeout: 900
+
+      - name: query_node_health_agents
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/query_node_health_agents.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+        timeout: 120
+
+      - name: query_planned_notifications
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/query_planned_notifications.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+        timeout: 120
+
+      - name: query_failure_notifications
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/query_failure_notifications.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+        timeout: 120
+
       # ─── Specified-Key Access (AUTH-XX-03) ──────────────────────────
       # Reads the site's SSH Key Groups and serial-console configuration from
       # the NICo API (/carbide/ segment, like the other NICo steps) and reports
@@ -353,13 +514,15 @@ commands:
 
 tests:
   cluster_name: "nico-bare-metal-validation"
-  description: "Verify NICo bare-metal hardware ingestion, DPU health, governance, host health, and instance inventory"
+  description: "Verify NICo bare-metal hardware ingestion, DPU health, governance, host health, break-fix observability, and instance inventory"
 
   settings:
     org: "{{env.NICO_ORGANIZATION}}"
     site_id: "{{env.NICO_SITE_ID}}"
     nico_api_base: "{{env.NICO_API_BASE}}"
     instance_id: "{{env.NICO_INSTANCE_ID}}"
+    machine_id: "{{env.NICO_MACHINE_ID | default('', true)}}"
+    rack_id: "{{env.NICO_RACK_ID | default('', true)}}"
     # The imported bare_metal suite defines these for the full instance
     # lifecycle, which NICo does not run yet. Blank them so the suite's
     # {{instance_type}} self-reference does not emit missing-variable warnings.

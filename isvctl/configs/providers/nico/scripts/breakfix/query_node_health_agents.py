@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Cordon node (BFX01-04) - Kubernetes-only; skipped on NICo bare-metal provider."""
+"""Node health agents GPUd/Sentinel (BFX04-01) - Maestro gap on NICo."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from remediation._common import emit, skip_result
+from breakfix._common import emit, skip_result
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
@@ -20,8 +20,9 @@ if __name__ == "__main__":
     a, _ = p.parse_known_args()
     r = skip_result(
         a.site_id,
-        "Node cordon is a Kubernetes breakfix action (BFX01-04; not wired for NICo provider config)",
-        gap="BFX01-04",
+        "GPUd/Sentinel/Maestro node health agents are not observable via NICo REST (BFX04-01 gap)",
+        gap="BFX04-01",
     )
-    r["operation"] = {"cordoned": False}
+    r["agents_observable"] = False
+    r["agents"] = []
     sys.exit(emit(r))

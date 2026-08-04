@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Shared helpers for NICo remediation scripts."""
+"""Shared helpers for NICo break-fix scripts."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def list_site_machines(*, org: str, site_id: str, api_base: str) -> tuple[list[d
             {
                 "success": True,
                 "skipped": True,
-                "skip_reason": "No machines discovered at the site; remediation checks require ingested hardware",
+                "skip_reason": "No machines discovered at the site; break-fix checks require ingested hardware",
             }
         )
         return [], result

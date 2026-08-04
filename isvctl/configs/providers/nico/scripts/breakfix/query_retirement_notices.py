@@ -2,10 +2,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Query NV switch tray firmware (BFX03-02) - NICo gap stub.
+"""Query retirement notices (BFX02-02) - NICo gap stub.
 
-NV switch inventory/firmware is managed by nvswitch-manager and is not exposed
-on the tenant machine REST API used by validation scripts.
+NICo exposes maintenance and repair signals on the machine resource but does
+not yet expose a dedicated retirement-notice query API matching the offtake BFX02
+event schema.
 """
 
 from __future__ import annotations
@@ -15,11 +16,11 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from remediation._common import emit, skip_result
+from breakfix._common import emit, skip_result
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Query NV switch firmware (NICo)")
+    parser = argparse.ArgumentParser(description="Query retirement notices (NICo)")
     parser.add_argument("--org", required=True)
     parser.add_argument("--site-id", required=True)
     parser.add_argument("--api-base", required=True)
@@ -27,10 +28,11 @@ def main() -> int:
 
     result = skip_result(
         args.site_id,
-        "NV switch tray firmware is not queryable via NICo tenant REST API (BFX03-02 gap)",
-        gap="BFX03-02",
+        "NICo has no retirement-notice query API (BFX02-02 gap)",
+        gap="BFX02-02",
     )
-    result["trays"] = []
+    result["notices_queryable"] = False
+    result["notices"] = []
     return emit(result)
 
 

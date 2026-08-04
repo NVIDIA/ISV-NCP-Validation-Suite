@@ -77,8 +77,8 @@ Usage:
     NICO_BEARER_TOKEN=<token> python query_serial_numbers.py \
         --org <org> --site-id <uuid> --api-base <url>
 
-    Wired via the remediation suite:
-      uv run isvctl test run -f isvctl/configs/providers/nico/config/remediation.yaml --capability bare_metal
+    Wired via the bare_metal suite:
+      uv run isvctl test run -f isvctl/configs/providers/nico/config/bare_metal.yaml
 
 Reference:
     OpenAPI spec: rest-api/openapi/spec.yaml

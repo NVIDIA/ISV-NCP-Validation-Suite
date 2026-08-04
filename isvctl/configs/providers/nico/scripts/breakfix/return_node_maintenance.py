@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from remediation._common import emit, skip_result
+from breakfix._common import emit, skip_result
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()

@@ -54,5 +54,27 @@ commands:
         command: "../scripts/k8s/teardown.sh"
         timeout: 30
 
+      # Break-fix actions (BFX01). Demo stubs until real cluster APIs are wired.
+      - name: reset_gpus
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/reset_gpus.py"
+        args:
+          - "--region"
+          - "{{region | default('', true)}}"
+          - "--machine-id"
+          - "{{machine_id | default('', true)}}"
+        timeout: 600
+
+      - name: cordon_node
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/cordon_node.py"
+        args: ["--region", "{{region | default('', true)}}"]
+        timeout: 600
+
 tests:
   description: "my-isv Kubernetes platform suite (real cluster required)"
+  settings:
+    region: ""
+    machine_id: ""

@@ -75,8 +75,7 @@ Suites:
 [`slurm`](slurm.yaml),
 [`control-plane`](control-plane.yaml),
 [`image-registry`](image-registry.yaml),
-[`security`](security.yaml),
-[`remediation`](remediation.yaml).
+[`security`](security.yaml).
 For the domain / script-count / AWS-reference overview see the
 [my-isv scaffold README](../providers/my-isv/scripts/README.md#domains).
 
@@ -258,29 +257,18 @@ its plan item is not platform-scoped.
 | `query_oob_health` | test | `providers/nico/scripts/health/query_oob_health.py` | `hosts_checked`, `hosts[].{host_id,oob_health_present,bmc_probe_ids,failure_categories.<device\|network\|memory\|drive>.{observable,probe_ids}}` |
 | `query_attestation` | test | `providers/nico/scripts/attestation/query_attestation.py` | `machines_checked`, `machines[].{attestation_supported,nonce_verified,attestation_signature_valid,secure_boot_enabled,boot_measurements_attested,measured_boot_state}` |
 | `query_topology` | test | `providers/nico/scripts/topology/query_topology.py` | `hosts_checked`, `hosts[].{host_id,failure_domain}` |
-
-### Remediation (`remediation.yaml`)
-
-Break-fix / remediation contract (BFX01–BFX06). Plain suite: core checks
-(BFX04–BFX06) run without `--capability`; bare-metal and kubernetes gated
-checks need `--capability bare_metal` and/or `--capability kubernetes`.
-
-| Step | Phase | Script | Key JSON Fields |
-|------|-------|--------|-----------------|
 | `query_serial_numbers` | test | `providers/nico/scripts/hardware_inventory/query_serial_numbers.py` | `machines_checked`, `machines[].components.{chassis,baseboard,cpu,gpu,nic}.{present,identifiers}` (BFX03-01) |
-| `query_maintenance_events` | test | `providers/nico/scripts/remediation/query_maintenance_events.py` | `events_queryable`, `events[].{machine_id,hardware_id,status,message,opened_at}` (BFX02-01) |
-| `query_retirement_notices` | test | `providers/my-isv/scripts/remediation/query_retirement_notices.py` | `notices_queryable`, `notices` (BFX02-02) |
-| `query_repair_history` | test | `providers/nico/scripts/remediation/query_repair_history.py` | `history_queryable`, `records[].{machine_id,entries}` (BFX02-03) |
-| `query_switch_firmware` | test | `providers/my-isv/scripts/remediation/query_switch_firmware.py` | `trays[].{tray_id,firmware_version}` (BFX03-02) |
-| `query_bmc_kernel_logs` | test | `providers/nico/scripts/remediation/query_bmc_kernel_logs.py` | `hosts[].{host_id,kernel_log_available,entry_count}` (BFX03-03) |
-| `reset_gpus` | test | `providers/my-isv/scripts/remediation/reset_gpus.py` | `operation.{requested,completed,node_id}` (BFX01-01) |
-| `return_node_maintenance` | test | `providers/my-isv/scripts/remediation/return_node_maintenance.py` | `operation.{requested,accepted,machine_id,maintenance_mode}` (BFX01-02) |
-| `return_rack_maintenance` | test | `providers/my-isv/scripts/remediation/return_rack_maintenance.py` | `operation.{requested,accepted,rack_id}` (BFX01-03) |
-| `cordon_node` | test | `providers/my-isv/scripts/remediation/cordon_node.py` | `operation.{cordoned,new_workloads_blocked,existing_workloads_running}` (BFX01-04) |
-| `request_host_replacement` | test | `providers/my-isv/scripts/remediation/request_host_replacement.py` | `operation.{requested,node_removed_from_pool,machine_id}` (BFX01-05) |
-| `query_node_health_agents` | test | `providers/my-isv/scripts/remediation/query_node_health_agents.py` | `agents_observable`, `agents[].{node_id,agent_name,running}` (BFX04-01) |
-| `query_planned_notifications` | test | `providers/my-isv/scripts/remediation/query_planned_notifications.py` | `notification_channel_observable`, `sample_event` (BFX05-01) |
-| `query_failure_notifications` | test | `providers/my-isv/scripts/remediation/query_failure_notifications.py` | `notification_channel_observable`, `sample_event` (BFX06-01) |
+| `query_maintenance_events` | test | `providers/nico/scripts/breakfix/query_maintenance_events.py` | `events_queryable`, `events[].{machine_id,hardware_id,status,message,opened_at}` (BFX02-01) |
+| `query_retirement_notices` | test | `providers/my-isv/scripts/breakfix/query_retirement_notices.py` | `notices_queryable`, `notices` (BFX02-02) |
+| `query_repair_history` | test | `providers/nico/scripts/breakfix/query_repair_history.py` | `history_queryable`, `records[].{machine_id,entries}` (BFX02-03) |
+| `query_switch_firmware` | test | `providers/my-isv/scripts/breakfix/query_switch_firmware.py` | `trays[].{tray_id,firmware_version}` (BFX03-02) |
+| `query_bmc_kernel_logs` | test | `providers/nico/scripts/breakfix/query_bmc_kernel_logs.py` | `hosts[].{host_id,kernel_log_available,entry_count}` (BFX03-03) |
+| `return_node_maintenance` | test | `providers/my-isv/scripts/breakfix/return_node_maintenance.py` | `operation.{requested,accepted,machine_id,maintenance_mode}` (BFX01-02) |
+| `return_rack_maintenance` | test | `providers/my-isv/scripts/breakfix/return_rack_maintenance.py` | `operation.{requested,accepted,rack_id}` (BFX01-03) |
+| `request_host_replacement` | test | `providers/my-isv/scripts/breakfix/request_host_replacement.py` | `operation.{requested,node_removed_from_pool,machine_id}` (BFX01-05) |
+| `query_node_health_agents` | test | `providers/my-isv/scripts/breakfix/query_node_health_agents.py` | `agents_observable`, `agents[].{node_id,agent_name,running}` (BFX04-01) |
+| `query_planned_notifications` | test | `providers/my-isv/scripts/breakfix/query_planned_notifications.py` | `notification_channel_observable`, `sample_event` (BFX05-01) |
+| `query_failure_notifications` | test | `providers/my-isv/scripts/breakfix/query_failure_notifications.py` | `notification_channel_observable`, `sample_event` (BFX06-01) |
 
 ### Storage (`storage.yaml`)
 
@@ -306,8 +294,10 @@ volume. The three test-phase steps all reuse that fixture.
 |------|-------|--------|
 | `setup` | setup | `providers/my-isv/scripts/k8s/setup.sh` |
 | `teardown` | teardown | `providers/my-isv/scripts/k8s/teardown.sh` |
+| `reset_gpus` | test | `providers/my-isv/scripts/breakfix/reset_gpus.py` (BFX01-01) |
+| `cordon_node` | test | `providers/my-isv/scripts/breakfix/cordon_node.py` (BFX01-04) |
 
-Validations use `kubectl` directly (or a custom CLI via the `KUBECTL` env var): node counts, GPU operator, pod health, NCCL/NIM workloads.
+Validations use `kubectl` directly (or a custom CLI via the `KUBECTL` env var): node counts, GPU operator, pod health, NCCL/NIM workloads. Break-fix cordon and GPU reset are optional provider steps.
 
 ### Slurm (`slurm.yaml`)
 

@@ -217,11 +217,13 @@ tests:
   description: "AWS EKS GPU cluster validation"
 
   validations:
+    storage_provider_api:
+      checks:
+        StorageProviderApiCheck:
+          manifest_path: "isvctl/configs/providers/aws/config/storage-provider-manifest.yaml"
     k8s_storage:
       checks:
         K8sCsiDriverHealthCheck: {}
-        StorageProviderApiCheck:
-          manifest_path: "isvctl/configs/providers/aws/config/storage-provider-manifest.yaml"
     k8s_multi_cluster:
       checks:
         K8sMultiClusterSameVpcCheck:

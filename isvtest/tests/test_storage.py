@@ -358,13 +358,18 @@ class TestIdentityAndCapabilities:
                 ],
             },
         )
-        caps = load_provider_registry({"manifest_path": str(path)})[0].expected_capabilities
+        provider = load_provider_registry({"manifest_path": str(path)})[0]
+        caps = provider.expected_capabilities
+        states = provider.capability_states
         assert caps["tenant.list"] is False
         assert caps["tenant.getQuota"] is True
         assert caps["volume.create"] is True
         assert caps["volume.list"] is True
         assert caps["quota.directory.set"] is False
         assert caps["quota.user.get"] is False
+        assert states["tenant.getQuota"] == "native"
+        assert states["volume.create"] == "native"
+        assert states["quota.user.get"] == "none"
 
     def test_package_default_capabilities_apply(self, tmp_path: Path) -> None:
         path = _write_manifest(
@@ -375,11 +380,14 @@ class TestIdentityAndCapabilities:
                 "providers": [{"name": "p", "type": "file", "capabilities": {"volumeManagement": "native"}}],
             },
         )
-        caps = load_provider_registry({"manifest_path": str(path)})[0].expected_capabilities
+        provider = load_provider_registry({"manifest_path": str(path)})[0]
+        caps = provider.expected_capabilities
         # volume.* native via provider block; everything else falls to package default none.
         assert caps["volume.create"] is True
         assert caps["quota.user.set"] is False
         assert caps["tenant.list"] is False
+        assert provider.capability_states["volume.create"] == "native"
+        assert provider.capability_states["quota.user.set"] == "none"
 
     def test_package_default_capabilities_camelcase_key(self, tmp_path: Path) -> None:
         # The camelCase `defaultCapabilities` key mirrors the upstream package
@@ -404,6 +412,7 @@ class TestIdentityAndCapabilities:
         )
         provider = load_provider_registry({"manifest_path": str(path)})[0]
         assert provider.expected_capabilities == {}
+        assert provider.capability_states == {}
 
     def test_capability_qualifiers_parsed(self, tmp_path: Path) -> None:
         path = _write_manifest(
@@ -455,6 +464,7 @@ class TestIdentityAndCapabilities:
         )
         provider = load_provider_registry({"manifest_path": str(path)})[0]
         assert provider.expected_capabilities == {}
+        assert provider.capability_states == {}
 
 
 class TestInstanceConfig:
@@ -485,6 +495,7 @@ class TestInstanceConfig:
         provider = load_provider_registry({"manifest_path": str(path)})[0]
         assert provider.tenant_id == "manifest-tenant"
         assert provider.expected_capabilities["volume.create"] is True
+        assert provider.capability_states["volume.create"] == "native"
         assert provider.storage_classes == ()
 
     def test_sibling_config_overrides_tenant_and_capabilities(self, tmp_path: Path) -> None:
@@ -510,6 +521,8 @@ class TestInstanceConfig:
         # volume.create disabled by the instance; volume.list still native.
         assert provider.expected_capabilities["volume.create"] is False
         assert provider.expected_capabilities["volume.list"] is True
+        assert provider.capability_states["volume.create"] == "none"
+        assert provider.capability_states["volume.list"] == "native"
 
     def test_group_override_expands_to_leaves(self, tmp_path: Path) -> None:
         path = self._manifest(tmp_path)
@@ -520,11 +533,13 @@ class TestInstanceConfig:
                 "instance": {"provider": {"capabilities": {"volume": "disabled"}}},
             },
         )
-        caps = load_provider_registry({"manifest_path": str(path)})[0].expected_capabilities
+        provider = load_provider_registry({"manifest_path": str(path)})[0]
+        caps = provider.expected_capabilities
         assert caps["volume.list"] is False
         assert caps["volume.get"] is False
         assert caps["volume.create"] is False
         assert caps["volume.delete"] is False
+        assert provider.capability_states["volume.delete"] == "none"
 
     def test_enable_adds_undeclared_capability(self, tmp_path: Path) -> None:
         path = self._manifest(tmp_path)
@@ -535,10 +550,12 @@ class TestInstanceConfig:
                 "instance": {"provider": {"capabilities": {"tenant.list": "enabled"}}},
             },
         )
-        caps = load_provider_registry({"manifest_path": str(path)})[0].expected_capabilities
+        provider = load_provider_registry({"manifest_path": str(path)})[0]
+        caps = provider.expected_capabilities
         # tenant.list was undeclared (unchecked) in the manifest; the instance
         # enables it, so it becomes an expected-supported surface.
         assert caps["tenant.list"] is True
+        assert provider.capability_states["tenant.list"] == "native"
 
     def test_explicit_instance_config_path(self, tmp_path: Path) -> None:
         path = self._manifest(tmp_path)
@@ -566,8 +583,10 @@ class TestInstanceConfig:
                 "instance": {"provider": {"capabilities": {"volume.create": False}}},
             },
         )
-        caps = load_provider_registry({"manifest_path": str(path)})[0].expected_capabilities
+        provider = load_provider_registry({"manifest_path": str(path)})[0]
+        caps = provider.expected_capabilities
         assert caps["volume.create"] is False
+        assert provider.capability_states["volume.create"] == "none"
 
     def test_unknown_capability_key_raises(self, tmp_path: Path) -> None:
         path = self._manifest(tmp_path)

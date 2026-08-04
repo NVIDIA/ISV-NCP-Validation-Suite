@@ -19,23 +19,52 @@ Covers ``_await_hard`` read-back polling, reused PVC/pod cleanup, and
 ``pod_name`` without ``pvc_name`` config rejection.
 """
 
+from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
 import pytest
 
+from isvtest.core.runners import CommandResult
 from isvtest.core.storage import Provider
 from isvtest.core.storage_provider import (
     CAP_DIRECTORY_QUOTA_DELETE,
     CAP_DIRECTORY_QUOTA_GET,
     CAP_DIRECTORY_QUOTA_LIST,
     CAP_DIRECTORY_QUOTA_SET,
+    CAP_VOLUME_CREATE,
+    CAP_VOLUME_DELETE,
     DirectoryQuota,
+    MountSpec,
     NotFoundError,
     QuotaLimits,
+    Volume,
 )
 from isvtest.validations.storage_quota_enforcement import StorageDirectoryQuotaEnforcementCheck
 
 _WANT = 1 << 30
+_FULL_DIRECTORY_QUOTA_CAPS = (
+    CAP_DIRECTORY_QUOTA_SET,
+    CAP_DIRECTORY_QUOTA_GET,
+    CAP_DIRECTORY_QUOTA_LIST,
+    CAP_DIRECTORY_QUOTA_DELETE,
+)
+
+
+def _directory_quota_provider(
+    name: str = "full",
+    *,
+    api: object | None = None,
+    capability_states: dict[str, str] | None = None,
+) -> Provider:
+    return Provider(
+        name=name,
+        volume_type="file",
+        tenant_id="tenant",
+        shim_kind="python",
+        api=api or object(),
+        expected_capabilities={cap: True for cap in _FULL_DIRECTORY_QUOTA_CAPS},
+        capability_states=capability_states or {},
+    )
 
 
 class _Api:
@@ -238,19 +267,7 @@ class TestCandidateSelection:
         available.assert_not_called()
 
     def test_full_directory_quota_provider_reaches_k8s_availability_check(self):
-        provider = Provider(
-            name="full",
-            volume_type="file",
-            tenant_id="tenant",
-            shim_kind="python",
-            api=object(),
-            expected_capabilities={
-                CAP_DIRECTORY_QUOTA_SET: True,
-                CAP_DIRECTORY_QUOTA_GET: True,
-                CAP_DIRECTORY_QUOTA_LIST: True,
-                CAP_DIRECTORY_QUOTA_DELETE: True,
-            },
-        )
+        provider = _directory_quota_provider()
         check = StorageDirectoryQuotaEnforcementCheck(
             config={"manifest_path": "manifest.yaml", "storage_class": "shared-fs"}
         )
@@ -260,8 +277,131 @@ class TestCandidateSelection:
         ):
             check.run()
         assert check.passed
-        assert "no reachable Kubernetes" in check.message
+        assert any("no reachable Kubernetes" in result["message"] for result in check._subtest_results)
         available.assert_called_once_with()
+
+
+class TestAcquisitionRouting:
+    def test_csi_provider_uses_k8s_path_when_k8s_available(self):
+        provider = _directory_quota_provider(
+            capability_states={CAP_VOLUME_CREATE: "default", CAP_VOLUME_DELETE: "default"}
+        )
+        check = StorageDirectoryQuotaEnforcementCheck(
+            config={"manifest_path": "manifest.yaml", "storage_class": "shared-fs"}
+        )
+
+        with (
+            patch("isvtest.validations.storage_quota_enforcement.load_provider_registry", return_value=[provider]),
+            patch("isvtest.validations.storage_quota_enforcement.is_k8s_available", return_value=True),
+            patch("isvtest.validations.storage_quota_enforcement.get_kubectl_command", return_value=["kubectl"]),
+            patch("isvtest.validations.storage_quota_enforcement.get_kubectl_base_shell", return_value="kubectl"),
+            patch.object(check, "_exercise_provider_k8s", return_value=True) as k8s,
+            patch.object(check, "_exercise_provider_native", return_value=True) as native,
+        ):
+            check.run()
+
+        assert check.passed
+        k8s.assert_called_once_with(provider)
+        native.assert_not_called()
+
+    def test_native_provider_uses_native_path_when_k8s_unavailable(self):
+        provider = _directory_quota_provider(
+            capability_states={CAP_VOLUME_CREATE: "native", CAP_VOLUME_DELETE: "native"}
+        )
+        check = StorageDirectoryQuotaEnforcementCheck(config={"manifest_path": "manifest.yaml"})
+
+        with (
+            patch("isvtest.validations.storage_quota_enforcement.load_provider_registry", return_value=[provider]),
+            patch("isvtest.validations.storage_quota_enforcement.is_k8s_available", return_value=False),
+            patch.object(check, "_exercise_provider_native", return_value=True) as native,
+            patch.object(check, "_exercise_provider_k8s", return_value=True) as k8s,
+        ):
+            check.run()
+
+        assert check.passed
+        native.assert_called_once_with(provider)
+        k8s.assert_not_called()
+
+
+class _NativeApi:
+    def __init__(self, *, mount: MountSpec | None = MountSpec(fs_type="nfs", source="server:/export")):
+        self.mount = mount
+        self.created = []
+        self.deleted = []
+        self.deleted_quotas = []
+
+    def create_volume(self, req):
+        self.created.append(req)
+        return Volume(
+            tenant_id=req.tenant_id or "tenant",
+            id="vol-1",
+            size_bytes=req.size_bytes,
+            created_at=datetime.now(UTC),
+            type=req.volume_type,
+            state="available",
+            mount=self.mount,
+        )
+
+    def delete_volume(self, req):
+        self.deleted.append(req)
+
+    def delete_directory_quota(self, req):
+        self.deleted_quotas.append(req)
+
+
+class TestNativeLifecycle:
+    def test_native_path_creates_mounts_runs_and_deletes_volume(self):
+        api = _NativeApi()
+        provider = _directory_quota_provider(
+            api=api,
+            capability_states={CAP_VOLUME_CREATE: "native", CAP_VOLUME_DELETE: "native"},
+        )
+        check = StorageDirectoryQuotaEnforcementCheck()
+        check._volume_size = 123
+        check._ns_prefix = "isvtest-dq"
+        check._write_timeout = 30
+        check._create_hard = 64
+        check._enforce_hard = 32
+
+        with (
+            patch("isvtest.validations.storage_quota_enforcement.uuid.uuid4") as uuid4,
+            patch("isvtest.validations.storage_quota_enforcement.tempfile.mkdtemp", return_value="/tmp/isvtest-native"),
+            patch.object(check, "_mount_native_volume", return_value=True) as mount,
+            patch.object(check, "_exec_local", return_value=CommandResult(0, "", "", 0.0)) as exec_local,
+            patch.object(check, "run_command", return_value=CommandResult(0, "", "", 0.0)) as run_command,
+            patch.object(check, "_run_crud", return_value=True) as crud,
+            patch.object(check, "_run_enforcement", return_value=True) as enforcement,
+        ):
+            uuid4.return_value.hex = "abcdef123456"
+            assert check._exercise_provider_native(provider)
+
+        assert api.created[0].size_bytes == 123
+        assert api.created[0].tenant_id == "tenant"
+        assert api.created[0].name == "isvtest-dq-abcdef12"
+        mount.assert_called_once_with(MountSpec(fs_type="nfs", source="server:/export"), "/tmp/isvtest-native")
+        exec_local.assert_any_call("mkdir -p /tmp/isvtest-native/isvtest-dq-abcdef12")
+        crud.assert_called_once()
+        enforcement.assert_called_once()
+        assert api.deleted[0].volume_id == "vol-1"
+        assert api.deleted[0].tenant_id == "tenant"
+        run_command.assert_any_call("umount /tmp/isvtest-native")
+        run_command.assert_any_call("rmdir /tmp/isvtest-native")
+
+    def test_native_path_skips_when_created_volume_has_no_mount_spec(self):
+        api = _NativeApi(mount=None)
+        provider = _directory_quota_provider(
+            api=api,
+            capability_states={CAP_VOLUME_CREATE: "native", CAP_VOLUME_DELETE: "native"},
+        )
+        check = StorageDirectoryQuotaEnforcementCheck()
+        check._volume_size = 123
+        check._ns_prefix = "isvtest-dq"
+
+        assert check._exercise_provider_native(provider)
+
+        assert [result["skipped"] for result in check._subtest_results] == [True, True]
+        assert "returned no mount instructions" in check._subtest_results[0]["message"]
+        assert api.deleted[0].volume_id == "vol-1"
 
 
 class TestPodReuseConfig:

@@ -251,6 +251,40 @@ tests:
           requires: [vm, bare_metal]
           step: multipath
 
+    storage_provider_api:
+      checks:
+        StorageProviderApiCheck:
+          test_id: "N/A"
+          labels: ["storage", "storage_provider_api"]
+          requires: []
+          # Drives StorageProvider API contract conformity. The manifest enumerates
+          # one or more backend providers; this check imports each provider's shim
+          # Python file in-process and runs health_check / create+delete_volume /
+          # get_tenant_quota against it. It does not require Kubernetes; K8s
+          # provider configs may still point manifest_path at a mounted ConfigMap.
+          # manifest_path is empty by default so the check is skipped cleanly on
+          # providers that haven't onboarded the shim yet.
+          manifest_path: "{{ steps.setup.storage.manifest_path | default('', true) }}"
+          volume_size_bytes: 1073741824 # 1 GiB
+        StorageDirectoryQuotaEnforcementCheck:
+          test_id: "N/A"
+          labels: ["storage", "storage_provider_api", "slow"]
+          requires: []
+          # Real directory-quota lifecycle + enforcement (vs. the sentinel-id probes
+          # in StorageProviderApiCheck). Uses the Kubernetes PVC/pod path for
+          # CSI-owned volume lifecycle when a cluster is reachable; otherwise,
+          # providers that declare native volume.create/delete are exercised via
+          # create_volume(), Volume.mount, local writes, and delete_volume().
+          # Skipped cleanly when no provider declares full directory-quota CRUD,
+          # no Kubernetes/CSI or native acquisition path is available, or a
+          # native volume returns no mount instructions.
+          manifest_path: "{{ steps.setup.storage.manifest_path | default('', true) }}"
+          storage_class: "{{ steps.setup_cluster.csi.shared_fs_storage_class | default('', true) }}"
+          pvc_size: "5Gi"
+          volume_size_bytes: 1073741824 # 1 GiB
+          create_hard_bytes: 1073741824 # 1 GiB
+          enforcement_hard_bytes: 67108864 # 64 MiB
+
     # Kubernetes storage checks probe the current cluster, so they bind to no
     # step: a `step:` here would skip them whenever no provider supplies that
     # fixture. StorageClass names come from steps.setup_cluster.csi on a provider
@@ -363,36 +397,6 @@ tests:
           bind_timeout_s: 120
           expand_timeout_s: 180
           namespace_prefix: "isvtest-csi-expand"
-        StorageProviderApiCheck:
-          test_id: "N/A"
-          labels: ["kubernetes", "storage", "storage_provider_api"]
-          requires: [kubernetes]
-          # Drives StorageProvider API contract conformity. The manifest enumerates
-          # one or more backend providers; this check imports each provider's shim
-          # Python file in-process and runs health_check / create+delete_volume /
-          # get_tenant_quota against it.
-          # manifest_path is empty by default so the check is skipped
-          # cleanly on providers that haven't onboarded the shim yet. Set
-          # steps.setup.storage.manifest_path (or override this key in a
-          # provider config) to the path of the mounted ConfigMap file (K8s) or to the on-disk manifest (bare-metal).
-          manifest_path: "{{ steps.setup.storage.manifest_path | default('', true) }}"
-          volume_size_bytes: 1073741824 # 1 GiB
-        StorageDirectoryQuotaEnforcementCheck:
-          test_id: "N/A"
-          labels: ["kubernetes", "storage", "storage_provider_api", "slow"]
-          requires: [kubernetes]
-          # Real directory-quota lifecycle + enforcement (vs. the bogus-id probes
-          # in StorageProviderApiCheck). Provisions an RWX PVC on the shared-fs
-          # StorageClass, mounts it, then drives set/get/update/list/delete over
-          # the shim and writes data through the mount to prove the hard limit is
-          # enforced. Skipped cleanly when no provider declares
-          # quota.directory.set, no shared-fs StorageClass is configured, or no
-          # cluster is reachable. storage_class falls back to K8S_CSI_SHARED_FS_SC.
-          manifest_path: "{{ steps.setup.storage.manifest_path | default('', true) }}"
-          storage_class: "{{ steps.setup_cluster.csi.shared_fs_storage_class | default('', true) }}"
-          pvc_size: "5Gi"
-          create_hard_bytes: 1073741824 # 1 GiB
-          enforcement_hard_bytes: 67108864 # 64 MiB
         K8sNodeKernelModulesCheck:
           test_id: "HSS11-04"
           labels: ["kubernetes", "storage"]

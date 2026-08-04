@@ -69,6 +69,7 @@ _logger = logging.getLogger(__name__)
 
 SUPPORTED_SCHEMA_VERSIONS: tuple[str, ...] = ("v1alpha1", "v1alpha2")
 ShimKind = Literal["python", "rest"]
+CapabilityDeclaration = Literal["native", "default", "none"]
 
 # Build-manifest capability states. ``native`` and
 # ``default`` both yield a serviceable (``supported``) surface; ``none`` opts out.
@@ -135,6 +136,7 @@ class Provider:
     backend: Mapping[str, Any] = field(default_factory=dict)
     sdk_version: str | None = None
     expected_capabilities: Mapping[str, bool] = field(default_factory=dict)
+    capability_states: Mapping[str, CapabilityDeclaration] = field(default_factory=dict)
     capability_qualifiers: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
     attributes: Mapping[str, str] = field(default_factory=dict)
     # K8s StorageClass names from an instance config's ``storageClasses`` (empty
@@ -304,7 +306,7 @@ def _build_provider(
         field_name=f"providers[{index}] ({name!r}).backend",
     )
 
-    expected_capabilities = _resolve_capabilities(
+    capability_states = _resolve_capability_states(
         _coerce_mapping(
             entry.get("capabilities"),
             field_name=f"providers[{index}] ({name!r}).capabilities",
@@ -312,6 +314,7 @@ def _build_provider(
         package_default_caps,
         field_name=f"providers[{index}] ({name!r}).capabilities",
     )
+    expected_capabilities = {cap_id: state != "none" for cap_id, state in capability_states.items()}
     capability_qualifiers = _coerce_qualifiers(
         entry.get("capability_qualifiers"),
         field_name=f"providers[{index}] ({name!r}).capability_qualifiers",
@@ -332,6 +335,7 @@ def _build_provider(
         backend=backend,
         sdk_version=str(sdk_version) if sdk_version else None,
         expected_capabilities=expected_capabilities,
+        capability_states=capability_states,
         capability_qualifiers=capability_qualifiers,
         attributes=attributes,
         shim_kind=shim_kind,
@@ -402,22 +406,33 @@ def _resolve_capabilities(
     *,
     field_name: str,
 ) -> dict[str, bool]:
-    """Lower the hierarchical capabilities block to ``cap_id -> supported?``.
+    """Lower the hierarchical capabilities block to ``cap_id -> supported?``."""
+    return {
+        cap_id: state != "none"
+        for cap_id, state in _resolve_capability_states(provider_caps, package_caps, field_name=field_name).items()
+    }
+
+
+def _resolve_capability_states(
+    provider_caps: Mapping[str, Any],
+    package_caps: Mapping[str, Any],
+    *,
+    field_name: str,
+) -> dict[str, CapabilityDeclaration]:
+    """Lower the hierarchical capabilities block to ``cap_id -> native/default/none``.
 
     Mirrors the package manifest resolution: most-specific wins, the provider block
     overrides the package ``default_capabilities``, and an absent capability with
-    no ``default:`` fallback resolves to ``none`` (not supported). ``native`` /
-    ``default`` map to ``True`` (serviceable); ``none`` maps to ``False``.
-
-    Returns only the capabilities the manifest actually declares (explicitly or
-    via a ``default:`` fallback) so the contract check leaves undeclared
-    surfaces unchecked.
+    no ``default:`` fallback is left undeclared. The boolean
+    ``expected_capabilities`` view is derived from this state map for legacy
+    contract checks, while validations that need to distinguish backend-native
+    behavior can inspect this richer declaration.
     """
     _validate_capability_block(provider_caps, field_name=field_name)
     _validate_capability_block(package_caps, field_name="default_capabilities")
     has_default = "default" in provider_caps or "default" in package_caps
 
-    resolved: dict[str, bool] = {}
+    resolved: dict[str, CapabilityDeclaration] = {}
     for cap_id, path in _capability_leaves():
         state = _lookup_capability(provider_caps, path)
         if state is None:
@@ -431,7 +446,7 @@ def _resolve_capabilities(
         # explicit leaf/group state, or a `default:` fallback.
         if not explicit and not has_default:
             continue
-        resolved[cap_id] = state != "none"
+        resolved[cap_id] = state
     return resolved
 
 
@@ -552,16 +567,22 @@ def _apply_instance_config(provider: Provider, instance: Mapping[str, Any]) -> P
         _coerce_mapping(inst_provider.get("capabilities"), field_name="instance.provider.capabilities")
     )
     expected = dict(provider.expected_capabilities)
+    states = dict(provider.capability_states)
     for cap_id in CAPABILITY_IDS:
         override = _resolve_capability_override(overrides, cap_id)
         if override is not None:
             expected[cap_id] = override
+            if override:
+                states[cap_id] = states.get(cap_id, "native") if states.get(cap_id) != "none" else "native"
+            else:
+                states[cap_id] = "none"
 
     return replace(
         provider,
         tenant_id=default_tenant if default_tenant else provider.tenant_id,
         storage_classes=storage_classes or provider.storage_classes,
         expected_capabilities=expected,
+        capability_states=states,
     )
 
 

@@ -17,8 +17,8 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from common.nico_client import probe_text
 from breakfix._common import emit, list_site_machines, skip_result
+from common.nico_client import probe_text
 
 _LOG_KEYWORDS = ("kernel", "sel", "syslog", "log", "journal")
 

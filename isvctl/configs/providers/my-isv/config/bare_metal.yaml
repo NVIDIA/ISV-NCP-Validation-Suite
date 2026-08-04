@@ -256,7 +256,6 @@ commands:
         args: ["--region", "{{region}}"]
         timeout: 120
 
-
       - name: return_node_maintenance
         phase: test
         continue_on_failure: true

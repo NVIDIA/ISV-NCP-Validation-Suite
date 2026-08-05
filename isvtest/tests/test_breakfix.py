@@ -13,6 +13,7 @@ from isvtest.validations.breakfix import (
     MaintenanceEventsCheck,
     NodeHealthAgentCheck,
     RepairHistoryCheck,
+    RetirementNoticesCheck,
 )
 
 
@@ -69,6 +70,29 @@ class TestRepairHistoryCheck:
     def test_skips_when_no_records(self) -> None:
         """Zero repair records cannot demonstrate the query API, so this must not pass."""
         check = RepairHistoryCheck(config={"step_output": {"success": True, "history_queryable": True, "records": []}})
+        with pytest.raises(pytest.skip.Exception):
+            check.run()
+
+
+class TestRetirementNoticesCheck:
+    def test_passes_when_notices_present(self) -> None:
+        check = RetirementNoticesCheck(
+            config={
+                "step_output": {
+                    "success": True,
+                    "notices_queryable": True,
+                    "notices": [{"machine_id": "m-1", "status": "scheduled"}],
+                }
+            }
+        )
+        check.run()
+        assert check.passed
+
+    def test_skips_when_no_notices(self) -> None:
+        """Zero notices cannot demonstrate the query API, so this must not pass."""
+        check = RetirementNoticesCheck(
+            config={"step_output": {"success": True, "notices_queryable": True, "notices": []}}
+        )
         with pytest.raises(pytest.skip.Exception):
             check.run()
 

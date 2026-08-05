@@ -23,7 +23,15 @@ def main() -> int:
         {
             **base_result("query_retirement_notices"),
             "notices_queryable": True,
-            "notices": [],
+            "notices": [
+                {
+                    "machine_id": "demo-machine-001",
+                    "rack_id": "demo-rack-001",
+                    "status": "scheduled",
+                    "message": "End-of-life retirement",
+                    "retire_after": "2027-01-15T00:00:00Z",
+                }
+            ],
         },
         hint="retirement notices query",
     )

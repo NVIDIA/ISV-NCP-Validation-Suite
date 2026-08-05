@@ -85,6 +85,9 @@ class RetirementNoticesCheck(BaseValidation):
 
     Step output:
         success, notices_queryable: bool, notices: list[dict]
+
+    An empty notice list skips rather than passes, for the same reason as
+    MaintenanceEventsCheck: no evidence means the API is undemonstrated.
     """
 
     description: ClassVar[str] = "Query retirement notices for a node or rack"
@@ -97,9 +100,10 @@ class RetirementNoticesCheck(BaseValidation):
         if not step_output.get("notices_queryable"):
             self.set_failed("Retirement notices are not queryable via the break-fix API")
             return
-        self.set_passed(
-            f"Retirement notice query API available ({len(step_output.get('notices') or [])} notice(s) at site)"
-        )
+        notices = step_output.get("notices") or []
+        if not notices:
+            pytest.skip("No retirement notices at the site; the query API cannot be demonstrated")
+        self.set_passed(f"Retirement notice query API returned {len(notices)} notice(s)")
 
 
 class RepairHistoryCheck(BaseValidation):

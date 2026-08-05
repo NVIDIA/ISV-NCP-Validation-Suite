@@ -20,7 +20,10 @@ from isvtest.validations.breakfix import (
 
 
 class TestMaintenanceEventsCheck:
+    """Cover the BFX02-01 maintenance-event query check."""
+
     def test_passes_when_queryable(self) -> None:
+        """A queryable API with at least one event passes."""
         check = MaintenanceEventsCheck(
             config={
                 "step_output": {
@@ -34,6 +37,7 @@ class TestMaintenanceEventsCheck:
         assert check.passed
 
     def test_skips_when_step_skipped(self) -> None:
+        """A provider step reporting a structured skip propagates as a pytest skip."""
         check = MaintenanceEventsCheck(
             config={
                 "step_output": {
@@ -56,7 +60,10 @@ class TestMaintenanceEventsCheck:
 
 
 class TestRepairHistoryCheck:
+    """Cover the BFX02-03 repair-history query check."""
+
     def test_passes_when_history_queryable(self) -> None:
+        """A queryable API with at least one machine record passes."""
         check = RepairHistoryCheck(
             config={
                 "step_output": {
@@ -77,7 +84,10 @@ class TestRepairHistoryCheck:
 
 
 class TestRetirementNoticesCheck:
+    """Cover the BFX02-02 retirement-notice query check."""
+
     def test_passes_when_notices_present(self) -> None:
+        """A queryable API with at least one notice passes."""
         check = RetirementNoticesCheck(
             config={
                 "step_output": {
@@ -100,7 +110,10 @@ class TestRetirementNoticesCheck:
 
 
 class TestGpuResetCheck:
+    """Cover the BFX01-01 GPU reset check."""
+
     def test_fails_when_not_completed(self) -> None:
+        """An operation that never completed fails."""
         check = GpuResetCheck(
             config={"step_output": {"success": True, "operation": {"completed": False, "message": "timeout"}}}
         )
@@ -109,7 +122,10 @@ class TestGpuResetCheck:
 
 
 class TestNodeHealthAgentCheck:
+    """Cover the BFX04-01 GPUd/Sentinel health-agent check."""
+
     def test_fails_when_agents_not_observable(self) -> None:
+        """A platform that cannot observe health agents fails."""
         check = NodeHealthAgentCheck(
             config={"step_output": {"success": True, "agents_observable": False, "agents": []}}
         )
@@ -124,6 +140,8 @@ class TestNodeHealthAgentCheck:
 
 
 class TestCordonNodeCheck:
+    """Cover the BFX01-04 cordon check."""
+
     def test_fails_when_existing_workloads_unreported(self) -> None:
         """A missing existing_workloads_running is not proof that workloads continued."""
         check = CordonNodeCheck(
@@ -139,7 +157,10 @@ class TestCordonNodeCheck:
 
 
 class TestNotificationChecks:
+    """Cover the BFX05-01 planned and BFX06-01 immediate notification checks."""
+
     def test_planned_notification_passes(self) -> None:
+        """An observable planned-maintenance channel passes."""
         check = PlannedMaintenanceNotificationCheck(
             config={"step_output": {"success": True, "notification_channel_observable": True}}
         )
@@ -147,6 +168,7 @@ class TestNotificationChecks:
         assert check.passed
 
     def test_failure_notification_passes(self) -> None:
+        """An observable immediate-failure channel passes."""
         check = FailureNotificationCheck(
             config={"step_output": {"success": True, "notification_channel_observable": True}}
         )

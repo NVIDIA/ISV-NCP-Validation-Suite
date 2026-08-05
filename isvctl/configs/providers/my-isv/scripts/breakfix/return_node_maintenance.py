@@ -15,6 +15,7 @@ from _stub import base_result, demo_or_not_implemented, finish
 
 
 def main() -> int:
+    """Emit the return-node-for-maintenance template result (BFX01-02)."""
     parser = argparse.ArgumentParser(description="Return node for maintenance (template)")
     parser.add_argument("--region", default="", help="Cloud region")
     parser.add_argument("--machine-id", default="", help="Target machine id")

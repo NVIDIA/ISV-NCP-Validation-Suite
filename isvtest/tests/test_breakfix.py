@@ -8,10 +8,12 @@ from __future__ import annotations
 import pytest
 
 from isvtest.validations.breakfix import (
+    CordonNodeCheck,
     FailureNotificationCheck,
     GpuResetCheck,
     MaintenanceEventsCheck,
     NodeHealthAgentCheck,
+    PlannedMaintenanceNotificationCheck,
     RepairHistoryCheck,
     RetirementNoticesCheck,
 )
@@ -114,9 +116,37 @@ class TestNodeHealthAgentCheck:
         check.run()
         assert not check.passed
 
+    def test_fails_when_no_agents_returned(self) -> None:
+        """BFX04-01 needs evidence an agent is running; zero records is not that."""
+        check = NodeHealthAgentCheck(config={"step_output": {"success": True, "agents_observable": True, "agents": []}})
+        check.run()
+        assert not check.passed
+
+
+class TestCordonNodeCheck:
+    def test_fails_when_existing_workloads_unreported(self) -> None:
+        """A missing existing_workloads_running is not proof that workloads continued."""
+        check = CordonNodeCheck(
+            config={
+                "step_output": {
+                    "success": True,
+                    "operation": {"cordoned": True, "new_workloads_blocked": True},
+                }
+            }
+        )
+        check.run()
+        assert not check.passed
+
 
 class TestNotificationChecks:
     def test_planned_notification_passes(self) -> None:
+        check = PlannedMaintenanceNotificationCheck(
+            config={"step_output": {"success": True, "notification_channel_observable": True}}
+        )
+        check.run()
+        assert check.passed
+
+    def test_failure_notification_passes(self) -> None:
         check = FailureNotificationCheck(
             config={"step_output": {"success": True, "notification_channel_observable": True}}
         )

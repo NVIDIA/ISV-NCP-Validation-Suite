@@ -19,6 +19,7 @@ from breakfix._common import emit, skip_result
 
 
 def main() -> int:
+    """Emit the NV switch firmware gap payload for NICo as JSON (BFX03-02)."""
     parser = argparse.ArgumentParser(description="Query NV switch firmware (NICo)")
     parser.add_argument("--org", required=True)
     parser.add_argument("--site-id", required=True)

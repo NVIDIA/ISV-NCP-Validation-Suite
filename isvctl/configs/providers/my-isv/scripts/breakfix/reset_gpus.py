@@ -15,6 +15,7 @@ from _stub import base_result, demo_or_not_implemented, finish
 
 
 def main() -> int:
+    """Emit the GPU reset template result (BFX01-01)."""
     parser = argparse.ArgumentParser(description="Reset GPUs via breakfix API (template)")
     parser.add_argument("--region", default="", help="Cloud region")
     parser.add_argument("--machine-id", default="", help="Target machine/node id")

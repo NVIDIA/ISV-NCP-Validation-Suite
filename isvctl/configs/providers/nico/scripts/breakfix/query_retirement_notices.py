@@ -20,6 +20,7 @@ from breakfix._common import emit, skip_result
 
 
 def main() -> int:
+    """Emit the retirement-notice gap payload for NICo as JSON (BFX02-02)."""
     parser = argparse.ArgumentParser(description="Query retirement notices (NICo)")
     parser.add_argument("--org", required=True)
     parser.add_argument("--site-id", required=True)

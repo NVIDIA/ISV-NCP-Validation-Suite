@@ -15,6 +15,7 @@ from _stub import base_result, demo_or_not_implemented, finish
 
 
 def main() -> int:
+    """Emit the NV switch firmware query template result (BFX03-02)."""
     parser = argparse.ArgumentParser(description="Query NV switch firmware (template)")
     parser.add_argument("--region", default="", help="Cloud region")
     _ = parser.parse_args()

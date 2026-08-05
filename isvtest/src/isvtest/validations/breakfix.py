@@ -31,6 +31,7 @@ from isvtest.core.validation import BaseValidation
 
 
 def _record_label(record: dict[str, Any], *keys: str) -> str:
+    """Return the first non-blank string value among ``keys``, or ``"unknown"``."""
     for key in keys:
         value = record.get(key)
         if isinstance(value, str) and value.strip():
@@ -39,6 +40,7 @@ def _record_label(record: dict[str, Any], *keys: str) -> str:
 
 
 def _maybe_skip(step_output: dict[str, Any]) -> None:
+    """Skip the check when the provider step reported a structured skip."""
     if step_output.get("skipped") is True:
         pytest.skip(step_output.get("skip_reason") or "Break-fix step skipped (not configured on this platform)")
 
@@ -68,6 +70,7 @@ class MaintenanceEventsCheck(BaseValidation):
     timeout: ClassVar[int] = 120
 
     def run(self) -> None:
+        """Assert the maintenance-event query API returned at least one event."""
         step_output = self.config.get("step_output", {})
         if not _require_success(step_output, self):
             return
@@ -94,6 +97,7 @@ class RetirementNoticesCheck(BaseValidation):
     timeout: ClassVar[int] = 120
 
     def run(self) -> None:
+        """Assert the retirement-notice query API returned at least one notice."""
         step_output = self.config.get("step_output", {})
         if not _require_success(step_output, self):
             return
@@ -120,6 +124,7 @@ class RepairHistoryCheck(BaseValidation):
     timeout: ClassVar[int] = 120
 
     def run(self) -> None:
+        """Assert the repair-history query API returned at least one machine record."""
         step_output = self.config.get("step_output", {})
         if not _require_success(step_output, self):
             return
@@ -143,6 +148,7 @@ class NvSwitchFirmwareCheck(BaseValidation):
     timeout: ClassVar[int] = 120
 
     def run(self) -> None:
+        """Assert every reported NV switch tray exposes a firmware version."""
         step_output = self.config.get("step_output", {})
         if not _require_success(step_output, self):
             return
@@ -174,6 +180,7 @@ class BmcKernelLogCheck(BaseValidation):
     timeout: ClassVar[int] = 120
 
     def run(self) -> None:
+        """Assert BMC kernel logs are obtainable for every reported host."""
         step_output = self.config.get("step_output", {})
         if not _require_success(step_output, self):
             return
@@ -206,6 +213,7 @@ class GpuResetCheck(BaseValidation):
     timeout: ClassVar[int] = 600
 
     def run(self) -> None:
+        """Assert the GPU reset operation completed on the target node."""
         step_output = self.config.get("step_output", {})
         if not _require_success(step_output, self):
             return
@@ -227,6 +235,7 @@ class ReturnNodeMaintenanceCheck(BaseValidation):
     timeout: ClassVar[int] = 600
 
     def run(self) -> None:
+        """Assert the provider accepted the node for maintenance."""
         step_output = self.config.get("step_output", {})
         if not _require_success(step_output, self):
             return
@@ -251,6 +260,7 @@ class ReturnRackMaintenanceCheck(BaseValidation):
     timeout: ClassVar[int] = 600
 
     def run(self) -> None:
+        """Assert the provider accepted the rack for maintenance."""
         step_output = self.config.get("step_output", {})
         if not _require_success(step_output, self):
             return
@@ -272,6 +282,7 @@ class CordonNodeCheck(BaseValidation):
     timeout: ClassVar[int] = 600
 
     def run(self) -> None:
+        """Assert the node is cordoned, blocks new work, and keeps existing work running."""
         step_output = self.config.get("step_output", {})
         if not _require_success(step_output, self):
             return
@@ -282,8 +293,8 @@ class CordonNodeCheck(BaseValidation):
         if not operation.get("new_workloads_blocked"):
             self.set_failed("New workloads were not blocked on the cordoned node")
             return
-        if operation.get("existing_workloads_running") is False:
-            self.set_failed("Existing workloads did not continue on the cordoned node")
+        if operation.get("existing_workloads_running") is not True:
+            self.set_failed("Existing workloads were not confirmed still running on the cordoned node")
             return
         self.set_passed("Node cordoned: new workloads blocked, existing workloads continue")
 
@@ -299,6 +310,7 @@ class HostReplacementCheck(BaseValidation):
     timeout: ClassVar[int] = 900
 
     def run(self) -> None:
+        """Assert the replaced host was removed from the allocatable pool."""
         step_output = self.config.get("step_output", {})
         if not _require_success(step_output, self):
             return
@@ -321,6 +333,7 @@ class NodeHealthAgentCheck(BaseValidation):
     timeout: ClassVar[int] = 120
 
     def run(self) -> None:
+        """Assert a node health agent is reported and running on every node."""
         step_output = self.config.get("step_output", {})
         if not _require_success(step_output, self):
             return
@@ -328,6 +341,9 @@ class NodeHealthAgentCheck(BaseValidation):
             self.set_failed("Node health agents (GPUd/Sentinel) are not observable on this platform")
             return
         agents = step_output.get("agents") or []
+        if not agents:
+            self.set_failed("No node health agent (GPUd/Sentinel) records returned; none is running")
+            return
         not_running = [a for a in agents if isinstance(a, dict) and not a.get("running")]
         if not_running:
             labels = ", ".join(_record_label(a, "node_id", "machine_id") for a in not_running[:3])
@@ -347,6 +363,7 @@ class PlannedMaintenanceNotificationCheck(BaseValidation):
     timeout: ClassVar[int] = 120
 
     def run(self) -> None:
+        """Assert the planned-maintenance notification channel is observable."""
         step_output = self.config.get("step_output", {})
         if not _require_success(step_output, self):
             return
@@ -367,6 +384,7 @@ class FailureNotificationCheck(BaseValidation):
     timeout: ClassVar[int] = 120
 
     def run(self) -> None:
+        """Assert the immediate-failure notification channel is observable."""
         step_output = self.config.get("step_output", {})
         if not _require_success(step_output, self):
             return

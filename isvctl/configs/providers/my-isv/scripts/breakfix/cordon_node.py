@@ -15,6 +15,7 @@ from _stub import base_result, demo_or_not_implemented, finish
 
 
 def main() -> int:
+    """Emit the cordon-node template result (BFX01-04)."""
     parser = argparse.ArgumentParser(description="Cordon node (template)")
     parser.add_argument("--region", default="", help="Cloud region")
     _ = parser.parse_args()

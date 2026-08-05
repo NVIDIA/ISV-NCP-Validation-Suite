@@ -15,6 +15,7 @@ from _stub import base_result, demo_or_not_implemented, finish
 
 
 def main() -> int:
+    """Emit the node health-agent query template result (BFX04-01)."""
     parser = argparse.ArgumentParser(description="Query node health agents (template)")
     parser.add_argument("--region", default="", help="Cloud region")
     _ = parser.parse_args()

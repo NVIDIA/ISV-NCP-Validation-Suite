@@ -15,6 +15,7 @@ from _stub import base_result, demo_or_not_implemented, finish
 
 
 def main() -> int:
+    """Emit the retirement-notice query template result (BFX02-02)."""
     parser = argparse.ArgumentParser(description="Query retirement notices (template)")
     parser.add_argument("--region", default="", help="Cloud region")
     _ = parser.parse_args()

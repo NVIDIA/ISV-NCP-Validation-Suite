@@ -15,6 +15,7 @@ from _stub import base_result, demo_or_not_implemented, finish
 
 
 def main() -> int:
+    """Emit the immediate-failure notification template result (BFX06-01)."""
     parser = argparse.ArgumentParser(description="Query failure notifications (template)")
     parser.add_argument("--region", default="", help="Cloud region")
     _ = parser.parse_args()

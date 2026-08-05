@@ -22,6 +22,7 @@ from breakfix._common import emit, history_entries, list_site_machines
 
 
 def _opened_at(machine: dict[str, Any]) -> str | None:
+    """Return the timestamp of the machine's most recent Maintenance transition."""
     for entry in reversed(history_entries(machine)):
         status = str(entry.get("status") or "").strip()
         if status == "Maintenance":
@@ -30,6 +31,7 @@ def _opened_at(machine: dict[str, Any]) -> str | None:
 
 
 def main() -> int:
+    """Map NICo machine maintenance state into neutral event records as JSON."""
     parser = argparse.ArgumentParser(description="Query NICo maintenance events")
     parser.add_argument("--org", required=True)
     parser.add_argument("--site-id", required=True)

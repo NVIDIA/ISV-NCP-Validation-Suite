@@ -19,10 +19,12 @@ def finish(result: dict[str, Any]) -> int:
 
 
 def base_result(test_name: str) -> dict[str, Any]:
+    """Build the common failing-by-default result payload for a scaffold script."""
     return {"success": False, "platform": "my-isv", "test_name": test_name}
 
 
 def demo_or_not_implemented(result: dict[str, Any], *, hint: str) -> dict[str, Any]:
+    """Mark ``result`` successful in demo mode, otherwise attach a not-implemented error."""
     if DEMO_MODE:
         result["success"] = True
         return result

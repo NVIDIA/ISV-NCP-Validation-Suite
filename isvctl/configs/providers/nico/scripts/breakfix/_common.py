@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from urllib.error import URLError
 
 from common.nico_client import NicoAuthError, forge_get_all, resolve_auth
 
@@ -25,7 +26,14 @@ def list_site_machines(*, org: str, site_id: str, api_base: str) -> tuple[list[d
             result_key="machines",
         )
     except NicoAuthError as exc:
+        result["error_type"] = "auth"
         result["error"] = str(exc)
+        return [], result
+    # forge_get_all propagates HTTPError/URLError and JSON decoding errors. Let them
+    # through and the script exits without printing, so the orchestrator gets no JSON
+    # contract at all instead of a structured failure.
+    except (URLError, ValueError) as exc:
+        result["error"] = f"{type(exc).__name__}: {exc}"
         return [], result
 
     if not machines:
@@ -57,11 +65,13 @@ def skip_result(site_id: str, reason: str, *, gap: str = "") -> dict[str, Any]:
 
 
 def emit(result: dict[str, Any]) -> int:
+    """Print the JSON result and return a process exit code."""
     print(json.dumps(result, indent=2))
     return 0 if result.get("success") else 1
 
 
 def machine_labels(machine: dict[str, Any]) -> dict[str, str]:
+    """Return a machine's labels as a plain string-to-string mapping."""
     labels = machine.get("labels") or {}
     if not isinstance(labels, dict):
         return {}
@@ -69,5 +79,6 @@ def machine_labels(machine: dict[str, Any]) -> dict[str, str]:
 
 
 def history_entries(machine: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return a machine's ``statusHistory`` entries, dropping malformed items."""
     history = machine.get("statusHistory") or []
     return [entry for entry in history if isinstance(entry, dict)]

@@ -15,6 +15,7 @@ from _stub import base_result, demo_or_not_implemented, finish
 
 
 def main() -> int:
+    """Emit the return-rack-for-maintenance template result (BFX01-03)."""
     parser = argparse.ArgumentParser(description="Return rack for maintenance (template)")
     parser.add_argument("--region", default="", help="Cloud region")
     parser.add_argument("--rack-id", default="", help="Target rack id")

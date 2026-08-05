@@ -15,6 +15,7 @@ from _stub import base_result, demo_or_not_implemented, finish
 
 
 def main() -> int:
+    """Emit the hardware serial-number query template result (BFX03-01)."""
     parser = argparse.ArgumentParser(description="Query hardware serial numbers (template)")
     parser.add_argument("--region", default="", help="Cloud region")
     args = parser.parse_args()

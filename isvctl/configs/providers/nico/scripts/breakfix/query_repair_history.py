@@ -23,6 +23,7 @@ _REPAIR_STATUSES = {"Maintenance", "Reset", "Error", "Repairing"}
 
 
 def _repair_entries(machine: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return repair-status entries from a machine's labels and status history."""
     entries: list[dict[str, Any]] = []
     labels = machine_labels(machine)
     repair_status = labels.get("RepairStatus") or labels.get("repair_status")
@@ -53,6 +54,7 @@ def _repair_entries(machine: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def main() -> int:
+    """Derive per-machine repair history from NICo status history as JSON."""
     parser = argparse.ArgumentParser(description="Query NICo repair history")
     parser.add_argument("--org", required=True)
     parser.add_argument("--site-id", required=True)

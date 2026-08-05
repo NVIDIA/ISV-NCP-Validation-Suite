@@ -15,6 +15,7 @@ from _stub import base_result, demo_or_not_implemented, finish
 
 
 def main() -> int:
+    """Emit the maintenance-event query template result (BFX02-01)."""
     parser = argparse.ArgumentParser(description="Query maintenance events (template)")
     parser.add_argument("--region", default="", help="Cloud region")
     args = parser.parse_args()

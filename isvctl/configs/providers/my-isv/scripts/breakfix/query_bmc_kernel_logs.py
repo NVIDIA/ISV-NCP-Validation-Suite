@@ -15,6 +15,7 @@ from _stub import base_result, demo_or_not_implemented, finish
 
 
 def main() -> int:
+    """Emit the BMC kernel-log query template result (BFX03-03)."""
     parser = argparse.ArgumentParser(description="Query BMC kernel logs (template)")
     parser.add_argument("--region", default="", help="Cloud region")
     _ = parser.parse_args()

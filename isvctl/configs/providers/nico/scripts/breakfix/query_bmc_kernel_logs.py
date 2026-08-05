@@ -24,6 +24,7 @@ _LOG_KEYWORDS = ("kernel", "sel", "syslog", "log", "journal")
 
 
 def _kernel_log_signal(health: dict[str, Any]) -> tuple[bool, int]:
+    """Return whether BMC log probes are present in a health report, and how many."""
     probes = (health.get("successes") or []) + (health.get("alerts") or [])
     matches = 0
     for probe in probes:
@@ -39,6 +40,7 @@ def _kernel_log_signal(health: dict[str, Any]) -> tuple[bool, int]:
 
 
 def main() -> int:
+    """Report per-host BMC kernel-log availability from NICo health probes as JSON."""
     parser = argparse.ArgumentParser(description="Query BMC kernel logs (NICo)")
     parser.add_argument("--org", required=True)
     parser.add_argument("--site-id", required=True)

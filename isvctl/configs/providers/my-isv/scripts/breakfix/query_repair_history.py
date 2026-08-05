@@ -15,6 +15,7 @@ from _stub import base_result, demo_or_not_implemented, finish
 
 
 def main() -> int:
+    """Emit the repair-history query template result (BFX02-03)."""
     parser = argparse.ArgumentParser(description="Query repair history (template)")
     parser.add_argument("--region", default="", help="Cloud region")
     _ = parser.parse_args()

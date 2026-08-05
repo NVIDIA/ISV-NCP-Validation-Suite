@@ -30,6 +30,12 @@
 #   - query_metrics.py aggregates per-status node and GPU counts into the
 #     Delivered / Healthy / Reserved / Active governance buckets;
 #     GovernanceMetricsCheck verifies the API contract (CAP01-01).
+#   - query_fleet_inventory.py maps each machine (plus the site's region) onto
+#     the per-node record the resource governance API must return;
+#     FleetManagementApiCheck verifies it (CAP02-01).
+#   - query_resource_discovery.py polls the expected-machine manifest, NICo's
+#     index of delivered capacity, so ResourceDiscoveryApiCheck can observe
+#     stable resource identifiers and a stated delivery reason (CAP03-01).
 #   - query_host_health.py reports each machine's health probes, alerts, and
 #     classifications; HostHealthCheck validates the per-host report is
 #     alert-free (CAP05-01). Leak detection (BmcLeakDetection/Leak) is included.
@@ -134,6 +140,45 @@ commands:
           - "{{site_id}}"
           - "--api-base"
           - "{{nico_api_base}}"
+        timeout: 120
+
+      # ─── Query Fleet Management Inventory (CAP02-01) ───────────────
+      # Maps every machine at the site onto the per-node record the resource
+      # governance API must return: identity, health classification, workload
+      # and project binding, creation time, hardware type, GPU count, account,
+      # in-use flag, and the site's region.
+      - name: query_fleet_inventory
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/governance/query_fleet_inventory.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+        timeout: 120
+
+      # ─── Poll Resource Discovery Index (CAP03-01) ──────────────────
+      # Polls the expected-machine manifest -- NICo's Resource Index for
+      # delivered capacity -- twice so ResourceDiscoveryApiCheck can observe
+      # that each record's identifier is stable rather than take it on trust.
+      - name: query_resource_discovery
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/governance/query_resource_discovery.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+          - "--polls"
+          - "2"
+          - "--poll-interval"
+          - "5"
         timeout: 120
 
       # ─── Query Per-Host Health (CAP05-01) ──────────────────────────

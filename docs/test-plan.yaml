@@ -1908,6 +1908,10 @@ domains:
                 status: approved
                 notes: ""
               - summary: "Verify that fleet management API provides full set of information requested below: Node ID (Unique identifier for a GPU node) Health State (Healthy/Unhealthy classification) Instance ID (Identifier for virtual workload) Creation Timestamp (Time workload/node was created) Hardware Type (Descriptor for the hardware model) GPU Count (Number of GPUs per node) Top-levelAccount/ID (Identifier for the top-level organization/account) Sub-LevelProject/ID (Identifier for the nested project/sub-account) In Use (True/False status indicating if the GPU Node is turned on and in use) Region (Region of the data center where nodes are deployed)"
+                labels:
+                  - bare_metal
+                  - governance
+                  - min_req
                 req_id: CAP02
                 test_id: CAP02-01
                 status: approved
@@ -1915,8 +1919,12 @@ domains:
                 priority: P1
                 github_issues:
                   - "#203"
-                milestone: ""
+                milestone: M8
               - summary: "Resource discovery API: newly delivered capacity must be discoverable. This \"Resource Index\" must provide a stable resource identifer."
+                labels:
+                  - bare_metal
+                  - governance
+                  - min_req
                 req_id: CAP03
                 test_id: CAP03-01
                 status: approved
@@ -1924,7 +1932,7 @@ domains:
                 priority: P1
                 github_issues:
                   - "#204"
-                milestone: ""
+                milestone: M8
           - description: Stable Identifiers (Switches/Infrastructure)
             tests:
               - summary: Verify that switch identifiers are stable across reboots and firmware updates

@@ -1,0 +1,210 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Report the per-node fleet management record for a NICo site (CAP02-01).
+
+CAP02 requires the resource governance API to return a fixed set of information
+for every node. This script reads the NICo machine list plus the site record and
+maps them onto that provider-neutral contract:
+
+  Node ID            <- machine.id
+  Health State       <- health.alerts (empty -> healthy, non-empty -> unhealthy);
+                        a machine with no health report at all is reported as
+                        "unknown" so an unclassified node is not silently passed
+  Instance ID        <- machine.instanceId
+  Creation Timestamp <- machine.createdAt, else the earliest statusHistory entry
+  Hardware Type      <- machine.hwSkuDeviceType, else productName / machineType
+  GPU Count          <- machineCapabilities entries of type GPU
+  Account/ID         <- the NGC org the API is queried as
+  Project/ID         <- machine.tenantId
+  In Use             <- machine.status == "InUse"
+  Region             <- the site's region/location (a NICo site is one data center)
+
+NICo API endpoints used:
+  GET /v2/org/{org}/carbide/machine?siteId={site_id}
+  GET /v2/org/{org}/carbide/site/{site_id}
+
+Auth:
+  - NICO_BEARER_TOKEN, or
+  - OIDC client_credentials via NICO_SSA_ISSUER,
+    NICO_CLIENT_ID, NICO_CLIENT_SECRET, and optional NICO_OIDC_SCOPE.
+
+Required JSON output fields:
+  {
+    "success": true,
+    "platform": "nico",
+    "site_id": "...",
+    "nodes_checked": 1,
+    "nodes": [
+      {
+        "node_id": "...",
+        "health_state": "healthy",
+        "instance_id": "...",
+        "created_at": "2026-01-02T03:04:05Z",
+        "hardware_type": "dgx-gb300",
+        "gpu_count": 8,
+        "account_id": "my-org",
+        "project_id": "...",
+        "in_use": true,
+        "region": "us-west-1"
+      }
+    ]
+  }
+
+A site with no ingested machines emits a structured skip (``skipped`` /
+``skip_reason``) so a site with no hardware discovered yet is not a hard failure.
+
+Usage:
+    NICO_BEARER_TOKEN=<token> python query_fleet_inventory.py \
+        --org <org> --site-id <uuid> --api-base <url>
+
+    Wired via the bare_metal suite:
+      uv run isvctl test run -f isvctl/configs/providers/nico/config/bare_metal.yaml
+
+Reference:
+    OpenAPI spec: rest-api/openapi/spec.yaml (Machine / Site schemas)
+"""
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+# Allow importing from sibling common/ directory
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from common.inventory import first_string
+from common.nico_client import NicoAuthError, forge_get, forge_get_all, resolve_auth, sum_capabilities
+
+# Machine status that means the node is powered on and running a tenant workload.
+IN_USE_STATUS = "InUse"
+
+# Machine fields carrying the hardware model descriptor, in priority order.
+HARDWARE_TYPE_KEYS = ("hwSkuDeviceType", "productName", "machineType")
+
+# Machine fields carrying the creation timestamp, in priority order.
+CREATED_AT_KEYS = ("createdAt", "created")
+
+# Site fields naming the data center's region, in priority order. A NICo site is
+# a single data center, so its region (or, failing that, its location or name)
+# is the region the nodes are deployed in.
+REGION_KEYS = ("region", "regionName", "location", "locationName", "name")
+
+
+def health_state(machine: dict[str, Any]) -> str:
+    """Classify a machine as healthy/unhealthy, or unknown when unreported.
+
+    NICo reports health as an alert-driven document: no alerts means healthy.
+    A machine carrying no probe data and no observation timestamp has not been
+    classified at all, which is distinct from being healthy.
+    """
+    health = machine.get("health") or {}
+    if not (health.get("successes") or health.get("alerts") or health.get("observedAt")):
+        return "unknown"
+    return "unhealthy" if health.get("alerts") else "healthy"
+
+
+def created_at(machine: dict[str, Any]) -> str:
+    """Return the machine's creation timestamp.
+
+    Falls back to the earliest ``statusHistory`` entry, which records when NICo
+    first observed the machine in a lifecycle state. ISO 8601 timestamps sort
+    lexicographically, so ``min`` picks the earliest.
+    """
+    explicit = first_string(machine, *CREATED_AT_KEYS)
+    if explicit:
+        return explicit
+
+    stamps = [
+        first_string(entry, "created", "updated")
+        for entry in (machine.get("statusHistory") or [])
+        if isinstance(entry, dict)
+    ]
+    stamps = [s for s in stamps if s]
+    return min(stamps) if stamps else ""
+
+
+def node_record(machine: dict[str, Any], *, account_id: str, region: str) -> dict[str, Any]:
+    """Build the provider-neutral CAP02 fleet record for one NICo machine."""
+    return {
+        "node_id": machine.get("id", ""),
+        "health_state": health_state(machine),
+        "instance_id": first_string(machine, "instanceId"),
+        "created_at": created_at(machine),
+        "hardware_type": first_string(machine, *HARDWARE_TYPE_KEYS),
+        "gpu_count": sum_capabilities(machine.get("machineCapabilities") or [], "GPU"),
+        "account_id": account_id,
+        "project_id": first_string(machine, "tenantId"),
+        "in_use": machine.get("status") == IN_USE_STATUS,
+        "region": region,
+    }
+
+
+def main() -> int:
+    """Query the NICo fleet and print the per-node governance records as JSON."""
+    parser = argparse.ArgumentParser(description="Report the NICo fleet management inventory")
+    parser.add_argument("--org", required=True, help="NGC org name")
+    parser.add_argument("--site-id", required=True, help="NICo site UUID")
+    parser.add_argument("--api-base", required=True, help="NICo API base URL")
+    args = parser.parse_args()
+
+    result: dict[str, Any] = {
+        "success": False,
+        "platform": "nico",
+        "site_id": args.site_id,
+        "nodes_checked": 0,
+        "nodes": [],
+    }
+
+    try:
+        auth = resolve_auth()
+
+        machines = forge_get_all(
+            args.org,
+            "machine",
+            auth.token,
+            base_url=args.api_base,
+            params={"siteId": args.site_id},
+            result_key="machines",
+        )
+
+        if not machines:
+            result["success"] = True
+            result["skipped"] = True
+            result["skip_reason"] = "No machines found at site; no fleet records to report"
+            print(json.dumps(result, indent=2))
+            return 0
+
+        site = forge_get(args.org, f"site/{args.site_id}", auth.token, base_url=args.api_base)
+        region = first_string(site, *REGION_KEYS)
+
+        result["nodes"] = [node_record(m, account_id=args.org, region=region) for m in machines]
+        result["nodes_checked"] = len(result["nodes"])
+        result["success"] = True
+
+    except NicoAuthError as e:
+        result["error_type"] = "auth"
+        result["error"] = str(e)
+    except Exception as e:
+        result["error"] = f"{type(e).__name__}: {e}"
+
+    print(json.dumps(result, indent=2))
+    return 0 if result["success"] else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

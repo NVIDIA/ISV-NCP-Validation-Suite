@@ -117,6 +117,10 @@ def provision(*, org: str, site_id: str, api_base: str, token: str, created: Thr
         org, "sshkey", token, base_url=api_base, body={"name": name, "publicKey": _generate_public_key(name)}
     )
     created.sshkey_id = key.get("id") or ""
+    # remove() skips a resource with no id, so continuing here would strand the
+    # key on the org for good -- the leak this whole flow exists to avoid.
+    if not created.sshkey_id:
+        raise RuntimeError(f"NICo sshkey create returned no id for {name}")
 
     group = forge_post(
         org,
@@ -126,6 +130,8 @@ def provision(*, org: str, site_id: str, api_base: str, token: str, created: Thr
         body={"name": name, "sshKeyIds": [created.sshkey_id], "siteIds": [site_id]},
     )
     created.sshkeygroup_id = group.get("id") or ""
+    if not created.sshkeygroup_id:
+        raise RuntimeError(f"NICo sshkeygroup create returned no id for {name}")
 
     created.synced = _wait_for_sync(org, created.sshkeygroup_id, site_id, token, base_url=api_base)
     if not created.synced:

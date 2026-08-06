@@ -29,7 +29,7 @@ def main() -> int:
             {
                 "machine_id": "demo-machine-001",
                 "type": "planned_maintenance",
-                "message": "Scheduled firmware update on 2026-07-01",
+                "message": "Scheduled firmware update (demo)",
                 "notified_at": "2026-06-24T12:00:00Z",
             }
         ],

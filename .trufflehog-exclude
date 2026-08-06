@@ -1,0 +1,16 @@
+# Newline-separated Go regexes of paths TruffleHog skips (passed via --exclude-paths).
+# Local build and tool artifacts only -- no first-party source belongs here.
+#
+# These exist in a developer working tree but not in CI's fresh checkout, so
+# excluding them makes `make security-trufflehog` agree with the CI scan instead
+# of drowning it in findings from vendored dependencies and cached test IDs.
+(^|/)\.git/
+(^|/)\.venv/
+(^|/)\.pytest_cache/
+(^|/)\.ruff_cache/
+(^|/)__pycache__/
+(^|/)htmlcov/
+(^|/)dist/
+(^|/)node_modules/
+(^|/)\.terraform/
+(^|/)junit\.xml$

@@ -94,7 +94,7 @@ class TestQueryableRecordChecks:
         assert not check.passed
 
     @pytest.mark.parametrize(("check_class", "flag", "key", "record"), _QUERYABLE_CASES)
-    def test_skips_when_records_are_empty_shells(
+    def test_skips_when_all_records_are_empty_shells(
         self, check_class: type[BaseValidation], flag: str, key: str, record: dict[str, Any]
     ) -> None:
         """A list of contentless records is not evidence, so it must not pass."""
@@ -183,7 +183,7 @@ class TestNotificationChecks:
         assert label in check.message
 
     @pytest.mark.parametrize(("check_class", "label"), _NOTIFICATION_CASES)
-    def test_observable_flag_alone_does_not_pass(self, check_class: type[BaseValidation], label: str) -> None:
+    def test_observable_flag_alone_is_not_evidence(self, check_class: type[BaseValidation], label: str) -> None:
         """The flag is the provider asserting its own capability; it is not evidence."""
         with pytest.raises(pytest.skip.Exception):
             _run(check_class, {"success": True, "notification_channel_observable": True})

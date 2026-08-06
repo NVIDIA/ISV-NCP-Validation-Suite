@@ -20,6 +20,11 @@ PJDFSTEST_DIR := isvtest/vendor/pjdfstest
 # When re-enabling, pin by digest and verify against a trusted source (GitHub release, not Docker Hub).
 # TRIVY_IMAGE ?= aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c  # 0.69.3 (last known-good release)
 TRUFFLEHOG_IMAGE ?= trufflesecurity/trufflehog:latest
+TRUFFLEHOG_EXCLUDE ?= .trufflehog-exclude
+# Lob's key pattern is `test_` + 35 chars, so its verifier reports every 40-character
+# pytest function name in the repo as a verified secret. Nothing here uses Lob (a postal
+# mail API), so the detector can only produce false positives.
+TRUFFLEHOG_EXCLUDE_DETECTORS ?= lob
 SECURITY_SKIP_DIRS := .git,dist,htmlcov,.pytest_cache,.ruff_cache,.venv,node_modules,vendor,.terraform
 # TRIVY_SARIF ?= vulnerability-scan-results.sarif
 
@@ -66,6 +71,8 @@ security-trivy security-trivy-detail:
 security-trufflehog: ## Run TruffleHog secret scan (Docker; verified/unknown, --only-verified). Exits non-zero if verified secrets are found
 	@command -v docker >/dev/null 2>&1 || { echo "docker not found; install Docker to run local security scans"; exit 1; }
 	docker run --rm -v "$(CURDIR):/work" -w /work $(TRUFFLEHOG_IMAGE) filesystem /work \
+		--exclude-paths /work/$(TRUFFLEHOG_EXCLUDE) \
+		--exclude-detectors $(TRUFFLEHOG_EXCLUDE_DETECTORS) \
 		--results=verified,unknown --only-verified --fail
 
 ci-security: security-trufflehog ## Run local equivalents of CI security scans (Trivy disabled - GHSA-69fq-xp46-6x23)

@@ -31,11 +31,25 @@ def _run(check_class: type[BaseValidation], step_output: dict[str, Any]) -> Base
     return check
 
 
-# (check class, queryable flag key, record list key, one sample record)
+# (check class, observable flag key, record list key, one sample record)
+# BFX05/BFX06 sit here too: a notification channel is held to the same evidence
+# bar as the BFX02 query APIs, so the flag alone cannot pass the check.
 _QUERYABLE_CASES = [
     (MaintenanceEventsCheck, "events_queryable", "events", {"machine_id": "m-1", "status": "maintenance"}),
     (RetirementNoticesCheck, "notices_queryable", "notices", {"machine_id": "m-1", "status": "scheduled"}),
     (RepairHistoryCheck, "history_queryable", "records", {"machine_id": "m-1", "entries": [{"status": "x"}]}),
+    (
+        PlannedMaintenanceNotificationCheck,
+        "notification_channel_observable",
+        "notifications",
+        {"machine_id": "m-1", "type": "planned_maintenance"},
+    ),
+    (
+        FailureNotificationCheck,
+        "notification_channel_observable",
+        "notifications",
+        {"machine_id": "m-1", "type": "node_failure"},
+    ),
 ]
 
 _NOTIFICATION_CASES = [
@@ -78,6 +92,31 @@ class TestQueryableRecordChecks:
         """A failed step surfaces its own error rather than a queryable-flag error."""
         check = _run(MaintenanceEventsCheck, {"success": False, "error": "auth expired"})
         assert not check.passed
+
+    @pytest.mark.parametrize(("check_class", "flag", "key", "record"), _QUERYABLE_CASES)
+    def test_skips_when_records_are_empty_shells(
+        self, check_class: type[BaseValidation], flag: str, key: str, record: dict[str, Any]
+    ) -> None:
+        """A list of contentless records is not evidence, so it must not pass."""
+        with pytest.raises(pytest.skip.Exception):
+            _run(check_class, {"success": True, flag: True, key: [{}]})
+
+    def test_repair_history_needs_entries_not_just_a_machine_record(self) -> None:
+        """BFX02-03 counts a machine record only when it carries history entries."""
+        step_output = {"success": True, "history_queryable": True, "records": [{"machine_id": "m-1", "entries": []}]}
+        with pytest.raises(pytest.skip.Exception):
+            _run(RepairHistoryCheck, step_output)
+
+    def test_repair_history_ignores_entryless_records_in_the_count(self) -> None:
+        """Records without entries are dropped from the reported count, not counted."""
+        step_output = {
+            "success": True,
+            "history_queryable": True,
+            "records": [{"machine_id": "m-1", "entries": []}, {"machine_id": "m-2", "entries": [{"status": "Error"}]}],
+        }
+        check = _run(RepairHistoryCheck, step_output)
+        assert check.passed
+        assert "1 machine record(s)" in check.message
 
 
 class TestOperationChecks:
@@ -132,11 +171,22 @@ class TestNotificationChecks:
     """Cover the BFX05-01 planned and BFX06-01 immediate notification checks."""
 
     @pytest.mark.parametrize(("check_class", "label"), _NOTIFICATION_CASES)
-    def test_passes_when_channel_observable(self, check_class: type[BaseValidation], label: str) -> None:
-        """An observable channel passes and names the channel it observed."""
-        check = _run(check_class, {"success": True, "notification_channel_observable": True})
+    def test_passes_when_a_notification_is_evidenced(self, check_class: type[BaseValidation], label: str) -> None:
+        """An observable channel with a real notification passes and names the channel."""
+        step_output = {
+            "success": True,
+            "notification_channel_observable": True,
+            "notifications": [{"machine_id": "m-1", "message": "scheduled"}],
+        }
+        check = _run(check_class, step_output)
         assert check.passed
         assert label in check.message
+
+    @pytest.mark.parametrize(("check_class", "label"), _NOTIFICATION_CASES)
+    def test_observable_flag_alone_does_not_pass(self, check_class: type[BaseValidation], label: str) -> None:
+        """The flag is the provider asserting its own capability; it is not evidence."""
+        with pytest.raises(pytest.skip.Exception):
+            _run(check_class, {"success": True, "notification_channel_observable": True})
 
     @pytest.mark.parametrize(("check_class", "label"), _NOTIFICATION_CASES)
     def test_fails_when_channel_unobservable(self, check_class: type[BaseValidation], label: str) -> None:

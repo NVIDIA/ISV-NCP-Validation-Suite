@@ -25,6 +25,14 @@ def main() -> int:
         "query_failure_notifications",
         hint="immediate failure notification channel",
         notification_channel_observable=True,
+        notifications=[
+            {
+                "machine_id": "demo-machine-001",
+                "type": "node_failure",
+                "message": "Node became unreachable; GPU fault detected",
+                "notified_at": "2026-06-24T12:00:00Z",
+            }
+        ],
     )
 
 

@@ -54,11 +54,11 @@ GAPS: dict[str, tuple[str, dict[str, Any]]] = {
     ),
     "BFX05-01": (
         "Planned maintenance notification channel is not exposed via NICo REST (BFX05-01 gap)",
-        {"notification_channel_observable": False},
+        {"notification_channel_observable": False, "notifications": []},
     ),
     "BFX06-01": (
         "Immediate failure notification channel is not exposed via NICo REST (BFX06-01 gap)",
-        {"notification_channel_observable": False},
+        {"notification_channel_observable": False, "notifications": []},
     ),
 }
 

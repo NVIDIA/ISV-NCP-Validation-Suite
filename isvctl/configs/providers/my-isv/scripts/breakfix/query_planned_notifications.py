@@ -25,6 +25,14 @@ def main() -> int:
         "query_planned_notifications",
         hint="planned maintenance notification channel",
         notification_channel_observable=True,
+        notifications=[
+            {
+                "machine_id": "demo-machine-001",
+                "type": "planned_maintenance",
+                "message": "Scheduled firmware update on 2026-07-01",
+                "notified_at": "2026-06-24T12:00:00Z",
+            }
+        ],
     )
 
 

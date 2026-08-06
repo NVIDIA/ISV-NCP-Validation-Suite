@@ -20,11 +20,12 @@ Provider-agnostic checks over step JSON output. Lifecycle steps may emit
 Maestro/GPUd integrations not yet wired). Query steps assert observability
 of maintenance, repair, and diagnostic signals where the provider exposes them.
 
-Evidence strength differs by requirement. The BFX02 query checks require a
-non-empty record list, so a provider cannot pass by asserting capability it
-never exercised. BFX05/BFX06 currently pass on a provider-emitted
-``notification_channel_observable`` boolean, which is self-attested; raising
-them to the BFX02 bar needs a contract change on the notification steps.
+Every "is this signal observable" requirement (BFX02, BFX05, BFX06) is held to
+the same evidence bar by ``_QueryableRecordsCheck``: the provider must report
+the signal as observable *and* return at least one record demonstrating it. A
+self-declared boolean is not evidence -- a provider could emit it for an API it
+never called -- so a capability claimed with no records skips rather than
+passes, and the requirement stays visibly unproven.
 """
 
 from __future__ import annotations
@@ -63,13 +64,14 @@ def _step_output(check: BaseValidation) -> dict[str, Any] | None:
 
 
 class _QueryableRecordsCheck(BaseValidation):
-    """Shared machinery for the BFX02 "is this record type queryable" checks.
+    """Shared machinery for the "is this signal observable" checks.
 
     Subclasses supply the step-output keys and the wording; the policy is the
-    same for all of them: the provider must report the record type as queryable,
-    and must return at least one record. An empty list skips rather than passes
-    because a site with no records is indistinguishable from one with no API at
-    all, so a pass there would assert nothing.
+    same for all of them: the provider must report the signal as observable,
+    and must return at least one record that actually demonstrates it. A list
+    with no usable records skips rather than passes, because a site with no
+    records is indistinguishable from one with no API at all -- a pass there
+    would assert nothing beyond the provider's own say-so.
     """
 
     _exclude_from_discovery: ClassVar[bool] = True
@@ -82,15 +84,23 @@ class _QueryableRecordsCheck(BaseValidation):
     api_label: ClassVar[str]
     record_noun: ClassVar[str]
 
+    def _is_evidence(self, record: Any) -> bool:
+        """Return whether one record demonstrates the signal.
+
+        Defaults to "any non-empty record". Subclasses tighten this when the
+        record needs specific content to prove anything.
+        """
+        return bool(record)
+
     def run(self) -> None:
-        """Assert the query API reported itself available and returned records."""
+        """Assert the signal is reported observable and backed by real records."""
         step_output = _step_output(self)
         if step_output is None:
             return
         if not step_output.get(self.queryable_key):
             self.set_failed(self.unavailable_message)
             return
-        records = step_output.get(self.records_key) or []
+        records = [r for r in (step_output.get(self.records_key) or []) if self._is_evidence(r)]
         if not records:
             pytest.skip(f"No {self.absent_noun} at the site; the query API cannot be demonstrated")
         self.set_passed(f"{self.api_label} query API returned {len(records)} {self.record_noun}(s)")
@@ -146,6 +156,10 @@ class RepairHistoryCheck(_QueryableRecordsCheck):
     absent_noun: ClassVar[str] = "repair history"
     api_label: ClassVar[str] = "Repair history"
     record_noun: ClassVar[str] = "machine record"
+
+    def _is_evidence(self, record: Any) -> bool:
+        """A machine record proves nothing without at least one history entry."""
+        return bool(isinstance(record, dict) and record.get("entries"))
 
 
 class NvSwitchFirmwareCheck(BaseValidation):
@@ -369,49 +383,43 @@ class NodeHealthAgentCheck(BaseValidation):
         self.set_passed(f"Node health agent running on {len(agents)} node(s)")
 
 
-class _NotificationChannelCheck(BaseValidation):
-    """Shared machinery for the BFX05/BFX06 tenant-notification checks.
-
-    Subclasses supply the channel wording. Both assert only that the provider
-    reports the channel as observable -- see the module docstring for why that
-    is weaker evidence than the BFX02 checks require.
-    """
-
-    _exclude_from_discovery: ClassVar[bool] = True
-    timeout: ClassVar[int] = 120
-
-    channel_label: ClassVar[str]
-
-    def run(self) -> None:
-        """Assert the tenant notification channel is observable."""
-        step_output = _step_output(self)
-        if step_output is None:
-            return
-        if not step_output.get("notification_channel_observable"):
-            self.set_failed(f"{self.channel_label} notification channel is not observable")
-            return
-        self.set_passed(f"{self.channel_label} notification channel is available")
-
-
-class PlannedMaintenanceNotificationCheck(_NotificationChannelCheck):
+class PlannedMaintenanceNotificationCheck(_QueryableRecordsCheck):
     """Validate tenants can be notified of planned maintenance (BFX05-01).
 
     Step output:
         success, notification_channel_observable: bool
+        notifications: list[{machine_id, type, message, notified_at}]
+
+    Requires a real notification record, not just the observable flag: the flag
+    alone is the provider asserting its own capability.
     """
 
     description: ClassVar[str] = "Verify tenants can be notified of planned future node maintenance"
 
-    channel_label: ClassVar[str] = "Planned maintenance"
+    queryable_key: ClassVar[str] = "notification_channel_observable"
+    records_key: ClassVar[str] = "notifications"
+    unavailable_message: ClassVar[str] = "Planned maintenance notification channel is not observable"
+    absent_noun: ClassVar[str] = "planned maintenance notifications"
+    api_label: ClassVar[str] = "Planned maintenance notification"
+    record_noun: ClassVar[str] = "notification"
 
 
-class FailureNotificationCheck(_NotificationChannelCheck):
+class FailureNotificationCheck(_QueryableRecordsCheck):
     """Validate tenants can be notified of immediate node failure (BFX06-01).
 
     Step output:
         success, notification_channel_observable: bool
+        notifications: list[{machine_id, type, message, notified_at}]
+
+    Requires a real notification record, for the same reason as
+    PlannedMaintenanceNotificationCheck.
     """
 
     description: ClassVar[str] = "Verify tenants can be notified of immediate node failure"
 
-    channel_label: ClassVar[str] = "Immediate failure"
+    queryable_key: ClassVar[str] = "notification_channel_observable"
+    records_key: ClassVar[str] = "notifications"
+    unavailable_message: ClassVar[str] = "Immediate failure notification channel is not observable"
+    absent_noun: ClassVar[str] = "immediate failure notifications"
+    api_label: ClassVar[str] = "Immediate failure notification"
+    record_noun: ClassVar[str] = "notification"

@@ -61,11 +61,11 @@
 #   - query_key_access.py reads the site's SSH Key Groups and serial-console
 #     configuration and reports whether a tenant-specified key can access
 #     out-of-band components; BmComponentKeyAccessCheck validates it (AUTH-XX-03).
-#     This is a read-only step (like the other checks here), and it skips when no
-#     SSH key group is synced to the site. setup_key_access.py /
-#     teardown_key_access.py mint and remove a throwaway key so AUTH-XX-03 can
-#     pass without manual key setup. They mutate the site, so this config is not
-#     read-only: see the setup_key_access step for what it creates and restores.
+#     When no key group is synced to the site there is nothing to evidence access
+#     with, so the step mints a throwaway key, observes the access path it
+#     unlocks, and removes it again in the same process (create, test, remove).
+#     That is the only mutating step in this config; pass --no-provision to keep
+#     the run strictly read-only, at the cost of skipping AUTH-XX-03.
 #   - list_instances.py / describe_instance.py query existing instances;
 #     BmHostListedCheck and BmHostStateReportedCheck validate
 #     the JSON contract.
@@ -77,7 +77,7 @@
 #   - Expected machines pre-registered; machines ingested and DPUs initialized
 #   - NICO_ORGANIZATION and NICO_SITE_ID environment variables set
 #   - Optional NICO_INSTANCE_ID narrows inventory checks to a known instance
-#   - ssh-keygen on the host (used by setup_key_access to mint the throwaway key)
+#   - ssh-keygen on the host (used by query_key_access to mint the throwaway key)
 #
 # Usage:
 #   NICO_BEARER_TOKEN=<token> NICO_ORGANIZATION=<org-name> NICO_SITE_ID=<uuid> \
@@ -90,7 +90,7 @@ version: "1.0"
 
 commands:
   bare_metal:
-    phases: ["setup", "test", "teardown"]
+    phases: ["test"]
     steps:
       # ─── Verify Hardware Ingestion ─────────────────────────────────
       # Compares expected-machine manifest against discovered machines.
@@ -479,24 +479,6 @@ commands:
           - "BFX06-01"
         timeout: 120
 
-      # ─── Provision a Throwaway Specified Key (setup) ────────────────
-      # Creates an ephemeral SSH key and a key group that syncs it to the site,
-      # so query_key_access below reports a real result instead of skipping.
-      # Mutates the site (POST sshkey + sshkeygroup, best-effort PATCH of the
-      # site's SSH-key SOL flag); teardown_key_access reverses all of it. Emits
-      # sshkey_id / sshkeygroup_id / restore_ssh_keys_enabled for teardown.
-      - name: setup_key_access
-        phase: setup
-        command: "python ../scripts/auth/setup_key_access.py"
-        args:
-          - "--org"
-          - "{{org}}"
-          - "--site-id"
-          - "{{site_id}}"
-          - "--api-base"
-          - "{{nico_api_base}}"
-        timeout: 360
-
       # ─── Specified-Key Access (AUTH-XX-03) ──────────────────────────
       # Reads the site's SSH Key Groups and serial-console configuration from
       # the NICo API (/carbide/ segment, like the other NICo steps) and reports
@@ -504,6 +486,11 @@ commands:
       # console (SOL) is verifiable from the tenant API (provider-enabled +
       # SSH-key auth + key synced); network-device access is provider-managed
       # and reported as unverified. BmComponentKeyAccessCheck validates it.
+      #
+      # When the site has no key group synced, this mints a throwaway key,
+      # observes the access it unlocks, and removes it in a finally -- so the key
+      # cannot outlive the run even if the process exits early. The timeout
+      # covers a key-group sync poll (up to 180s) plus cleanup.
       - name: query_key_access
         phase: test
         continue_on_failure: true
@@ -515,29 +502,7 @@ commands:
           - "{{site_id}}"
           - "--api-base"
           - "{{nico_api_base}}"
-        timeout: 120
-
-      # ─── Remove the Throwaway Specified Key (teardown) ──────────────
-      # Best-effort cleanup of the key group + key created by setup_key_access,
-      # and restores the site's SSH-key SOL flag when setup flipped it. Keep this
-      # enabled whenever setup_key_access is, or the throwaway key leaks.
-      - name: teardown_key_access
-        phase: teardown
-        command: "python ../scripts/auth/teardown_key_access.py"
-        args:
-          - "--org"
-          - "{{org}}"
-          - "--site-id"
-          - "{{site_id}}"
-          - "--api-base"
-          - "{{nico_api_base}}"
-          - "--sshkeygroup-id"
-          - "{{steps.setup_key_access.sshkeygroup_id}}"
-          - "--sshkey-id"
-          - "{{steps.setup_key_access.sshkey_id}}"
-          - "--restore-ssh-keys-enabled"
-          - "{{steps.setup_key_access.restore_ssh_keys_enabled}}"
-        timeout: 120
+        timeout: 420
 
       # ─── List Existing Instances ───────────────────────────────────
       # Lists instances visible to NICo at the configured site.

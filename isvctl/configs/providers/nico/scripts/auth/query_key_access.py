@@ -48,9 +48,22 @@ Auth:
     (NICO_SSA_ISSUER / NICO_CLIENT_ID / NICO_CLIENT_SECRET).
 
 When no SSH key group with a key is synced to the site there is nothing to
-evidence access with, so the script emits a structured skip (``skipped: true``
-+ ``skip_reason``) carrying an ``org_key_groups`` count, distinguishing "no key
-groups exist at all" from "key groups exist but none are synced to this site".
+evidence access with, so this script provisions a throwaway one itself (see
+_key_access.py), observes the access path it unlocks, and removes it again in a
+``finally`` -- create, test, remove, all in one process. That keeps the key from
+outliving the run even if the teardown phase never executes, and it means a
+plain ``--phase test`` run is self-cleaning. ``--no-provision`` keeps the run
+strictly read-only instead; ``--skip-cleanup`` leaves the key in place for
+debugging.
+
+When provisioning is disabled or fails, the script emits a structured skip
+(``skipped: true`` + ``skip_reason``) carrying an ``org_key_groups`` count,
+distinguishing "no key groups exist at all" from "key groups exist but none are
+synced to this site".
+
+A hard kill (SIGKILL, power loss) can still strand the key, since no ``finally``
+runs. It is named ``isvtest-auth-xx-03-<hex>`` and its private half was never
+kept, so it grants nobody access; delete it by name if one is ever left behind.
 
 Required JSON output fields:
   {
@@ -96,6 +109,7 @@ from typing import Any
 # Allow importing from sibling common/ directory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from auth._key_access import ThrowawayKey, provision, remove
 from common.nico_client import (
     NicoAuthError,
     forge_get,
@@ -122,6 +136,24 @@ def _count_specified_keys(groups: list[dict[str, Any]]) -> int:
 def _keys_synced_to_site(groups: list[dict[str, Any]], site_id: str) -> bool:
     """Return whether a key group with at least one key is synced to the site."""
     return any((group.get("sshKeys") or []) and sshkeygroup_synced_to_site(group, site_id) for group in groups)
+
+
+def _synced_key_groups(org: str, site_id: str, token: str, *, base_url: str) -> list[dict[str, Any]]:
+    """Return the SSH key groups the API reports as synced to the site."""
+    return forge_get_all(
+        org, "sshkeygroup", token, base_url=base_url, params={"siteId": site_id}, result_key="sshKeyGroups"
+    )
+
+
+def _skip_reason(org_key_groups: int, *, provisioning_disabled: bool) -> str:
+    """Explain why no specified key could be evidenced on this site."""
+    if provisioning_disabled:
+        remedy = "re-run without --no-provision to mint a throwaway key, or sync one yourself"
+    else:
+        remedy = "provisioning a throwaway key did not produce a synced key group"
+    if org_key_groups:
+        return f"{org_key_groups} SSH key group(s) exist for the org but none are synced to this site; {remedy}"
+    return f"No SSH key groups exist for the org and none are synced to this site; {remedy}"
 
 
 def _serial_console_target(site: dict[str, Any]) -> dict[str, Any]:
@@ -187,6 +219,16 @@ def main() -> int:
     parser.add_argument("--org", required=True, help="NGC org name")
     parser.add_argument("--site-id", required=True, help="NICo site UUID")
     parser.add_argument("--api-base", required=True, help="NICo API base URL")
+    parser.add_argument(
+        "--no-provision",
+        action="store_true",
+        help="Never mint a throwaway key; skip instead when the site has none synced (read-only run)",
+    )
+    parser.add_argument(
+        "--skip-cleanup",
+        action="store_true",
+        help="Leave a provisioned throwaway key in place for debugging (it is removed by default)",
+    )
     args = parser.parse_args()
 
     result: dict[str, Any] = {
@@ -197,25 +239,28 @@ def main() -> int:
         "access_targets": [],
     }
 
+    auth = None
+    created = ThrowawayKey()
+
     try:
         auth = resolve_auth()
 
-        groups = forge_get_all(
-            args.org,
-            "sshkeygroup",
-            auth.token,
-            base_url=args.api_base,
-            params={"siteId": args.site_id},
-            result_key="sshKeyGroups",
-        )
+        groups = _synced_key_groups(args.org, args.site_id, auth.token, base_url=args.api_base)
+
+        if not _keys_synced_to_site(groups, args.site_id) and not args.no_provision:
+            # No key synced to this site, so there is nothing to evidence access
+            # with. Mint a throwaway one; the finally below removes it.
+            provision(org=args.org, site_id=args.site_id, api_base=args.api_base, token=auth.token, created=created)
+            result["provisioned_key"] = True
+            if created.synced:
+                groups = _synced_key_groups(args.org, args.site_id, auth.token, base_url=args.api_base)
 
         result["specified_keys"] = _count_specified_keys(groups)
 
         if not _keys_synced_to_site(groups, args.site_id):
-            # Nothing to evidence access with on this site. Query the org-wide
-            # key groups (no siteId filter) so the skip reason can distinguish
-            # "no key groups exist at all" from "key groups exist but none are
-            # synced to this site" -- the operator needs to know which.
+            # Query the org-wide key groups (no siteId filter) so the skip reason
+            # can distinguish "no key groups exist at all" from "key groups exist
+            # but none are synced to this site" -- the operator needs to know which.
             org_groups = forge_get_all(
                 args.org,
                 "sshkeygroup",
@@ -225,16 +270,7 @@ def main() -> int:
             )
             result["org_key_groups"] = len(org_groups)
             result["skipped"] = True
-            if org_groups:
-                result["skip_reason"] = (
-                    f"{len(org_groups)} SSH key group(s) exist for the org but none are synced to this site; "
-                    "sync a key group containing an SSH key to the site to enable key-based SOL access"
-                )
-            else:
-                result["skip_reason"] = (
-                    "No SSH key groups exist for the org; create one with an SSH key and sync it to the site "
-                    "to enable key-based SOL access"
-                )
+            result["skip_reason"] = _skip_reason(len(org_groups), provisioning_disabled=args.no_provision)
         else:
             site = forge_get(args.org, f"site/{args.site_id}", auth.token, base_url=args.api_base)
             result["access_targets"] = [
@@ -247,8 +283,25 @@ def main() -> int:
     except NicoAuthError as e:
         result["error_type"] = "auth"
         result["error"] = str(e)
+    except FileNotFoundError:
+        result["error"] = "ssh-keygen not found; it is required to mint the throwaway specified key"
     except Exception as e:
         result["error"] = f"{type(e).__name__}: {e}"
+    finally:
+        # Remove the throwaway key in the same process that created it, so it
+        # cannot outlive the run even when the teardown phase does not execute.
+        if created and auth is not None and not args.skip_cleanup:
+            cleanup_errors = remove(
+                org=args.org, site_id=args.site_id, api_base=args.api_base, token=auth.token, created=created
+            )
+            if cleanup_errors:
+                # A leaked key must be visible, so this fails the step even when
+                # the access evidence itself was gathered successfully.
+                result["cleanup_errors"] = cleanup_errors
+                result["success"] = False
+                result["error"] = "; ".join(cleanup_errors)
+        elif created and args.skip_cleanup:
+            result["cleanup_skipped"] = True
 
     print(json.dumps(result, indent=2))
     return 0 if result["success"] else 1

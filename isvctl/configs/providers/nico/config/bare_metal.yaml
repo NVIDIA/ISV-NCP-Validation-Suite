@@ -64,8 +64,8 @@
 #     This is a read-only step (like the other checks here), and it skips when no
 #     SSH key group is synced to the site. setup_key_access.py /
 #     teardown_key_access.py mint and remove a throwaway key so AUTH-XX-03 can
-#     pass without manual key setup; they are wired but skipped by default to
-#     keep a routine run read-only. Drop their `skip: true` to enable them.
+#     pass without manual key setup. They mutate the site, so this config is not
+#     read-only: see the setup_key_access step for what it creates and restores.
 #   - list_instances.py / describe_instance.py query existing instances;
 #     BmHostListedCheck and BmHostStateReportedCheck validate
 #     the JSON contract.
@@ -77,8 +77,7 @@
 #   - Expected machines pre-registered; machines ingested and DPUs initialized
 #   - NICO_ORGANIZATION and NICO_SITE_ID environment variables set
 #   - Optional NICO_INSTANCE_ID narrows inventory checks to a known instance
-#   - ssh-keygen on the host, only when the opt-in key-provisioning steps are
-#     unskipped (used to mint the throwaway key)
+#   - ssh-keygen on the host (used by setup_key_access to mint the throwaway key)
 #
 # Usage:
 #   NICO_BEARER_TOKEN=<token> NICO_ORGANIZATION=<org-name> NICO_SITE_ID=<uuid> \
@@ -480,15 +479,14 @@ commands:
           - "BFX06-01"
         timeout: 120
 
-      # ─── Provision a Throwaway Specified Key (setup, opt-in) ────────
+      # ─── Provision a Throwaway Specified Key (setup) ────────────────
       # Creates an ephemeral SSH key and a key group that syncs it to the site,
       # so query_key_access below reports a real result instead of skipping.
       # Mutates the site (POST sshkey + sshkeygroup, best-effort PATCH of the
-      # site's SSH-key SOL flag), so it is skipped by default. Emits
+      # site's SSH-key SOL flag); teardown_key_access reverses all of it. Emits
       # sshkey_id / sshkeygroup_id / restore_ssh_keys_enabled for teardown.
       - name: setup_key_access
         phase: setup
-        skip: true
         command: "python ../scripts/auth/setup_key_access.py"
         args:
           - "--org"
@@ -519,13 +517,12 @@ commands:
           - "{{nico_api_base}}"
         timeout: 120
 
-      # ─── Remove the Throwaway Specified Key (teardown, opt-in) ──────
+      # ─── Remove the Throwaway Specified Key (teardown) ──────────────
       # Best-effort cleanup of the key group + key created by setup_key_access,
-      # and restores the site's SSH-key SOL flag when setup flipped it. Unskip
-      # this whenever setup_key_access is unskipped.
+      # and restores the site's SSH-key SOL flag when setup flipped it. Keep this
+      # enabled whenever setup_key_access is, or the throwaway key leaks.
       - name: teardown_key_access
         phase: teardown
-        skip: true
         command: "python ../scripts/auth/teardown_key_access.py"
         args:
           - "--org"

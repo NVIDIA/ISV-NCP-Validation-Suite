@@ -19,6 +19,12 @@ Provider-agnostic checks over step JSON output. Lifecycle steps may emit
 ``skipped`` when a platform lacks the mutating break-fix API (for example
 Maestro/GPUd integrations not yet wired). Query steps assert observability
 of maintenance, repair, and diagnostic signals where the provider exposes them.
+
+Evidence strength differs by requirement. The BFX02 query checks require a
+non-empty record list, so a provider cannot pass by asserting capability it
+never exercised. BFX05/BFX06 currently pass on a provider-emitted
+``notification_channel_observable`` boolean, which is self-attested; raising
+them to the BFX02 bar needs a contract change on the notification steps.
 """
 
 from __future__ import annotations
@@ -39,102 +45,107 @@ def _record_label(record: dict[str, Any], *keys: str) -> str:
     return "unknown"
 
 
-def _maybe_skip(step_output: dict[str, Any]) -> None:
-    """Skip the check when the provider step reported a structured skip."""
+def _step_output(check: BaseValidation) -> dict[str, Any] | None:
+    """Return the step payload, or None when the check should stop.
+
+    Skips when the provider step reported a structured skip, and fails the check
+    when the step itself failed. ``BaseValidation.execute`` also honours
+    ``skipped`` before calling ``run``; repeating it here keeps a directly
+    invoked ``run`` consistent with the sibling validation modules.
+    """
+    step_output = check.config.get("step_output", {})
     if step_output.get("skipped") is True:
         pytest.skip(step_output.get("skip_reason") or "Break-fix step skipped (not configured on this platform)")
+    if not step_output.get("success"):
+        check.set_failed(step_output.get("error") or "Break-fix step failed")
+        return None
+    return step_output
 
 
-def _require_success(step_output: dict[str, Any], check: BaseValidation) -> bool:
-    """Return False when the step failed and the check should stop."""
-    _maybe_skip(step_output)
-    if step_output.get("success"):
-        return True
-    check.set_failed(step_output.get("error") or "Break-fix step failed")
-    return False
+class _QueryableRecordsCheck(BaseValidation):
+    """Shared machinery for the BFX02 "is this record type queryable" checks.
+
+    Subclasses supply the step-output keys and the wording; the policy is the
+    same for all of them: the provider must report the record type as queryable,
+    and must return at least one record. An empty list skips rather than passes
+    because a site with no records is indistinguishable from one with no API at
+    all, so a pass there would assert nothing.
+    """
+
+    _exclude_from_discovery: ClassVar[bool] = True
+    timeout: ClassVar[int] = 120
+
+    queryable_key: ClassVar[str]
+    records_key: ClassVar[str]
+    unavailable_message: ClassVar[str]
+    absent_noun: ClassVar[str]
+    api_label: ClassVar[str]
+    record_noun: ClassVar[str]
+
+    def run(self) -> None:
+        """Assert the query API reported itself available and returned records."""
+        step_output = _step_output(self)
+        if step_output is None:
+            return
+        if not step_output.get(self.queryable_key):
+            self.set_failed(self.unavailable_message)
+            return
+        records = step_output.get(self.records_key) or []
+        if not records:
+            pytest.skip(f"No {self.absent_noun} at the site; the query API cannot be demonstrated")
+        self.set_passed(f"{self.api_label} query API returned {len(records)} {self.record_noun}(s)")
 
 
-class MaintenanceEventsCheck(BaseValidation):
+class MaintenanceEventsCheck(_QueryableRecordsCheck):
     """Validate upcoming/current maintenance events are queryable (BFX02-01).
 
     Step output:
-        success, events: list[{machine_id, hardware_id, status, message, opened_at?}]
+        success, events: list[{machine_id, status, message}]
         events_queryable: bool -- API exposes maintenance event records
-
-    An empty event list skips rather than passes: a site with no maintenance
-    events is indistinguishable from one with no maintenance API at all, so a
-    pass there would assert nothing.
     """
 
     description: ClassVar[str] = "Query upcoming or current maintenance events for a node"
-    timeout: ClassVar[int] = 120
 
-    def run(self) -> None:
-        """Assert the maintenance-event query API returned at least one event."""
-        step_output = self.config.get("step_output", {})
-        if not _require_success(step_output, self):
-            return
-        if not step_output.get("events_queryable"):
-            self.set_failed("Maintenance events are not queryable via the break-fix API")
-            return
-        events = step_output.get("events") or []
-        if not events:
-            pytest.skip("No maintenance events at the site; the query API cannot be demonstrated")
-        self.set_passed(f"Maintenance event query API returned {len(events)} event(s)")
+    queryable_key: ClassVar[str] = "events_queryable"
+    records_key: ClassVar[str] = "events"
+    unavailable_message: ClassVar[str] = "Maintenance events are not queryable via the break-fix API"
+    absent_noun: ClassVar[str] = "maintenance events"
+    api_label: ClassVar[str] = "Maintenance event"
+    record_noun: ClassVar[str] = "event"
 
 
-class RetirementNoticesCheck(BaseValidation):
+class RetirementNoticesCheck(_QueryableRecordsCheck):
     """Validate retirement notices for a node/rack are queryable (BFX02-02).
 
     Step output:
         success, notices_queryable: bool, notices: list[dict]
-
-    An empty notice list skips rather than passes, for the same reason as
-    MaintenanceEventsCheck: no evidence means the API is undemonstrated.
     """
 
     description: ClassVar[str] = "Query retirement notices for a node or rack"
-    timeout: ClassVar[int] = 120
 
-    def run(self) -> None:
-        """Assert the retirement-notice query API returned at least one notice."""
-        step_output = self.config.get("step_output", {})
-        if not _require_success(step_output, self):
-            return
-        if not step_output.get("notices_queryable"):
-            self.set_failed("Retirement notices are not queryable via the break-fix API")
-            return
-        notices = step_output.get("notices") or []
-        if not notices:
-            pytest.skip("No retirement notices at the site; the query API cannot be demonstrated")
-        self.set_passed(f"Retirement notice query API returned {len(notices)} notice(s)")
+    queryable_key: ClassVar[str] = "notices_queryable"
+    records_key: ClassVar[str] = "notices"
+    unavailable_message: ClassVar[str] = "Retirement notices are not queryable via the break-fix API"
+    absent_noun: ClassVar[str] = "retirement notices"
+    api_label: ClassVar[str] = "Retirement notice"
+    record_noun: ClassVar[str] = "notice"
 
 
-class RepairHistoryCheck(BaseValidation):
+class RepairHistoryCheck(_QueryableRecordsCheck):
     """Validate historical repair status is queryable for a node (BFX02-03).
 
     Step output:
         success, history_queryable: bool, records: list[{machine_id, entries: list[dict]}]
-
-    An empty record list skips rather than passes, for the same reason as
-    MaintenanceEventsCheck: no repair evidence means the API is undemonstrated.
     """
 
     description: ClassVar[str] = "Query historical repair status for a node"
-    timeout: ClassVar[int] = 120
 
-    def run(self) -> None:
-        """Assert the repair-history query API returned at least one machine record."""
-        step_output = self.config.get("step_output", {})
-        if not _require_success(step_output, self):
-            return
-        if not step_output.get("history_queryable"):
-            self.set_failed("Repair history is not queryable via the break-fix API")
-            return
-        records = step_output.get("records") or []
-        if not records:
-            pytest.skip("No repair history at the site; the query API cannot be demonstrated")
-        self.set_passed(f"Repair history query API returned {len(records)} machine record(s)")
+    queryable_key: ClassVar[str] = "history_queryable"
+    records_key: ClassVar[str] = "records"
+    unavailable_message: ClassVar[str] = "Repair history is not queryable via the break-fix API"
+    absent_noun: ClassVar[str] = "repair history"
+    api_label: ClassVar[str] = "Repair history"
+    record_noun: ClassVar[str] = "machine record"
 
 
 class NvSwitchFirmwareCheck(BaseValidation):
@@ -149,8 +160,8 @@ class NvSwitchFirmwareCheck(BaseValidation):
 
     def run(self) -> None:
         """Assert every reported NV switch tray exposes a firmware version."""
-        step_output = self.config.get("step_output", {})
-        if not _require_success(step_output, self):
+        step_output = _step_output(self)
+        if step_output is None:
             return
         trays = step_output.get("trays")
         if not isinstance(trays, list):
@@ -173,7 +184,7 @@ class BmcKernelLogCheck(BaseValidation):
     """Validate BMC kernel log messages are obtainable for a node (BFX03-03).
 
     Step output:
-        success, hosts: list[{host_id, kernel_log_available: bool, entry_count: int}]
+        success, hosts: list[{host_id, kernel_log_available: bool}]
     """
 
     description: ClassVar[str] = "Obtain BMC kernel log messages for a node"
@@ -181,8 +192,8 @@ class BmcKernelLogCheck(BaseValidation):
 
     def run(self) -> None:
         """Assert BMC kernel logs are obtainable for every reported host."""
-        step_output = self.config.get("step_output", {})
-        if not _require_success(step_output, self):
+        step_output = _step_output(self)
+        if step_output is None:
             return
         hosts = step_output.get("hosts")
         if not isinstance(hosts, list):
@@ -202,7 +213,39 @@ class BmcKernelLogCheck(BaseValidation):
         self.set_passed(f"BMC kernel logs obtainable for {len(hosts)} host(s)")
 
 
-class GpuResetCheck(BaseValidation):
+class _OperationCheck(BaseValidation):
+    """Shared machinery for the BFX01 mutating-operation checks.
+
+    Subclasses name the ``operation`` flag that marks the operation as having
+    taken effect and supply the wording. The provider's own ``operation.message``
+    wins over the generic failure text when the operation did not take effect.
+    """
+
+    _exclude_from_discovery: ClassVar[bool] = True
+    timeout: ClassVar[int] = 600
+
+    completion_key: ClassVar[str]
+    failure_message: ClassVar[str]
+    label_keys: ClassVar[tuple[str, ...]]
+    pass_template: ClassVar[str]
+
+    def _pass_message(self, label: str, operation: dict[str, Any]) -> str:
+        """Return the success message for a completed operation."""
+        return self.pass_template.format(label=label)
+
+    def run(self) -> None:
+        """Assert the provider reported the operation as having taken effect."""
+        step_output = _step_output(self)
+        if step_output is None:
+            return
+        operation = step_output.get("operation") or {}
+        if not operation.get(self.completion_key):
+            self.set_failed(operation.get("message") or self.failure_message)
+            return
+        self.set_passed(self._pass_message(_record_label(operation, *self.label_keys), operation))
+
+
+class GpuResetCheck(_OperationCheck):
     """Validate GPU reset via the break-fix API (BFX01-01).
 
     Step output:
@@ -210,21 +253,14 @@ class GpuResetCheck(BaseValidation):
     """
 
     description: ClassVar[str] = "Reset GPUs on an individual node via the breakfix API"
-    timeout: ClassVar[int] = 600
 
-    def run(self) -> None:
-        """Assert the GPU reset operation completed on the target node."""
-        step_output = self.config.get("step_output", {})
-        if not _require_success(step_output, self):
-            return
-        operation = step_output.get("operation") or {}
-        if not operation.get("completed"):
-            self.set_failed(operation.get("message") or "GPU reset did not complete")
-            return
-        self.set_passed(f"GPU reset completed for node {_record_label(operation, 'node_id', 'machine_id')}")
+    completion_key: ClassVar[str] = "completed"
+    failure_message: ClassVar[str] = "GPU reset did not complete"
+    label_keys: ClassVar[tuple[str, ...]] = ("node_id", "machine_id")
+    pass_template: ClassVar[str] = "GPU reset completed for node {label}"
 
 
-class ReturnNodeMaintenanceCheck(BaseValidation):
+class ReturnNodeMaintenanceCheck(_OperationCheck):
     """Validate returning an individual node for maintenance (BFX01-02).
 
     Step output:
@@ -232,24 +268,18 @@ class ReturnNodeMaintenanceCheck(BaseValidation):
     """
 
     description: ClassVar[str] = "Return an individual node to the provider for maintenance via the API"
-    timeout: ClassVar[int] = 600
 
-    def run(self) -> None:
-        """Assert the provider accepted the node for maintenance."""
-        step_output = self.config.get("step_output", {})
-        if not _require_success(step_output, self):
-            return
-        operation = step_output.get("operation") or {}
-        if not operation.get("accepted"):
-            self.set_failed(operation.get("message") or "Node maintenance return was not accepted")
-            return
-        self.set_passed(
-            f"Node {_record_label(operation, 'machine_id', 'node_id')} accepted for maintenance "
-            f"(maintenance_mode={operation.get('maintenance_mode')})"
-        )
+    completion_key: ClassVar[str] = "accepted"
+    failure_message: ClassVar[str] = "Node maintenance return was not accepted"
+    label_keys: ClassVar[tuple[str, ...]] = ("machine_id", "node_id")
+    pass_template: ClassVar[str] = "Node {label} accepted for maintenance"
+
+    def _pass_message(self, label: str, operation: dict[str, Any]) -> str:
+        """Report the maintenance mode the provider placed the node into."""
+        return f"{super()._pass_message(label, operation)} (maintenance_mode={operation.get('maintenance_mode')})"
 
 
-class ReturnRackMaintenanceCheck(BaseValidation):
+class ReturnRackMaintenanceCheck(_OperationCheck):
     """Validate returning a rack for maintenance (BFX01-03).
 
     Step output:
@@ -257,18 +287,27 @@ class ReturnRackMaintenanceCheck(BaseValidation):
     """
 
     description: ClassVar[str] = "Return a rack to the provider for maintenance via the API"
-    timeout: ClassVar[int] = 600
 
-    def run(self) -> None:
-        """Assert the provider accepted the rack for maintenance."""
-        step_output = self.config.get("step_output", {})
-        if not _require_success(step_output, self):
-            return
-        operation = step_output.get("operation") or {}
-        if not operation.get("accepted"):
-            self.set_failed(operation.get("message") or "Rack maintenance return was not accepted")
-            return
-        self.set_passed(f"Rack {_record_label(operation, 'rack_id')} accepted for maintenance")
+    completion_key: ClassVar[str] = "accepted"
+    failure_message: ClassVar[str] = "Rack maintenance return was not accepted"
+    label_keys: ClassVar[tuple[str, ...]] = ("rack_id",)
+    pass_template: ClassVar[str] = "Rack {label} accepted for maintenance"
+
+
+class HostReplacementCheck(_OperationCheck):
+    """Validate host replacement when health thresholds are breached (BFX01-05).
+
+    Step output:
+        success, operation: {requested, node_removed_from_pool, machine_id}
+    """
+
+    description: ClassVar[str] = "Request host replacement and verify node removed from pool"
+    timeout: ClassVar[int] = 900
+
+    completion_key: ClassVar[str] = "node_removed_from_pool"
+    failure_message: ClassVar[str] = "Node was not removed from the allocatable pool"
+    label_keys: ClassVar[tuple[str, ...]] = ("machine_id", "node_id")
+    pass_template: ClassVar[str] = "Host replacement removed {label} from the pool"
 
 
 class CordonNodeCheck(BaseValidation):
@@ -283,8 +322,8 @@ class CordonNodeCheck(BaseValidation):
 
     def run(self) -> None:
         """Assert the node is cordoned, blocks new work, and keeps existing work running."""
-        step_output = self.config.get("step_output", {})
-        if not _require_success(step_output, self):
+        step_output = _step_output(self)
+        if step_output is None:
             return
         operation = step_output.get("operation") or {}
         if not operation.get("cordoned"):
@@ -297,28 +336,6 @@ class CordonNodeCheck(BaseValidation):
             self.set_failed("Existing workloads were not confirmed still running on the cordoned node")
             return
         self.set_passed("Node cordoned: new workloads blocked, existing workloads continue")
-
-
-class HostReplacementCheck(BaseValidation):
-    """Validate host replacement when health thresholds are breached (BFX01-05).
-
-    Step output:
-        success, operation: {requested, node_removed_from_pool, machine_id}
-    """
-
-    description: ClassVar[str] = "Request host replacement and verify node removed from pool"
-    timeout: ClassVar[int] = 900
-
-    def run(self) -> None:
-        """Assert the replaced host was removed from the allocatable pool."""
-        step_output = self.config.get("step_output", {})
-        if not _require_success(step_output, self):
-            return
-        operation = step_output.get("operation") or {}
-        if not operation.get("node_removed_from_pool"):
-            self.set_failed(operation.get("message") or "Node was not removed from the allocatable pool")
-            return
-        self.set_passed(f"Host replacement removed {_record_label(operation, 'machine_id', 'node_id')} from the pool")
 
 
 class NodeHealthAgentCheck(BaseValidation):
@@ -334,8 +351,8 @@ class NodeHealthAgentCheck(BaseValidation):
 
     def run(self) -> None:
         """Assert a node health agent is reported and running on every node."""
-        step_output = self.config.get("step_output", {})
-        if not _require_success(step_output, self):
+        step_output = _step_output(self)
+        if step_output is None:
             return
         if not step_output.get("agents_observable"):
             self.set_failed("Node health agents (GPUd/Sentinel) are not observable on this platform")
@@ -352,43 +369,49 @@ class NodeHealthAgentCheck(BaseValidation):
         self.set_passed(f"Node health agent running on {len(agents)} node(s)")
 
 
-class PlannedMaintenanceNotificationCheck(BaseValidation):
+class _NotificationChannelCheck(BaseValidation):
+    """Shared machinery for the BFX05/BFX06 tenant-notification checks.
+
+    Subclasses supply the channel wording. Both assert only that the provider
+    reports the channel as observable -- see the module docstring for why that
+    is weaker evidence than the BFX02 checks require.
+    """
+
+    _exclude_from_discovery: ClassVar[bool] = True
+    timeout: ClassVar[int] = 120
+
+    channel_label: ClassVar[str]
+
+    def run(self) -> None:
+        """Assert the tenant notification channel is observable."""
+        step_output = _step_output(self)
+        if step_output is None:
+            return
+        if not step_output.get("notification_channel_observable"):
+            self.set_failed(f"{self.channel_label} notification channel is not observable")
+            return
+        self.set_passed(f"{self.channel_label} notification channel is available")
+
+
+class PlannedMaintenanceNotificationCheck(_NotificationChannelCheck):
     """Validate tenants can be notified of planned maintenance (BFX05-01).
 
     Step output:
-        success, notification_channel_observable: bool, sample_event: dict | null
+        success, notification_channel_observable: bool
     """
 
     description: ClassVar[str] = "Verify tenants can be notified of planned future node maintenance"
-    timeout: ClassVar[int] = 120
 
-    def run(self) -> None:
-        """Assert the planned-maintenance notification channel is observable."""
-        step_output = self.config.get("step_output", {})
-        if not _require_success(step_output, self):
-            return
-        if not step_output.get("notification_channel_observable"):
-            self.set_failed("Planned maintenance notification channel is not observable")
-            return
-        self.set_passed("Planned maintenance notification channel is available")
+    channel_label: ClassVar[str] = "Planned maintenance"
 
 
-class FailureNotificationCheck(BaseValidation):
+class FailureNotificationCheck(_NotificationChannelCheck):
     """Validate tenants can be notified of immediate node failure (BFX06-01).
 
     Step output:
-        success, notification_channel_observable: bool, sample_event: dict | null
+        success, notification_channel_observable: bool
     """
 
     description: ClassVar[str] = "Verify tenants can be notified of immediate node failure"
-    timeout: ClassVar[int] = 120
 
-    def run(self) -> None:
-        """Assert the immediate-failure notification channel is observable."""
-        step_output = self.config.get("step_output", {})
-        if not _require_success(step_output, self):
-            return
-        if not step_output.get("notification_channel_observable"):
-            self.set_failed("Immediate failure notification channel is not observable")
-            return
-        self.set_passed("Immediate failure notification channel is available")
+    channel_label: ClassVar[str] = "Immediate failure"

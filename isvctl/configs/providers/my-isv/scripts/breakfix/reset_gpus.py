@@ -10,8 +10,9 @@ import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _stub import base_result, demo_or_not_implemented, finish
+# Allow importing provider-local helpers from scripts/common/.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from common.stub import emit_stub
 
 
 def main() -> int:
@@ -22,14 +23,11 @@ def main() -> int:
     args = parser.parse_args()
 
     node_id = args.machine_id or "demo-node-001"
-    result = demo_or_not_implemented(
-        {
-            **base_result("reset_gpus"),
-            "operation": {"requested": True, "completed": True, "node_id": node_id, "machine_id": node_id},
-        },
+    return emit_stub(
+        "reset_gpus",
         hint="GPU reset breakfix API",
+        operation={"requested": True, "completed": True, "node_id": node_id},
     )
-    return finish(result)
 
 
 if __name__ == "__main__":

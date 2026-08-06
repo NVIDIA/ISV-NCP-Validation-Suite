@@ -337,7 +337,7 @@ commands:
       - name: query_retirement_notices
         phase: test
         continue_on_failure: true
-        command: "python ../scripts/breakfix/query_retirement_notices.py"
+        command: "python ../scripts/breakfix/gap_stub.py"
         args:
           - "--org"
           - "{{org}}"
@@ -345,6 +345,8 @@ commands:
           - "{{site_id}}"
           - "--api-base"
           - "{{nico_api_base}}"
+          - "--gap"
+          - "BFX02-02"
         timeout: 120
 
       - name: query_repair_history
@@ -363,7 +365,7 @@ commands:
       - name: query_switch_firmware
         phase: test
         continue_on_failure: true
-        command: "python ../scripts/breakfix/query_switch_firmware.py"
+        command: "python ../scripts/breakfix/gap_stub.py"
         args:
           - "--org"
           - "{{org}}"
@@ -371,6 +373,8 @@ commands:
           - "{{site_id}}"
           - "--api-base"
           - "{{nico_api_base}}"
+          - "--gap"
+          - "BFX03-02"
         timeout: 120
 
       - name: query_bmc_kernel_logs
@@ -389,7 +393,7 @@ commands:
       - name: return_node_maintenance
         phase: test
         continue_on_failure: true
-        command: "python ../scripts/breakfix/return_node_maintenance.py"
+        command: "python ../scripts/breakfix/gap_stub.py"
         args:
           - "--org"
           - "{{org}}"
@@ -397,12 +401,14 @@ commands:
           - "{{site_id}}"
           - "--api-base"
           - "{{nico_api_base}}"
+          - "--gap"
+          - "BFX01-02"
         timeout: 600
 
       - name: return_rack_maintenance
         phase: test
         continue_on_failure: true
-        command: "python ../scripts/breakfix/return_rack_maintenance.py"
+        command: "python ../scripts/breakfix/gap_stub.py"
         args:
           - "--org"
           - "{{org}}"
@@ -410,12 +416,14 @@ commands:
           - "{{site_id}}"
           - "--api-base"
           - "{{nico_api_base}}"
+          - "--gap"
+          - "BFX01-03"
         timeout: 600
 
       - name: request_host_replacement
         phase: test
         continue_on_failure: true
-        command: "python ../scripts/breakfix/request_host_replacement.py"
+        command: "python ../scripts/breakfix/gap_stub.py"
         args:
           - "--org"
           - "{{org}}"
@@ -423,12 +431,14 @@ commands:
           - "{{site_id}}"
           - "--api-base"
           - "{{nico_api_base}}"
+          - "--gap"
+          - "BFX01-05"
         timeout: 900
 
       - name: query_node_health_agents
         phase: test
         continue_on_failure: true
-        command: "python ../scripts/breakfix/query_node_health_agents.py"
+        command: "python ../scripts/breakfix/gap_stub.py"
         args:
           - "--org"
           - "{{org}}"
@@ -436,12 +446,14 @@ commands:
           - "{{site_id}}"
           - "--api-base"
           - "{{nico_api_base}}"
+          - "--gap"
+          - "BFX04-01"
         timeout: 120
 
       - name: query_planned_notifications
         phase: test
         continue_on_failure: true
-        command: "python ../scripts/breakfix/query_planned_notifications.py"
+        command: "python ../scripts/breakfix/gap_stub.py"
         args:
           - "--org"
           - "{{org}}"
@@ -449,12 +461,14 @@ commands:
           - "{{site_id}}"
           - "--api-base"
           - "{{nico_api_base}}"
+          - "--gap"
+          - "BFX05-01"
         timeout: 120
 
       - name: query_failure_notifications
         phase: test
         continue_on_failure: true
-        command: "python ../scripts/breakfix/query_failure_notifications.py"
+        command: "python ../scripts/breakfix/gap_stub.py"
         args:
           - "--org"
           - "{{org}}"
@@ -462,6 +476,8 @@ commands:
           - "{{site_id}}"
           - "--api-base"
           - "{{nico_api_base}}"
+          - "--gap"
+          - "BFX06-01"
         timeout: 120
 
       # ─── Provision a Throwaway Specified Key (setup, opt-in) ────────
@@ -567,8 +583,6 @@ tests:
     site_id: "{{env.NICO_SITE_ID}}"
     nico_api_base: "{{env.NICO_API_BASE}}"
     instance_id: "{{env.NICO_INSTANCE_ID}}"
-    machine_id: "{{env.NICO_MACHINE_ID | default('', true)}}"
-    rack_id: "{{env.NICO_RACK_ID | default('', true)}}"
     # The imported bare_metal suite defines these for the full instance
     # lifecycle, which NICo does not run yet. Blank them so the suite's
     # {{instance_type}} self-reference does not emit missing-variable warnings.

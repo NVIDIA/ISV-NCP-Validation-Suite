@@ -10,8 +10,9 @@ import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _stub import base_result, demo_or_not_implemented, finish
+# Allow importing provider-local helpers from scripts/common/.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from common.stub import emit_stub
 
 
 def main() -> int:
@@ -20,27 +21,24 @@ def main() -> int:
     parser.add_argument("--region", default="", help="Cloud region")
     args = parser.parse_args()
 
-    result = demo_or_not_implemented(
-        {
-            **base_result("query_serial_numbers"),
-            "site_id": args.region or "demo-site",
-            "machines_checked": 1,
-            "machines": [
-                {
-                    "machine_id": "demo-machine-001",
-                    "components": {
-                        "chassis": {"present": True, "identifiers": ["CH-DEMO-001"]},
-                        "baseboard": {"present": True, "identifiers": ["BB-DEMO-001"]},
-                        "cpu": {"present": True, "identifiers": ["Intel Demo CPU"]},
-                        "gpu": {"present": True, "identifiers": ["GPU-DEMO-001"]},
-                        "nic": {"present": True, "identifiers": ["aa:bb:cc:dd:ee:ff"]},
-                    },
-                }
-            ],
-        },
+    return emit_stub(
+        "query_serial_numbers",
         hint="hardware serial inventory query",
+        site_id=args.region or "demo-site",
+        machines_checked=1,
+        machines=[
+            {
+                "machine_id": "demo-machine-001",
+                "components": {
+                    "chassis": {"present": True, "identifiers": ["CH-DEMO-001"]},
+                    "baseboard": {"present": True, "identifiers": ["BB-DEMO-001"]},
+                    "cpu": {"present": True, "identifiers": ["Intel Demo CPU"]},
+                    "gpu": {"present": True, "identifiers": ["GPU-DEMO-001"]},
+                    "nic": {"present": True, "identifiers": ["aa:bb:cc:dd:ee:ff"]},
+                },
+            }
+        ],
     )
-    return finish(result)
 
 
 if __name__ == "__main__":

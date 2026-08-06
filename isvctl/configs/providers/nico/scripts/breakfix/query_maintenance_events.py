@@ -18,16 +18,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from breakfix._common import emit, history_entries, list_site_machines
-
-
-def _opened_at(machine: dict[str, Any]) -> str | None:
-    """Return the timestamp of the machine's most recent Maintenance transition."""
-    for entry in reversed(history_entries(machine)):
-        status = str(entry.get("status") or "").strip()
-        if status == "Maintenance":
-            return entry.get("timestamp") or entry.get("updatedAt")
-    return None
+from breakfix._common import emit, list_site_machines
 
 
 def main() -> int:
@@ -38,12 +29,13 @@ def main() -> int:
     parser.add_argument("--api-base", required=True)
     args = parser.parse_args()
 
-    machines, result = list_site_machines(org=args.org, site_id=args.site_id, api_base=args.api_base)
-    if result.get("skipped"):
-        result["events_queryable"] = False
-        result["events"] = []
-        return emit(result)
-    if not result.get("success"):
+    machines, result = list_site_machines(
+        org=args.org,
+        site_id=args.site_id,
+        api_base=args.api_base,
+        empty_contract={"events_queryable": False, "events": []},
+    )
+    if not machines:
         return emit(result)
 
     events: list[dict[str, Any]] = []
@@ -52,14 +44,11 @@ def main() -> int:
         message = machine.get("maintenanceMessage")
         if status != "Maintenance" and not message:
             continue
-        machine_id = machine.get("id", "")
         events.append(
             {
-                "machine_id": machine_id,
-                "hardware_id": machine_id,
+                "machine_id": machine.get("id", ""),
                 "status": status.lower() if status else "maintenance",
                 "message": message or "",
-                "opened_at": _opened_at(machine),
             }
         )
 

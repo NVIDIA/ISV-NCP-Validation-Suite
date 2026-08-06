@@ -28,7 +28,7 @@ NICo API endpoints used (``/carbide/`` segment, like the other NICo scripts):
   DELETE /{org}/carbide/sshkey/{id}
   PATCH  /{org}/carbide/site/{site_id}        (only when restoring the flag)
 
-Usage (wired via the key_access config; IDs come from the setup step):
+Usage (wired via the bare_metal config; IDs come from the setup step):
     python teardown_key_access.py --org <org> --site-id <uuid> --api-base <url> \
         --sshkeygroup-id <id> --sshkey-id <id> --restore-ssh-keys-enabled <bool|"">
 """

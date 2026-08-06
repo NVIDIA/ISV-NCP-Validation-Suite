@@ -10,8 +10,9 @@ import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _stub import base_result, demo_or_not_implemented, finish
+# Allow importing provider-local helpers from scripts/common/.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from common.stub import emit_stub
 
 
 def main() -> int:
@@ -20,27 +21,23 @@ def main() -> int:
     parser.add_argument("--region", default="", help="Cloud region")
     _ = parser.parse_args()
 
-    result = demo_or_not_implemented(
-        {
-            **base_result("query_repair_history"),
-            "history_queryable": True,
-            "records": [
-                {
-                    "machine_id": "demo-machine-001",
-                    "entries": [
-                        {
-                            "status": "Repairing",
-                            "message": "GPU replaced",
-                            "updated_at": "2026-06-15T09:00:00Z",
-                            "action": "repairs done on faulty GPUs",
-                        }
-                    ],
-                }
-            ],
-        },
+    return emit_stub(
+        "query_repair_history",
         hint="repair history query",
+        history_queryable=True,
+        records=[
+            {
+                "machine_id": "demo-machine-001",
+                "entries": [
+                    {
+                        "status": "Repairing",
+                        "message": "GPU replaced",
+                        "updated_at": "2026-06-15T09:00:00Z",
+                    }
+                ],
+            }
+        ],
     )
-    return finish(result)
 
 
 if __name__ == "__main__":

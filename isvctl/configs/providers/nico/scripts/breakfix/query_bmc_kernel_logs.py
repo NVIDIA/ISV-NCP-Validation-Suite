@@ -23,11 +23,9 @@ from common.nico_client import probe_text
 _LOG_KEYWORDS = ("kernel", "sel", "syslog", "log", "journal")
 
 
-def _kernel_log_signal(health: dict[str, Any]) -> tuple[bool, int]:
-    """Return whether BMC log probes are present in a health report, and how many."""
-    probes = (health.get("successes") or []) + (health.get("alerts") or [])
-    matches = 0
-    for probe in probes:
+def _has_kernel_log_signal(health: dict[str, Any]) -> bool:
+    """Return whether any BMC log probe is present in a health report."""
+    for probe in (health.get("successes") or []) + (health.get("alerts") or []):
         if not isinstance(probe, dict):
             continue
         text = probe_text(probe)
@@ -35,8 +33,8 @@ def _kernel_log_signal(health: dict[str, Any]) -> tuple[bool, int]:
         if "bmc" not in probe_id and "bmc" not in text:
             continue
         if any(keyword in text for keyword in _LOG_KEYWORDS) or "sel" in probe_id:
-            matches += 1
-    return matches > 0, matches
+            return True
+    return False
 
 
 def main() -> int:
@@ -47,28 +45,26 @@ def main() -> int:
     parser.add_argument("--api-base", required=True)
     args = parser.parse_args()
 
-    machines, result = list_site_machines(org=args.org, site_id=args.site_id, api_base=args.api_base)
-    if result.get("skipped"):
-        result["hosts"] = []
-        return emit(result)
-    if not result.get("success"):
+    machines, result = list_site_machines(
+        org=args.org,
+        site_id=args.site_id,
+        api_base=args.api_base,
+        empty_contract={"hosts": []},
+    )
+    if not machines:
         return emit(result)
 
     hosts: list[dict[str, Any]] = []
-    any_signal = False
     for machine in machines:
         health = machine.get("health") or {}
-        available, count = _kernel_log_signal(health if isinstance(health, dict) else {})
-        any_signal = any_signal or available
         hosts.append(
             {
                 "host_id": machine.get("id", ""),
-                "kernel_log_available": available,
-                "entry_count": count,
+                "kernel_log_available": _has_kernel_log_signal(health if isinstance(health, dict) else {}),
             }
         )
 
-    if not any_signal:
+    if not any(host["kernel_log_available"] for host in hosts):
         skip = skip_result(
             args.site_id,
             "NICo health API does not expose BMC kernel log messages on the tenant REST surface (BFX03-03 gap)",

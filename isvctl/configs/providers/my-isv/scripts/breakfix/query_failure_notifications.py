@@ -10,8 +10,9 @@ import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _stub import base_result, demo_or_not_implemented, finish
+# Allow importing provider-local helpers from scripts/common/.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from common.stub import emit_stub
 
 
 def main() -> int:
@@ -20,15 +21,11 @@ def main() -> int:
     parser.add_argument("--region", default="", help="Cloud region")
     _ = parser.parse_args()
 
-    result = demo_or_not_implemented(
-        {
-            **base_result("query_failure_notifications"),
-            "notification_channel_observable": True,
-            "sample_event": {"type": "node_failure", "node_id": "demo-node-001"},
-        },
+    return emit_stub(
+        "query_failure_notifications",
         hint="immediate failure notification channel",
+        notification_channel_observable=True,
     )
-    return finish(result)
 
 
 if __name__ == "__main__":

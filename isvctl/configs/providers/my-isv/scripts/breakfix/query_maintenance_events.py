@@ -10,34 +10,29 @@ import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _stub import base_result, demo_or_not_implemented, finish
+# Allow importing provider-local helpers from scripts/common/.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from common.stub import emit_stub
 
 
 def main() -> int:
     """Emit the maintenance-event query template result (BFX02-01)."""
     parser = argparse.ArgumentParser(description="Query maintenance events (template)")
     parser.add_argument("--region", default="", help="Cloud region")
-    args = parser.parse_args()
+    _ = parser.parse_args()
 
-    result = demo_or_not_implemented(
-        {
-            **base_result("query_maintenance_events"),
-            "events_queryable": True,
-            "events": [
-                {
-                    "machine_id": "demo-machine-001",
-                    "hardware_id": "demo-machine-001",
-                    "status": "maintenance",
-                    "message": "Scheduled firmware update",
-                    "opened_at": "2026-07-01T12:00:00Z",
-                }
-            ],
-        },
+    return emit_stub(
+        "query_maintenance_events",
         hint="maintenance events query",
+        events_queryable=True,
+        events=[
+            {
+                "machine_id": "demo-machine-001",
+                "status": "maintenance",
+                "message": "Scheduled firmware update",
+            }
+        ],
     )
-    _ = args
-    return finish(result)
 
 
 if __name__ == "__main__":

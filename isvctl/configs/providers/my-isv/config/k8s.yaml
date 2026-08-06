@@ -61,16 +61,16 @@ commands:
         command: "python ../scripts/breakfix/reset_gpus.py"
         args:
           - "--region"
-          - "{{region | default('', true)}}"
+          - "{{region}}"
           - "--machine-id"
-          - "{{machine_id | default('', true)}}"
+          - "{{machine_id}}"
         timeout: 600
 
       - name: cordon_node
         phase: test
         continue_on_failure: true
         command: "python ../scripts/breakfix/cordon_node.py"
-        args: ["--region", "{{region | default('', true)}}"]
+        args: ["--region", "{{region}}"]
         timeout: 600
 
 tests:

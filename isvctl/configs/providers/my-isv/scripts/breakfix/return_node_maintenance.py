@@ -10,8 +10,9 @@ import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _stub import base_result, demo_or_not_implemented, finish
+# Allow importing provider-local helpers from scripts/common/.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from common.stub import emit_stub
 
 
 def main() -> int:
@@ -22,19 +23,16 @@ def main() -> int:
     args = parser.parse_args()
 
     machine_id = args.machine_id or "demo-machine-001"
-    result = demo_or_not_implemented(
-        {
-            **base_result("return_node_maintenance"),
-            "operation": {
-                "requested": True,
-                "accepted": True,
-                "machine_id": machine_id,
-                "maintenance_mode": True,
-            },
-        },
+    return emit_stub(
+        "return_node_maintenance",
         hint="return-node-for-maintenance API",
+        operation={
+            "requested": True,
+            "accepted": True,
+            "machine_id": machine_id,
+            "maintenance_mode": True,
+        },
     )
-    return finish(result)
 
 
 if __name__ == "__main__":

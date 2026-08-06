@@ -12,9 +12,17 @@ from urllib.error import URLError
 from common.nico_client import NicoAuthError, forge_get_all, resolve_auth
 
 
-def list_site_machines(*, org: str, site_id: str, api_base: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Fetch machines for a site or return a structured failure/skip payload."""
+def list_site_machines(
+    *, org: str, site_id: str, api_base: str, empty_contract: dict[str, Any] | None = None
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Fetch machines for a site, or build the structured failure/skip payload.
+
+    Returns ``(machines, result)``. When ``machines`` is empty the caller must
+    emit ``result`` and stop: it already carries the skip or the error, plus the
+    zeroed ``empty_contract`` fields the bound validation still expects to read.
+    """
     result: dict[str, Any] = {"success": False, "platform": "nico", "site_id": site_id}
+    result.update(empty_contract or {})
     try:
         auth = resolve_auth()
         machines = forge_get_all(
@@ -50,18 +58,16 @@ def list_site_machines(*, org: str, site_id: str, api_base: str) -> tuple[list[d
     return machines, result
 
 
-def skip_result(site_id: str, reason: str, *, gap: str = "") -> dict[str, Any]:
+def skip_result(site_id: str, reason: str, *, gap: str) -> dict[str, Any]:
     """Build a structured skip payload documenting a known platform gap."""
-    payload: dict[str, Any] = {
+    return {
         "success": True,
         "skipped": True,
         "platform": "nico",
         "site_id": site_id,
         "skip_reason": reason,
+        "gap": gap,
     }
-    if gap:
-        payload["gap"] = gap
-    return payload
 
 
 def emit(result: dict[str, Any]) -> int:

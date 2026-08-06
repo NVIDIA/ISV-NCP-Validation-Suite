@@ -33,7 +33,6 @@ def _repair_entries(machine: dict[str, Any]) -> list[dict[str, Any]]:
                 "status": repair_status,
                 "message": "machine label",
                 "updated_at": None,
-                "action": repair_status,
                 "source": "label",
             }
         )
@@ -46,7 +45,6 @@ def _repair_entries(machine: dict[str, Any]) -> list[dict[str, Any]]:
                 "status": status,
                 "message": item.get("message") or "",
                 "updated_at": item.get("timestamp") or item.get("updatedAt"),
-                "action": item.get("message") or status,
                 "source": "statusHistory",
             }
         )
@@ -61,12 +59,13 @@ def main() -> int:
     parser.add_argument("--api-base", required=True)
     args = parser.parse_args()
 
-    machines, result = list_site_machines(org=args.org, site_id=args.site_id, api_base=args.api_base)
-    if result.get("skipped"):
-        result["history_queryable"] = False
-        result["records"] = []
-        return emit(result)
-    if not result.get("success"):
+    machines, result = list_site_machines(
+        org=args.org,
+        site_id=args.site_id,
+        api_base=args.api_base,
+        empty_contract={"history_queryable": False, "records": []},
+    )
+    if not machines:
         return emit(result)
 
     records: list[dict[str, Any]] = []

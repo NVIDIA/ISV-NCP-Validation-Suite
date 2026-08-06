@@ -38,6 +38,7 @@ template, then fill in the TODOs.
 | `security/` | 17 | [`suites/security.yaml`](../../../suites/security.yaml) | [`config/security.yaml`](../config/security.yaml) | [`providers/aws/scripts/security/`](../../aws/scripts/security/), [`providers/aws/scripts/capacity/`](../../aws/scripts/capacity/) |
 | `k8s/` | 9 shell | [`suites/k8s.yaml`](../../../suites/k8s.yaml) | [`config/k8s.yaml`](../config/k8s.yaml) | [`providers/aws/scripts/eks/`](../../aws/scripts/eks/) |
 | `slurm/` | 2 shell | [`suites/slurm.yaml`](../../../suites/slurm.yaml) | [`config/slurm.yaml`](../config/slurm.yaml) | - |
+| `breakfix/` | 14 | [`suites/bare_metal.yaml`](../../../suites/bare_metal.yaml), [`suites/k8s.yaml`](../../../suites/k8s.yaml) | [`config/bare_metal.yaml`](../config/bare_metal.yaml), [`config/k8s.yaml`](../config/k8s.yaml) | - |
 
 The `k8s/` and `slurm/` examples drive a **real** cluster (validations shell out
 to `kubectl` / `sinfo`), so they are not part of `make demo-test` — a

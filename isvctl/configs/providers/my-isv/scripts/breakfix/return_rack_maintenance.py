@@ -10,8 +10,9 @@ import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _stub import base_result, demo_or_not_implemented, finish
+# Allow importing provider-local helpers from scripts/common/.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from common.stub import emit_stub
 
 
 def main() -> int:
@@ -22,14 +23,11 @@ def main() -> int:
     args = parser.parse_args()
 
     rack_id = args.rack_id or "demo-rack-001"
-    result = demo_or_not_implemented(
-        {
-            **base_result("return_rack_maintenance"),
-            "operation": {"requested": True, "accepted": True, "rack_id": rack_id},
-        },
+    return emit_stub(
+        "return_rack_maintenance",
         hint="return-rack-for-maintenance API",
+        operation={"requested": True, "accepted": True, "rack_id": rack_id},
     )
-    return finish(result)
 
 
 if __name__ == "__main__":

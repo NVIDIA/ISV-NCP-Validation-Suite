@@ -1707,7 +1707,11 @@ def _run_fleet_inventory_script(
     module = _load_fleet_inventory_script()
     monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="test-token"))
     monkeypatch.setattr(module, "forge_get_all", lambda *args, **kwargs: machines)
-    default_site = {"name": "site-1", "location": {"city": "Santa Clara", "state": "CA", "country": "US"}}
+    default_site = {
+        "name": "site-1",
+        "org": "test-org",
+        "location": {"city": "Santa Clara", "state": "CA", "country": "US"},
+    }
     monkeypatch.setattr(module, "forge_get", lambda *args, **kwargs: site if site is not None else default_site)
     monkeypatch.setattr(
         sys,
@@ -1812,7 +1816,9 @@ def test_fleet_inventory_script_leaves_region_empty_without_a_site_location(
     without saying where it is. Falling back to it would make the region
     requirement impossible to fail.
     """
-    payload = _run_fleet_inventory_script(monkeypatch, capsys, machines=[_fleet_machine()], site={"name": "site-1"})
+    payload = _run_fleet_inventory_script(
+        monkeypatch, capsys, machines=[_fleet_machine()], site={"name": "site-1", "org": "test-org"}
+    )
 
     assert payload["nodes"][0]["region"] == ""
 
@@ -1820,6 +1826,42 @@ def test_fleet_inventory_script_leaves_region_empty_without_a_site_location(
     check.run()
     assert check._passed is False
     assert "missing region" in check._error
+
+
+def test_fleet_inventory_script_reads_the_account_from_the_site_record(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The account is what the API reports, not the org we queried with.
+
+    Echoing back --org would make CAP02's account requirement impossible to
+    fail, since the argument is required and always non-empty.
+    """
+    payload = _run_fleet_inventory_script(
+        monkeypatch,
+        capsys,
+        machines=[_fleet_machine()],
+        site={"name": "site-1", "org": "reported-org", "location": {"country": "US"}},
+    )
+
+    assert payload["nodes"][0]["account_id"] == "reported-org"
+
+
+def test_fleet_inventory_script_leaves_account_empty_when_the_site_omits_org(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A site record with no org has no account to report, so CAP02 fails."""
+    payload = _run_fleet_inventory_script(
+        monkeypatch, capsys, machines=[_fleet_machine()], site={"name": "site-1", "location": {"country": "US"}}
+    )
+
+    assert payload["nodes"][0]["account_id"] == ""
+
+    check = FleetManagementApiCheck(config={"step_output": payload})
+    check.run()
+    assert check._passed is False
+    assert "missing account_id" in check._error
 
 
 def test_fleet_inventory_script_reports_a_partial_site_location(

@@ -359,8 +359,10 @@ class ResourceDiscoveryApiCheck(BaseValidation):
     provider must expose a "Resource Index" that can be polled and gives each
     resource a stable identifier. This check asserts the index was polled more
     than once (so stability is observed rather than asserted), that no
-    identifier changed or disappeared between the first and last poll, and that
-    every entry carries a unique, non-empty identifier.
+    identifier changed or disappeared between the first and last poll, that
+    every entry carries a unique, non-empty identifier, and that at least one
+    indexed resource has actually been discovered -- an index whose capacity was
+    never ingested does not show that delivered capacity is discoverable.
 
     ``delivery_reason`` is reported but not asserted. The plan item requires a
     stable identifier; the reason a resource is being delivered is useful
@@ -384,6 +386,7 @@ class ResourceDiscoveryApiCheck(BaseValidation):
         resources_discovered: int
         resources: list[dict]:
             resource_id: str -- stable identifier for the delivered resource
+            discovered: bool -- whether the resource has been ingested yet
             delivery_reason: str -- why the capacity is being provided, when the
                 index states one; reported only, never asserted
     """
@@ -438,6 +441,20 @@ class ResourceDiscoveryApiCheck(BaseValidation):
         incomplete = self._incomplete_resources(resources)
         duplicates = _duplicate_ids(resources, "resource_id")
 
+        # "Discoverable" means the delivered capacity was actually ingested, not
+        # merely listed: an index of entries that never resolved to a resource
+        # would otherwise satisfy every other assertion here.
+        discovered = [r for r in resources if isinstance(r, dict) and r.get("discovered") is True]
+        self.report_subtest(
+            "capacity_discovered",
+            passed=bool(discovered),
+            message=(
+                f"{len(discovered)}/{len(resources)} indexed resource(s) discovered"
+                if discovered
+                else f"None of the {len(resources)} indexed resource(s) have been discovered"
+            ),
+        )
+
         failures: list[str] = []
         if not stable:
             failures.append("resource identifiers are not stable across polls")
@@ -446,13 +463,16 @@ class ResourceDiscoveryApiCheck(BaseValidation):
         if incomplete:
             detail = ", ".join(f"{label} ({reason})" for label, reason in incomplete.items())
             failures.append(f"{len(incomplete)}/{len(resources)} entr(ies) incomplete: {detail}")
+        if not discovered:
+            failures.append(f"none of the {len(resources)} indexed resource(s) have been discovered")
 
         if failures:
             self.set_failed(f"Resource discovery API does not meet the index contract: {'; '.join(failures)}")
             return
 
         self.set_passed(
-            f"Resource index exposes {len(resources)} resource(s) with stable identifiers across {polls} poll(s)"
+            f"Resource index exposes {len(resources)} resource(s) with stable identifiers across {polls} poll(s), "
+            f"{len(discovered)} discovered"
         )
 
     def _incomplete_resources(self, resources: list[Any]) -> dict[str, str]:

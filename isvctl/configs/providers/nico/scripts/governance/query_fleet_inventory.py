@@ -28,7 +28,9 @@ maps them onto that provider-neutral contract:
   Creation Timestamp <- machine.created, else the earliest statusHistory entry
   Hardware Type      <- machine.hwSkuDeviceType, else productName
   GPU Count          <- machineCapabilities entries of type GPU
-  Account/ID         <- the NGC org the API is queried as
+  Account/ID         <- site.org, the NGC organization the site belongs to. Read
+                        from the site record rather than echoed back from --org,
+                        which would assert nothing about what the API reports.
   Project/ID         <- machine.tenantId
   In Use             <- machine.status == "InUse"
   Region             <- the site's location (city/state/country). NICo exposes no
@@ -60,7 +62,7 @@ Required JSON output fields:
         "created_at": "2026-01-02T03:04:05Z",
         "hardware_type": "dgx-gb300",
         "gpu_count": 8,
-        "account_id": "my-org",
+        "account_id": "ncx",
         "project_id": "...",
         "in_use": true,
         "region": "Santa Clara, CA, US"
@@ -206,8 +208,9 @@ def main() -> int:
 
         site = forge_get(args.org, f"site/{args.site_id}", auth.token, base_url=args.api_base)
         region = site_region(site)
+        account_id = first_string(site, "org")
 
-        result["nodes"] = [node_record(m, account_id=args.org, region=region) for m in machines]
+        result["nodes"] = [node_record(m, account_id=account_id, region=region) for m in machines]
         result["nodes_checked"] = len(result["nodes"])
         result["success"] = True
 

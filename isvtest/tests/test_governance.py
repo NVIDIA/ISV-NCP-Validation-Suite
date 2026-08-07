@@ -418,6 +418,7 @@ class TestResourceDiscoveryApiCheck:
         assert {r["name"] for r in check._subtest_results} == {
             "index_pollable",
             "identifiers_stable",
+            "capacity_discovered",
             "resource_expected-machine-1",
         }
 
@@ -492,3 +493,22 @@ class TestResourceDiscoveryApiCheck:
         check.run()
         assert check._passed is False
         assert "at least 1 indexed resource" in check._error
+
+    def test_index_of_undiscovered_capacity_fails(self) -> None:
+        """Listing capacity that was never ingested does not make it discoverable."""
+        output = _discovery_output(resources=[_resource(discovered=False)])
+        check = ResourceDiscoveryApiCheck(config={"step_output": output})
+        check.run()
+        assert check._passed is False
+        assert "have been discovered" in check._error
+
+    def test_one_discovered_entry_is_enough(self) -> None:
+        """Capacity still awaiting ingestion rides along with what has arrived."""
+        output = _discovery_output(
+            resources=[_resource(), _resource(resource_id="expected-machine-2", discovered=False)]
+        )
+        check = ResourceDiscoveryApiCheck(config={"step_output": output})
+        check.run()
+        assert check._passed is True, check._error
+        reported = next(r for r in check._subtest_results if r["name"] == "capacity_discovered")
+        assert "1/2" in reported["message"]

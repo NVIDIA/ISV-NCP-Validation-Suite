@@ -372,9 +372,7 @@ def _resource(**overrides: Any) -> dict[str, Any]:
     """Build a complete CAP03 index entry; override individual fields per test."""
     resource = {
         "resource_id": "expected-machine-1",
-        "resource_type": "machine",
         "delivery_reason": "capacity fulfillment on gb300 project",
-        "delivery_reason_source": "label:DeliveryReason",
         "discovered": True,
     }
     resource.update(overrides)
@@ -385,7 +383,6 @@ def _discovery_output(
     *,
     success: bool = True,
     polls: int = 2,
-    identifiers_stable: bool = True,
     unstable_identifiers: list[str] | None = None,
     resources: list[dict[str, Any]] | None = None,
     error: str = "",
@@ -398,10 +395,8 @@ def _discovery_output(
         "site_id": "test-site-001",
         "polls": polls,
         "poll_interval_seconds": 5,
-        "identifiers_stable": identifiers_stable,
         "unstable_identifiers": unstable_identifiers or [],
-        "new_identifiers": [],
-        "resources_discovered": len(entries),
+        "resources_checked": len(entries),
         "resources": entries,
         "error": error,
     }
@@ -447,15 +442,7 @@ class TestResourceDiscoveryApiCheck:
 
     def test_changed_identifier_fails(self) -> None:
         """An identifier that disappears between polls is not stable."""
-        output = _discovery_output(identifiers_stable=False, unstable_identifiers=["expected-machine-9"])
-        check = ResourceDiscoveryApiCheck(config={"step_output": output})
-        check.run()
-        assert check._passed is False
-        assert "not stable across polls" in check._error
-
-    def test_unstable_identifiers_override_the_stable_flag(self) -> None:
-        """A step claiming stability while listing drift is still a failure."""
-        output = _discovery_output(identifiers_stable=True, unstable_identifiers=["expected-machine-9"])
+        output = _discovery_output(unstable_identifiers=["expected-machine-9"])
         check = ResourceDiscoveryApiCheck(config={"step_output": output})
         check.run()
         assert check._passed is False

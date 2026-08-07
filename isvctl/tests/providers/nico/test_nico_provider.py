@@ -1971,14 +1971,11 @@ def test_resource_discovery_script_polls_and_reports_stable_identifiers(
     payload = _run_resource_discovery_script(monkeypatch, capsys, polls=[index, index])
 
     assert payload["polls"] == 2
-    assert payload["identifiers_stable"] is True
     assert payload["unstable_identifiers"] == []
     assert payload["resources"] == [
         {
             "resource_id": "expected-machine-1",
-            "resource_type": "machine",
             "delivery_reason": "capacity fulfillment on gb300 project",
-            "delivery_reason_source": "field:description",
             "discovered": True,
         }
     ]
@@ -1995,7 +1992,6 @@ def test_resource_discovery_script_flags_a_vanished_identifier(
         polls=[[_expected_machine(), _expected_machine(id="expected-machine-2")], [_expected_machine()]],
     )
 
-    assert payload["identifiers_stable"] is False
     assert payload["unstable_identifiers"] == ["expected-machine-2"]
 
 
@@ -2010,8 +2006,8 @@ def test_resource_discovery_script_treats_new_capacity_as_expected(
         polls=[[_expected_machine()], [_expected_machine(), _expected_machine(id="expected-machine-2")]],
     )
 
-    assert payload["identifiers_stable"] is True
-    assert payload["new_identifiers"] == ["expected-machine-2"]
+    assert payload["unstable_identifiers"] == []
+    assert [r["resource_id"] for r in payload["resources"]] == ["expected-machine-1", "expected-machine-2"]
 
 
 def test_resource_discovery_script_prefers_an_operator_reason_label(
@@ -2025,7 +2021,6 @@ def test_resource_discovery_script_prefers_an_operator_reason_label(
 
     resource = payload["resources"][0]
     assert resource["delivery_reason"] == "break-fix / RMA return to cluster"
-    assert resource["delivery_reason_source"] == "label:DeliveryReason"
 
 
 def test_resource_discovery_script_leaves_an_unstated_reason_empty(

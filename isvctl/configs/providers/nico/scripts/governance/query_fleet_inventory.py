@@ -95,7 +95,14 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from common.inventory import first_string
-from common.nico_client import NicoAuthError, forge_get, forge_get_all, resolve_auth, sum_capabilities
+from common.nico_client import (
+    NicoAuthError,
+    classify_health,
+    forge_get,
+    forge_get_all,
+    resolve_auth,
+    sum_capabilities,
+)
 
 # Machine status that means the node is powered on and running a tenant workload.
 IN_USE_STATUS = "InUse"
@@ -125,14 +132,15 @@ def site_region(site: dict[str, Any]) -> str:
 def health_state(machine: dict[str, Any]) -> str:
     """Classify a machine as healthy/unhealthy, or unknown when unreported.
 
-    NICo reports health as an alert-driven document: no alerts means healthy.
-    A machine carrying no probe data and no observation timestamp has not been
+    Defers to the shared ``classify_health`` for the healthy/unhealthy call so
+    CAP02 cannot drift from CAP01/CAP05. The tri-state is the addition: a
+    machine carrying no probe data and no observation timestamp has not been
     classified at all, which is distinct from being healthy.
     """
     health = machine.get("health") or {}
     if not (health.get("successes") or health.get("alerts") or health.get("observedAt")):
         return "unknown"
-    return "unhealthy" if health.get("alerts") else "healthy"
+    return classify_health(health)
 
 
 def created_at(machine: dict[str, Any]) -> str:

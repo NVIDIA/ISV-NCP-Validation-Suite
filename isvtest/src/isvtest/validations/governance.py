@@ -31,6 +31,7 @@ provider that emits the documented fields can reuse them.
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import datetime
 from typing import Any, ClassVar
 
@@ -56,20 +57,6 @@ FLEET_ALLOCATION_FIELDS: tuple[str, ...] = ("instance_id", "project_id")
 # The Healthy/Unhealthy classification CAP02 requires. A node the API did not
 # classify (reported as "unknown" or omitted) does not satisfy the requirement.
 FLEET_HEALTH_STATES: frozenset[str] = frozenset({"healthy", "unhealthy"})
-
-# Every CAP02 field, in the order the requirement lists them.
-FLEET_NODE_FIELDS: tuple[str, ...] = (
-    "node_id",
-    "health_state",
-    "instance_id",
-    "created_at",
-    "hardware_type",
-    "gpu_count",
-    "account_id",
-    "project_id",
-    "in_use",
-    "region",
-)
 
 
 class GovernanceMetricsCheck(BaseValidation):
@@ -222,18 +209,8 @@ def _is_iso_timestamp(value: str) -> bool:
 
 def _duplicate_ids(records: list[Any], field: str) -> list[str]:
     """Return the identifiers reported more than once by ``records``, sorted."""
-    seen: set[str] = set()
-    duplicates: set[str] = set()
-    for record in records:
-        if not isinstance(record, dict):
-            continue
-        identifier = _text(record, field)
-        if not identifier:
-            continue
-        if identifier in seen:
-            duplicates.add(identifier)
-        seen.add(identifier)
-    return sorted(duplicates)
+    counts = Counter(identifier for record in records if (identifier := _text(record, field)))
+    return sorted(identifier for identifier, count in counts.items() if count > 1)
 
 
 class FleetManagementApiCheck(BaseValidation):
@@ -302,7 +279,7 @@ class FleetManagementApiCheck(BaseValidation):
                 message=(
                     f"Node {label}: {'; '.join(problems)}"
                     if problems
-                    else f"Node {label}: all {len(FLEET_NODE_FIELDS)} required fields reported"
+                    else f"Node {label}: all required fields reported"
                 ),
             )
             if problems:
@@ -379,11 +356,10 @@ class ResourceDiscoveryApiCheck(BaseValidation):
         platform: str
         polls: int -- how many times the index was polled
         poll_interval_seconds: int -- delay between polls
-        identifiers_stable: bool -- no identifier changed across the polls
         unstable_identifiers: list[str] -- identifiers seen in the first poll
             but missing from the last (capacity appearing mid-run is expected
             and is not instability)
-        resources_discovered: int
+        resources_checked: int
         resources: list[dict]:
             resource_id: str -- stable identifier for the delivered resource
             discovered: bool -- whether the resource has been ingested yet
@@ -427,36 +403,42 @@ class ResourceDiscoveryApiCheck(BaseValidation):
         )
 
         unstable = [str(i) for i in (step_output.get("unstable_identifiers") or [])]
-        stable = bool(step_output.get("identifiers_stable")) and not unstable
         self.report_subtest(
             "identifiers_stable",
-            passed=stable,
+            passed=not unstable,
             message=(
                 f"{len(unstable)} identifier(s) changed across polls: {', '.join(unstable)}"
-                if not stable
+                if unstable
                 else f"All {len(resources)} resource identifier(s) unchanged across {polls} poll(s)"
             ),
         )
 
-        incomplete = self._incomplete_resources(resources)
+        incomplete: dict[str, str] = {}
+        for index, resource in enumerate(resources):
+            label, problem = self._resource_problem(resource, index)
+            reason = _text(resource, "delivery_reason")
+            detail = problem or (f"delivered for {reason}" if reason else "identified, no delivery reason stated")
+            self.report_subtest(f"resource_{label}", passed=not problem, message=f"Resource {label}: {detail}")
+            if problem:
+                incomplete[label] = problem
+
         duplicates = _duplicate_ids(resources, "resource_id")
 
         # "Discoverable" means the delivered capacity was actually ingested, not
         # merely listed: an index of entries that never resolved to a resource
         # would otherwise satisfy every other assertion here.
         discovered = [r for r in resources if isinstance(r, dict) and r.get("discovered") is True]
+        undiscovered = f"none of the {len(resources)} indexed resource(s) have been discovered"
         self.report_subtest(
             "capacity_discovered",
             passed=bool(discovered),
             message=(
-                f"{len(discovered)}/{len(resources)} indexed resource(s) discovered"
-                if discovered
-                else f"None of the {len(resources)} indexed resource(s) have been discovered"
+                f"{len(discovered)}/{len(resources)} indexed resource(s) discovered" if discovered else undiscovered
             ),
         )
 
         failures: list[str] = []
-        if not stable:
+        if unstable:
             failures.append("resource identifiers are not stable across polls")
         if duplicates:
             failures.append(f"duplicate resource_id(s): {', '.join(duplicates)}")
@@ -464,7 +446,7 @@ class ResourceDiscoveryApiCheck(BaseValidation):
             detail = ", ".join(f"{label} ({reason})" for label, reason in incomplete.items())
             failures.append(f"{len(incomplete)}/{len(resources)} entr(ies) incomplete: {detail}")
         if not discovered:
-            failures.append(f"none of the {len(resources)} indexed resource(s) have been discovered")
+            failures.append(undiscovered)
 
         if failures:
             self.set_failed(f"Resource discovery API does not meet the index contract: {'; '.join(failures)}")
@@ -475,32 +457,16 @@ class ResourceDiscoveryApiCheck(BaseValidation):
             f"{len(discovered)} discovered"
         )
 
-    def _incomplete_resources(self, resources: list[Any]) -> dict[str, str]:
-        """Return ``label -> reason`` for index entries with no stable identifier.
+    @staticmethod
+    def _resource_problem(resource: Any, index: int) -> tuple[str, str]:
+        """Return ``(label, problem)`` for one index entry; problem is '' when sound.
 
-        Also reports a subtest per entry, noting the delivery reason when the
-        index states one. An unstated reason is recorded as context, not a gap.
+        The only gap that counts is a missing stable identifier -- an unstated
+        delivery reason is context, never a problem.
         """
-        incomplete: dict[str, str] = {}
-        for index, resource in enumerate(resources):
-            if not isinstance(resource, dict):
-                incomplete[f"resource[{index}]"] = "entry is not an object"
-                self.report_subtest(f"resource[{index}]", passed=False, message="Index entry is not an object")
-                continue
-            identifier = _text(resource, "resource_id")
-            label = identifier or f"resource[{index}]"
-            reason = _text(resource, "delivery_reason")
-            self.report_subtest(
-                f"resource_{label}",
-                passed=bool(identifier),
-                message=(
-                    f"Resource {label}: missing resource_id"
-                    if not identifier
-                    else f"Resource {label}: delivered for {reason}"
-                    if reason
-                    else f"Resource {label}: identified, no delivery reason stated"
-                ),
-            )
-            if not identifier:
-                incomplete[label] = "missing resource_id"
-        return incomplete
+        if not isinstance(resource, dict):
+            return f"resource[{index}]", "entry is not an object"
+        identifier = _text(resource, "resource_id")
+        if not identifier:
+            return f"resource[{index}]", "missing resource_id"
+        return identifier, ""

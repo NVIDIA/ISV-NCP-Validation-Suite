@@ -25,7 +25,8 @@ each record is registered when capacity is handed over, carries its own stable
 This script polls that index more than once so identifier stability is observed
 rather than asserted. Identifiers present in the first poll but gone by the last
 are reported as unstable; capacity that *appears* mid-run is exactly what the
-index is for and is reported separately as new.
+index is for and is not instability. The script reports only what it observed --
+whether that amounts to a stable index is ``ResourceDiscoveryApiCheck``'s call.
 
 The delivery reason is reported when the record states one, and is deliberately
 never inferred from lifecycle state -- an inferred reason would read as though
@@ -53,16 +54,12 @@ Required JSON output fields:
     "site_id": "...",
     "polls": 2,
     "poll_interval_seconds": 5,
-    "identifiers_stable": true,
     "unstable_identifiers": [],
-    "new_identifiers": [],
-    "resources_discovered": 1,
+    "resources_checked": 1,
     "resources": [
       {
         "resource_id": "...",
-        "resource_type": "machine",
         "delivery_reason": "capacity fulfillment on gb300 project",
-        "delivery_reason_source": "field:description",
         "discovered": true
       }
     ]
@@ -101,55 +98,30 @@ from common.nico_client import NicoAuthError, forge_get_all, resolve_auth
 # adopt rather than anything the API guarantees.
 DELIVERY_REASON_LABEL_KEYS = ("DeliveryReason", "deliveryReason", "delivery_reason", "reason")
 
-# The only free-text field on an expected machine that can carry a reason.
-DELIVERY_REASON_FIELD_KEYS = ("description",)
 
-
-def delivery_reason(record: dict[str, Any]) -> tuple[str, str]:
-    """Return ``(reason, source)`` for an index entry, or ``("", "")`` if unstated."""
+def delivery_reason(record: dict[str, Any]) -> str:
+    """Return the stated reason for an index entry, or '' when unstated."""
     labels = record.get("labels")
     if isinstance(labels, dict):
         for key in DELIVERY_REASON_LABEL_KEYS:
-            reason = first_string(labels, key)
-            if reason:
-                return reason, f"label:{key}"
+            if reason := first_string(labels, key):
+                return reason
 
-    for key in DELIVERY_REASON_FIELD_KEYS:
-        reason = first_string(record, key)
-        if reason:
-            return reason, f"field:{key}"
+    return first_string(record, "description")
 
-    return "", ""
+
+def identifiers(records: list[dict[str, Any]]) -> set[str]:
+    """Return the non-empty resource identifiers in one poll of the index."""
+    return {ident for r in records if (ident := first_string(r, "id"))}
 
 
 def resource_record(record: dict[str, Any]) -> dict[str, Any]:
     """Build the provider-neutral CAP03 index entry for one expected machine."""
-    reason, source = delivery_reason(record)
     return {
         "resource_id": first_string(record, "id"),
-        "resource_type": "machine",
-        "delivery_reason": reason,
-        "delivery_reason_source": source,
+        "delivery_reason": delivery_reason(record),
         "discovered": bool(first_string(record, "machineId")),
     }
-
-
-def poll_index(
-    org: str,
-    token: str,
-    *,
-    site_id: str,
-    api_base: str,
-) -> list[dict[str, Any]]:
-    """Fetch one full page-through of the expected-machine resource index."""
-    return forge_get_all(
-        org,
-        "expected-machine",
-        token,
-        base_url=api_base,
-        params={"siteId": site_id},
-        result_key="expectedMachines",
-    )
 
 
 def main() -> int:
@@ -168,38 +140,46 @@ def main() -> int:
         "site_id": args.site_id,
         "polls": 0,
         "poll_interval_seconds": args.poll_interval,
-        "identifiers_stable": False,
         "unstable_identifiers": [],
-        "new_identifiers": [],
-        "resources_discovered": 0,
+        "resources_checked": 0,
         "resources": [],
     }
 
     try:
         auth = resolve_auth()
 
-        polls: list[list[dict[str, Any]]] = []
-        for attempt in range(max(1, args.polls)):
+        # Only the first and last poll are compared, so intermediate payloads
+        # are reduced to their identifiers rather than retained whole.
+        first_ids: set[str] = set()
+        latest: list[dict[str, Any]] = []
+        indexed_anything = False
+        polls = max(1, args.polls)
+        for attempt in range(polls):
             if attempt:
                 time.sleep(max(0, args.poll_interval))
-            polls.append(poll_index(args.org, auth.token, site_id=args.site_id, api_base=args.api_base))
-            result["polls"] = len(polls)
+            latest = forge_get_all(
+                args.org,
+                "expected-machine",
+                auth.token,
+                base_url=args.api_base,
+                params={"siteId": args.site_id},
+                result_key="expectedMachines",
+            )
+            indexed_anything = indexed_anything or bool(latest)
+            if not attempt:
+                first_ids = identifiers(latest)
+        result["polls"] = polls
 
-        if not any(polls):
+        if not indexed_anything:
             result["success"] = True
             result["skipped"] = True
             result["skip_reason"] = "Resource index is empty at this site; no delivered capacity to report"
             print(json.dumps(result, indent=2))
             return 0
 
-        first_ids = {first_string(r, "id") for r in polls[0] if first_string(r, "id")}
-        last_ids = {first_string(r, "id") for r in polls[-1] if first_string(r, "id")}
-
-        result["unstable_identifiers"] = sorted(first_ids - last_ids)
-        result["new_identifiers"] = sorted(last_ids - first_ids)
-        result["identifiers_stable"] = not result["unstable_identifiers"]
-        result["resources"] = [resource_record(r) for r in polls[-1]]
-        result["resources_discovered"] = len(result["resources"])
+        result["unstable_identifiers"] = sorted(first_ids - identifiers(latest))
+        result["resources"] = [resource_record(r) for r in latest]
+        result["resources_checked"] = len(result["resources"])
         result["success"] = True
 
     except NicoAuthError as e:

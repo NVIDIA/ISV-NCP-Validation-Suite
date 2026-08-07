@@ -130,7 +130,14 @@ def _load_nico_script(relative_path: str, module_name: str) -> ModuleType:
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     with _isolated_common_imports():
-        spec.loader.exec_module(module)
+        # A script using @dataclass under `from __future__ import annotations`
+        # resolves its field annotations via sys.modules[cls.__module__] while
+        # executing, so the module has to be registered for the duration.
+        sys.modules[module_name] = module
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            sys.modules.pop(module_name, None)
     return module
 
 
@@ -236,14 +243,9 @@ def _load_query_key_access_script() -> ModuleType:
     return _load_nico_script("auth/query_key_access.py", "test_query_key_access")
 
 
-def _load_setup_key_access_script() -> ModuleType:
-    """Load the setup_key_access script as a module for direct unit testing."""
-    return _load_nico_script("auth/setup_key_access.py", "test_setup_key_access")
-
-
-def _load_teardown_key_access_script() -> ModuleType:
-    """Load the teardown_key_access script as a module for direct unit testing."""
-    return _load_nico_script("auth/teardown_key_access.py", "test_teardown_key_access")
+def _load_key_access_helpers() -> ModuleType:
+    """Load the throwaway-key provision/remove helpers for direct unit testing."""
+    return _load_nico_script("auth/_key_access.py", "test_key_access_helpers")
 
 
 def test_nico_auth_prefers_explicit_bearer_token(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -3174,7 +3176,7 @@ def test_query_key_access_skips_when_no_key_groups(
         module,
         monkeypatch,
         capsys,
-        ["query_key_access.py", "--org", "o", "--site-id", "site-1", "--api-base", "http://x"],
+        ["query_key_access.py", "--org", "o", "--site-id", "site-1", "--api-base", "http://x", "--no-provision"],
     )
 
     assert code == 0
@@ -3182,6 +3184,7 @@ def test_query_key_access_skips_when_no_key_groups(
     assert out["skipped"] is True
     assert out["org_key_groups"] == 0
     assert "No SSH key groups exist" in out["skip_reason"]
+    assert "--no-provision" in out["skip_reason"]
 
 
 def test_query_key_access_skip_distinguishes_unsynced_groups(
@@ -3204,7 +3207,7 @@ def test_query_key_access_skip_distinguishes_unsynced_groups(
         module,
         monkeypatch,
         capsys,
-        ["query_key_access.py", "--org", "o", "--site-id", "site-1", "--api-base", "http://x"],
+        ["query_key_access.py", "--org", "o", "--site-id", "site-1", "--api-base", "http://x", "--no-provision"],
     )
 
     assert code == 0
@@ -3213,83 +3216,46 @@ def test_query_key_access_skip_distinguishes_unsynced_groups(
     assert "none are synced to this site" in out["skip_reason"]
 
 
-def test_setup_key_access_provisions_and_records_restore(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """Setup creates the key + synced group and records the site flag to restore."""
-    module = _load_setup_key_access_script()
-    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+def _fake_provisioned_site(path: str) -> dict[str, Any]:
+    """Return a synced key group for group polls, or a SOL-enabled site otherwise."""
+    if path.startswith("sshkeygroup/"):
+        return {"status": "Synced", "siteAssociations": [{"site": {"id": "site-1"}, "status": "Synced"}]}
+    return {
+        "name": "sjc-1",
+        "isSerialConsoleEnabled": True,
+        "isSerialConsoleSSHKeysEnabled": False,
+        "serialConsoleHostname": "sol.example.com",
+    }
+
+
+def test_provision_creates_synced_group_and_records_restore(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Provision creates the key + synced group and records the site flag to restore."""
+    module = _load_key_access_helpers()
     monkeypatch.setattr(module, "_generate_public_key", lambda comment: "ssh-ed25519 AAAAtest")
-
-    def fake_post(org: str, path: str, token: str, *, base_url: str, body: dict, **kw: Any) -> dict:
-        return {"id": "key-1"} if path == "sshkey" else {"id": "kg-1"}
-
-    def fake_get(org: str, path: str, token: str, **kw: Any) -> dict:
-        if path.startswith("sshkeygroup/"):
-            return {"status": "Synced", "siteAssociations": [{"site": {"id": "site-1"}, "status": "Synced"}]}
-        return {"isSerialConsoleSSHKeysEnabled": False}
-
-    patched: dict[str, Any] = {}
-
-    def fake_patch(org: str, path: str, token: str, *, base_url: str, body: dict, **kw: Any) -> dict:
-        patched.update(body)
-        return {}
-
-    monkeypatch.setattr(module, "forge_post", fake_post)
-    monkeypatch.setattr(module, "forge_get", fake_get)
-    monkeypatch.setattr(module, "forge_patch", fake_patch)
-
-    code, out = _run_script_main(
-        module,
-        monkeypatch,
-        capsys,
-        ["setup_key_access.py", "--org", "o", "--site-id", "site-1", "--api-base", "http://x"],
-    )
-
-    assert code == 0
-    assert out["success"] is True
-    assert out["sshkey_id"] == "key-1"
-    assert out["sshkeygroup_id"] == "kg-1"
-    assert out["synced"] is True
-    assert out["restore_ssh_keys_enabled"] is False
-    assert patched == {"isSerialConsoleSSHKeysEnabled": True}
-
-
-def test_setup_key_access_fails_when_group_does_not_sync(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """Setup fails when the key group never syncs, but still emits IDs for teardown."""
-    module = _load_setup_key_access_script()
-    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
-    monkeypatch.setattr(module, "_generate_public_key", lambda comment: "ssh-ed25519 AAAAtest")
-    monkeypatch.setattr(module, "_wait_for_sync", lambda *a, **k: False)
     monkeypatch.setattr(
         module,
         "forge_post",
         lambda org, path, token, *, base_url, body, **kw: {"id": "key-1"} if path == "sshkey" else {"id": "kg-1"},
     )
-
-    code, out = _run_script_main(
-        module,
-        monkeypatch,
-        capsys,
-        ["setup_key_access.py", "--org", "o", "--site-id", "site-1", "--api-base", "http://x"],
+    monkeypatch.setattr(module, "forge_get", lambda org, path, token, **kw: _fake_provisioned_site(path))
+    patched: dict[str, Any] = {}
+    monkeypatch.setattr(
+        module, "forge_patch", lambda org, path, token, *, base_url, body, **kw: patched.update(body) or {}
     )
 
-    assert code == 1
-    assert out["success"] is False
-    assert out["synced"] is False
-    assert out["sshkey_id"] == "key-1"
-    assert out["sshkeygroup_id"] == "kg-1"
-    assert "did not sync" in out["error"]
+    created = module.ThrowawayKey()
+    module.provision(org="o", site_id="site-1", api_base="http://x", token="t", created=created)
+
+    assert created.sshkey_id == "key-1"
+    assert created.sshkeygroup_id == "kg-1"
+    assert created.synced is True
+    assert created.restore_ssh_keys_enabled is False
+    assert patched == {"isSerialConsoleSSHKeysEnabled": True}
 
 
-def test_setup_key_access_emits_key_id_on_group_failure(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """A created key id is emitted even when the group create fails, so teardown can clean up."""
-    module = _load_setup_key_access_script()
-    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+def test_provision_records_key_id_when_group_create_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A created key id is recorded even when the group create raises, so removal can clean up."""
+    module = _load_key_access_helpers()
     monkeypatch.setattr(module, "_generate_public_key", lambda comment: "ssh-ed25519 AAAAtest")
 
     def fake_post(org: str, path: str, token: str, *, base_url: str, body: dict, **kw: Any) -> dict:
@@ -3299,25 +3265,39 @@ def test_setup_key_access_emits_key_id_on_group_failure(
 
     monkeypatch.setattr(module, "forge_post", fake_post)
 
-    code, out = _run_script_main(
+    created = module.ThrowawayKey()
+    with pytest.raises(RuntimeError):
+        module.provision(org="o", site_id="site-1", api_base="http://x", token="t", created=created)
+
+    assert created.sshkey_id == "key-1"
+    assert created.sshkeygroup_id == ""
+    assert bool(created) is True
+
+
+def test_provision_reports_unsynced_group_without_patching_site(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A group that never syncs leaves synced False and skips the site PATCH."""
+    module = _load_key_access_helpers()
+    monkeypatch.setattr(module, "_generate_public_key", lambda comment: "ssh-ed25519 AAAAtest")
+    monkeypatch.setattr(module, "_wait_for_sync", lambda *a, **k: False)
+    monkeypatch.setattr(
         module,
-        monkeypatch,
-        capsys,
-        ["setup_key_access.py", "--org", "o", "--site-id", "site-1", "--api-base", "http://x"],
+        "forge_post",
+        lambda org, path, token, *, base_url, body, **kw: {"id": "key-1"} if path == "sshkey" else {"id": "kg-1"},
     )
+    patches: list[dict[str, Any]] = []
+    monkeypatch.setattr(module, "forge_patch", lambda *a, **k: patches.append(k.get("body", {})) or {})
 
-    assert code == 1
-    assert out["success"] is False
-    assert out["sshkey_id"] == "key-1"
-    assert out["sshkeygroup_id"] == ""
+    created = module.ThrowawayKey()
+    module.provision(org="o", site_id="site-1", api_base="http://x", token="t", created=created)
+
+    assert created.synced is False
+    assert created.sshkeygroup_id == "kg-1"
+    assert patches == []
 
 
-def test_teardown_key_access_deletes_resources_and_restores_flag(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """Teardown deletes the group then the key and restores the site flag."""
-    module = _load_teardown_key_access_script()
-    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+def test_remove_deletes_group_before_key_and_restores_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Removal deletes the group then the key and restores the site flag."""
+    module = _load_key_access_helpers()
     deletes: list[str] = []
     patched: dict[str, Any] = {}
     monkeypatch.setattr(module, "forge_delete", lambda org, path, token, **kw: deletes.append(path) or {})
@@ -3325,143 +3305,206 @@ def test_teardown_key_access_deletes_resources_and_restores_flag(
         module, "forge_patch", lambda org, path, token, *, base_url, body, **kw: patched.update(body) or {}
     )
 
-    code, out = _run_script_main(
-        module,
-        monkeypatch,
-        capsys,
-        [
-            "teardown_key_access.py",
-            "--org",
-            "o",
-            "--site-id",
-            "site-1",
-            "--api-base",
-            "http://x",
-            "--sshkeygroup-id",
-            "kg-1",
-            "--sshkey-id",
-            "key-1",
-            "--restore-ssh-keys-enabled",
-            "false",
-        ],
-    )
-
-    assert code == 0
-    assert out["success"] is True
+    created = module.ThrowawayKey(sshkey_id="key-1", sshkeygroup_id="kg-1", restore_ssh_keys_enabled=False)
+    assert module.remove(org="o", site_id="site-1", api_base="http://x", token="t", created=created) == []
     assert deletes == ["sshkeygroup/kg-1", "sshkey/key-1"]
     assert patched == {"isSerialConsoleSSHKeysEnabled": False}
-    assert out["cleanup_errors"] == []
 
 
-def test_teardown_key_access_treats_404_delete_as_success(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """DELETE 404 means the resource is already gone; teardown should still succeed."""
-    module = _load_teardown_key_access_script()
-    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+def test_remove_treats_404_delete_as_already_gone(monkeypatch: pytest.MonkeyPatch) -> None:
+    """DELETE 404 means the resource is already gone; removal reports no error."""
+    module = _load_key_access_helpers()
     monkeypatch.setattr(
         module,
         "forge_delete",
         lambda *a, **k: (_ for _ in ()).throw(HTTPError("http://x", 404, "Not Found", None, None)),
     )
 
-    code, out = _run_script_main(
-        module,
-        monkeypatch,
-        capsys,
-        [
-            "teardown_key_access.py",
-            "--org",
-            "o",
-            "--site-id",
-            "site-1",
-            "--api-base",
-            "http://x",
-            "--sshkeygroup-id",
-            "kg-1",
-            "--sshkey-id",
-            "key-1",
-            "--restore-ssh-keys-enabled",
-            "",
-        ],
-    )
-
-    assert code == 0
-    assert out["success"] is True
-    assert out["cleanup_errors"] == []
+    created = module.ThrowawayKey(sshkey_id="key-1", sshkeygroup_id="kg-1")
+    assert module.remove(org="o", site_id="site-1", api_base="http://x", token="t", created=created) == []
 
 
-def test_teardown_key_access_treats_none_restore_flag_as_unset(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """Jinja renders Python None as the literal string 'None'; do not PATCH the site."""
-    module = _load_teardown_key_access_script()
-    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
-    patches: list[dict[str, Any]] = []
-    monkeypatch.setattr(module, "forge_delete", lambda *a, **k: {})
+def test_remove_continues_after_one_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A stuck group delete must not strand the key; both failures are reported."""
+    module = _load_key_access_helpers()
     monkeypatch.setattr(
-        module,
-        "forge_patch",
-        lambda org, path, token, *, base_url, body, **kw: patches.append(body) or {},
+        module, "forge_delete", lambda org, path, token, **kw: (_ for _ in ()).throw(RuntimeError(f"boom {path}"))
     )
 
-    code, out = _run_script_main(
-        module,
-        monkeypatch,
-        capsys,
-        [
-            "teardown_key_access.py",
-            "--org",
-            "o",
-            "--site-id",
-            "site-1",
-            "--api-base",
-            "http://x",
-            "--sshkeygroup-id",
-            "kg-1",
-            "--sshkey-id",
-            "key-1",
-            "--restore-ssh-keys-enabled",
-            "None",
-        ],
-    )
+    created = module.ThrowawayKey(sshkey_id="key-1", sshkeygroup_id="kg-1")
+    errors = module.remove(org="o", site_id="site-1", api_base="http://x", token="t", created=created)
 
-    assert code == 0
-    assert out["success"] is True
-    assert patches == []
+    assert len(errors) == 2
+    assert "sshkeygroup kg-1" in errors[0]
+    assert "sshkey key-1" in errors[1]
 
 
-def test_teardown_key_access_is_noop_without_ids(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """Empty IDs (setup created nothing) make teardown a no-op."""
-    module = _load_teardown_key_access_script()
-    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+def test_remove_is_noop_without_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Nothing created means nothing to remove."""
+    module = _load_key_access_helpers()
     calls: list[str] = []
     monkeypatch.setattr(module, "forge_delete", lambda *a, **k: calls.append("delete") or {})
     monkeypatch.setattr(module, "forge_patch", lambda *a, **k: calls.append("patch") or {})
 
+    created = module.ThrowawayKey()
+    assert module.remove(org="o", site_id="site-1", api_base="http://x", token="t", created=created) == []
+    assert calls == []
+    assert bool(created) is False
+
+
+def _patch_query_provisioning(
+    module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    removed: list[str],
+    cleanup_errors: list[str] | None = None,
+) -> None:
+    """Wire query_key_access so provisioning succeeds and removal is recorded."""
+
+    def fake_provision(*, org: str, site_id: str, api_base: str, token: str, created: Any) -> None:
+        created.sshkey_id, created.sshkeygroup_id, created.synced = "key-1", "kg-1", True
+
+    def fake_remove(*, org: str, site_id: str, api_base: str, token: str, created: Any) -> list[str]:
+        removed.append(created.sshkeygroup_id)
+        return list(cleanup_errors or [])
+
+    monkeypatch.setattr(module, "provision", fake_provision)
+    monkeypatch.setattr(module, "remove", fake_remove)
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+
+
+_SYNCED_GROUP = {
+    "status": "Synced",
+    "sshKeys": [{"id": "k1"}],
+    "siteAssociations": [{"site": {"id": "site-1"}, "status": "Synced"}],
+}
+
+
+def test_query_key_access_provisions_then_removes_the_throwaway_key(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """With no key synced, the step mints one, evidences access, and removes it."""
+    module = _load_query_key_access_script()
+    removed: list[str] = []
+    _patch_query_provisioning(module, monkeypatch, removed=removed)
+    monkeypatch.setattr(
+        module,
+        "forge_get",
+        lambda org, path, token, **kw: {
+            "name": "sjc-1",
+            "isSerialConsoleEnabled": True,
+            "isSerialConsoleSSHKeysEnabled": True,
+            "serialConsoleHostname": "sol.example.com",
+        },
+    )
+    # First sweep finds nothing synced; the post-provision sweep finds the new group.
+    sweeps = iter([[], [_SYNCED_GROUP]])
+    monkeypatch.setattr(module, "forge_get_all", lambda *a, **k: next(sweeps, [_SYNCED_GROUP]))
+
     code, out = _run_script_main(
         module,
         monkeypatch,
         capsys,
-        [
-            "teardown_key_access.py",
-            "--org",
-            "o",
-            "--site-id",
-            "site-1",
-            "--api-base",
-            "http://x",
-            "--sshkeygroup-id",
-            "",
-            "--sshkey-id",
-            "",
-            "--restore-ssh-keys-enabled",
-            "",
-        ],
+        ["query_key_access.py", "--org", "o", "--site-id", "site-1", "--api-base", "http://x"],
     )
 
     assert code == 0
     assert out["success"] is True
+    assert out["provisioned_key"] is True
+    assert removed == ["kg-1"], "the throwaway key must be removed in the same run"
+    sol = next(t for t in out["access_targets"] if t["type"] == "serial_console")
+    assert sol["reachable"] is True
+
+
+def test_query_key_access_removes_the_key_even_when_evidence_gathering_fails(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A failure after provisioning must not strand the key."""
+    module = _load_query_key_access_script()
+    removed: list[str] = []
+    _patch_query_provisioning(module, monkeypatch, removed=removed)
+    sweeps = iter([[], [_SYNCED_GROUP]])
+    monkeypatch.setattr(module, "forge_get_all", lambda *a, **k: next(sweeps, [_SYNCED_GROUP]))
+    monkeypatch.setattr(module, "forge_get", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("site read failed")))
+
+    code, out = _run_script_main(
+        module,
+        monkeypatch,
+        capsys,
+        ["query_key_access.py", "--org", "o", "--site-id", "site-1", "--api-base", "http://x"],
+    )
+
+    assert code == 1
+    assert out["success"] is False
+    assert "site read failed" in out["error"]
+    assert removed == ["kg-1"], "cleanup must run on the failure path"
+
+
+def test_query_key_access_fails_the_step_when_cleanup_leaks(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A leaked throwaway key must be visible, even when the evidence was gathered."""
+    module = _load_query_key_access_script()
+    removed: list[str] = []
+    _patch_query_provisioning(module, monkeypatch, removed=removed, cleanup_errors=["sshkey key-1: boom"])
+    monkeypatch.setattr(module, "forge_get", lambda *a, **k: {"isSerialConsoleEnabled": True})
+    sweeps = iter([[], [_SYNCED_GROUP]])
+    monkeypatch.setattr(module, "forge_get_all", lambda *a, **k: next(sweeps, [_SYNCED_GROUP]))
+
+    code, out = _run_script_main(
+        module,
+        monkeypatch,
+        capsys,
+        ["query_key_access.py", "--org", "o", "--site-id", "site-1", "--api-base", "http://x"],
+    )
+
+    assert code == 1
+    assert out["success"] is False
+    assert out["cleanup_errors"] == ["sshkey key-1: boom"]
+
+
+def test_query_key_access_skip_cleanup_leaves_the_key(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--skip-cleanup keeps the key for debugging and says so in the payload."""
+    module = _load_query_key_access_script()
+    removed: list[str] = []
+    _patch_query_provisioning(module, monkeypatch, removed=removed)
+    monkeypatch.setattr(module, "forge_get", lambda *a, **k: {"isSerialConsoleEnabled": True})
+    sweeps = iter([[], [_SYNCED_GROUP]])
+    monkeypatch.setattr(module, "forge_get_all", lambda *a, **k: next(sweeps, [_SYNCED_GROUP]))
+
+    code, out = _run_script_main(
+        module,
+        monkeypatch,
+        capsys,
+        ["query_key_access.py", "--org", "o", "--site-id", "site-1", "--api-base", "http://x", "--skip-cleanup"],
+    )
+
+    assert code == 0
+    assert out["cleanup_skipped"] is True
+    assert removed == []
+
+
+def test_query_key_access_no_provision_never_mutates(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--no-provision keeps the run read-only: no key is minted and none is removed."""
+    module = _load_query_key_access_script()
+    calls: list[str] = []
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+    monkeypatch.setattr(module, "provision", lambda **kw: calls.append("provision"))
+    monkeypatch.setattr(module, "remove", lambda **kw: calls.append("remove") or [])
+    monkeypatch.setattr(module, "forge_get", lambda *a, **k: {"isSerialConsoleEnabled": True})
+    monkeypatch.setattr(module, "forge_get_all", lambda *a, **k: [])
+
+    code, out = _run_script_main(
+        module,
+        monkeypatch,
+        capsys,
+        ["query_key_access.py", "--org", "o", "--site-id", "site-1", "--api-base", "http://x", "--no-provision"],
+    )
+
+    assert code == 0
+    assert out["skipped"] is True
     assert calls == []

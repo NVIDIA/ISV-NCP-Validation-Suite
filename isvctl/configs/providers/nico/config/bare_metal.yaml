@@ -18,7 +18,8 @@
 # Imports the provider-agnostic bare_metal contract and wires the NICo
 # hardware-lifecycle and inventory steps. NICo currently implements hardware
 # ingestion, DPU health, governance metrics, unified host-health, InfiniBand
-# fabric security, tenant-transition sanitization, attestation, and existing
+# fabric security, tenant-transition sanitization, attestation, break-fix
+# observability (with documented gaps for mutating workflows), and existing
 # instance inventory checks. Full lifecycle and SSH-host validations remain
 # excluded until those steps are wired for NICo.
 #
@@ -60,8 +61,11 @@
 #   - query_key_access.py reads the site's SSH Key Groups and serial-console
 #     configuration and reports whether a tenant-specified key can access
 #     out-of-band components; BmComponentKeyAccessCheck validates it (AUTH-XX-03).
-#     This is a read-only step (like the other checks here); the auto-provisioning
-#     variant that mints a throwaway key lives in the dedicated key_access.yaml.
+#     When no key group is synced to the site there is nothing to evidence access
+#     with, so the step mints a throwaway key, observes the access path it
+#     unlocks, and removes it again in the same process (create, test, remove).
+#     That is the only mutating step in this config; pass --no-provision to keep
+#     the run strictly read-only, at the cost of skipping AUTH-XX-03.
 #   - list_instances.py / describe_instance.py query existing instances;
 #     BmHostListedCheck and BmHostStateReportedCheck validate
 #     the JSON contract.
@@ -73,6 +77,7 @@
 #   - Expected machines pre-registered; machines ingested and DPUs initialized
 #   - NICO_ORGANIZATION and NICO_SITE_ID environment variables set
 #   - Optional NICO_INSTANCE_ID narrows inventory checks to a known instance
+#   - ssh-keygen on the host (used by query_key_access to mint the throwaway key)
 #
 # Usage:
 #   NICO_BEARER_TOKEN=<token> NICO_ORGANIZATION=<org-name> NICO_SITE_ID=<uuid> \
@@ -227,25 +232,6 @@ commands:
           - "{{nico_api_base}}"
         timeout: 120
 
-      # ─── Query Hardware Serial Numbers (BFX03-01) ──────────────────
-      # Reads each machine's discovered hardware metadata and reduces it to a
-      # per-component stable-identifier record (chassis / baseboard DMI serials,
-      # GPU serials, NIC MAC/GUID, CPU model). BmHardwareSerialCheck asserts a
-      # stable identifier is queryable for every present component so break/fix
-      # can identify installed hardware. Obfuscated-but-stable IDs are accepted.
-      - name: query_serial_numbers
-        phase: test
-        continue_on_failure: true
-        command: "python ../scripts/hardware_inventory/query_serial_numbers.py"
-        args:
-          - "--org"
-          - "{{org}}"
-          - "--site-id"
-          - "{{site_id}}"
-          - "--api-base"
-          - "{{nico_api_base}}"
-        timeout: 120
-
       # ─── Query Failure-Domain Topology (STG05-01) ──────────────────
       # Reads each machine's rack label and reduces it to a per-host
       # failure-domain identifier plus the distinct set of failure domains at
@@ -318,6 +304,181 @@ commands:
           - "{{nico_api_base}}"
         timeout: 120
 
+      # ─── Break-fix observability / lifecycle (BFX01–BFX06) ────────
+      # Read-only where NICo exposes signals; mutating actions and missing
+      # APIs emit structured skips with gap IDs (see scripts/breakfix/).
+      - name: query_serial_numbers
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/hardware_inventory/query_serial_numbers.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+        timeout: 120
+
+      - name: query_maintenance_events
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/query_maintenance_events.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+        timeout: 120
+
+      - name: query_retirement_notices
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/gap_stub.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+          - "--gap"
+          - "BFX02-02"
+        timeout: 120
+
+      - name: query_repair_history
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/query_repair_history.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+        timeout: 120
+
+      - name: query_switch_firmware
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/gap_stub.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+          - "--gap"
+          - "BFX03-02"
+        timeout: 120
+
+      - name: query_bmc_kernel_logs
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/query_bmc_kernel_logs.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+        timeout: 120
+
+      - name: return_node_maintenance
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/gap_stub.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+          - "--gap"
+          - "BFX01-02"
+        timeout: 600
+
+      - name: return_rack_maintenance
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/gap_stub.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+          - "--gap"
+          - "BFX01-03"
+        timeout: 600
+
+      - name: request_host_replacement
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/gap_stub.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+          - "--gap"
+          - "BFX01-05"
+        timeout: 900
+
+      - name: query_node_health_agents
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/gap_stub.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+          - "--gap"
+          - "BFX04-01"
+        timeout: 120
+
+      - name: query_planned_notifications
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/gap_stub.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+          - "--gap"
+          - "BFX05-01"
+        timeout: 120
+
+      - name: query_failure_notifications
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/gap_stub.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+          - "--gap"
+          - "BFX06-01"
+        timeout: 120
+
       # ─── Specified-Key Access (AUTH-XX-03) ──────────────────────────
       # Reads the site's SSH Key Groups and serial-console configuration from
       # the NICo API (/carbide/ segment, like the other NICo steps) and reports
@@ -325,6 +486,11 @@ commands:
       # console (SOL) is verifiable from the tenant API (provider-enabled +
       # SSH-key auth + key synced); network-device access is provider-managed
       # and reported as unverified. BmComponentKeyAccessCheck validates it.
+      #
+      # When the site has no key group synced, this mints a throwaway key,
+      # observes the access it unlocks, and removes it in a finally -- so the key
+      # cannot outlive the run even if the process exits early. The timeout
+      # covers a key-group sync poll (up to 180s) plus cleanup.
       - name: query_key_access
         phase: test
         continue_on_failure: true
@@ -336,7 +502,7 @@ commands:
           - "{{site_id}}"
           - "--api-base"
           - "{{nico_api_base}}"
-        timeout: 120
+        timeout: 420
 
       # ─── List Existing Instances ───────────────────────────────────
       # Lists instances visible to NICo at the configured site.
@@ -372,7 +538,7 @@ commands:
 
 tests:
   cluster_name: "nico-bare-metal-validation"
-  description: "Verify NICo bare-metal hardware ingestion, DPU health, governance, host health, and instance inventory"
+  description: "Verify NICo bare-metal hardware ingestion, DPU health, governance, host health, break-fix observability, and instance inventory"
 
   settings:
     org: "{{env.NICO_ORGANIZATION}}"

@@ -93,7 +93,11 @@ jobs:
       - name: Run TruffleHog Scan
         uses: NVIDIA/dsx-github-actions/.github/actions/trufflehog-scan@9a9ce3a7770a8b53d2726afa920be3276bc3ddd7
         with:
-          extra-args: "--results=verified,unknown --only-verified"
+          # Lob's key pattern is `test_` + 35 chars, so its verifier reports every
+          # 40-character pytest function name as a verified secret. Nothing here uses
+          # Lob (a postal mail API), so it can only produce false positives. Kept in
+          # sync with TRUFFLEHOG_EXCLUDE_DETECTORS in the Makefile.
+          extra-args: "--results=verified,unknown --only-verified --exclude-detectors=lob"
           post-pr-comment: "true"
           fail-on-findings: "true"
 

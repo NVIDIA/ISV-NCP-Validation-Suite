@@ -211,6 +211,105 @@ commands:
           - "{{steps.power_cycle_instance.public_ip}}"
         timeout: 60
 
+      # ─── Break-fix (BFX01–BFX06) demo stubs ───────────────────────
+      # Independent of the instance lifecycle fixture above; continue on
+      # failure so a missing break-fix API does not abort the phase.
+      - name: query_serial_numbers
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/query_serial_numbers.py"
+        args: ["--region", "{{region}}"]
+        timeout: 120
+
+      - name: query_switch_firmware
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/query_switch_firmware.py"
+        args: ["--region", "{{region}}"]
+        timeout: 120
+
+      - name: query_bmc_kernel_logs
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/query_bmc_kernel_logs.py"
+        args: ["--region", "{{region}}"]
+        timeout: 120
+
+      - name: query_maintenance_events
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/query_maintenance_events.py"
+        args: ["--region", "{{region}}"]
+        timeout: 120
+
+      - name: query_retirement_notices
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/query_retirement_notices.py"
+        args: ["--region", "{{region}}"]
+        timeout: 120
+
+      - name: query_repair_history
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/query_repair_history.py"
+        args: ["--region", "{{region}}"]
+        timeout: 120
+
+      - name: return_node_maintenance
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/return_node_maintenance.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--machine-id"
+          - "{{machine_id}}"
+        timeout: 600
+
+      - name: return_rack_maintenance
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/return_rack_maintenance.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--rack-id"
+          - "{{rack_id}}"
+        timeout: 600
+
+      - name: request_host_replacement
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/request_host_replacement.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--machine-id"
+          - "{{machine_id}}"
+        timeout: 900
+
+      - name: query_node_health_agents
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/query_node_health_agents.py"
+        args: ["--region", "{{region}}"]
+        timeout: 120
+
+      - name: query_planned_notifications
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/query_planned_notifications.py"
+        args: ["--region", "{{region}}"]
+        timeout: 120
+
+      - name: query_failure_notifications
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/query_failure_notifications.py"
+        args: ["--region", "{{region}}"]
+        timeout: 120
+
       # Skipped: deploy_nim / teardown_nim SSH into a real host to run
       # a NIM container. The dummy stubs can't satisfy them.
       - name: deploy_nim
@@ -273,6 +372,8 @@ tests:
   settings:
     region: "my-isv-region-1"
     instance_type: "my-isv.bm.gpu.8x"
+    machine_id: "demo-machine-001"
+    rack_id: "demo-rack-001"
 
   # Skip host checks that need a real SSH-reachable node. Real ISVs
   # remove this exclusion as their stubs come online.

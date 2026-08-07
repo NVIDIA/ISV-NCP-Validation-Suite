@@ -346,9 +346,11 @@ def test_output_dir_scaffold_runs_external_provider_script_imports(
     result = runner.invoke(main_app, ["provider", "scaffold", "acme", "--output-dir", str(target)])
     assert result.exit_code == 0
 
+    # The scaffold already ships a scripts/common/ package (see my-isv/scripts/common/),
+    # so this only adds the helper the generated script below imports.
     common_dir = target / "scripts" / "common"
-    common_dir.mkdir()
-    (common_dir / "__init__.py").write_text("", encoding="utf-8")
+    common_dir.mkdir(exist_ok=True)
+    (common_dir / "__init__.py").touch()
     (common_dir / "provider_ids.py").write_text(
         "def instance_id() -> str:\n    return 'acme-external-vm-0001'\n",
         encoding="utf-8",

@@ -1988,6 +1988,9 @@ domains:
             tests:
               - summary: Check that GPUd or Sentinel is running
                 priority: P1
+                labels:
+                  - bare_metal
+                  - breakfix
                 dependencies:
                   - LimitedEnv
                 req_id: BFX04
@@ -1997,6 +2000,9 @@ domains:
                 notes: ""
                 milestone: ""
               - summary: Verify that Tenants can be notified, by some communication system, of planned future node maintenance
+                labels:
+                  - bare_metal
+                  - breakfix
                 dependencies:
                   - LimitedEnv
                 req_id: BFX05
@@ -2007,6 +2013,9 @@ domains:
                 priority: ""
                 milestone: ""
               - summary: Verify that Tenants can be notified, by some communication system, of immediate node failure
+                labels:
+                  - bare_metal
+                  - breakfix
                 dependencies:
                   - LimitedEnv
                 req_id: BFX06
@@ -2020,6 +2029,8 @@ domains:
             tests:
               - summary: Reset GPUs on an individual node via the Breakfix API
                 labels:
+                  - breakfix
+                  - kubernetes
                   - min_req
                 priority: P2
                 milestone: M5
@@ -2031,6 +2042,8 @@ domains:
                 status: pending
               - summary: Return an individual node to the provider for maintenance via the API
                 labels:
+                  - bare_metal
+                  - breakfix
                   - min_req
                 priority: P1
                 milestone: M5
@@ -2042,6 +2055,8 @@ domains:
                 status: pending
               - summary: Return a rack to the provider for maintenance via the API
                 labels:
+                  - bare_metal
+                  - breakfix
                   - min_req
                 priority: P1
                 milestone: M5
@@ -2053,6 +2068,8 @@ domains:
                 status: pending
               - summary: Cordon a node (mark unschedulable); verify no new workloads are placed; verify existing workloads continue
                 labels:
+                  - breakfix
+                  - kubernetes
                   - min_req
                 priority: P1
                 milestone: M5
@@ -2064,6 +2081,8 @@ domains:
                 status: pending
               - summary: Request a host replacement when health thresholds are breached; verify the node is removed from the pool
                 labels:
+                  - bare_metal
+                  - breakfix
                   - min_req
                 priority: P1
                 milestone: M5
@@ -2077,6 +2096,8 @@ domains:
             tests:
               - summary: Query upcoming/current maintenance events for a node
                 labels:
+                  - bare_metal
+                  - breakfix
                   - min_req
                 priority: P1
                 milestone: M5
@@ -2088,6 +2109,8 @@ domains:
                 status: pending
               - summary: Query retirement notices for a node/rack
                 labels:
+                  - bare_metal
+                  - breakfix
                   - min_req
                 priority: P1
                 milestone: M5
@@ -2099,6 +2122,8 @@ domains:
                 status: pending
               - summary: Query historical repair status for a node
                 labels:
+                  - bare_metal
+                  - breakfix
                   - min_req
                 priority: P1
                 milestone: M5
@@ -2125,6 +2150,8 @@ domains:
                 status: pending
               - summary: Inspect firmware versions of NV switch trays
                 labels:
+                  - bare_metal
+                  - breakfix
                   - min_req
                 priority: P1
                 milestone: M5
@@ -2136,6 +2163,8 @@ domains:
                 status: pending
               - summary: Obtain BMC kernel log messages for a node
                 labels:
+                  - bare_metal
+                  - breakfix
                   - min_req
                 priority: P1
                 milestone: M5

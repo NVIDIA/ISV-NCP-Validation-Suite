@@ -675,19 +675,6 @@ tests:
           test_id: "SEC21-02"
           labels: ["bare_metal", "disk", "min_req", "sanitization", "security"]
 
-    # Hardware serial-number inventory (BFX03-01). Asserts a stable identifier
-    # is queryable for every present hardware component (chassis, baseboard, CPU,
-    # GPU, NIC) so break/fix can identify installed hardware. Obfuscated but
-    # stable IDs are accepted. Only runs for providers that implement the
-    # query_serial_numbers step.
-    hardware_serials:
-      step: query_serial_numbers
-      checks:
-        BmHardwareSerialCheck:
-          test_id: "BFX03-01"
-          labels: ["bare_metal", "breakfix", "min_req"]
-          min_machines: 1
-
     # Failure-domain topology observability (STG05-01). Asserts every host
     # reports the physical failure domain (rack/enclosure) it belongs to, so a
     # tenant can spread storage/compute across independent domains for physical
@@ -768,6 +755,97 @@ tests:
         BmComponentKeyAccessCheck:
           test_id: "AUTH03-01"
           labels: ["bare_metal", "iam", "security", "vm"]
+
+    # ─── Break-fix (BFX01–BFX06) ─────────────────────────────────────
+    # Bare-metal obligation for offtake Breakfix Requirements. Kubernetes-
+    # only actions (GPU reset, cordon) live in k8s.yaml.
+
+    hardware_serials:
+      step: query_serial_numbers
+      checks:
+        BmHardwareSerialCheck:
+          test_id: "BFX03-01"
+          labels: ["bare_metal", "breakfix", "min_req"]
+          min_machines: 1
+
+    switch_firmware:
+      step: query_switch_firmware
+      checks:
+        NvSwitchFirmwareCheck:
+          test_id: "BFX03-02"
+          labels: ["bare_metal", "breakfix", "min_req"]
+          min_trays: 1
+
+    bmc_kernel_logs:
+      step: query_bmc_kernel_logs
+      checks:
+        BmcKernelLogCheck:
+          test_id: "BFX03-03"
+          labels: ["bare_metal", "breakfix", "min_req"]
+          min_hosts: 1
+
+    maintenance_events:
+      step: query_maintenance_events
+      checks:
+        MaintenanceEventsCheck:
+          test_id: "BFX02-01"
+          labels: ["bare_metal", "breakfix", "min_req"]
+
+    retirement_notices:
+      step: query_retirement_notices
+      checks:
+        RetirementNoticesCheck:
+          test_id: "BFX02-02"
+          labels: ["bare_metal", "breakfix", "min_req"]
+
+    repair_history:
+      step: query_repair_history
+      checks:
+        RepairHistoryCheck:
+          test_id: "BFX02-03"
+          labels: ["bare_metal", "breakfix", "min_req"]
+
+    return_node_maintenance:
+      step: return_node_maintenance
+      checks:
+        ReturnNodeMaintenanceCheck:
+          test_id: "BFX01-02"
+          labels: ["bare_metal", "breakfix", "min_req"]
+
+    return_rack_maintenance:
+      step: return_rack_maintenance
+      checks:
+        ReturnRackMaintenanceCheck:
+          test_id: "BFX01-03"
+          labels: ["bare_metal", "breakfix", "min_req"]
+
+    host_replacement:
+      step: request_host_replacement
+      checks:
+        HostReplacementCheck:
+          test_id: "BFX01-05"
+          labels: ["bare_metal", "breakfix", "min_req"]
+
+    node_health_agents:
+      step: query_node_health_agents
+      checks:
+        NodeHealthAgentCheck:
+          test_id: "BFX04-01"
+          labels: ["bare_metal", "breakfix"]
+
+    planned_maintenance_notification:
+      step: query_planned_notifications
+      checks:
+        PlannedMaintenanceNotificationCheck:
+          test_id: "BFX05-01"
+          labels: ["bare_metal", "breakfix"]
+
+    failure_notification:
+      step: query_failure_notifications
+      checks:
+        FailureNotificationCheck:
+          test_id: "BFX06-01"
+          labels: ["bare_metal", "breakfix"]
 
   exclude:
     labels: []

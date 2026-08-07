@@ -222,9 +222,12 @@ def _volume_matches_quota(q: dict[str, Any], volume_id: str) -> bool:
         return False
     if str(q.get("id") or "") == volume_id:
         return True
-    qpath = _norm_path(q.get("path") or "")
-    if not qpath:
+    # Test the raw path before normalising: _norm_path("") becomes "/", which
+    # would otherwise match almost any absolute volume_id / CSI handle.
+    raw_path = (q.get("path") or "").strip("/")
+    if not raw_path:
         return False
+    qpath = _norm_path(raw_path)
     if qpath == _norm_path(volume_id):
         return True
     return volume_id.endswith(qpath) or qpath in volume_id
@@ -350,10 +353,10 @@ class VastApi(Implementation):
         """Aggregate hard limit and used capacity for all quotas under ``storage_path``.
 
         * If a quota exists at exactly ``storage_path``, its ``hard_limit``
-          is the tenant capacity ceiling.
-        * Otherwise the ceiling is the sum of all child-quota hard limits.
-        * Used bytes is always the sum of ``used_effective_capacity`` from
-          child quotas.
+          is the tenant capacity ceiling and its ``used_effective_capacity``
+          is the reported usage (covers the common single-root-quota layout).
+        * Otherwise the ceiling and usage are the sum of child-quota hard
+          limits / ``used_effective_capacity``.
         """
         resolved = self._resolve_tenant(req.tenant_id)
         quotas = self._list_quotas_all()
@@ -371,11 +374,11 @@ class VastApi(Implementation):
         if parent is not None:
             hard_limit_bytes = int(parent.get("hard_limit") or 0)
             name = str(parent.get("name") or storage_path)
+            used_bytes = int(parent.get("used_effective_capacity") or 0)
         else:
             hard_limit_bytes = sum(int(q.get("hard_limit") or 0) for q in children)
             name = f"VAST {storage_path}"
-
-        used_bytes = sum(int(q.get("used_effective_capacity") or 0) for q in children)
+            used_bytes = sum(int(q.get("used_effective_capacity") or 0) for q in children)
 
         return TenantQuota(
             tenant_id=resolved,

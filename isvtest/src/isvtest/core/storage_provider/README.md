@@ -10,7 +10,7 @@ provider's real backend — no Kubernetes, sidecar, or REST endpoint required.
 | ---                          | ---                                                                                                   |
 | **Source**                   | [`api.py`](./api.py) (contract) · [`mock.py`](./mock.py) (reference impl) · [`loader.py`](./loader.py) (shim discovery) |
 | **Contract reference**       | Per-method input/output, error conditions, and capability/qualifier semantics live as docstrings in [`api.py`](./api.py) |
-| **Manifest schema**          | [`isvctl/schemas/storage-provider-manifest.schema.json`](../../../../../isvctl/schemas/storage-provider-manifest.schema.json) |                     |
+| **Manifest schema**          | [`isvctl/schemas/storage-provider-manifest.schema.json`](../../../../../isvctl/schemas/storage-provider-manifest.schema.json) |
 
 ## Quickstart
 

@@ -18,8 +18,10 @@
 * `health_check` / `get_tenant_quota.hard_limit_bytes`
   via ``servicequotas:GetServiceQuota(ServiceCode="fsx", QuotaCode=...)``.
 * `get_tenant_quota.used_bytes` via ``fsx:DescribeFileSystems`` summed
-  ``StorageCapacity`` (matches ``storageRequested`` in
-  ``nv_storage_controller.go:reconcileStatus``).
+  ``StorageCapacity`` for filesystems matching ``FSX_DEPLOYMENT_TYPE``
+  (matches ``storageRequested`` in
+  ``nv_storage_controller.go:reconcileStatus``). When ``FSX_QUOTA_CODE``
+  overrides the quota code, usage still filters on ``FSX_DEPLOYMENT_TYPE``.
 * `list_volumes` via ``fsx:DescribeFileSystems``, one ``Volume`` per
   filesystem (``get_volume`` is served by the SDK base via ``list_volumes``).
 * `create_volume` / `delete_volume` are left unimplemented - the
@@ -282,6 +284,9 @@ class AwsFsxLustreApi(Implementation):
 
         used_bytes = 0
         for fs in self._iter_lustre_filesystems():
+            fs_deployment_type = (fs.get("LustreConfiguration") or {}).get("DeploymentType")
+            if fs_deployment_type and fs_deployment_type != self._deployment_type:
+                continue
             capacity_gib = fs.get("StorageCapacity") or 0
             used_bytes += int(capacity_gib) * GIB
 

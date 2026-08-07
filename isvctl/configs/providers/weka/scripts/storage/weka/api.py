@@ -795,7 +795,11 @@ class WekaApi(Implementation):
             )
             page = envelope.get("data")
             if page is None:
-                page = envelope.get("quotas") or envelope.get("results") or envelope
+                page = envelope.get("quotas") or envelope.get("results")
+                if page is None:
+                    raise StorageApiError(
+                        f"unexpected /fileSystems/{fs_uid}/quota response shape: keys={sorted(envelope)}"
+                    )
             if isinstance(page, dict):
                 page = [page]
             if not isinstance(page, list):
@@ -803,7 +807,7 @@ class WekaApi(Implementation):
             all_quotas.extend(page)
 
             next_token = envelope.get("next_token")
-            if not next_token:
+            if not next_token or (params is not None and str(next_token) == params.get("next_token")):
                 break
             params = {"next_token": str(next_token)}
 

@@ -27,10 +27,16 @@ rather than asserted. Identifiers present in the first poll but gone by the last
 are reported as unstable; capacity that *appears* mid-run is exactly what the
 index is for and is reported separately as new.
 
-The delivery reason is read from the record itself -- a well-known label or a
-free-text field. It is deliberately not inferred from lifecycle state: an
-inferred reason would let the check pass without the API ever stating why the
-capacity is being provided, which is the assertion CAP03 actually makes.
+The delivery reason is reported when the record states one, and is deliberately
+never inferred from lifecycle state -- an inferred reason would read as though
+the API had stated why the capacity is being provided when it had not.
+
+NICo has no dedicated delivery-reason field. The only free-text field on an
+expected machine is ``description``, and ``labels`` is an operator-controlled
+map with no key reserved for a reason. So the reason is best-effort context,
+not an API guarantee, and ``ResourceDiscoveryApiCheck`` reports it without
+gating on it. The assertion that does hold is the stable identifier: an
+expected machine's ``id`` is a server-assigned UUID.
 
 NICo API endpoints used:
   GET /v2/org/{org}/carbide/expected-machine?siteId={site_id}
@@ -56,7 +62,7 @@ Required JSON output fields:
         "resource_id": "...",
         "resource_type": "machine",
         "delivery_reason": "capacity fulfillment on gb300 project",
-        "delivery_reason_source": "label:DeliveryReason",
+        "delivery_reason_source": "field:description",
         "discovered": true
       }
     ]
@@ -73,7 +79,8 @@ Usage:
       uv run isvctl test run -f isvctl/configs/providers/nico/config/bare_metal.yaml
 
 Reference:
-    OpenAPI spec: rest-api/openapi/spec.yaml (ExpectedMachine schema)
+    NVIDIA/infra-controller: rest-api/api/pkg/api/model/expectedmachine.go
+    (APIExpectedMachine)
 """
 
 import argparse
@@ -89,11 +96,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from common.inventory import first_string
 from common.nico_client import NicoAuthError, forge_get_all, resolve_auth
 
-# Expected-machine label keys carrying the delivery reason, in priority order.
+# Operator-set label keys that may carry a delivery reason, in priority order.
+# NICo reserves no label key for this, so these are a convention a site may
+# adopt rather than anything the API guarantees.
 DELIVERY_REASON_LABEL_KEYS = ("DeliveryReason", "deliveryReason", "delivery_reason", "reason")
 
-# Expected-machine top-level fields carrying the delivery reason, in priority order.
-DELIVERY_REASON_FIELD_KEYS = ("deliveryReason", "reason", "description", "notes")
+# The only free-text field on an expected machine that can carry a reason.
+DELIVERY_REASON_FIELD_KEYS = ("description",)
 
 
 def delivery_reason(record: dict[str, Any]) -> tuple[str, str]:

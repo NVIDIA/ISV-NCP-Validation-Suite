@@ -595,10 +595,13 @@ tests:
           min_nodes: 1
 
     # Resource discovery API (CAP03-01): newly delivered capacity must be
-    # discoverable from a centralized index rather than handed over out of band.
-    # The step polls the index repeatedly so identifier stability is observed
-    # rather than asserted; min_polls is the floor that keeps a single-shot step
-    # from passing this vacuously. Only runs for providers that implement the
+    # discoverable from a centralized index rather than handed over out of band,
+    # and each entry must carry a stable identifier. The step polls the index
+    # repeatedly so identifier stability is observed rather than asserted;
+    # min_polls is the floor that keeps a single-shot step from passing this
+    # vacuously. A delivery reason is reported when the index states one but is
+    # not asserted -- no provider API is known to expose it as a dedicated
+    # field. Only runs for providers that implement the
     # query_resource_discovery step.
     resource_discovery:
       step: query_resource_discovery

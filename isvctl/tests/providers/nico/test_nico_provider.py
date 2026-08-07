@@ -1687,7 +1687,7 @@ def _fleet_machine(**overrides: Any) -> dict[str, Any]:
         "status": "InUse",
         "instanceId": "instance-1",
         "tenantId": "project-1",
-        "createdAt": "2026-01-02T03:04:05Z",
+        "created": "2026-01-02T03:04:05Z",
         "hwSkuDeviceType": "dgx-gb300",
         "machineCapabilities": [{"type": "GPU", "count": 8}],
         "health": {"observedAt": "2026-01-02T04:00:00Z", "successes": [{"id": "BmcSensor"}], "alerts": []},
@@ -1707,9 +1707,8 @@ def _run_fleet_inventory_script(
     module = _load_fleet_inventory_script()
     monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="test-token"))
     monkeypatch.setattr(module, "forge_get_all", lambda *args, **kwargs: machines)
-    monkeypatch.setattr(
-        module, "forge_get", lambda *args, **kwargs: site if site is not None else {"region": "us-west-1"}
-    )
+    default_site = {"name": "site-1", "location": {"city": "Santa Clara", "state": "CA", "country": "US"}}
+    monkeypatch.setattr(module, "forge_get", lambda *args, **kwargs: site if site is not None else default_site)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -1749,7 +1748,7 @@ def test_fleet_inventory_script_maps_every_required_field(
         "account_id": "test-org",
         "project_id": "project-1",
         "in_use": True,
-        "region": "us-west-1",
+        "region": "Santa Clara, CA, US",
     }
 
 
@@ -1772,14 +1771,14 @@ def test_fleet_inventory_script_falls_back_to_status_history_for_creation_time(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Without an explicit createdAt, the earliest lifecycle entry dates the node."""
+    """Without an explicit created stamp, the earliest lifecycle entry dates the node."""
     machine = _fleet_machine(
         statusHistory=[
             {"status": "InUse", "created": "2026-03-04T00:00:00Z"},
             {"status": "Ready", "created": "2026-01-05T00:00:00Z"},
         ],
     )
-    del machine["createdAt"]
+    del machine["created"]
 
     payload = _run_fleet_inventory_script(monkeypatch, capsys, machines=[machine])
 
@@ -1801,6 +1800,41 @@ def test_fleet_inventory_script_reports_idle_nodes_without_allocation(
     assert node["in_use"] is False
     assert node["instance_id"] == ""
     assert node["project_id"] == ""
+
+
+def test_fleet_inventory_script_leaves_region_empty_without_a_site_location(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A site with no location has no region to report, so CAP02 fails honestly.
+
+    NICo exposes no region field, and the site's name identifies the site
+    without saying where it is. Falling back to it would make the region
+    requirement impossible to fail.
+    """
+    payload = _run_fleet_inventory_script(monkeypatch, capsys, machines=[_fleet_machine()], site={"name": "site-1"})
+
+    assert payload["nodes"][0]["region"] == ""
+
+    check = FleetManagementApiCheck(config={"step_output": payload})
+    check.run()
+    assert check._passed is False
+    assert "missing region" in check._error
+
+
+def test_fleet_inventory_script_reports_a_partial_site_location(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A location with only some parts set still names a region."""
+    payload = _run_fleet_inventory_script(
+        monkeypatch,
+        capsys,
+        machines=[_fleet_machine()],
+        site={"name": "site-1", "location": {"country": "US"}},
+    )
+
+    assert payload["nodes"][0]["region"] == "US"
 
 
 def test_fleet_inventory_script_skips_a_site_with_no_machines(
@@ -1841,7 +1875,7 @@ def _expected_machine(**overrides: Any) -> dict[str, Any]:
     record: dict[str, Any] = {
         "id": "expected-machine-1",
         "machineId": "machine-1",
-        "labels": {"DeliveryReason": "capacity fulfillment on gb300 project"},
+        "description": "capacity fulfillment on gb300 project",
     }
     record.update(overrides)
     return record
@@ -1902,7 +1936,7 @@ def test_resource_discovery_script_polls_and_reports_stable_identifiers(
             "resource_id": "expected-machine-1",
             "resource_type": "machine",
             "delivery_reason": "capacity fulfillment on gb300 project",
-            "delivery_reason_source": "label:DeliveryReason",
+            "delivery_reason_source": "field:description",
             "discovered": True,
         }
     ]
@@ -1938,26 +1972,31 @@ def test_resource_discovery_script_treats_new_capacity_as_expected(
     assert payload["new_identifiers"] == ["expected-machine-2"]
 
 
-def test_resource_discovery_script_reads_the_reason_from_a_plain_field(
+def test_resource_discovery_script_prefers_an_operator_reason_label(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A record without a reason label may state the reason in a free-text field."""
-    record = _expected_machine(labels={}, reason="break-fix / RMA return to cluster")
+    """A site that adopts a reason label has it read ahead of the description."""
+    record = _expected_machine(labels={"DeliveryReason": "break-fix / RMA return to cluster"})
 
     payload = _run_resource_discovery_script(monkeypatch, capsys, polls=[[record], [record]])
 
     resource = payload["resources"][0]
     assert resource["delivery_reason"] == "break-fix / RMA return to cluster"
-    assert resource["delivery_reason_source"] == "field:reason"
+    assert resource["delivery_reason_source"] == "label:DeliveryReason"
 
 
 def test_resource_discovery_script_leaves_an_unstated_reason_empty(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A reason the API never states is reported as absent, not inferred."""
-    record = _expected_machine(labels={})
+    """A reason the API never states is reported as absent, not inferred.
+
+    NICo reserves no delivery-reason field, so an absent reason must not fail a
+    provider that meets CAP03's stable-identifier requirement.
+    """
+    record = _expected_machine()
+    del record["description"]
 
     payload = _run_resource_discovery_script(monkeypatch, capsys, polls=[[record], [record]])
 
@@ -1965,8 +2004,7 @@ def test_resource_discovery_script_leaves_an_unstated_reason_empty(
 
     check = ResourceDiscoveryApiCheck(config={"step_output": payload})
     check.run()
-    assert check._passed is False
-    assert "missing delivery_reason" in check._error
+    assert check._passed is True, check._error
 
 
 def test_resource_discovery_script_skips_an_empty_index(

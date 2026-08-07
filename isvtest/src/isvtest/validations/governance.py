@@ -23,7 +23,7 @@ Three provider-agnostic checks over the Capacity & Fleet Management APIs:
   complete per-node record (identity, health, allocation, hardware, region).
 - ``ResourceDiscoveryApiCheck`` (CAP03-01): newly delivered capacity is
   discoverable from a pollable index that gives each resource a stable
-  identifier and states why it is being delivered.
+  identifier.
 
 All three only inspect provider-neutral JSON produced by a step script, so any
 provider that emits the documented fields can reuse them.
@@ -356,12 +356,16 @@ class ResourceDiscoveryApiCheck(BaseValidation):
     """Validate newly delivered capacity is discoverable from a stable index.
 
     CAP03 rules out capacity being handed over by phone, Slack, or email: the
-    provider must expose a "Resource Index" that can be polled, gives each
-    resource a stable identifier, and says why the resource is being delivered.
-    This check asserts the index was polled more than once (so stability is
-    observed rather than asserted), that no identifier changed or disappeared
-    between the first and last poll, and that every entry carries a unique
-    identifier and a delivery reason.
+    provider must expose a "Resource Index" that can be polled and gives each
+    resource a stable identifier. This check asserts the index was polled more
+    than once (so stability is observed rather than asserted), that no
+    identifier changed or disappeared between the first and last poll, and that
+    every entry carries a unique, non-empty identifier.
+
+    ``delivery_reason`` is reported but not asserted. The plan item requires a
+    stable identifier; the reason a resource is being delivered is useful
+    context that no provider API is known to expose as a dedicated field, so
+    gating on it would fail providers that meet the requirement as written.
 
     Config:
         step_output: Step output containing the polled resource index.
@@ -380,13 +384,11 @@ class ResourceDiscoveryApiCheck(BaseValidation):
         resources_discovered: int
         resources: list[dict]:
             resource_id: str -- stable identifier for the delivered resource
-            resource_type: str -- e.g. "machine"
-            delivery_reason: str -- why the capacity is being provided
-            delivery_reason_source: str -- where the reason came from
-            discovered: bool -- whether the resource has been ingested yet
+            delivery_reason: str -- why the capacity is being provided, when the
+                index states one; reported only, never asserted
     """
 
-    description: ClassVar[str] = "Check newly delivered capacity is discoverable with stable identifiers and reasons"
+    description: ClassVar[str] = "Check newly delivered capacity is discoverable with stable resource identifiers"
     timeout: ClassVar[int] = 300
 
     def run(self) -> None:
@@ -450,30 +452,35 @@ class ResourceDiscoveryApiCheck(BaseValidation):
             return
 
         self.set_passed(
-            f"Resource index exposes {len(resources)} resource(s) with stable identifiers and delivery reasons "
-            f"across {polls} poll(s)"
+            f"Resource index exposes {len(resources)} resource(s) with stable identifiers across {polls} poll(s)"
         )
 
     def _incomplete_resources(self, resources: list[Any]) -> dict[str, str]:
-        """Return ``label -> reason`` for index entries missing required fields."""
+        """Return ``label -> reason`` for index entries with no stable identifier.
+
+        Also reports a subtest per entry, noting the delivery reason when the
+        index states one. An unstated reason is recorded as context, not a gap.
+        """
         incomplete: dict[str, str] = {}
         for index, resource in enumerate(resources):
             if not isinstance(resource, dict):
                 incomplete[f"resource[{index}]"] = "entry is not an object"
+                self.report_subtest(f"resource[{index}]", passed=False, message="Index entry is not an object")
                 continue
-            label = _text(resource, "resource_id") or f"resource[{index}]"
-            problems = [
-                f"missing {field}" for field in ("resource_id", "delivery_reason") if not _text(resource, field)
-            ]
+            identifier = _text(resource, "resource_id")
+            label = identifier or f"resource[{index}]"
+            reason = _text(resource, "delivery_reason")
             self.report_subtest(
                 f"resource_{label}",
-                passed=not problems,
+                passed=bool(identifier),
                 message=(
-                    f"Resource {label}: {'; '.join(problems)}"
-                    if problems
-                    else f"Resource {label}: delivered for {_text(resource, 'delivery_reason')}"
+                    f"Resource {label}: missing resource_id"
+                    if not identifier
+                    else f"Resource {label}: delivered for {reason}"
+                    if reason
+                    else f"Resource {label}: identified, no delivery reason stated"
                 ),
             )
-            if problems:
-                incomplete[label] = problems[0]
+            if not identifier:
+                incomplete[label] = "missing resource_id"
         return incomplete

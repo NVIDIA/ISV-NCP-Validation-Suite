@@ -460,13 +460,23 @@ class TestResourceDiscoveryApiCheck:
         assert check._passed is False
         assert "not stable across polls" in check._error
 
-    def test_missing_delivery_reason_fails(self) -> None:
-        """The index must say why the capacity is being provided."""
+    def test_missing_delivery_reason_is_reported_not_fatal(self) -> None:
+        """An unstated reason is context; the plan item requires the identifier."""
         output = _discovery_output(resources=[_resource(delivery_reason="")])
         check = ResourceDiscoveryApiCheck(config={"step_output": output})
         check.run()
+        assert check._passed is True, check._error
+        reported = next(r for r in check._subtest_results if r["name"] == "resource_expected-machine-1")
+        assert reported["passed"] is True
+        assert "no delivery reason stated" in reported["message"]
+
+    def test_missing_resource_id_fails(self) -> None:
+        """An entry with no identifier cannot be tracked across polls."""
+        output = _discovery_output(resources=[_resource(resource_id="")])
+        check = ResourceDiscoveryApiCheck(config={"step_output": output})
+        check.run()
         assert check._passed is False
-        assert "missing delivery_reason" in check._error
+        assert "missing resource_id" in check._error
 
     def test_duplicate_resource_ids_fail(self) -> None:
         """A stable identifier must identify exactly one delivered resource."""

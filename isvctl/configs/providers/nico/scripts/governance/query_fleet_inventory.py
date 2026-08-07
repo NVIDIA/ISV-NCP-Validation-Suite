@@ -25,13 +25,17 @@ maps them onto that provider-neutral contract:
                         a machine with no health report at all is reported as
                         "unknown" so an unclassified node is not silently passed
   Instance ID        <- machine.instanceId
-  Creation Timestamp <- machine.createdAt, else the earliest statusHistory entry
-  Hardware Type      <- machine.hwSkuDeviceType, else productName / machineType
+  Creation Timestamp <- machine.created, else the earliest statusHistory entry
+  Hardware Type      <- machine.hwSkuDeviceType, else productName
   GPU Count          <- machineCapabilities entries of type GPU
   Account/ID         <- the NGC org the API is queried as
   Project/ID         <- machine.tenantId
   In Use             <- machine.status == "InUse"
-  Region             <- the site's region/location (a NICo site is one data center)
+  Region             <- the site's location (city/state/country). NICo exposes no
+                        region field, and a site is a single data center, so its
+                        location is the region it sits in. Left empty when the
+                        site has no location, so CAP02 reports the gap instead of
+                        passing on a stand-in such as the site name.
 
 NICo API endpoints used:
   GET /v2/org/{org}/carbide/machine?siteId={site_id}
@@ -59,7 +63,7 @@ Required JSON output fields:
         "account_id": "my-org",
         "project_id": "...",
         "in_use": true,
-        "region": "us-west-1"
+        "region": "Santa Clara, CA, US"
       }
     ]
   }
@@ -75,7 +79,8 @@ Usage:
       uv run isvctl test run -f isvctl/configs/providers/nico/config/bare_metal.yaml
 
 Reference:
-    OpenAPI spec: rest-api/openapi/spec.yaml (Machine / Site schemas)
+    NVIDIA/infra-controller: rest-api/api/pkg/api/model/machine.go (APIMachine),
+    rest-api/api/pkg/api/model/site.go (APISite, APISiteLocation)
 """
 
 import argparse
@@ -94,15 +99,25 @@ from common.nico_client import NicoAuthError, forge_get, forge_get_all, resolve_
 IN_USE_STATUS = "InUse"
 
 # Machine fields carrying the hardware model descriptor, in priority order.
-HARDWARE_TYPE_KEYS = ("hwSkuDeviceType", "productName", "machineType")
+HARDWARE_TYPE_KEYS = ("hwSkuDeviceType", "productName")
 
-# Machine fields carrying the creation timestamp, in priority order.
-CREATED_AT_KEYS = ("createdAt", "created")
+# APISiteLocation fields, coarsest last, joined to name the region a site sits in.
+SITE_LOCATION_KEYS = ("city", "state", "country")
 
-# Site fields naming the data center's region, in priority order. A NICo site is
-# a single data center, so its region (or, failing that, its location or name)
-# is the region the nodes are deployed in.
-REGION_KEYS = ("region", "regionName", "location", "locationName", "name")
+
+def site_region(site: dict[str, Any]) -> str:
+    """Return the region a site's nodes are deployed in, or '' when unstated.
+
+    NICo has no region field; a site carries a structured location instead, and
+    a site is a single data center. Returning '' for a site with no location
+    lets CAP02 report the missing region rather than pass on the site's name,
+    which identifies the site but says nothing about where it is.
+    """
+    location = site.get("location")
+    if not isinstance(location, dict):
+        return ""
+    parts = [first_string(location, key) for key in SITE_LOCATION_KEYS]
+    return ", ".join(part for part in parts if part)
 
 
 def health_state(machine: dict[str, Any]) -> str:
@@ -125,7 +140,7 @@ def created_at(machine: dict[str, Any]) -> str:
     first observed the machine in a lifecycle state. ISO 8601 timestamps sort
     lexicographically, so ``min`` picks the earliest.
     """
-    explicit = first_string(machine, *CREATED_AT_KEYS)
+    explicit = first_string(machine, "created")
     if explicit:
         return explicit
 
@@ -190,7 +205,7 @@ def main() -> int:
             return 0
 
         site = forge_get(args.org, f"site/{args.site_id}", auth.token, base_url=args.api_base)
-        region = first_string(site, *REGION_KEYS)
+        region = site_region(site)
 
         result["nodes"] = [node_record(m, account_id=args.org, region=region) for m in machines]
         result["nodes_checked"] = len(result["nodes"])

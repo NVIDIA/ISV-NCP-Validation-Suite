@@ -35,9 +35,9 @@
 #     governance API must return; FleetManagementApiCheck verifies it (CAP02-01).
 #   - query_resource_discovery.py polls the expected-machine manifest, NICo's
 #     index of delivered capacity, so ResourceDiscoveryApiCheck can observe that
-#     each record's UUID is stable across polls (CAP03-01). A delivery reason is
-#     reported when the record states one (description, or an operator label),
-#     but NICo reserves no field for it so the check does not gate on it.
+#     each record's identifier is stable across polls (CAP03-01). A delivery
+#     reason is reported when the record states one (description, or an operator
+#     label), but NICo reserves no field for it so the check does not gate on it.
 #   - query_host_health.py reports each machine's health probes, alerts, and
 #     classifications; HostHealthCheck validates the per-host report is
 #     alert-free (CAP05-01). Leak detection (BmcLeakDetection/Leak) is included.

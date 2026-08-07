@@ -481,6 +481,19 @@ class TestResourceDiscoveryApiCheck:
         assert check._passed is False
         assert "at least 1 indexed resource" in check._error
 
+    def test_an_index_that_emptied_mid_run_names_the_vanished_identifiers(self) -> None:
+        """An emptied index trips the resource floor, but drift is the real cause.
+
+        Reporting only the count would read as though the site never had any
+        capacity, rather than that it lost what it had between polls.
+        """
+        output = _discovery_output(resources=[], unstable_identifiers=["expected-machine-1"])
+        check = ResourceDiscoveryApiCheck(config={"step_output": output})
+        check.run()
+        assert check._passed is False
+        assert "got 0" in check._error
+        assert "1 identifier(s) vanished across polls: expected-machine-1" in check._error
+
     def test_index_of_undiscovered_capacity_fails(self) -> None:
         """Listing capacity that was never ingested does not make it discoverable."""
         output = _discovery_output(resources=[_resource(discovered=False)])

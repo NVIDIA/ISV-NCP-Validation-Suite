@@ -388,8 +388,17 @@ class ResourceDiscoveryApiCheck(BaseValidation):
         if min_resources is None or min_polls is None:
             return
 
+        unstable = [str(i) for i in (step_output.get("unstable_identifiers") or [])]
+
         if len(resources) < min_resources:
-            self.set_failed(f"Expected at least {min_resources} indexed resource(s), got {len(resources)}")
+            # An index that emptied mid-run trips this floor too, so name the
+            # identifiers that went away; the count alone reads as though no
+            # capacity was ever delivered.
+            vanished = f"; {len(unstable)} identifier(s) vanished across polls: {', '.join(unstable)}"
+            self.set_failed(
+                f"Expected at least {min_resources} indexed resource(s), "
+                f"got {len(resources)}{vanished if unstable else ''}"
+            )
             return
 
         polls = step_output.get("polls")
@@ -402,7 +411,6 @@ class ResourceDiscoveryApiCheck(BaseValidation):
             message=f"Resource index polled {polls} time(s) every {step_output.get('poll_interval_seconds', '?')}s",
         )
 
-        unstable = [str(i) for i in (step_output.get("unstable_identifiers") or [])]
         self.report_subtest(
             "identifiers_stable",
             passed=not unstable,

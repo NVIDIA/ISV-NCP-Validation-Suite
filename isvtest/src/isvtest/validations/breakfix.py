@@ -278,7 +278,7 @@ class ReturnNodeMaintenanceCheck(_OperationCheck):
     """Validate returning an individual node for maintenance (BFX01-02).
 
     Step output:
-        success, operation: {requested, accepted, machine_id, maintenance_mode}
+        success, operation: {requested, accepted, machine_id, maintenance_mode, restored}
     """
 
     description: ClassVar[str] = "Return an individual node to the provider for maintenance via the API"
@@ -291,6 +291,26 @@ class ReturnNodeMaintenanceCheck(_OperationCheck):
     def _pass_message(self, label: str, operation: dict[str, Any]) -> str:
         """Report the maintenance mode the provider placed the node into."""
         return f"{super()._pass_message(label, operation)} (maintenance_mode={operation.get('maintenance_mode')})"
+
+    def run(self) -> None:
+        """Require evidence of the request, observed maintenance state, and restoration."""
+        step_output = _step_output(self)
+        if step_output is None:
+            return
+        operation = step_output.get("operation") or {}
+        if operation.get("requested") is not True:
+            self.set_failed("Node maintenance return was not requested")
+            return
+        if operation.get("accepted") is not True:
+            self.set_failed(operation.get("message") or self.failure_message)
+            return
+        if operation.get("maintenance_mode") != "Maintenance":
+            self.set_failed("Provider did not report the node in Maintenance")
+            return
+        if operation.get("restored") is not True:
+            self.set_failed("Provider did not restore the node after maintenance validation")
+            return
+        self.set_passed(self._pass_message(_record_label(operation, *self.label_keys), operation))
 
 
 class ReturnRackMaintenanceCheck(_OperationCheck):

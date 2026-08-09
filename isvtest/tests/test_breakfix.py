@@ -138,12 +138,33 @@ class TestOperationChecks:
         step_output = {"success": True, "operation": {"completed": True, "node_removed_from_pool": False}}
         assert not _run(HostReplacementCheck, step_output).passed
 
-    def test_node_maintenance_reports_mode(self) -> None:
-        """BFX01-02 appends the maintenance mode the provider placed the node into."""
-        step_output = {"success": True, "operation": {"accepted": True, "machine_id": "m-1", "maintenance_mode": "hw"}}
+    def test_node_maintenance_requires_complete_evidence(self) -> None:
+        """BFX01-02 passes only after the requested state was observed and restored."""
+        step_output = {
+            "success": True,
+            "operation": {
+                "requested": True,
+                "accepted": True,
+                "machine_id": "m-1",
+                "maintenance_mode": "Maintenance",
+                "restored": True,
+            },
+        }
         check = _run(ReturnNodeMaintenanceCheck, step_output)
         assert check.passed
-        assert "maintenance_mode=hw" in check.message
+        assert "maintenance_mode=Maintenance" in check.message
+
+    @pytest.mark.parametrize(
+        "operation",
+        [
+            {"accepted": True},
+            {"requested": True, "accepted": True, "maintenance_mode": "Ready", "restored": True},
+            {"requested": True, "accepted": True, "maintenance_mode": "Maintenance", "restored": False},
+        ],
+    )
+    def test_node_maintenance_rejects_incomplete_evidence(self, operation: dict[str, Any]) -> None:
+        """A provider's accepted flag alone cannot satisfy BFX01-02."""
+        assert not _run(ReturnNodeMaintenanceCheck, {"success": True, "operation": operation}).passed
 
 
 class TestNodeHealthAgentCheck:

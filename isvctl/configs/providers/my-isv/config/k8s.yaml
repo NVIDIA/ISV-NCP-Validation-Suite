@@ -70,7 +70,7 @@ commands:
         phase: test
         continue_on_failure: true
         command: "python ../scripts/breakfix/cordon_node.py"
-        args: ["--region={{region}}"]
+        args: ["--region", "{{region}}"]
         timeout: 600
 
 tests:

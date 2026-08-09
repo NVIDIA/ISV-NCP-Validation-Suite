@@ -295,7 +295,7 @@ volume. The three test-phase steps all reuse that fixture.
 | `setup` | setup | `providers/my-isv/scripts/k8s/setup.sh` |
 | `teardown` | teardown | `providers/my-isv/scripts/k8s/teardown.sh` |
 | `reset_gpus` | test | `providers/my-isv/scripts/breakfix/reset_gpus.py` (BFX01-01) |
-| `cordon_node` | test | `providers/my-isv/scripts/breakfix/cordon_node.py` (BFX01-04) |
+| `cordon_node` | test | `providers/my-isv/scripts/breakfix/cordon_node.py` template; `providers/shared/breakfix/cordon_node.py` Kubernetes reference used by Minikube (BFX01-04) |
 
 Validations use `kubectl` directly (or a custom CLI via the `KUBECTL` env var): node counts, GPU operator, pod health, NCCL/NIM workloads. Break-fix cordon and GPU reset are optional provider steps.
 

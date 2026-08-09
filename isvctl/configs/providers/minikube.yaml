@@ -21,11 +21,6 @@
 #   export ISVTEST_INCLUDE_UNRELEASED=1
 #   isvctl test run -f isvctl/configs/providers/minikube.yaml
 #   isvctl test run -f isvctl/configs/providers/minikube.yaml -- -v -s
-#
-# Run only the reversible cordon check against the current kubectl context
-# (including an existing DSX cluster) without Minikube setup or teardown:
-#   isvctl test run -f isvctl/configs/providers/minikube.yaml --phase test \
-#     --label breakfix -- -v -s -k CordonNodeCheck
 
 import: ../suites/k8s.yaml
 
@@ -39,11 +34,6 @@ commands:
         phase: setup
         command: "my-isv/scripts/k8s/setup_minikube.sh"
         timeout: 60
-      - name: cordon_node
-        phase: test
-        continue_on_failure: true
-        command: "python shared/breakfix/cordon_node.py"
-        timeout: 600
       - name: teardown
         phase: teardown
         command: "my-isv/scripts/k8s/teardown_minikube.sh"

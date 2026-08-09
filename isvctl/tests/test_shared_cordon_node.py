@@ -16,9 +16,21 @@ from typing import Any
 import pytest
 import yaml
 
+from isvctl.config.merger import merge_yaml_files
+from isvctl.config.schema import RunConfig
+from isvctl.orchestrator.context import Context
+from isvctl.orchestrator.step_executor import StepExecutor
+
 ISVCTL_ROOT = Path(__file__).resolve().parents[1]
 CORDON_SCRIPT = ISVCTL_ROOT / "configs" / "providers" / "shared" / "breakfix" / "cordon_node.py"
 MINIKUBE_CONFIG = ISVCTL_ROOT / "configs" / "providers" / "minikube.yaml"
+BREAKFIX_CONFIG = ISVCTL_ROOT / "configs" / "providers" / "kubernetes-breakfix.yaml"
+
+
+@pytest.fixture(autouse=True)
+def _allow_explicit_test_mutation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unit workflows opt in explicitly; production callers must do the same."""
+    monkeypatch.setenv("ISVTEST_BREAKFIX_ALLOW_MUTATION", "1")
 
 
 def _load_script() -> ModuleType:
@@ -90,15 +102,61 @@ def _patch_from_args(args: tuple[str, ...]) -> list[dict[str, Any]]:
     return json.loads(args[args.index("-p") + 1])
 
 
-def test_minikube_config_wires_the_shared_reference() -> None:
-    """Keep live cordon behavior out of the my-isv template."""
-    config = yaml.safe_load(MINIKUBE_CONFIG.read_text())
+def test_explicit_breakfix_config_wires_the_shared_reference() -> None:
+    """Keep the mutating reference behind an explicitly selected config."""
+    config = yaml.safe_load(BREAKFIX_CONFIG.read_text())
     steps = config["commands"]["kubernetes"]["steps"]
     cordon_step = next(step for step in steps if step["name"] == "cordon_node")
 
     assert cordon_step["command"] == "python shared/breakfix/cordon_node.py"
     assert cordon_step["phase"] == "test"
-    assert cordon_step["timeout"] == 600
+    assert cordon_step["timeout"] == 1200
+    assert cordon_step["requires_available_validations"] == ["CordonNodeCheck"]
+    assert cordon_step["args"] == ["--node={{ env.ISVTEST_BREAKFIX_NODE | default('', true) }}"]
+
+
+def test_empty_node_selection_renders_as_one_safe_argument(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Single-node runs must render ``--node=`` instead of a dangling flag."""
+    monkeypatch.delenv("ISVTEST_BREAKFIX_NODE", raising=False)
+    config = RunConfig.model_validate(merge_yaml_files([BREAKFIX_CONFIG]))
+    cordon_step = next(step for step in config.commands["kubernetes"].steps if step.name == "cordon_node")
+
+    rendered = StepExecutor()._render_args(cordon_step.args, Context(config))
+
+    assert rendered == ["--node="]
+
+
+def test_normal_minikube_config_never_runs_the_mutating_step() -> None:
+    """An ordinary Minikube validation must not cordon a node implicitly."""
+    config = yaml.safe_load(MINIKUBE_CONFIG.read_text())
+    steps = config["commands"]["kubernetes"]["steps"]
+
+    assert all(step["name"] != "cordon_node" for step in steps)
+
+
+def test_missing_mutation_opt_in_fails_before_kubectl(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Selecting the explicit config alone must not authorize a cluster mutation."""
+    module = _load_script()
+    monkeypatch.delenv(module.MUTATION_OPT_IN_ENV)
+    monkeypatch.setattr(sys, "argv", ["cordon_node.py"])
+    monkeypatch.setattr(
+        module,
+        "_kubectl_command",
+        lambda: pytest.fail("kubectl must not run without explicit mutation opt-in"),
+    )
+
+    assert module.main() == 1
+    result = json.loads(capsys.readouterr().out)
+
+    assert result["operation"] == {
+        "cordoned": False,
+        "new_workloads_blocked": False,
+        "existing_workloads_running": False,
+    }
+    assert "ISVTEST_BREAKFIX_ALLOW_MUTATION=1" in result["error"]
 
 
 def test_node_taints_are_tolerated_without_bypassing_cordon(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -121,6 +179,22 @@ def test_node_taints_are_tolerated_without_bypassing_cordon(monkeypatch: pytest.
     assert selection.tolerations == [
         {"key": "nvidia.com/gpu", "operator": "Equal", "value": "present", "effect": "NoSchedule"}
     ]
+
+
+def test_multiple_nodes_require_an_explicit_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Never choose a control-plane or shared-cluster node on the user's behalf."""
+    module = _load_script()
+    second = _node()
+    second["metadata"]["name"] = "worker-2"
+    second["metadata"]["labels"]["kubernetes.io/hostname"] = "worker-2-host"
+    monkeypatch.setattr(
+        module,
+        "_run",
+        lambda kubectl, *args, **kwargs: _completed(args, payload={"items": [_node(), second]}),
+    )
+
+    with pytest.raises(module.CordonTestError, match="pass --node with a dedicated test node"):
+        module._select_node(["kubectl"], None)
 
 
 def test_run_bounds_the_process_and_api_request(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -247,6 +321,52 @@ def test_claim_request_timeout_after_apply_recovers_verified_ownership(monkeypat
     )
 
 
+def test_unverified_claim_timeout_still_runs_conditional_cleanup(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A lost claim and verification response still retains a safe cleanup candidate."""
+    module = _load_script()
+    calls: list[tuple[str, ...]] = []
+    owner_token = ""
+    node_gets = 0
+
+    def fake_run(kubectl: list[str], *args: str, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        """Lose both claim responses, then let cleanup observe and release the claim."""
+        nonlocal node_gets, owner_token
+        calls.append(args)
+        if args[:4] == ("get", "nodes", "-o", "json"):
+            return _completed(args, payload={"items": [_node()]})
+        if args[:3] == ("patch", "node", "worker-1"):
+            patch = _patch_from_args(args)
+            owner_operation = next(
+                (operation for operation in patch if operation.get("path") == module.OWNER_ANNOTATION_PATH),
+                None,
+            )
+            if owner_operation and owner_operation["op"] == "add":
+                owner_token = owner_operation["value"]
+                raise module.KubectlTimeoutError("claim response timed out")
+            return _completed(args)
+        if args[:3] == ("get", "node", "worker-1"):
+            node_gets += 1
+            if node_gets == 1:
+                raise module.KubectlTimeoutError("claim verification timed out")
+            return _completed(args, payload=_node(unschedulable=True, resource_version="11", owner=owner_token))
+        return _completed(args)
+
+    monkeypatch.setattr(module, "_run", fake_run)
+    monkeypatch.setattr(module.uuid, "uuid4", lambda: type("Uuid", (), {"hex": "deadbeefcafebabe"})())
+    monkeypatch.setattr(sys, "argv", ["cordon_node.py", "--timeout-seconds", "1"])
+
+    assert module.main() == 1
+    result = json.loads(capsys.readouterr().out)
+
+    assert result["error"] == "claim response timed out"
+    patches = [_patch_from_args(call) for call in calls if call[:3] == ("patch", "node", "worker-1")]
+    assert len(patches) == 2
+    assert {"op": "replace", "path": "/spec/unschedulable", "value": False} in patches[1]
+
+
 def test_concurrent_claim_failure_never_uncordons(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -333,8 +453,8 @@ def test_cordon_workflow_proves_requirements_and_conditionally_restores_node(
     assert {"op": "test", "path": module.OWNER_ANNOTATION_PATH, "value": owner_token} in patches[1]
     assert {"op": "replace", "path": "/spec/unschedulable", "value": False} in patches[1]
     assert {"op": "remove", "path": module.OWNER_ANNOTATION_PATH} in patches[1]
-    assert [call[:3] for call in calls].count(("delete", "pod", "isvtest-bfx-existing-deadbeef")) == 1
-    assert [call[:3] for call in calls].count(("delete", "pod", "isvtest-bfx-blocked-deadbeef")) == 1
+    assert [call[:3] for call in calls].count(("delete", "pod", "isvtest-bfx-existing-deadbeefcafebabe")) == 1
+    assert [call[:3] for call in calls].count(("delete", "pod", "isvtest-bfx-blocked-deadbeefcafebabe")) == 1
 
 
 def test_changed_ownership_preserves_a_later_cordon(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -378,6 +498,35 @@ def test_release_timeout_after_apply_is_confirmed_by_reread(monkeypatch: pytest.
 
     module._release_node(["kubectl"], ownership)
 
+    assert [call[:3] for call in patch_calls] == [("patch", "node", "worker-1")]
+
+
+def test_release_retries_a_timed_out_state_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A transient cleanup GET timeout must not prevent conditional release."""
+    module = _load_script()
+    ownership = module.CordonOwnership("worker-1", "our-token")
+    get_calls = 0
+    patch_calls: list[tuple[str, ...]] = []
+
+    def fake_get_node(kubectl: list[str], node_name: str) -> dict[str, Any]:
+        """Fail the first read and return the owned state on retry."""
+        nonlocal get_calls
+        get_calls += 1
+        if get_calls == 1:
+            raise module.KubectlTimeoutError("cleanup state read timed out")
+        return _node(unschedulable=True, resource_version="10", owner="our-token")
+
+    def fake_run(kubectl: list[str], *args: str, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        """Accept the conditional release patch."""
+        patch_calls.append(args)
+        return _completed(args)
+
+    monkeypatch.setattr(module, "_get_node", fake_get_node)
+    monkeypatch.setattr(module, "_run", fake_run)
+
+    module._release_node(["kubectl"], ownership)
+
+    assert get_calls == 2
     assert [call[:3] for call in patch_calls] == [("patch", "node", "worker-1")]
 
 
@@ -425,7 +574,7 @@ def test_create_timeout_preregisters_probe_for_cleanup(
     result = json.loads(capsys.readouterr().out)
 
     assert result["error"] == "create response timed out"
-    assert ("delete", "pod", "isvtest-bfx-existing-deadbeef") in [call[:3] for call in calls]
+    assert ("delete", "pod", "isvtest-bfx-existing-deadbeefcafebabe") in [call[:3] for call in calls]
 
 
 def test_blocked_probe_create_timeout_preregisters_both_pods(
@@ -474,8 +623,8 @@ def test_blocked_probe_create_timeout_preregisters_both_pods(
     assert result["error"] == "blocked create response timed out"
     deleted_pods = [call[:3] for call in calls if call[:2] == ("delete", "pod")]
     assert deleted_pods == [
-        ("delete", "pod", "isvtest-bfx-existing-deadbeef"),
-        ("delete", "pod", "isvtest-bfx-blocked-deadbeef"),
+        ("delete", "pod", "isvtest-bfx-existing-deadbeefcafebabe"),
+        ("delete", "pod", "isvtest-bfx-blocked-deadbeefcafebabe"),
     ]
 
 

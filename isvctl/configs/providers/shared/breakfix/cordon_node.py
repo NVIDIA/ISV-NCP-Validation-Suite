@@ -22,6 +22,7 @@ DEFAULT_COMMAND_TIMEOUT_SECONDS = 30.0
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 15.0
 OWNER_ANNOTATION = "isvtest.nvidia.com/bfx01-04-owner"
 OWNER_ANNOTATION_PATH = "/metadata/annotations/isvtest.nvidia.com~1bfx01-04-owner"
+MUTATION_OPT_IN_ENV = "ISVTEST_BREAKFIX_ALLOW_MUTATION"
 UNCORDON_ATTEMPTS = 3
 
 
@@ -138,6 +139,8 @@ def _select_node(kubectl: list[str], requested_node: str | None) -> NodeSelectio
             raise CordonTestError(f"Requested node {requested_node!r} is not Ready, schedulable, and unclaimed")
     if not candidates:
         raise CordonTestError("No Ready, schedulable, unclaimed node is available for the cordon test")
+    if not requested_node and len(candidates) != 1:
+        raise CordonTestError("Multiple Ready, schedulable nodes are available; pass --node with a dedicated test node")
 
     node = candidates[0]
     metadata = node.get("metadata", {})
@@ -259,7 +262,11 @@ def _release_node(kubectl: list[str], ownership: CordonOwnership) -> None:
     """Conditionally uncordon a node only while this run still owns it."""
     last_error = "conditional patch did not succeed"
     for _ in range(UNCORDON_ATTEMPTS):
-        node = _get_node(kubectl, ownership.node_name)
+        try:
+            node = _get_node(kubectl, ownership.node_name)
+        except CordonTestError as exc:
+            last_error = str(exc)
+            continue
         metadata = node.get("metadata", {})
         spec = node.get("spec", {})
         annotations = metadata.get("annotations") or {}
@@ -440,11 +447,15 @@ def main() -> int:
     try:
         if args.timeout_seconds <= 0 or args.poll_interval_seconds <= 0:
             raise CordonTestError("Timeout and poll interval must be greater than zero")
+        if os.environ.get(MUTATION_OPT_IN_ENV) != "1":
+            raise CordonTestError(
+                f"Refusing to mutate cluster state; explicitly set {MUTATION_OPT_IN_ENV}=1 for BFX01-04"
+            )
         kubectl = _kubectl_command()
         selection = _select_node(kubectl, args.node)
         operation["node_id"] = selection.name
         run_id = uuid.uuid4().hex
-        suffix = run_id[:8]
+        suffix = run_id
         existing_pod = f"isvtest-bfx-existing-{suffix}"
         blocked_pod = f"isvtest-bfx-blocked-{suffix}"
 
@@ -477,7 +488,12 @@ def main() -> int:
         # Pod startup can take long enough for kubelet status updates to advance
         # resourceVersion. Refresh immediately before the conditional claim.
         claim_selection = _select_node(kubectl, selection.name)
-        ownership = _claim_node(kubectl, claim_selection, f"isvtest-bfx01-04-{run_id}")
+        # Retain a conditional cleanup candidate before issuing the PATCH. If
+        # the API commits the claim but both the PATCH response and immediate
+        # verification GET are lost, cleanup can later release the node only
+        # after observing this exact unique annotation.
+        ownership = CordonOwnership(selection.name, f"isvtest-bfx01-04-{run_id}")
+        _claim_node(kubectl, claim_selection, ownership.token)
         node = _get_node(kubectl, selection.name)
         operation["cordoned"] = node.get("spec", {}).get("unschedulable") is True and _owned_by(node, ownership.token)
         if not operation["cordoned"]:

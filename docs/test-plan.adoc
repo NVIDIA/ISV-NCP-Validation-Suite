@@ -2083,12 +2083,12 @@ a|
 | [[CAP02-01]]CAP02-01
 | CAP02
 | https://github.com/NVIDIA/ai-cloud-validation/issues/203[#203]
-|
+| bare_metal, governance, min_req
 |
 | P1
 a| https://github.com/NVIDIA/ai-cloud-validation/issues/203[#203]
 |
-|
+| M8
 |
 | Verify that fleet management API provides full set of information requested below: Node ID (Unique identifier for a GPU node) Health State (Healthy/Unhealthy classification) Instance ID (Identifier for virtual workload) Creation Timestamp (Time workload/node was created) Hardware Type (Descriptor for the hardware model) GPU Count (Number of GPUs per node) Top-levelAccount/ID (Identifier for the top-level organization/account) Sub-LevelProject/ID (Identifier for the nested project/sub-account) In Use (True/False status indicating if the GPU Node is turned on and in use) Region (Region of the data center where nodes are deployed)
 | approved
@@ -2097,12 +2097,12 @@ a| https://github.com/NVIDIA/ai-cloud-validation/issues/203[#203]
 | [[CAP03-01]]CAP03-01
 | CAP03
 | https://github.com/NVIDIA/ai-cloud-validation/issues/204[#204]
-|
+| bare_metal, governance, min_req
 |
 | P1
 a| https://github.com/NVIDIA/ai-cloud-validation/issues/204[#204]
 |
-|
+| M8
 |
 | Resource discovery API: newly delivered capacity must be discoverable. This "Resource Index" must provide a stable resource identifer.
 | approved

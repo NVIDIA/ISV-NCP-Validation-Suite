@@ -581,6 +581,37 @@ tests:
           labels: ["bare_metal", "governance", "min_req"]
           min_delivered_nodes: 1
 
+    # Fleet management API (CAP02-01): the resource governance API must return a
+    # complete record for every node -- identity, Healthy/Unhealthy
+    # classification, the workload it is running, creation time, hardware type,
+    # GPU count, owning account and project, in-use flag, and region. Only runs
+    # for providers that implement the query_fleet_inventory step.
+    fleet_inventory:
+      step: query_fleet_inventory
+      checks:
+        FleetManagementApiCheck:
+          test_id: "CAP02-01"
+          labels: ["bare_metal", "governance", "min_req"]
+          min_nodes: 1
+
+    # Resource discovery API (CAP03-01): newly delivered capacity must be
+    # discoverable from a centralized index rather than handed over out of band,
+    # and each entry must carry a stable identifier. The step polls the index
+    # repeatedly so identifier stability is observed rather than asserted;
+    # min_polls is the floor that keeps a single-shot step from passing this
+    # vacuously. A delivery reason is reported when the index states one but is
+    # not asserted -- no provider API is known to expose it as a dedicated
+    # field. Only runs for providers that implement the
+    # query_resource_discovery step.
+    resource_discovery:
+      step: query_resource_discovery
+      checks:
+        ResourceDiscoveryApiCheck:
+          test_id: "CAP03-01"
+          labels: ["bare_metal", "governance", "min_req"]
+          min_resources: 1
+          min_polls: 2
+
     # Per-host health API (CAP05-01). Asserts the API returns a report per host
     # and the host is alert-free. Only runs for providers that implement the
     # query_host_health step. fail_on_classifications is omitted so ANY alert

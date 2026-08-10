@@ -32,7 +32,11 @@ from urllib.parse import parse_qs
 
 import pytest
 from isvtest.validations.attestation import BmFirmwareAttestationCheck, BmNonceAttestationCheck
-from isvtest.validations.governance import GovernanceMetricsCheck
+from isvtest.validations.governance import (
+    FleetManagementApiCheck,
+    GovernanceMetricsCheck,
+    ResourceDiscoveryApiCheck,
+)
 from isvtest.validations.hardware import BmHardwareSerialCheck
 from isvtest.validations.health import HealthAggregationCheck, HostHealthCheck
 from isvtest.validations.infiniband import IbKeysConfiguredCheck, IbTenantIsolationCheck
@@ -150,6 +154,16 @@ def _load_governance_metrics_script() -> ModuleType:
     with _isolated_common_imports():
         spec.loader.exec_module(module)
     return module
+
+
+def _load_fleet_inventory_script() -> ModuleType:
+    """Load the query_fleet_inventory (CAP02-01) script for direct unit testing."""
+    return _load_nico_script("governance/query_fleet_inventory.py", "test_query_fleet_inventory")
+
+
+def _load_resource_discovery_script() -> ModuleType:
+    """Load the query_resource_discovery (CAP03-01) script for direct unit testing."""
+    return _load_nico_script("governance/query_resource_discovery.py", "test_query_resource_discovery")
 
 
 def _load_host_health_script() -> ModuleType:
@@ -424,6 +438,8 @@ def test_forge_post_rejects_non_json_success_body(monkeypatch: pytest.MonkeyPatc
         "verify_ingestion",
         "check_dpu_health",
         "query_governance_metrics",
+        "query_fleet_inventory",
+        "query_resource_discovery",
         "query_host_health",
         "query_health_aggregation",
         "query_attestation",
@@ -1064,6 +1080,8 @@ def test_nico_subnet_assignment_skips_when_site_has_no_vpcs(
         ("verify_ingestion.py", _load_ingestion_script),
         ("check_dpu_health.py", _load_dpu_health_script),
         ("query_metrics.py", _load_governance_metrics_script),
+        ("query_fleet_inventory.py", _load_fleet_inventory_script),
+        ("query_resource_discovery.py", _load_resource_discovery_script),
         ("query_host_health.py", _load_host_health_script),
         ("query_health_aggregation.py", _load_health_aggregation_script),
         ("query_attestation.py", _load_attestation_script),
@@ -1655,6 +1673,401 @@ def test_governance_script_output_satisfies_validation_contract(
     )
 
     check = GovernanceMetricsCheck(config={"step_output": payload})
+    check.run()
+    assert check._passed is True, check._error
+
+
+# ---------------------------------------------------------------------------
+# query_fleet_inventory (CAP02-01) script
+# ---------------------------------------------------------------------------
+
+
+def _fleet_machine(**overrides: Any) -> dict[str, Any]:
+    """Build a NICo machine payload carrying every field the CAP02 record needs."""
+    machine: dict[str, Any] = {
+        "id": "machine-1",
+        "status": "InUse",
+        "instanceId": "instance-1",
+        "tenantId": "project-1",
+        "created": "2026-01-02T03:04:05Z",
+        "hwSkuDeviceType": "dgx-gb300",
+        "machineCapabilities": [{"type": "GPU", "count": 8}],
+        "health": {"observedAt": "2026-01-02T04:00:00Z", "successes": [{"id": "BmcSensor"}], "alerts": []},
+    }
+    machine.update(overrides)
+    return machine
+
+
+def _run_fleet_inventory_script(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    *,
+    machines: list[dict[str, Any]],
+    site: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Drive the fleet inventory script with mocked auth/API and return its JSON."""
+    module = _load_fleet_inventory_script()
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="test-token"))
+    monkeypatch.setattr(module, "forge_get_all", lambda *args, **kwargs: machines)
+    default_site = {
+        "name": "site-1",
+        "org": "test-org",
+        "location": {"city": "Santa Clara", "state": "CA", "country": "US"},
+    }
+    monkeypatch.setattr(module, "forge_get", lambda *args, **kwargs: site if site is not None else default_site)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "query_fleet_inventory.py",
+            "--org",
+            "test-org",
+            "--site-id",
+            "site-1",
+            "--api-base",
+            "http://127.0.0.1:8080/v2/org",
+        ],
+    )
+
+    exit_code = module.main()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0, payload
+    return payload
+
+
+def test_fleet_inventory_script_maps_every_required_field(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Each machine maps onto the full CAP02 per-node record."""
+    payload = _run_fleet_inventory_script(monkeypatch, capsys, machines=[_fleet_machine()])
+
+    assert payload["nodes_checked"] == 1
+    assert payload["nodes"][0] == {
+        "node_id": "machine-1",
+        "health_state": "healthy",
+        "instance_id": "instance-1",
+        "created_at": "2026-01-02T03:04:05Z",
+        "hardware_type": "dgx-gb300",
+        "gpu_count": 8,
+        "account_id": "test-org",
+        "project_id": "project-1",
+        "in_use": True,
+        "region": "Santa Clara, CA, US",
+    }
+
+
+def test_fleet_inventory_script_reports_alerting_and_unclassified_hosts(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An alerting machine is unhealthy; one with no health report is unclassified."""
+    machines = [
+        _fleet_machine(id="alerting", health={"observedAt": "2026-01-02T04:00:00Z", "alerts": [{"id": "FanSpeed"}]}),
+        _fleet_machine(id="unreported", health={}),
+    ]
+
+    payload = _run_fleet_inventory_script(monkeypatch, capsys, machines=machines)
+
+    assert [n["health_state"] for n in payload["nodes"]] == ["unhealthy", "unknown"]
+
+
+def test_fleet_inventory_script_falls_back_to_status_history_for_creation_time(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Without an explicit created stamp, the earliest lifecycle entry dates the node."""
+    machine = _fleet_machine(
+        statusHistory=[
+            {"status": "InUse", "created": "2026-03-04T00:00:00Z"},
+            {"status": "Ready", "created": "2026-01-05T00:00:00Z"},
+        ],
+    )
+    del machine["created"]
+
+    payload = _run_fleet_inventory_script(monkeypatch, capsys, machines=[machine])
+
+    assert payload["nodes"][0]["created_at"] == "2026-01-05T00:00:00Z"
+
+
+def test_fleet_inventory_script_reports_idle_nodes_without_allocation(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A Ready machine is not in use and has no workload or project bound."""
+    machine = _fleet_machine(id="idle", status="Ready")
+    del machine["instanceId"]
+    del machine["tenantId"]
+
+    payload = _run_fleet_inventory_script(monkeypatch, capsys, machines=[machine])
+
+    node = payload["nodes"][0]
+    assert node["in_use"] is False
+    assert node["instance_id"] == ""
+    assert node["project_id"] == ""
+
+
+def test_fleet_inventory_script_leaves_region_empty_without_a_site_location(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A site with no location has no region to report, so CAP02 fails honestly.
+
+    NICo exposes no region field, and the site's name identifies the site
+    without saying where it is. Falling back to it would make the region
+    requirement impossible to fail.
+    """
+    payload = _run_fleet_inventory_script(
+        monkeypatch, capsys, machines=[_fleet_machine()], site={"name": "site-1", "org": "test-org"}
+    )
+
+    assert payload["nodes"][0]["region"] == ""
+
+    check = FleetManagementApiCheck(config={"step_output": payload})
+    check.run()
+    assert check._passed is False
+    assert "missing region" in check._error
+
+
+def test_fleet_inventory_script_reads_the_account_from_the_site_record(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The account is what the API reports, not the org we queried with.
+
+    Echoing back --org would make CAP02's account requirement impossible to
+    fail, since the argument is required and always non-empty.
+    """
+    payload = _run_fleet_inventory_script(
+        monkeypatch,
+        capsys,
+        machines=[_fleet_machine()],
+        site={"name": "site-1", "org": "reported-org", "location": {"country": "US"}},
+    )
+
+    assert payload["nodes"][0]["account_id"] == "reported-org"
+
+
+def test_fleet_inventory_script_leaves_account_empty_when_the_site_omits_org(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A site record with no org has no account to report, so CAP02 fails."""
+    payload = _run_fleet_inventory_script(
+        monkeypatch, capsys, machines=[_fleet_machine()], site={"name": "site-1", "location": {"country": "US"}}
+    )
+
+    assert payload["nodes"][0]["account_id"] == ""
+
+    check = FleetManagementApiCheck(config={"step_output": payload})
+    check.run()
+    assert check._passed is False
+    assert "missing account_id" in check._error
+
+
+def test_fleet_inventory_script_reports_a_partial_site_location(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A location with only some parts set still names a region."""
+    payload = _run_fleet_inventory_script(
+        monkeypatch,
+        capsys,
+        machines=[_fleet_machine()],
+        site={"name": "site-1", "location": {"country": "US"}},
+    )
+
+    assert payload["nodes"][0]["region"] == "US"
+
+
+def test_fleet_inventory_script_skips_a_site_with_no_machines(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A site with nothing ingested reports a structured skip, not a failure."""
+    payload = _run_fleet_inventory_script(monkeypatch, capsys, machines=[])
+
+    assert payload["success"] is True
+    assert payload["skipped"] is True
+    assert "No machines found" in payload["skip_reason"]
+
+
+def test_fleet_inventory_script_output_satisfies_validation_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """End-to-end: NICo fleet JSON should pass FleetManagementApiCheck."""
+    payload = _run_fleet_inventory_script(
+        monkeypatch,
+        capsys,
+        machines=[_fleet_machine(), _fleet_machine(id="machine-2", status="Ready", instanceId="", tenantId="")],
+    )
+
+    check = FleetManagementApiCheck(config={"step_output": payload})
+    check.run()
+    assert check._passed is True, check._error
+
+
+# ---------------------------------------------------------------------------
+# query_resource_discovery (CAP03-01) script
+# ---------------------------------------------------------------------------
+
+
+def _expected_machine(**overrides: Any) -> dict[str, Any]:
+    """Build a NICo expected-machine record for the resource discovery index."""
+    record: dict[str, Any] = {
+        "id": "expected-machine-1",
+        "machineId": "machine-1",
+        "description": "capacity fulfillment on gb300 project",
+    }
+    record.update(overrides)
+    return record
+
+
+def _run_resource_discovery_script(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    *,
+    polls: list[list[dict[str, Any]]],
+) -> dict[str, Any]:
+    """Drive the discovery script so each API call returns the next poll's index."""
+    module = _load_resource_discovery_script()
+    responses = iter(polls)
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="test-token"))
+    monkeypatch.setattr(module, "forge_get_all", lambda *args, **kwargs: next(responses))
+    # Keep the inter-poll delay out of the test's runtime.
+    monkeypatch.setattr(module.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "query_resource_discovery.py",
+            "--org",
+            "test-org",
+            "--site-id",
+            "site-1",
+            "--api-base",
+            "http://127.0.0.1:8080/v2/org",
+            "--polls",
+            str(len(polls)),
+            "--poll-interval",
+            "0",
+        ],
+    )
+
+    exit_code = module.main()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0, payload
+    return payload
+
+
+def test_resource_discovery_script_polls_and_reports_stable_identifiers(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An index that returns the same identifiers on every poll is stable."""
+    index = [_expected_machine()]
+
+    payload = _run_resource_discovery_script(monkeypatch, capsys, polls=[index, index])
+
+    assert payload["polls"] == 2
+    assert payload["unstable_identifiers"] == []
+    assert payload["resources"] == [
+        {
+            "resource_id": "expected-machine-1",
+            "delivery_reason": "capacity fulfillment on gb300 project",
+            "discovered": True,
+        }
+    ]
+
+
+def test_resource_discovery_script_flags_a_vanished_identifier(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An identifier present in the first poll but not the last is not stable."""
+    payload = _run_resource_discovery_script(
+        monkeypatch,
+        capsys,
+        polls=[[_expected_machine(), _expected_machine(id="expected-machine-2")], [_expected_machine()]],
+    )
+
+    assert payload["unstable_identifiers"] == ["expected-machine-2"]
+
+
+def test_resource_discovery_script_treats_new_capacity_as_expected(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Capacity appearing mid-run is what the index is for, not identifier drift."""
+    payload = _run_resource_discovery_script(
+        monkeypatch,
+        capsys,
+        polls=[[_expected_machine()], [_expected_machine(), _expected_machine(id="expected-machine-2")]],
+    )
+
+    assert payload["unstable_identifiers"] == []
+    assert [r["resource_id"] for r in payload["resources"]] == ["expected-machine-1", "expected-machine-2"]
+
+
+def test_resource_discovery_script_prefers_an_operator_reason_label(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A site that adopts a reason label has it read ahead of the description."""
+    record = _expected_machine(labels={"DeliveryReason": "break-fix / RMA return to cluster"})
+
+    payload = _run_resource_discovery_script(monkeypatch, capsys, polls=[[record], [record]])
+
+    resource = payload["resources"][0]
+    assert resource["delivery_reason"] == "break-fix / RMA return to cluster"
+
+
+def test_resource_discovery_script_leaves_an_unstated_reason_empty(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A reason the API never states is reported as absent, not inferred.
+
+    NICo reserves no delivery-reason field, so an absent reason must not fail a
+    provider that meets CAP03's stable-identifier requirement.
+    """
+    record = _expected_machine()
+    del record["description"]
+
+    payload = _run_resource_discovery_script(monkeypatch, capsys, polls=[[record], [record]])
+
+    assert payload["resources"][0]["delivery_reason"] == ""
+
+    check = ResourceDiscoveryApiCheck(config={"step_output": payload})
+    check.run()
+    assert check._passed is True, check._error
+
+
+def test_resource_discovery_script_skips_an_empty_index(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A site with no registered capacity reports a structured skip."""
+    payload = _run_resource_discovery_script(monkeypatch, capsys, polls=[[], []])
+
+    assert payload["success"] is True
+    assert payload["skipped"] is True
+    assert "Resource index is empty" in payload["skip_reason"]
+
+
+def test_resource_discovery_script_output_satisfies_validation_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """End-to-end: NICo discovery JSON should pass ResourceDiscoveryApiCheck."""
+    index = [_expected_machine(), _expected_machine(id="expected-machine-2", machineId=None)]
+
+    payload = _run_resource_discovery_script(monkeypatch, capsys, polls=[index, index])
+
+    check = ResourceDiscoveryApiCheck(config={"step_output": payload})
     check.run()
     assert check._passed is True, check._error
 

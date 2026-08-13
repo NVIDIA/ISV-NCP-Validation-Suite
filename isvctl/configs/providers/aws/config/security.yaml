@@ -38,7 +38,7 @@
 #  10. KMS Options             - Verify provider- and customer-managed keys (SEC09-02)
 #  11. Centralized KMS         - Verify encrypted resources resolve to KMS (SEC09-03)
 #  12. Customer Managed Key    - Verify customer-managed key encryption (SEC09-04)
-#  13. Least Privilege         - Verify scoped user/resource/network policies (SEC04-01/02)
+#  13. Least Privilege         - Verify scoped user/resource policies (SEC04-01/02)
 #  14. Audit Logging           - Verify management-event logging and retention (SEC08-01/02)
 #  15. SA Credential Auth      - Verify IAM user + long-lived access key auth
 #  16. OIDC User Auth          - Probe configured OIDC-protected platform endpoint (SEC01-01)
@@ -175,8 +175,8 @@ commands:
       # Test 12: Least-Privilege Policy + Minimal Role Enforcement (SEC04-01/02)
       # Self-contained: provisions a temporary IAM user, two tagged buckets, and a minimal
       # VPC/subnet/security-group/instance fixture for EC2 DryRun probes. It attaches one
-      # inline policy scoped by identity, resource, and aws:SourceIp, then verifies the
-      # allowed S3 ListBucket path plus denied out-of-scope compute/storage/network API
+      # inline policy scoped by identity and resource, then verifies the allowed S3
+      # ListBucket path plus denied out-of-scope compute/storage/network API
       # probes. Cleans up the user, access key, inline policy, buckets, object, and EC2
       # fixture in a finally block.
       #

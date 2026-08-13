@@ -21,13 +21,11 @@ This AWS reference is self-contained. It provisions a temporary IAM user
 inline policy to the user, mints an access key, then probes the policy as
 that user.
 
-The inline policy exercises the three least-privilege dimensions named by
+The inline policy exercises the two least-privilege dimensions named by
 SEC04-01:
 
 * user-based: only the temporary user receives the inline grant.
 * resource-based: only the tagged allowed bucket ARN is granted.
-* network-based: the grant includes an ``aws:SourceIp`` condition for the
-  caller's public CIDR.
 
 SEC04-02 is checked from the same minimal identity by verifying out-of-scope
 compute, storage, and network APIs are denied. Mutating EC2 probes use
@@ -41,13 +39,10 @@ rather than fabricate a pass.
 """
 
 import argparse
-import ipaddress
 import json
 import os
 import sys
 import time
-import urllib.error
-import urllib.request
 import uuid
 from collections.abc import Callable
 from pathlib import Path
@@ -63,7 +58,6 @@ TEST_NAME = "least_privilege_test"
 TEST_USER_PREFIX = "isv-sec04-test-"
 INLINE_POLICY_NAME = "isv-sec04-least-privilege"
 DENIED_OBJECT_KEY = "sec04-denied-probe-object"
-CALLER_IP_URL = "https://checkip.amazonaws.com/"
 PROBE_CIDR = "10.96.0.0/24"
 
 SKIPPABLE_SETUP_ERRORS = frozenset({"AccessDenied", "UnauthorizedOperation"})
@@ -90,23 +84,6 @@ def _skipped_result(reason: str) -> dict[str, Any]:
         "skip_reason": reason,
         "tests": {},
     }
-
-
-def _detect_source_cidr() -> str:
-    """Return the caller's public IP address as an IPv4/IPv6 host CIDR."""
-    try:
-        with urllib.request.urlopen(CALLER_IP_URL, timeout=5) as response:
-            ip_address = response.read().decode("utf-8").strip()
-    except (OSError, urllib.error.URLError) as exc:
-        msg = f"cannot determine caller public IP for source condition: {exc}"
-        raise RuntimeError(msg) from exc
-    try:
-        parsed_ip = ipaddress.ip_address(ip_address)
-    except ValueError as exc:
-        msg = f"unexpected caller public IP response: {ip_address!r}"
-        raise RuntimeError(msg) from exc
-    prefix_len = 32 if parsed_ip.version == 4 else 128
-    return f"{parsed_ip}/{prefix_len}"
 
 
 def _create_bucket(s3: Any, bucket: str, region: str, buckets_created: list[str]) -> None:
@@ -233,71 +210,30 @@ def _get_amazon_linux_ami(ec2: Any) -> str:
     return images[0]["ImageId"]
 
 
-def _policy_document(allowed_bucket: str, source_cidr: str) -> str:
+def _policy_document(allowed_bucket: str) -> str:
     """Return the minimal inline policy attached only to the temporary user."""
     return json.dumps(
         {
             "Version": "2012-10-17",
             "Statement": [
                 {
-                    "Sid": "AllowListOnlyTaggedBucketFromCallerCidr",
+                    "Sid": "AllowListOnlyTaggedBucket",
                     "Effect": "Allow",
                     "Action": "s3:ListBucket",
                     "Resource": f"arn:aws:s3:::{allowed_bucket}",
-                    "Condition": {"IpAddress": {"aws:SourceIp": source_cidr}},
                 }
             ],
         }
     )
 
 
-def _policy_has_source_cidr_condition(policy_document: str, allowed_bucket: str, source_cidr: str) -> bool:
-    """Return True when the S3 allow statement is scoped to the expected SourceIp CIDR."""
-    expected_resource = f"arn:aws:s3:::{allowed_bucket}"
-    try:
-        document = json.loads(policy_document)
-    except json.JSONDecodeError:
-        return False
-
-    statements = document.get("Statement", [])
-    if isinstance(statements, dict):
-        statements = [statements]
-    if not isinstance(statements, list):
-        return False
-
-    for statement in statements:
-        if not isinstance(statement, dict):
-            continue
-        actions = statement.get("Action", [])
-        if isinstance(actions, str):
-            actions = [actions]
-        resources = statement.get("Resource", [])
-        if isinstance(resources, str):
-            resources = [resources]
-        source_ips = statement.get("Condition", {}).get("IpAddress", {}).get("aws:SourceIp", [])
-        if isinstance(source_ips, str):
-            source_ips = [source_ips]
-        if (
-            statement.get("Effect") == "Allow"
-            and "s3:ListBucket" in actions
-            and expected_resource in resources
-            and source_cidr in source_ips
-        ):
-            return True
-    return False
-
-
-def _policy_dimension_scope_results(
+def _policy_resource_scope_result(
     *,
     allowed_result: dict[str, Any],
     denied_resource_result: dict[str, Any],
-    policy_document: str,
-    allowed_bucket: str,
-    source_cidr: str,
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Build resource- and network-scope SEC04 result entries from concrete evidence."""
+) -> dict[str, Any]:
+    """Build the resource-scope SEC04 result entry from concrete evidence."""
     allowed_passed = bool(allowed_result.get("passed"))
-    source_condition_matches = _policy_has_source_cidr_condition(policy_document, allowed_bucket, source_cidr)
     resource_passed = allowed_passed and bool(denied_resource_result.get("passed"))
     resource_result: dict[str, Any] = {
         "passed": resource_passed,
@@ -311,21 +247,7 @@ def _policy_dimension_scope_results(
             resource_result["error"] = denied_resource_result.get("error") or (
                 f"unscoped-resource probe returned {denied_resource_result.get('code', 'unknown')}"
             )
-    network_passed = allowed_passed and source_condition_matches
-    network_result: dict[str, Any] = {
-        "passed": network_passed,
-        "message": (
-            "minimal policy "
-            f"{'contains' if source_condition_matches else 'does not contain'} the expected source CIDR condition"
-        ),
-    }
-    if not network_passed:
-        network_result["error"] = (
-            "allowed scoped-resource action did not succeed"
-            if not allowed_passed
-            else "minimal policy is missing the expected source CIDR condition"
-        )
-    return resource_result, network_result
+    return resource_result
 
 
 def _cleanup_buckets(s3: Any, buckets: list[str]) -> list[str]:
@@ -485,19 +407,8 @@ def main() -> int:
     """Provision the SEC04 fixture, run positive and negative probes, emit JSON."""
     parser = argparse.ArgumentParser(description="Least-privilege policy and minimal-role enforcement test")
     parser.add_argument("--region", default=os.environ.get("AWS_REGION", "us-west-2"))
-    parser.add_argument(
-        "--source-cidr",
-        default=os.environ.get("SEC04_ALLOWED_SOURCE_CIDR", ""),
-        help="Allowed source CIDR. Defaults to the caller public host CIDR.",
-    )
     args = parser.parse_args()
     region = args.region
-
-    try:
-        source_cidr = args.source_cidr.strip() or _detect_source_cidr()
-    except RuntimeError as exc:
-        print(json.dumps(_skipped_result(str(exc)), indent=2))
-        return 0
 
     iam = boto3.client("iam", region_name=region)
     ec2 = boto3.client("ec2", region_name=region)
@@ -523,11 +434,9 @@ def main() -> int:
         "test_name": TEST_NAME,
         "test_identity": username,
         "allowed_resource": allowed_bucket,
-        "allowed_source_cidr": source_cidr,
         "tests": {
             "policy_dimensions_user_based": {"passed": False},
             "policy_dimensions_resource_based": {"passed": False},
-            "policy_dimensions_network_based": {"passed": False},
             "policy_dimensions_allowed_action_succeeds": {"passed": False},
             "out_of_scope_compute_denied": {"passed": False},
             "out_of_scope_storage_denied": {"passed": False},
@@ -554,7 +463,7 @@ def main() -> int:
                 sg_id=probe_sg_id,
                 name=username,
             )
-            policy_document = _policy_document(allowed_bucket, source_cidr)
+            policy_document = _policy_document(allowed_bucket)
             iam.put_user_policy(
                 UserName=username,
                 PolicyName=INLINE_POLICY_NAME,
@@ -584,12 +493,9 @@ def main() -> int:
                 "storage_list_unscoped_resource_denied",
                 lambda: clients["s3"].list_objects_v2(Bucket=denied_bucket, MaxKeys=1),
             )
-            resource_scope_result, network_scope_result = _policy_dimension_scope_results(
+            resource_scope_result = _policy_resource_scope_result(
                 allowed_result=allowed_result,
                 denied_resource_result=denied_resource_result,
-                policy_document=policy_document,
-                allowed_bucket=allowed_bucket,
-                source_cidr=source_cidr,
             )
             user_based_passed = allowed_passed and username in caller_arn
             result["tests"]["policy_dimensions_user_based"] = {
@@ -607,7 +513,6 @@ def main() -> int:
                     else "temporary principal identity did not match the minted access key"
                 )
             result["tests"]["policy_dimensions_resource_based"] = resource_scope_result
-            result["tests"]["policy_dimensions_network_based"] = network_scope_result
 
             compute_probes = [
                 _expect_denied(

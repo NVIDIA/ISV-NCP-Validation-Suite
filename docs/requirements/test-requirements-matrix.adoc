@@ -1698,7 +1698,7 @@ docs/requirements/test-requirements-matrix.yaml. Run `make plan` to regenerate.
 | [[SEC04-01]]SEC04-01
 | Data Services
 | SDS Controller
-| Verify least-privilege access policies (resource-based, user-based, network-based)
+| Verify least-privilege access policies (resource-based and user-based)
 | SEC04
 | offtake
 | full

@@ -2649,7 +2649,7 @@ a| icon:exclamation-circle[role=red] https://github.com/NVIDIA/ISV-NCP-Validatio
 |
 | M5
 |
-| Verify least-privilege access policies (resource-based, user-based, network-based)
+| Verify least-privilege access policies (resource-based and user-based)
 | pending
 |
 

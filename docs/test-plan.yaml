@@ -2037,7 +2037,7 @@ domains:
                 status: pending
           - description: Storage Security
             tests:
-              - summary: Verify least-privilege access policies (resource-based, user-based, network-based)
+              - summary: Verify least-privilege access policies (resource-based and user-based)
                 labels:
                   - min_req
                 priority: P1

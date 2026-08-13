@@ -98,15 +98,17 @@ providers:
 
     # Optional L2 semantic facts (ProviderProperties capability qualifiers).
     # WEKA mints directory-quota ids (quota_id), so id_assignment is `backend`
-    # and set_directory_quota requires a path. Byte-only quotas are set on the
-    # shim's capability_qualifiers() hook.
+    # and set_directory_quota requires a path. Quotas are byte-only (no inode
+    # enforcement); mirrors the shim's capability_qualifiers() hook.
     capability_qualifiers:
       quota.directory:
         idAssignment: backend
+        inodes: "false"
       quota.user:
         # WEKA addresses one uid per call; there is no filesystem-wide
         # default-user slot, so user=None is refused.
         defaultUserSlot: "false"
+        inodes: "false"
 
     # Attributes are arbitrary fields about the provider's configuration that can be
     # used as values in testing.

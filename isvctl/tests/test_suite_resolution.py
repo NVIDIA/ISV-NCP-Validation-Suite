@@ -64,12 +64,11 @@ def test_capability_uses_catalog_vocabulary(tmp_path: Path) -> None:
         parse_capability("kubernetes,vm", tmp_path)
 
 
-def test_platform_suites_reject_requires_and_unknown_platforms() -> None:
-    """Platform placement is its obligation; it cannot declare check requirements."""
+def test_platform_suites_accept_imported_requires_and_reject_unknown_platforms() -> None:
+    """Provider platform configs may import plain-suite checks carrying requirements."""
     validation = {"sample": {"checks": {"PlainCheck": {"requires": []}}}}
 
-    with pytest.raises(ValidationError, match="requires is not allowed in platform suites"):
-        RunConfig.model_validate({"tests": {"capability": "kubernetes", "validations": validation}})
+    RunConfig.model_validate({"tests": {"capability": "kubernetes", "validations": validation}})
     with pytest.raises(ValidationError, match=r"tests\.capability must be one of"):
         RunConfig.model_validate({"tests": {"capability": "compute", "validations": {}}})
     with pytest.raises(ValidationError, match=r"tests\.capability must be one of"):

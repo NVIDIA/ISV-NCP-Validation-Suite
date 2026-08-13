@@ -471,11 +471,11 @@ tests:
         assert "[SKIP] VmCheck" in output
 
 
-def test_platform_suite_keeps_the_unfiltered_context(
+def test_platform_suite_uses_declared_capability_context(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """Platform suites declare no requires, so the core default must not apply."""
+    """Platform suites filter imported requirement metadata using their declaration."""
     configs_root = tmp_path / "configs"
     suites = configs_root / "suites"
     suites.mkdir(parents=True)
@@ -489,6 +489,10 @@ tests:
         PlatformCheck:
           test_id: "N/A"
           labels: ["vm"]
+        K8sImportedCheck:
+          test_id: "N/A"
+          labels: ["kubernetes"]
+          requires: [kubernetes]
 """,
         encoding="utf-8",
     )
@@ -501,8 +505,9 @@ tests:
     )
 
     assert result.exit_code == 0, result.output
-    assert "Capability: not filtered" in result.stdout
+    assert "Capability: vm" in result.stdout
     assert "[RUN]  PlatformCheck" in result.stdout
+    assert "[SKIP] K8sImportedCheck: requires kubernetes (context: vm)" in result.stdout
 
 
 def test_platform_suite_rejects_explicit_capability(

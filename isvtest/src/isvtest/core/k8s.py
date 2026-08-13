@@ -22,6 +22,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import tempfile
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -54,6 +55,64 @@ TERMINAL_WAITING_REASONS: frozenset[str] = frozenset(
 # attempt before kubelet transitions to ImagePullBackOff; callers should fail
 # only if they persist across consecutive polls.
 TRANSIENT_WAITING_REASONS: frozenset[str] = frozenset({"ErrImagePull"})
+
+# Projected ServiceAccount mount. kubectl has no in-cluster config fallback
+# (unlike client-go), so a pod needs a kubeconfig even when token/CA are here.
+_INCLUSTER_SA_DIR = Path("/var/run/secrets/kubernetes.io/serviceaccount")
+
+
+@functools.lru_cache(maxsize=1)
+def ensure_incluster_kubeconfig() -> str | None:
+    """Write a kubeconfig from the pod ServiceAccount when none exists.
+
+    Returns the path, or ``None`` if a kubeconfig already exists or this is not
+    an in-cluster process. Uses ``tokenFile`` / CA paths (not embedded secrets)
+    so kubelet token rotation is picked up on the next kubectl call. Cached
+    once per process; sets ``KUBECONFIG``.
+    """
+    if os.environ.get("KUBECONFIG") or Path(os.path.expanduser("~/.kube/config")).exists():
+        return None
+
+    host = os.environ.get("KUBERNETES_SERVICE_HOST")
+    token_file = _INCLUSTER_SA_DIR / "token"
+    ca_file = _INCLUSTER_SA_DIR / "ca.crt"
+    if not host or not token_file.exists() or not ca_file.exists():
+        return None
+    port = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
+    if ":" in host:
+        host = f"[{host}]"  # IPv6 URL host needs brackets
+
+    context: dict[str, str] = {"cluster": "in-cluster", "user": "in-cluster"}
+    namespace_file = _INCLUSTER_SA_DIR / "namespace"
+    try:
+        context["namespace"] = namespace_file.read_text().strip()
+    except OSError:
+        pass
+
+    kubeconfig = {
+        "apiVersion": "v1",
+        "kind": "Config",
+        "clusters": [
+            {
+                "name": "in-cluster",
+                "cluster": {"server": f"https://{host}:{port}", "certificate-authority": str(ca_file)},
+            }
+        ],
+        "users": [{"name": "in-cluster", "user": {"tokenFile": str(token_file)}}],
+        "contexts": [{"name": "in-cluster", "context": context}],
+        "current-context": "in-cluster",
+    }
+
+    path = Path(tempfile.gettempdir()) / f"isvtest-incluster-kubeconfig-{os.getuid()}.yaml"
+    try:
+        path.write_text(yaml.safe_dump(kubeconfig, sort_keys=False))
+    except OSError as exc:
+        logger.warning("Could not write in-cluster kubeconfig to %s: %s", path, exc)
+        return None
+
+    os.environ["KUBECONFIG"] = str(path)
+    logger.info("No kubeconfig found; generated one from the pod ServiceAccount at %s", path)
+    return str(path)
 
 
 @functools.lru_cache(maxsize=1)
@@ -164,6 +223,8 @@ def get_kubectl_command() -> list[str]:
         ValueError: If ``KUBECTL`` contains malformed shell syntax
             (e.g. unterminated quotes).
     """
+    ensure_incluster_kubeconfig()
+
     raw = os.environ.get("KUBECTL")
     if raw is not None:
         trimmed = raw.strip()
@@ -489,11 +550,15 @@ def run_kubectl(
 def is_k8s_available() -> bool:
     """Check if Kubernetes cluster is accessible.
 
+    Uses ``kubectl get --raw /version`` (any authenticated caller) rather than
+    ``cluster-info`` (needs ``kube-system`` list rights), so namespace-scoped
+    ServiceAccounts still report the cluster as reachable.
+
     Returns:
         True if kubectl can connect to a cluster, False otherwise.
     """
     try:
-        result = run_kubectl(["cluster-info"], timeout=10)
+        result = run_kubectl(["get", "--raw", "/version"], timeout=10)
         return result.returncode == 0
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return False

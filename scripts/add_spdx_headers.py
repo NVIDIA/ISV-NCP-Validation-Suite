@@ -111,6 +111,11 @@ def find_files() -> list[Path]:
         if rel.parts and rel.parts[0] == ".github":
             continue
 
+        # Vendored third-party source keeps its upstream content/license; it
+        # must not receive NVIDIA SPDX headers.
+        if "vendor" in rel.parts:
+            continue
+
         ext = rel.suffix
 
         if ext in (".py", ".sh", ".tf", ".yaml", ".yml"):

@@ -1,0 +1,70 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# AWS Storage Provider Manifest.
+#
+# Drives `StorageProviderApiCheck` against a live EKS + FSx Lustre cluster via
+# the boto3 shim under `../scripts/storage/fsx-lustre/api.py`.
+# Tenant = AWS account + region.
+#
+# v1alpha2 mirrors the upstream StorageProvider package manifest: a package-level
+# namespace + vendor, a per-provider `provider` identity block, and a
+# hierarchical `capabilities` block (native | default | none). The declared
+# identity + capabilities are a CONTRACT: StorageProviderApiCheck cross-checks
+# them against the running shim's properties(). Keep this in sync with
+# `../scripts/storage/fsx-lustre/api.py` (AwsFsxLustreApi's ProviderProperties
+# core).
+
+schema_version: v1alpha2
+
+# Package identity (the package manifest namespace + vendor). With each provider's id
+# this forms the registration key <namespace>/<id>.
+namespace: aws.amazon.com
+vendor:
+  vendorName: NVIDIA
+
+providers:
+  - id: fsx-lustre
+    name: aws-fsx-lustre
+    # tenant_id intentionally omitted - the shim resolves it from
+    # sts:GetCallerIdentity at construction time. Set AWS_ACCOUNT_ID to
+    # override (e.g. in CI where STS isn't reachable).
+    sdk_version: v1beta1
+
+    provider:
+      name: AWS FSx Lustre
+      description: AWS FSx for Lustre fronted by the boto3 shim
+      type: file
+      protocols: [lustre]
+      version: 0.1.0
+
+    shim:
+      kind: python
+      module: ../scripts/storage/fsx-lustre/api.py
+
+    capabilities:
+      tenantManagement:
+        list: none
+        get: none
+        getQuota: native
+      volumeManagement:
+        list: native
+        get: native
+        create: none
+        delete: none
+      quotaManagement: none
+
+    attributes:
+      deployment_type: PERSISTENT_2

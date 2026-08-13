@@ -1,0 +1,110 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# VAST Storage Provider Manifest (schema v1alpha2).
+#
+# Drives StorageProviderApiCheck ONLY, via the VMS REST API shim
+# (../scripts/storage/vast/api.py) - config/storage.yaml (no cluster).
+#
+# v1alpha2 mirrors the upstream StorageProvider package manifest: a package-level
+# namespace + vendor, a per-provider `provider` identity block, and a
+# hierarchical `capabilities` block (native | default | none). The declared
+# identity + capabilities are a CONTRACT: StorageProviderApiCheck cross-checks
+# them against the running shim's properties(). Keep this in sync with
+# ../scripts/storage/vast/api.py (VastApi's ProviderProperties core).
+#
+# The K8sCsi* / K8sFilesystem* / K8sNfsMountOptions checks get their StorageClass
+# names and NFS expectations from config/storage-k8s.yaml (or K8S_CSI_* env
+# vars), NOT from this manifest. One entry per (tenant, storage_path) pair; add
+# entries to validate more.
+
+schema_version: v1alpha2
+
+# Package identity (the package manifest namespace + vendor). With each provider's id
+# this forms the registration key <namespace>/<id>.
+namespace: vastdata.com
+vendor:
+  vendorName: NVIDIA
+
+providers:
+  - id: vast-nfs
+    name: vast-nfs
+    # tenant_id is the VAST tenant name sent as the `X-Tenant-Name` header.
+    # Omit (or leave empty) to use the VMS default tenant. When set, it is
+    # cross-checked against get_tenant_quota().tenant_id and must equal the
+    # shim's VAST_TENANT at runtime.
+    # tenant_id: my-vast-tenant
+    sdk_version: v1beta1
+
+    # Implementor identity (mirrors ProviderProperties / VersionMetadata). type
+    # + version are cross-checked against the shim's properties().
+    provider:
+      name: VAST NFS
+      description: VAST Data shared filesystem fronted by the VMS REST API shim
+      type: file
+      protocols: [nfsv4]
+      version: 0.1.0
+      # protocols is cross-checked against the shim's properties() (which
+      # reports "nfsv4"). The on-wire NFS version (vers=4.1) is asserted by
+      # K8sNfsMountOptionsCheck (config/storage-k8s.yaml).
+
+    # The storage system fronted. version is an opaque vendor passthrough
+    # (StorageClass label helm.sh/chart: vast-2.6.4); not contract-checked.
+    backend:
+      vendorName: VAST Data
+      name: VAST
+      version: "2.6.4"
+
+    # Management-API shim: drives StorageProviderApiCheck (health_check, tenant +
+    # volume read, directory + user quota CRUD). create/delete are unimplemented
+    # (the CSI driver owns lifecycle). Needs VAST_ENDPOINT, VAST_TOKEN (or
+    # VAST_USERNAME+VAST_PASSWORD) and VAST_STORAGE_PATH at runtime.
+    shim:
+      kind: python
+      # Resolved relative to this manifest's parent directory.
+      module: ../scripts/storage/vast/api.py
+
+    # Hierarchical capabilities (native | default | none), lowered by the loader
+    # to a cap_id -> supported? map and cross-checked against properties():
+    # StorageProviderApiCheck fails if a declared surface disagrees with the
+    # shim. Matches the VastApi capability core in scripts/storage/vast/api.py:
+    # tenant + volume read + full directory/user quota. Volume lifecycle is
+    # CSI-owned, so create/delete stay `none`.
+    capabilities:
+      tenantManagement: native # single tenant (tenant.list/get/getQuota/listQuotas)
+      volumeManagement:
+        list: native
+        get: native
+        create: none # CSI owns lifecycle -> create_volume is unimplemented
+        delete: none
+      quotaManagement: native # quota.directory.* + quota.user.*
+
+    # Optional L2 semantic facts (ProviderProperties capability qualifiers),
+    # keyed by capability id or dotted group prefix. Mirrors the shim's
+    # capability_qualifiers() hook (qualifier keys documented in api.py).
+    # Multi-tenant=false is set on the shim's capability_qualifiers() hook.
+    capability_qualifiers:
+      quota.directory:
+        idAssignment: backend # VAST mints directory-quota ids; path is the key
+        accounting: nested # overlapping subjects charge the most-restrictive cap
+        inodes: "true"
+      quota.user:
+        defaultUserSlot: "true" # default_user_quota slot supported
+        inodes: "true"
+
+    attributes:
+      # MUST match VAST_STORAGE_PATH at runtime (informational here; the shim
+      # reads the env var directly). Matches the StorageClass root_export.
+      storage_path: /exports/k8s

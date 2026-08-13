@@ -50,5 +50,5 @@ ignore = ["E501", "RUF005"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
-testpaths = ["tests", "src/isvtest/tests"]
+testpaths = ["tests", "src/isvtest/tests", "src/isvtest/core/storage_provider/tests"]
 addopts = "-v --junitxml=junit.xml"

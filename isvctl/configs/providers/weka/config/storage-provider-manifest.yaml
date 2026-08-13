@@ -1,0 +1,119 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# WEKA Storage Provider Manifest (schema v1alpha2).
+#
+# Drives StorageProviderApiCheck ONLY, via the WEKA REST API shim
+# (../scripts/storage/weka/api.py) - config/storage.yaml (no cluster required).
+# The K8sCsi* / K8sFilesystem* checks get the WEKA StorageClass name from
+# config/storage-k8s.yaml (or K8S_CSI_* env vars), NOT from this manifest.
+#
+# v1alpha2 mirrors the upstream StorageProvider package manifest: a package-level
+# namespace + vendor, a per-provider `provider` identity block, and a
+# hierarchical `capabilities` block (native | default | none). The declared
+# identity + capabilities are a CONTRACT: StorageProviderApiCheck cross-checks
+# them against the running shim's properties(). Keep this in sync with
+# ../scripts/storage/weka/api.py (WekaApi's ProviderProperties core).
+#
+# Needs WEKA_ENDPOINTS (or WEKA_ENDPOINT), WEKA_USERNAME, WEKA_PASSWORD and
+# WEKA_FILESYSTEM at runtime:
+#
+#   ISVTEST_INCLUDE_UNRELEASED=1 \
+#     uv run isvctl test run -f isvctl/configs/providers/weka/config/storage.yaml
+#
+# Tenant = WEKA organization name (defaults to `Root` via WEKA_ORGANIZATION).
+
+schema_version: v1alpha2
+
+# Package identity (the package manifest namespace + vendor). With each provider's id
+# this forms the registration key <namespace>/<id>.
+namespace: weka.io
+vendor:
+  vendorName: NVIDIA
+
+providers:
+  - id: shared-fs
+    name: weka-shared-fs
+    # tenant_id maps to the WEKA organization name. It is cross-checked against
+    # get_tenant_quota().tenant_id and must equal the shim's WEKA_ORGANIZATION
+    # (default `Root`) at runtime.
+    tenant_id: Root
+    sdk_version: v1beta1
+
+    # Implementor identity (mirrors ProviderProperties / VersionMetadata). type
+    # + protocols + version are cross-checked against the shim's properties().
+    # WEKA uses its native POSIX client (wekafs), not NFS.
+    provider:
+      name: WEKA shared filesystem
+      description: WEKA shared filesystem fronted by the WEKA REST API shim
+      type: file
+      protocols: [wekafs]
+      version: 0.1.0
+
+    # The storage system fronted. version is an opaque vendor passthrough
+    # (the live cluster build is not surfaced by the REST API today);
+    # not contract-checked.
+    backend:
+      vendorName: WekaIO
+      name: WEKA
+
+    # Management-API shim: drives StorageProviderApiCheck (health_check, tenant +
+    # volume read, directory and user quota CRUD). volume create/delete are
+    # NotSupported (the CSI driver csi.weka.io owns lifecycle), so they are
+    # declared `none`. Needs WEKA_ENDPOINTS (or WEKA_ENDPOINT), WEKA_USERNAME,
+    # WEKA_PASSWORD and WEKA_FILESYSTEM at runtime.
+    shim:
+      kind: python
+      # Resolved relative to this manifest's parent directory.
+      module: ../scripts/storage/weka/api.py
+
+    # Hierarchical capabilities (native | default | none), lowered by the loader
+    # to a cap_id -> supported? map and cross-checked against properties():
+    # StorageProviderApiCheck fails if a declared surface disagrees with the
+    # shim. Matches the WekaApi capability core in scripts/storage/weka/api.py:
+    # tenant + volume read and directory + user quotas (REST). Volume lifecycle
+    # is CSI-owned, so create/delete stay `none`.
+    capabilities:
+      tenantManagement: native # single organization (tenant.list/get/getQuota/listQuotas)
+      volumeManagement:
+        list: native
+        get: native
+        create: none # CSI owns lifecycle -> create_volume is unimplemented
+        delete: none
+      quotaManagement:
+        directory: native # quota.directory.* via the documented REST API
+        user: native # quota.user.* via /fileSystems/<uid>/quota/user (WEKA 5.1.26+)
+
+    # Optional L2 semantic facts (ProviderProperties capability qualifiers).
+    # WEKA mints directory-quota ids (quota_id), so id_assignment is `backend`
+    # and set_directory_quota requires a path. Quotas are byte-only (no inode
+    # enforcement); mirrors the shim's capability_qualifiers() hook.
+    capability_qualifiers:
+      quota.directory:
+        idAssignment: backend
+        inodes: "false"
+      quota.user:
+        # WEKA addresses one uid per call; there is no filesystem-wide
+        # default-user slot, so user=None is refused.
+        defaultUserSlot: "false"
+        inodes: "false"
+
+    # Attributes are arbitrary fields about the provider's configuration that can be
+    # used as values in testing.
+    attributes:
+      # Filesystem used for tenant quota. MUST match WEKA_FILESYSTEM at runtime
+      # (informational here; the shim reads the env var directly) and the
+      # StorageClass `filesystemName` (e.g. `test_fs` in a test environment).
+      filesystem: test_fs

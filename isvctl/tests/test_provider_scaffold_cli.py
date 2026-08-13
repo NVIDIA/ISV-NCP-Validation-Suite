@@ -33,6 +33,17 @@ from isvctl.main import app as main_app
 
 runner = CliRunner()
 
+# Storage provider manifests live alongside run-configs in a provider's config/
+# directory but are not RunConfigs (no commands/tests) and carry no path
+# references, so the run-config assertions below skip them.
+_MANIFEST_GLOB = "storage-provider-manifest*.yaml"
+
+
+def _generated_run_configs(config_dir: Path) -> list[Path]:
+    """Return generated run-config YAMLs, excluding storage provider manifests."""
+    manifests = set(config_dir.glob(_MANIFEST_GLOB))
+    return sorted(p for p in config_dir.glob("*.yaml") if p not in manifests)
+
 
 def test_provider_help_renders() -> None:
     """Test provider command help."""
@@ -324,7 +335,7 @@ def test_output_dir_scaffold_imports_load_for_every_config(tmp_path: Path) -> No
     result = runner.invoke(main_app, ["provider", "scaffold", "acme", "--output-dir", str(target)])
 
     assert result.exit_code == 0
-    config_files = sorted((target / "config").glob("*.yaml"))
+    config_files = _generated_run_configs(target / "config")
     assert config_files, "no generated config files"
     for config_path in config_files:
         config_text = config_path.read_text(encoding="utf-8")
@@ -444,20 +455,23 @@ def test_every_generated_config_relative_path_resolves(tmp_path: Path) -> None:
     result = runner.invoke(main_app, ["provider", "scaffold", "acme", "--output-dir", str(target)])
     assert result.exit_code == 0
 
-    config_files = sorted((target / "config").glob("*.yaml"))
+    config_files = _generated_run_configs(target / "config")
     assert config_files, "no generated config files"
 
+    # Not every config carries a provider-local ``../`` reference: storage
+    # configs reference only built-in files (the shared step script, the suite),
+    # which the scaffolder rewrites to checkout-root-relative paths. The
+    # invariant is that any ``../`` reference that *is* present resolves, and
+    # that the scaffold as a whole still uses relative references somewhere.
     total_refs = 0
     for yaml_path in config_files:
         content = yaml_path.read_text(encoding="utf-8")
-        refs = RELATIVE_PATH_RE.findall(content)
-        assert refs, f"{yaml_path} has no relative references; template change?"
-        for ref in refs:
+        for ref in RELATIVE_PATH_RE.findall(content):
             resolved = (yaml_path.parent / ref).resolve()
             assert resolved.is_file(), f"{yaml_path} references missing file: {ref} -> {resolved}"
             total_refs += 1
 
-    assert total_refs >= len(config_files), "expected at least one reference per config file"
+    assert total_refs > 0, "expected at least one relative reference across generated configs"
 
 
 def test_meta_file_is_written_and_records_provider_name(tmp_path: Path) -> None:

@@ -1,0 +1,55 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# VAST Storage Provider Shim - Standalone validation config.
+#
+# Drives StorageProviderApiCheck against a live VAST cluster via the VMS
+# REST API shim. No Kubernetes cluster required: the shim is imported
+# in-process.
+#
+# Required environment variables (see scripts/storage/README.md):
+#   VAST_ENDPOINT       VMS hostname or URL
+#   VAST_TOKEN          API token  (or VAST_USERNAME + VAST_PASSWORD)
+#   VAST_STORAGE_PATH   Root export path (e.g. /exports/k8s)
+#
+# StorageProviderApiCheck is unreleased and skipped by default; set
+# ISVTEST_INCLUDE_UNRELEASED=1 to exercise it:
+#
+#   ISVTEST_INCLUDE_UNRELEASED=1 \
+#     uv run isvctl test run \
+#       -f isvctl/configs/providers/vast/config/storage.yaml
+
+version: "1.0"
+
+commands:
+  storage:
+    phases: ["setup", "test", "teardown"]
+    steps:
+      - name: preflight
+        phase: setup
+        command: "echo"
+        args: ['{"success": true, "platform": "storage", "test_name": "preflight"}']
+        timeout: 10
+
+tests:
+  cluster_name: "vast-storage-validation"
+  description: "VAST storage shim validation"
+
+  validations:
+    storage_provider_api:
+      checks:
+        StorageProviderApiCheck:
+          manifest_path: "isvctl/configs/providers/vast/config/storage-provider-manifest.yaml"
+          volume_size_bytes: 1073741824 # 1 GiB

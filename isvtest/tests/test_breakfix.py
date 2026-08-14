@@ -154,10 +154,61 @@ class TestOperationChecks:
         assert check.passed
         assert "maintenance_mode=Maintenance" in check.message
 
+    def test_kubernetes_node_maintenance_requires_evacuation_and_recovery(self) -> None:
+        """Kubernetes must prove behavior beyond BFX01-04 cordoning."""
+        step_output = {
+            "success": True,
+            "platform": "kubernetes",
+            "operation": {
+                "requested": True,
+                "accepted": True,
+                "node_id": "worker-1",
+                "maintenance_mode": "Maintenance",
+                "workload_evacuated": True,
+                "replacement_blocked": True,
+                "workload_recovered": True,
+                "restored": True,
+            },
+        }
+        check = _run(ReturnNodeMaintenanceCheck, step_output)
+        assert check.passed
+        assert "worker-1" in check.message
+
+    @pytest.mark.parametrize(
+        "field",
+        ["workload_evacuated", "replacement_blocked", "workload_recovered"],
+    )
+    def test_kubernetes_node_maintenance_rejects_missing_behavior(
+        self,
+        field: str,
+    ) -> None:
+        """Every Kubernetes maintenance behavior flag is required."""
+        operation = {
+            "requested": True,
+            "accepted": True,
+            "node_id": "worker-1",
+            "maintenance_mode": "Maintenance",
+            "workload_evacuated": True,
+            "replacement_blocked": True,
+            "workload_recovered": True,
+            "restored": True,
+        }
+        operation[field] = False
+        assert not _run(
+            ReturnNodeMaintenanceCheck,
+            {"success": True, "platform": "kubernetes", "operation": operation},
+        ).passed
+
     @pytest.mark.parametrize(
         "operation",
         [
             {"accepted": True},
+            {
+                "requested": True,
+                "accepted": True,
+                "maintenance_mode": "Maintenance",
+                "restored": True,
+            },
             {"requested": True, "accepted": True, "maintenance_mode": "Ready", "restored": True},
             {"requested": True, "accepted": True, "maintenance_mode": "Maintenance", "restored": False},
         ],

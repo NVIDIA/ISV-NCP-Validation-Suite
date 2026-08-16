@@ -30,6 +30,20 @@ Workflow:
 > attached to a milestone. The file you are reading now is the canonical
 > per-tag changelog.
 
+## [0.7.3] - 2026-08-16
+
+### Fixed
+
+- **GPU container runtime compatibility** ([#580](https://github.com/NVIDIA/ai-cloud-validation/pull/580))
+  Updates `ContainerRuntimeCheck` to recognize Docker, nerdctl, containerd, runc, and crun when GPU capability is configured, preventing valid non-Docker Kubernetes and OCI hosts from failing the runtime check.
+- **SEC04-01 least-privilege scope** ([#577](https://github.com/NVIDIA/ai-cloud-validation/pull/577))
+  Removes source CIDR as required evidence from `LeastPrivilegePolicyCheck`, aligning SEC04-01 with its user- and resource-scoping requirement and preventing unsupported network conditions from failing the validation.
+
+### Internal
+
+- Add maintenance-branch release guidance and harden the CI and tagging workflows ([#582](https://github.com/NVIDIA/ai-cloud-validation/pull/582)).
+- Repin DSX security actions after their repository transfer ([#576](https://github.com/NVIDIA/ai-cloud-validation/pull/576)).
+
 ## [0.7.2] - 2026-06-03
 
 ### Added

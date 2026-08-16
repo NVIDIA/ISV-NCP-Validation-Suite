@@ -274,7 +274,9 @@ The project follows [semver](https://semver.org/) but is still pre-1.0
   flagging to downstream consumers.
 - **Patch** (`X.Y.Z` -> `X.Y.(Z+1)`) - a decent batch of fixes/features/chores
   that has accumulated on `main` and is worth cutting, or an urgent fix that
-  needs to ship on its own.
+  needs to ship on its own. An urgent fix for an older minor is cut from a
+  maintenance branch instead of `main` (see [Out-of-Band
+  Releases](#out-of-band-releases)).
 
 External operators only run the **released** tests - the set pinned by
 `isvtest/src/isvtest/released_tests.json` at each tag - so every tag has a
@@ -340,6 +342,45 @@ After bumping, open a PR, review, and merge. Then the repo maintainers will crea
 1. Go to **Actions** > **Create version tag** in GitHub
 2. Enter the version (e.g. `1.0.0`, without leading `v`)
 3. The workflow verifies all `pyproject.toml` files match, then creates and pushes `v1.0.0`
+
+The workflow tags whichever branch it is dispatched from, and only `main` or a
+`releases/**` branch is accepted. It will not re-cut an existing tag - tags are
+never deleted, so a mistake means burning that version - and it refuses to tag a
+commit that CI has not passed on. Since merges are squashed, that commit is a new
+one no pull request tested, so wait for its CI to finish before dispatching.
+
+### Out-of-Band Releases
+
+To patch an older minor without shipping everything that has landed on `main`
+since, cut a maintenance branch named `releases/<minor>.x` from the tag being
+patched, and tag from there.
+
+```bash
+git switch -c releases/<minor>.x v<tag>     # once per minor, from the tag
+git switch -c <topic> releases/<minor>.x    # then cherry-pick and bump
+git cherry-pick -x <sha>
+make bump-patch
+```
+
+Open the PR against the release branch, then dispatch **Create version tag**
+with that branch selected.
+
+Conventions:
+
+- Fixes land on `main` first and are cherry-picked onto the release branch,
+  never the reverse.
+- The release branch is not merged back. Forward-port only the CHANGELOG
+  section, not the version bump.
+- `make bump-patch` derives the version from the nearest ancestor tag, so it
+  increments the release branch's own line.
+- Workflows run from the branch they are on, so a branch cut from an older tag
+  carries that tag's CI config. Add `releases/**` to the `push` triggers in
+  `.github/workflows/ci.yaml` on the branch, or its tip is never tested.
+- `released_tests.json` is regenerated from the release branch's catalog, so a
+  cherry-picked validation ships there while staying unreleased on `main` until
+  the next `main` bump. Run the bump on the branch; never cherry-pick it.
+- Confirm the version is free first - a bump can reach `main` without a tag
+  ever being cut, which burns the number.
 
 ## Project Structure
 

@@ -144,6 +144,9 @@ forwarded env vars → optional isvreporter upload.
   feature PRs. To exercise an unreleased check end-to-end against a config,
   run with `ISVTEST_INCLUDE_UNRELEASED=1` (the orchestrator otherwise logs
   `Skipping unreleased validation '<Name>'` and the new check is a no-op).
+  On a `releases/X.Y.x` maintenance branch this manifest is regenerated from
+  that branch's own catalog, so it legitimately differs from `main`'s - do not
+  "reconcile" it by copying `main`'s version.
 
 ## Directory Layout
 

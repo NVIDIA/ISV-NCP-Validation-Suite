@@ -8,9 +8,20 @@ on:
   push:
     branches:
       - main
+      - "releases/**"
       - "pull-request/[0-9]+"
     tags:
       - "v[0-9]*.[0-9]*.[0-9]*"
+
+# Least privilege for every job that does not declare its own block. Without
+# this the token inherits the repository default, which is write. packages:read
+# is required because the container image below is private and the runner
+# authenticates to ghcr with this token. Jobs that need more (the security
+# scans) declare their own permissions, which replace these rather than add
+# to them.
+permissions:
+  contents: read
+  packages: read
 
 jobs:
   pre-commit:
@@ -182,9 +193,14 @@ jobs:
       - security-codeql-scan
       # - security-trivy-scan  # Disabled - see comment above (Trivy supply chain compromise)
     steps:
+      # The expression is evaluated into env rather than inlined into the
+      # script, keeping "no ${{ }} inside a run: block" true across every
+      # workflow - an invariant a reviewer can grep for.
       - name: Check Pipeline Status
+        env:
+          PIPELINE_FAILED: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
         run: |
-          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+          if [[ "$PIPELINE_FAILED" == "true" ]]; then
             echo "One or more jobs on the pipeline failed! Check the logs for details."
             exit 1
           fi

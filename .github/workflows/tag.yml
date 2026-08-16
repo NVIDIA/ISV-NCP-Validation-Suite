@@ -17,15 +17,34 @@ jobs:
     environment: release
     steps:
       # fetch-depth: 0 so existing tags are visible to the guards below.
+      # persist-credentials: false so no write-capable token is left behind in
+      # .git/config while later steps run scripts from the checked-out ref. The
+      # tag is created through the API in the final step, which is the only step
+      # that needs a credential.
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Normalize version
+      # inputs.version is untrusted - it arrives as a free-form string from
+      # whoever dispatched the run. It is passed through env rather than a
+      # ${{ }} expression because expressions are substituted into the script
+      # before bash parses it, so a crafted value would execute as code. It is
+      # validated here, before any other step consumes it. The pattern matches
+      # the repository's tag naming rule (with semver's no-leading-zeros
+      # restriction), so a version accepted here cannot be rejected later.
+      - name: Normalize and validate version
         id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          VERSION="${{ inputs.version }}"
-          VERSION="${VERSION#v}"
+          VERSION="${INPUT_VERSION#v}"
+          if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc[0-9]+)?$ ]]; then
+            # The rejected value is deliberately not echoed: it is untrusted and
+            # could inject workflow commands. It is visible in the run's inputs.
+            echo "::error::Invalid version input. Expected X.Y.Z or X.Y.Z-rcN, without a leading 'v'."
+            exit 1
+          fi
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
 
       # Releases come from main, or from a maintenance branch for out-of-band
@@ -43,16 +62,18 @@ jobs:
           esac
 
       - name: Verify tag does not already exist
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
         run: |
-          TAG="v${{ steps.version.outputs.value }}"
+          TAG="v$VERSION"
           if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
             echo "::error::$TAG already exists at $(git rev-parse --short "$TAG^{commit}")." \
-                 "Tags cannot be deleted - pick the next version."
+                 "Tags are never deleted - pick the next version."
             exit 1
           fi
 
       # Informational: lets the dispatcher confirm they are tagging what they
-      # think before the (irreversible) push.
+      # think before the (irreversible) tag creation.
       - name: Show base tag
         run: |
           BASE=$(git describe --tags --abbrev=0 --match "v*" HEAD 2>/dev/null || echo "none")
@@ -60,9 +81,18 @@ jobs:
           echo "Nearest ancestor tag: $BASE"
 
       - name: Verify version matches pyproject.toml
-        run: python3 scripts/bump-version.py --check "${{ steps.version.outputs.value }}"
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: python3 scripts/bump-version.py --check "$VERSION"
 
-      - name: Create and push tag
+      - name: Create tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.value }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
         run: |
-          git tag "v${{ steps.version.outputs.value }}"
-          git push origin "v${{ steps.version.outputs.value }}"
+          gh api --method POST "repos/$REPO/git/refs" \
+            -f ref="refs/tags/v$VERSION" \
+            -f sha="$SHA" > /dev/null
+          echo "Created tag v$VERSION at $SHA"

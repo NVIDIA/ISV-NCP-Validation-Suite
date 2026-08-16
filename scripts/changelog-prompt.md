@@ -30,7 +30,7 @@ A version is considered a release if either:
 
 1. There is a git tag of the form `vX.Y.Z` **that is reachable from `HEAD`**, OR
 2. The `version` field of the root `pyproject.toml` is newer than the
-   **nearest ancestor tag** (`git describe --tags --abbrev=0 --match "v*"`)
+   **nearest ancestor tag** (`git describe --tags --abbrev=0 --match "v*" --exclude "*-rc*"`)
    — this is a **pending release** that has been bumped but is not yet
    tagged (typically run as part of `make bump-*`). Compare against the
    ancestor tag rather than against every tag in the repo: on a
@@ -56,17 +56,22 @@ any version section that already has content.
    from `git tag --merged HEAD`, it is not a release of this branch: skip it,
    even when it is missing from `CHANGELOG.md` and looks like a gap.
 
-   Also run `git describe --tags --abbrev=0 --match "v*"` to get the nearest
-   ancestor tag of `HEAD`, and read the root `pyproject.toml` — if its
-   `version = "X.Y.Z"` is newer than that ancestor tag and not already a
-   heading, treat it as a pending release.
+   Also run `git describe --tags --abbrev=0 --match "v*" --exclude "*-rc*"`
+   to get the nearest ancestor tag of `HEAD`, and read the root
+   `pyproject.toml` — if its `version = "X.Y.Z"` is newer than that ancestor
+   tag and not already a heading, treat it as a pending release.
+
+   `--exclude "*-rc*"` matters because release candidates deliberately get no
+   changelog section. If an ancestor lookup returned `vX.Y.Z-rcN`, the range
+   would start at the candidate and the commits between the previous final
+   release and that candidate would be documented nowhere.
 3. For each missing version, in chronological order (oldest first):
    - For a **tagged release**, the commit range is `<prev_tag>..<tag>`, where
      `<prev_tag>` is the tag the release was cut from — use
-     `git describe --tags --abbrev=0 --match "v*" <tag>^` rather than
-     "the previous tag by version number", so a patch cut from a maintenance
-     branch is diffed against its own base and not against an unrelated tag
-     on `main` (`git log --pretty='%H %s' <prev_tag>..<tag>`).
+     `git describe --tags --abbrev=0 --match "v*" --exclude "*-rc*" <tag>^`
+     rather than "the previous tag by version number", so a patch cut from a
+     maintenance branch is diffed against its own base and not against an
+     unrelated tag on `main` (`git log --pretty='%H %s' <prev_tag>..<tag>`).
    - For a **pending release**, the commit range is `<ancestor_tag>..HEAD`
      (`git log --pretty='%H %s' <ancestor_tag>..HEAD`), using the nearest
      ancestor tag from step 2. Skip the bump commit itself

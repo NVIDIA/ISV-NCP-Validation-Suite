@@ -345,7 +345,9 @@ After bumping, open a PR, review, and merge. Then the repo maintainers will crea
 
 The workflow tags whichever branch it is dispatched from, and only `main` or a
 `releases/**` branch is accepted. It will not re-cut an existing tag - tags are
-never deleted, so a mistake means burning that version.
+never deleted, so a mistake means burning that version - and it refuses to tag a
+commit that CI has not passed on. Since merges are squashed, that commit is a new
+one no pull request tested, so wait for its CI to finish before dispatching.
 
 ### Out-of-Band Releases
 
@@ -371,6 +373,9 @@ Conventions:
   section, not the version bump.
 - `make bump-patch` derives the version from the nearest ancestor tag, so it
   increments the release branch's own line.
+- Workflows run from the branch they are on, so a branch cut from an older tag
+  carries that tag's CI config. Add `releases/**` to the `push` triggers in
+  `.github/workflows/ci.yaml` on the branch, or its tip is never tested.
 - `released_tests.json` is regenerated from the release branch's catalog, so a
   cherry-picked validation ships there while staying unreleased on `main` until
   the next `main` bump. Run the bump on the branch; never cherry-pick it.

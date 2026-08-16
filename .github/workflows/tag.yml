@@ -10,11 +10,13 @@ on:
 
 permissions:
   contents: write
+  checks: read # to confirm CI passed on the commit being tagged
 
 jobs:
   tag:
     runs-on: ubuntu-latest
     environment: release
+    timeout-minutes: 10
     steps:
       # fetch-depth: 0 so existing tags are visible to the guards below.
       # persist-credentials: false so no write-capable token is left behind in
@@ -84,6 +86,39 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.value }}
         run: python3 scripts/bump-version.py --check "$VERSION"
+
+      # A tag is permanent, and merges are squashed - so the commit being tagged
+      # is a new SHA that no pull request ever tested. Require CI to have passed
+      # on this exact commit. This also catches a release branch cut from an
+      # older tag, which carries that tag's workflow config and may not run CI
+      # on pushes to itself at all (see CONTRIBUTING.md "Out-of-Band Releases").
+      - name: Verify CI passed on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          STATE=$(gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" \
+            --jq '[.check_runs[] | select(.name == "Pipeline Status")]
+                  | sort_by(.started_at) | last // {}
+                  | "\(.status // "none"):\(.conclusion // "none")"')
+          case "$STATE" in
+            completed:success)
+              echo "Pipeline Status passed for $SHA"
+              ;;
+            none:none)
+              echo "::error::No Pipeline Status check found for $SHA." \
+                   "If this is a release branch, add 'releases/**' to the push" \
+                   "triggers in .github/workflows/ci.yaml on the branch, push," \
+                   "and re-run once CI completes."
+              exit 1
+              ;;
+            *)
+              echo "::error::Pipeline Status for $SHA is '$STATE', not a success." \
+                   "Refusing to tag an untested commit."
+              exit 1
+              ;;
+          esac
 
       - name: Create tag
         env:

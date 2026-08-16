@@ -23,9 +23,9 @@ add a complete `## [X.Y.Z] - YYYY-MM-DD` section. Sections are kept in
 first existing `## [X.Y.Z]` heading whose version is lower than it (or at
 the end of the file if there is no such heading). For a release cut from
 `main` this is the top of the list. For an out-of-band patch release it
-depends on the file: on the maintenance branch itself `0.7.3` is the
-newest section, but once that section is forward-ported to `main` it
-belongs below `0.10.0`, not above it.
+depends on the file: on the maintenance branch itself the new patch is
+the newest section, but once that section is forward-ported to `main` it
+belongs below the newer lines already documented there, not above them.
 A version is considered a release if either:
 
 1. There is a git tag of the form `vX.Y.Z` **that is reachable from `HEAD`**, OR
@@ -34,8 +34,8 @@ A version is considered a release if either:
    — this is a **pending release** that has been bumped but is not yet
    tagged (typically run as part of `make bump-*`). Compare against the
    ancestor tag rather than against every tag in the repo: on a
-   `releases/X.Y.x` maintenance branch the pending `0.7.3` is older than
-   the newest tag on `main`, and comparing globally would miss it
+   `releases/X.Y.x` maintenance branch the pending patch version is older
+   than the newest tag on `main`, and comparing globally would miss it
    entirely. See CONTRIBUTING.md, "Out-of-Band Releases".
 
 Do not modify the file header, the "How to update this file" block, or
@@ -50,8 +50,8 @@ any version section that already has content.
 
    Use `--merged HEAD`, never a bare `git tag`. A bare listing returns every
    tag in the repository, including releases cut from other lines. On a
-   `releases/0.7.x` maintenance branch that would pull in `v0.8.0`, `v0.9.0`
-   and `v0.10.0` — none of which are ancestors of this branch — and invent
+   `releases/X.Y.x` maintenance branch that would pull in the tags of every
+   newer line — none of which are ancestors of this branch — and invent
    sections for work this branch does not contain. If a version is absent
    from `git tag --merged HEAD`, it is not a release of this branch: skip it,
    even when it is missing from `CHANGELOG.md` and looks like a gap.
@@ -73,7 +73,7 @@ any version section that already has content.
      (`chore: update package versions to X.Y.Z`).
    - Each commit subject ends with the PR number in parentheses, e.g.
      `(#425)`. Fetch the PR for richer context from
-     `https://github.com/NVIDIA/ISV-NCP-Validation-Suite/pull/<N>` (use the
+     `https://github.com/NVIDIA/ai-cloud-validation/pull/<N>` (use the
      `gh pr view <N>` CLI if available, otherwise an HTTP fetch). If the PR
      is inaccessible, fall back to reading the commit itself with
      `git show <hash>`.
@@ -108,7 +108,7 @@ description (a second sentence only if genuinely needed) indented two
 spaces under the title:
 
 ```md
-- **Concise title summarizing the change** ([#N](https://github.com/NVIDIA/ISV-NCP-Validation-Suite/pull/N))
+- **Concise title summarizing the change** ([#N](https://github.com/NVIDIA/ai-cloud-validation/pull/N))
   One sentence explaining what changed and why (add a second only if
   genuinely needed). Describe the user-visible behavior — not the
   implementation — and reference the relevant validation ID, CLI flag,
@@ -119,7 +119,7 @@ For **Internal**, use a terse one-line form with a linked PR ref (no
 bold title, no description paragraph):
 
 ```md
-- Brief description ([#N](https://github.com/NVIDIA/ISV-NCP-Validation-Suite/pull/N)).
+- Brief description ([#N](https://github.com/NVIDIA/ai-cloud-validation/pull/N)).
 ```
 
 ### Roll-up entries
@@ -129,7 +129,7 @@ refactor or a multi-PR feature series), collapse them into a single
 bullet with all PR refs inline and one shared description:
 
 ```md
-- **Common theme across the series** ([#A](https://github.com/NVIDIA/ISV-NCP-Validation-Suite/pull/A), [#B](https://github.com/NVIDIA/ISV-NCP-Validation-Suite/pull/B), [#C](https://github.com/NVIDIA/ISV-NCP-Validation-Suite/pull/C))
+- **Common theme across the series** ([#A](https://github.com/NVIDIA/ai-cloud-validation/pull/A), [#B](https://github.com/NVIDIA/ai-cloud-validation/pull/B), [#C](https://github.com/NVIDIA/ai-cloud-validation/pull/C))
   One description that covers the whole series. Prefer this over three
   near-identical separate bullets.
 ```

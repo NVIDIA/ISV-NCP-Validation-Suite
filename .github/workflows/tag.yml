@@ -51,11 +51,29 @@ jobs:
 
       # Releases come from main, or from a maintenance branch for out-of-band
       # patches (see CONTRIBUTING.md "Out-of-Band Releases"). Anything else is
-      # a mis-dispatch, and tags are never deleted.
+      # a mis-dispatch, and tags are never deleted. A maintenance branch must
+      # also be tagged on its own line: releases/0.7.x cuts 0.7.z and nothing
+      # else, so a wrong-branch dispatch cannot mint a permanent tag that
+      # belongs to a different minor.
       - name: Verify dispatch ref is releasable
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
         run: |
           case "$GITHUB_REF" in
-            refs/heads/main | refs/heads/releases/*) ;;
+            refs/heads/main) ;;
+            refs/heads/releases/*)
+              if [[ ! "$GITHUB_REF" =~ ^refs/heads/releases/((0|[1-9][0-9]*)\.(0|[1-9][0-9]*))\.x$ ]]; then
+                echo "::error::Maintenance branches must be named 'releases/X.Y.x'," \
+                     "not '$GITHUB_REF'."
+                exit 1
+              fi
+              LINE="${BASH_REMATCH[1]}"
+              if [[ "$VERSION" != "$LINE".* ]]; then
+                echo "::error::$GITHUB_REF releases the $LINE line, but $VERSION is not on it." \
+                     "Dispatch from the branch that owns this version."
+                exit 1
+              fi
+              ;;
             *)
               echo "::error::Refusing to tag from '$GITHUB_REF'." \
                    "Dispatch from 'main' or a 'releases/X.Y.x' branch."

@@ -8,9 +8,20 @@ on:
   push:
     branches:
       - main
+      - "releases/**"
       - "pull-request/[0-9]+"
     tags:
       - "v[0-9]*.[0-9]*.[0-9]*"
+
+# Least privilege for every job that does not declare its own block. Without
+# this the token inherits the repository default, which is write. packages:read
+# is required because the container image below is private and the runner
+# authenticates to ghcr with this token. Jobs that need more (the security
+# scans) declare their own permissions, which replace these rather than add
+# to them.
+permissions:
+  contents: read
+  packages: read
 
 jobs:
   pre-commit:
@@ -91,7 +102,7 @@ jobs:
           fetch-depth: 0 # Full history for secret scanning
 
       - name: Run TruffleHog Scan
-        uses: NVIDIA/dsx-github-actions/.github/actions/trufflehog-scan@9a9ce3a7770a8b53d2726afa920be3276bc3ddd7
+        uses: dsx-ai-factory/dsx-github-actions/.github/actions/trufflehog-scan@9a9ce3a7770a8b53d2726afa920be3276bc3ddd7
         with:
           extra-args: "--results=verified,unknown --only-verified"
           post-pr-comment: "true"
@@ -112,7 +123,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Run CodeQL Scan
-        uses: NVIDIA/dsx-github-actions/.github/actions/codeql-scan@55d1e0af17fb4431edaca19fbd5c78fecd29d18a
+        uses: dsx-ai-factory/dsx-github-actions/.github/actions/codeql-scan@55d1e0af17fb4431edaca19fbd5c78fecd29d18a
         with:
           languages: python
           build-mode: none
@@ -142,7 +153,7 @@ jobs:
   #       uses: actions/checkout@v6
 
   #     - name: Run Trivy Scan
-  #       uses: NVIDIA/dsx-github-actions/.github/actions/trivy-scan@495fc76167e3d265f817c1fdc00b7b9275436418
+  #       uses: dsx-ai-factory/dsx-github-actions/.github/actions/trivy-scan@495fc76167e3d265f817c1fdc00b7b9275436418
   #       with:
   #         scan-type: fs
   #         scan-ref: .
@@ -178,9 +189,14 @@ jobs:
       - security-codeql-scan
       # - security-trivy-scan  # Disabled - see comment above (Trivy supply chain compromise)
     steps:
+      # The expression is evaluated into env rather than inlined into the
+      # script, keeping "no ${{ }} inside a run: block" true across every
+      # workflow - an invariant a reviewer can grep for.
       - name: Check Pipeline Status
+        env:
+          PIPELINE_FAILED: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
         run: |
-          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+          if [[ "$PIPELINE_FAILED" == "true" ]]; then
             echo "One or more jobs on the pipeline failed! Check the logs for details."
             exit 1
           fi

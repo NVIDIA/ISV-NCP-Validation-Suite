@@ -983,76 +983,32 @@ def test_audit_logging_main_emits_structured_skip(
     assert "audit_log_trail_arn" not in payload
 
 
-class FakeIpResponse:
-    """Context manager returned by fake URL open calls."""
-
-    def __init__(self, body: str) -> None:
-        """Store the fake response body."""
-        self.body = body
-
-    def __enter__(self) -> FakeIpResponse:
-        """Return this fake response."""
-        return self
-
-    def __exit__(self, *_args: Any) -> None:
-        """Close the fake response."""
-
-    def read(self) -> bytes:
-        """Return the configured response body."""
-        return self.body.encode("utf-8")
-
-
-@pytest.mark.parametrize(
-    ("raw_ip", "expected_cidr"),
-    [
-        ("203.0.113.10\n", "203.0.113.10/32"),
-        ("2001:db8::1\n", "2001:db8::1/128"),
-    ],
-)
-def test_least_privilege_detect_source_cidr_handles_ipv4_and_ipv6(
-    monkeypatch: pytest.MonkeyPatch,
-    raw_ip: str,
-    expected_cidr: str,
-) -> None:
-    """Source CIDR detection normalizes IPv4 and IPv6 host addresses."""
+def test_least_privilege_resource_scope_requires_denied_bucket() -> None:
+    """SEC04 resource scope requires allowed-resource and denied-resource evidence."""
     module = _load_security_script("least_privilege_test.py")
+    policy_document = json.loads(module._policy_document("allowed-bucket"))
 
-    monkeypatch.setattr(module.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeIpResponse(raw_ip))
-
-    assert module._detect_source_cidr() == expected_cidr
-
-
-def test_least_privilege_dimension_results_require_denied_bucket_and_source_cidr() -> None:
-    """SEC04 dimension flags require denied-resource evidence and the SourceIp policy condition."""
-    module = _load_security_script("least_privilege_test.py")
-    policy_document = module._policy_document("allowed-bucket", "2001:db8::1/128")
-
-    resource_result, network_result = module._policy_dimension_scope_results(
+    resource_result = module._policy_resource_scope_result(
         allowed_result={"passed": True},
         denied_resource_result={
             "name": "storage_list_unscoped_resource_denied",
             "passed": True,
             "code": "AccessDenied",
         },
-        policy_document=policy_document,
-        allowed_bucket="allowed-bucket",
-        source_cidr="2001:db8::1/128",
     )
 
+    assert policy_document["Statement"][0]["Resource"] == "arn:aws:s3:::allowed-bucket"
+    assert "Condition" not in policy_document["Statement"][0]
     assert resource_result["passed"] is True
     assert resource_result["probes"][0]["code"] == "AccessDenied"
-    assert network_result["passed"] is True
 
-    failed_resource_result, failed_network_result = module._policy_dimension_scope_results(
+    failed_resource_result = module._policy_resource_scope_result(
         allowed_result={"passed": True},
         denied_resource_result={"name": "storage_list_unscoped_resource_denied", "passed": False, "error": "allowed"},
-        policy_document=policy_document,
-        allowed_bucket="allowed-bucket",
-        source_cidr="203.0.113.10/32",
     )
 
     assert failed_resource_result["passed"] is False
-    assert failed_network_result["passed"] is False
+    assert failed_resource_result["error"]
 
 
 class FakeIamTags:

@@ -31,6 +31,7 @@ from isvtest.validations.security import (
     CustomerManagedKeyCheck,
     InsecureProtocolsCheck,
     KmsEncryptionOptionCheck,
+    LeastPrivilegePolicyCheck,
     MfaEnforcedCheck,
     OidcUserAuthCheck,
     ShortLivedCredentialsCheck,
@@ -854,6 +855,74 @@ def test_short_lived_credentials_check_skips_when_step_marks_skipped() -> None:
 
     with pytest.raises(pytest.skip.Exception, match="GetSessionToken not available"):
         ShortLivedCredentialsCheck(config={"step_output": step_output}).execute()
+
+
+LEAST_PRIVILEGE_REQUIRED_TESTS = {
+    "policy_dimensions_user_based": {"passed": True},
+    "policy_dimensions_resource_based": {"passed": True},
+    "policy_dimensions_allowed_action_succeeds": {"passed": True},
+}
+
+
+def _least_privilege_step_output(**overrides: Any) -> dict[str, Any]:
+    """Return valid SEC04-01 output without the removed source-CIDR evidence."""
+    output: dict[str, Any] = {
+        "success": True,
+        "platform": "security",
+        "test_name": "least_privilege_test",
+        "test_identity": "sec04-test-principal",
+        "allowed_resource": "sec04-test-resource",
+        "tests": deepcopy(LEAST_PRIVILEGE_REQUIRED_TESTS),
+    }
+    output.update(overrides)
+    return output
+
+
+class TestLeastPrivilegePolicyCheck:
+    """Tests for SEC04-01 least-privilege policy validation."""
+
+    def test_passes_without_source_cidr_dimension(self) -> None:
+        """Source-IP/CIDR is not part of the originating SEC04-01 requirement."""
+        result = LeastPrivilegePolicyCheck(config={"step_output": _least_privilege_step_output()}).execute()
+
+        assert result["passed"] is True
+
+    def test_ignores_legacy_source_cidr_evidence(self) -> None:
+        """Legacy provider output cannot reintroduce the removed CIDR subtest."""
+        tests = deepcopy(LEAST_PRIVILEGE_REQUIRED_TESTS)
+        tests["policy_dimensions_network_based"] = {
+            "passed": False,
+            "error": "source-IP identity binding is unavailable",
+        }
+        result = LeastPrivilegePolicyCheck(
+            config={
+                "step_output": _least_privilege_step_output(
+                    allowed_source_cidr="",
+                    tests=tests,
+                )
+            }
+        ).execute()
+
+        assert result["passed"] is True
+
+    def test_fails_when_required_dimension_is_missing(self) -> None:
+        """User, resource, and allowed-action evidence remain mandatory."""
+        tests = deepcopy(LEAST_PRIVILEGE_REQUIRED_TESTS)
+        tests.pop("policy_dimensions_resource_based")
+        result = LeastPrivilegePolicyCheck(config={"step_output": _least_privilege_step_output(tests=tests)}).execute()
+
+        assert result["passed"] is False
+        assert "policy_dimensions_resource_based" in result["error"]
+
+    @pytest.mark.parametrize("field", ["test_identity", "allowed_resource"])
+    def test_fails_when_required_identity_or_resource_is_empty(self, field: str) -> None:
+        """The remaining identity and resource evidence must be non-empty."""
+        result = LeastPrivilegePolicyCheck(
+            config={"step_output": _least_privilege_step_output(**{field: ""})}
+        ).execute()
+
+        assert result["passed"] is False
+        assert field in result["error"]
 
 
 TENANT_ISOLATION_REQUIRED_TESTS = {

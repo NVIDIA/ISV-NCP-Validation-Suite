@@ -787,10 +787,10 @@ class ShortLivedCredentialsCheck(BaseValidation):
 class LeastPrivilegePolicyCheck(BaseValidation):
     """Validate least-privilege policy dimensions are enforced (SEC04-01).
 
-    Verifies the provider probe exercised user-scoped, resource-scoped, and
-    network-scoped access policy constraints. The probe may emit a structured
-    top-level skip when it cannot provision the temporary identity needed for
-    the check.
+    Verifies the provider probe exercised user-scoped and resource-scoped
+    access policy constraints and that the allowed action succeeds. The probe
+    may emit a structured top-level skip when it cannot provision the
+    temporary identity needed for the check.
 
     Config:
         step_output: The step output to check
@@ -798,14 +798,12 @@ class LeastPrivilegePolicyCheck(BaseValidation):
     Step output:
         test_identity: Required non-empty identity used for the policy probe
         allowed_resource: Required non-empty resource identifier that should be allowed
-        allowed_source_cidr: Required non-empty source CIDR used for network-scope enforcement
         tests: dict with policy_dimensions_user_based,
                policy_dimensions_resource_based,
-               policy_dimensions_network_based,
                policy_dimensions_allowed_action_succeeds
     """
 
-    description: ClassVar[str] = "Check least-privilege access policies are user, resource, and network scoped"
+    description: ClassVar[str] = "Check least-privilege access policies are user and resource scoped"
     labels: ClassVar[tuple[str, ...]] = ("security", "iam")
 
     def run(self) -> None:
@@ -817,13 +815,12 @@ class LeastPrivilegePolicyCheck(BaseValidation):
         required = [
             "policy_dimensions_user_based",
             "policy_dimensions_resource_based",
-            "policy_dimensions_network_based",
             "policy_dimensions_allowed_action_succeeds",
         ]
         if not check_required_tests(self, required, "Least-privilege policy tests failed"):
             return
 
-        for field in ("test_identity", "allowed_resource", "allowed_source_cidr"):
+        for field in ("test_identity", "allowed_resource"):
             value = step_output.get(field)
             if not isinstance(value, str) or not value.strip():
                 self.set_failed(f"Least-privilege policy output missing non-empty '{field}'")

@@ -10,25 +10,142 @@ on:
 
 permissions:
   contents: write
+  checks: read # to confirm CI passed on the commit being tagged
 
 jobs:
   tag:
     runs-on: ubuntu-latest
     environment: release
+    timeout-minutes: 10
     steps:
+      # fetch-depth: 0 so existing tags are visible to the guards below.
+      # persist-credentials: false so no write-capable token is left behind in
+      # .git/config while later steps run scripts from the checked-out ref. The
+      # tag is created through the API in the final step, which is the only step
+      # that needs a credential.
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Normalize version
+      # inputs.version is untrusted - it arrives as a free-form string from
+      # whoever dispatched the run. It is passed through env rather than a
+      # ${{ }} expression because expressions are substituted into the script
+      # before bash parses it, so a crafted value would execute as code. It is
+      # validated here, before any other step consumes it. The pattern matches
+      # the repository's tag naming rule (with semver's no-leading-zeros
+      # restriction), so a version accepted here cannot be rejected later.
+      - name: Normalize and validate version
         id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          VERSION="${{ inputs.version }}"
-          VERSION="${VERSION#v}"
+          VERSION="${INPUT_VERSION#v}"
+          if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc[0-9]+)?$ ]]; then
+            # The rejected value is deliberately not echoed: it is untrusted and
+            # could inject workflow commands. It is visible in the run's inputs.
+            echo "::error::Invalid version input. Expected X.Y.Z or X.Y.Z-rcN, without a leading 'v'."
+            exit 1
+          fi
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Verify version matches pyproject.toml
-        run: python3 scripts/bump-version.py --check "${{ steps.version.outputs.value }}"
-
-      - name: Create and push tag
+      # Releases come from main, or from a maintenance branch for out-of-band
+      # patches (see CONTRIBUTING.md "Out-of-Band Releases"). Anything else is
+      # a mis-dispatch, and tags are never deleted. A maintenance branch must
+      # also be tagged on its own line: releases/0.7.x cuts 0.7.z and nothing
+      # else, so a wrong-branch dispatch cannot mint a permanent tag that
+      # belongs to a different minor.
+      - name: Verify dispatch ref is releasable
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
         run: |
-          git tag "v${{ steps.version.outputs.value }}"
-          git push origin "v${{ steps.version.outputs.value }}"
+          case "$GITHUB_REF" in
+            refs/heads/main) ;;
+            refs/heads/releases/*)
+              if [[ ! "$GITHUB_REF" =~ ^refs/heads/releases/((0|[1-9][0-9]*)\.(0|[1-9][0-9]*))\.x$ ]]; then
+                echo "::error::Maintenance branches must be named 'releases/X.Y.x'," \
+                     "not '$GITHUB_REF'."
+                exit 1
+              fi
+              LINE="${BASH_REMATCH[1]}"
+              if [[ "$VERSION" != "$LINE".* ]]; then
+                echo "::error::$GITHUB_REF releases the $LINE line, but $VERSION is not on it." \
+                     "Dispatch from the branch that owns this version."
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::error::Refusing to tag from '$GITHUB_REF'." \
+                   "Dispatch from 'main' or a 'releases/X.Y.x' branch."
+              exit 1
+              ;;
+          esac
+
+      - name: Verify tag does not already exist
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          TAG="v$VERSION"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "::error::$TAG already exists at $(git rev-parse --short "$TAG^{commit}")." \
+                 "Tags are never deleted - pick the next version."
+            exit 1
+          fi
+
+      # Informational: lets the dispatcher confirm they are tagging what they
+      # think before the (irreversible) tag creation.
+      - name: Show base tag
+        run: |
+          BASE=$(git describe --tags --abbrev=0 --match "v*" HEAD 2>/dev/null || echo "none")
+          echo "Tagging $(git rev-parse --short HEAD) on $GITHUB_REF"
+          echo "Nearest ancestor tag: $BASE"
+
+      - name: Verify version matches pyproject.toml
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: python3 scripts/bump-version.py --check "$VERSION"
+
+      # A tag is permanent, and merges are squashed - so the commit being tagged
+      # is a new SHA that no pull request ever tested. Require CI to have passed
+      # on this exact commit. This also catches a release branch cut from an
+      # older tag, which carries that tag's workflow config and may not run CI
+      # on pushes to itself at all (see CONTRIBUTING.md "Out-of-Band Releases").
+      - name: Verify CI passed on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          STATE=$(gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" \
+            --jq '[.check_runs[] | select(.name == "Pipeline Status")]
+                  | sort_by(.started_at) | last // {}
+                  | "\(.status // "none"):\(.conclusion // "none")"')
+          case "$STATE" in
+            completed:success)
+              echo "Pipeline Status passed for $SHA"
+              ;;
+            none:none)
+              echo "::error::No Pipeline Status check found for $SHA." \
+                   "If this is a release branch, add 'releases/**' to the push" \
+                   "triggers in .github/workflows/ci.yaml on the branch, push," \
+                   "and re-run once CI completes."
+              exit 1
+              ;;
+            *)
+              echo "::error::Pipeline Status for $SHA is '$STATE', not a success." \
+                   "Refusing to tag an untested commit."
+              exit 1
+              ;;
+          esac
+
+      - name: Create tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.value }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          gh api --method POST "repos/$REPO/git/refs" \
+            -f ref="refs/tags/v$VERSION" \
+            -f sha="$SHA" > /dev/null
+          echo "Created tag v$VERSION at $SHA"

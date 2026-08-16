@@ -18,15 +18,23 @@ NVIDIA ISV NCP Validation Suite repository.
 ## Goal
 
 For every release version that is not yet documented in `CHANGELOG.md`,
-add a complete `## [X.Y.Z] - YYYY-MM-DD` section, in descending version
-order, immediately above the first existing `## [X.Y.Z]` heading (or at
-the end of the file if no version sections exist yet). A version is
-considered a release if either:
+add a complete `## [X.Y.Z] - YYYY-MM-DD` section. Sections are kept in
+**descending semver order**, so insert each one immediately above the
+first existing `## [X.Y.Z]` heading whose version is lower than it (or at
+the end of the file if there is no such heading). For a release cut from
+`main` this is the top of the list; for an out-of-band patch release it
+usually is not — a `0.7.3` section belongs below `0.10.0`, not above it.
+A version is considered a release if either:
 
 1. There is a git tag of the form `vX.Y.Z`, OR
-2. The `version` field of the root `pyproject.toml` is newer than every
-   git tag — this is a **pending release** that has been bumped but is
-   not yet tagged (typically run as part of `make bump-*`).
+2. The `version` field of the root `pyproject.toml` is newer than the
+   **nearest ancestor tag** (`git describe --tags --abbrev=0 --match "v*"`)
+   — this is a **pending release** that has been bumped but is not yet
+   tagged (typically run as part of `make bump-*`). Compare against the
+   ancestor tag rather than against every tag in the repo: on a
+   `releases/X.Y.x` maintenance branch the pending `0.7.3` is older than
+   the newest tag on `main`, and comparing globally would miss it
+   entirely. See CONTRIBUTING.md, "Out-of-Band Releases".
 
 Do not modify the file header, the "How to update this file" block, or
 any version section that already has content.
@@ -36,15 +44,21 @@ any version section that already has content.
 1. Read `CHANGELOG.md` and list every `## [X.Y.Z]` heading already present.
 2. Run `git tag --sort=-v:refname` to list all release tags. Any tag of the
    form `vX.Y.Z` whose version is **not** already a heading in the file is
-   missing. Also read the root `pyproject.toml` — if its `version = "X.Y.Z"`
-   is newer than every git tag and not already a heading, treat it as a
-   pending release.
+   missing. Also run `git describe --tags --abbrev=0 --match "v*"` to get the
+   nearest ancestor tag of `HEAD`, and read the root `pyproject.toml` — if its
+   `version = "X.Y.Z"` is newer than that ancestor tag and not already a
+   heading, treat it as a pending release.
 3. For each missing version, in chronological order (oldest first):
-   - For a **tagged release**, the commit range is `<prev_tag>..<tag>`
-     (`git log --pretty='%H %s' <prev_tag>..<tag>`).
-   - For a **pending release**, the commit range is `<latest_tag>..HEAD`
-     (`git log --pretty='%H %s' <latest_tag>..HEAD`). Skip the bump
-     commit itself (`chore: update package versions to X.Y.Z`).
+   - For a **tagged release**, the commit range is `<prev_tag>..<tag>`, where
+     `<prev_tag>` is the tag the release was cut from — use
+     `git describe --tags --abbrev=0 --match "v*" <tag>^` rather than
+     "the previous tag by version number", so a patch cut from a maintenance
+     branch is diffed against its own base and not against an unrelated tag
+     on `main` (`git log --pretty='%H %s' <prev_tag>..<tag>`).
+   - For a **pending release**, the commit range is `<ancestor_tag>..HEAD`
+     (`git log --pretty='%H %s' <ancestor_tag>..HEAD`), using the nearest
+     ancestor tag from step 2. Skip the bump commit itself
+     (`chore: update package versions to X.Y.Z`).
    - Each commit subject ends with the PR number in parentheses, e.g.
      `(#425)`. Fetch the PR for richer context from
      `https://github.com/NVIDIA/ISV-NCP-Validation-Suite/pull/<N>` (use the

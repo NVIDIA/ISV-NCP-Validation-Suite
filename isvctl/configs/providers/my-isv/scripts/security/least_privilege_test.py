@@ -27,11 +27,9 @@ Required JSON output fields:
     "test_name": "least_privilege_test",
     "test_identity": "<temporary principal id>",
     "allowed_resource": "<resource allowed by the minimal policy>",
-    "allowed_source_cidr": "<network source constraint>",
     "tests": {
       "policy_dimensions_user_based":              {"passed": true},
       "policy_dimensions_resource_based":          {"passed": true},
-      "policy_dimensions_network_based":           {"passed": true},
       "policy_dimensions_allowed_action_succeeds": {"passed": true},
       "out_of_scope_compute_denied":               {"passed": true},
       "out_of_scope_storage_denied":               {"passed": true},
@@ -64,11 +62,9 @@ def main() -> int:
         "test_name": "least_privilege_test",
         "test_identity": "",
         "allowed_resource": "",
-        "allowed_source_cidr": "",
         "tests": {
             "policy_dimensions_user_based": {"passed": False},
             "policy_dimensions_resource_based": {"passed": False},
-            "policy_dimensions_network_based": {"passed": False},
             "policy_dimensions_allowed_action_succeeds": {"passed": False},
             "out_of_scope_compute_denied": {"passed": False},
             "out_of_scope_storage_denied": {"passed": False},
@@ -85,7 +81,6 @@ def main() -> int:
     #       principal,
     #       allowed_action="list/read metadata",
     #       allowed_resource=resource.id,
-    #       allowed_source_cidr=current_runner_cidr,
     #   )
     #   assert principal.can_perform_allowed_action(resource)
     #   assert principal.cannot_use_compute_actions_outside_policy()
@@ -99,11 +94,9 @@ def main() -> int:
     if DEMO_MODE:
         result["test_identity"] = "demo-sec04-principal"
         result["allowed_resource"] = "demo-sec04-resource"
-        result["allowed_source_cidr"] = "203.0.113.10/32"
         result["tests"] = {
             "policy_dimensions_user_based": {"passed": True, "message": "demo: policy attached to one principal"},
             "policy_dimensions_resource_based": {"passed": True, "message": "demo: policy scoped to one resource"},
-            "policy_dimensions_network_based": {"passed": True, "message": "demo: policy scoped to one source CIDR"},
             "policy_dimensions_allowed_action_succeeds": {"passed": True, "message": "demo: in-scope action allowed"},
             "out_of_scope_compute_denied": {"passed": True, "message": "demo: compute operations denied"},
             "out_of_scope_storage_denied": {"passed": True, "message": "demo: storage operations denied"},

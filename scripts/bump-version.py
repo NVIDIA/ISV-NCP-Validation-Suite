@@ -271,7 +271,10 @@ def refresh_released_tests(new_version: str) -> None:
 def check(expected: str) -> None:
     """Verify all pyproject.toml files already have the expected version."""
     if not SEMVER_RE.match(expected):
-        print(f"error: '{expected}' is not valid semver (expected X.Y.Z)", file=sys.stderr)
+        print(
+            f"error: '{expected}' is not valid semver (expected X.Y.Z, optionally with a prerelease such as X.Y.Z-rc1)",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     ok = True

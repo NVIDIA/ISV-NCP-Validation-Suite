@@ -30,6 +30,19 @@ Workflow:
 > attached to a milestone. The file you are reading now is the canonical
 > per-tag changelog.
 
+## [0.7.3] - 2026-08-16
+
+### Fixed
+
+- **GPU container runtime compatibility** ([#583](https://github.com/NVIDIA/ISV-NCP-Validation-Suite/pull/583))
+  Updates `ContainerRuntimeCheck` to recognize Docker, nerdctl, containerd, runc, and crun when GPU capability is configured, preventing valid non-Docker Kubernetes and OCI hosts from failing the runtime check.
+- **SEC04-01 least-privilege scope** ([#583](https://github.com/NVIDIA/ISV-NCP-Validation-Suite/pull/583))
+  Removes source CIDR as required evidence from `LeastPrivilegePolicyCheck`, aligning SEC04-01 with its user- and resource-scoping requirement and preventing unsupported network conditions from failing the validation.
+
+### Internal
+
+- Add maintenance-branch release guidance, harden CI and tagging workflows, and repin DSX security actions after their repository transfer ([#583](https://github.com/NVIDIA/ISV-NCP-Validation-Suite/pull/583)).
+
 ## [0.7.2] - 2026-06-03
 
 ### Added

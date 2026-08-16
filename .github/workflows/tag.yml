@@ -16,7 +16,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: release
     steps:
+      # fetch-depth: 0 so existing tags are visible to the guards below.
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Normalize version
         id: version
@@ -24,6 +27,37 @@ jobs:
           VERSION="${{ inputs.version }}"
           VERSION="${VERSION#v}"
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # Releases come from main, or from a maintenance branch for out-of-band
+      # patches (see CONTRIBUTING.md "Out-of-Band Releases"). Anything else is
+      # a mis-dispatch, and tags are never deleted.
+      - name: Verify dispatch ref is releasable
+        run: |
+          case "$GITHUB_REF" in
+            refs/heads/main | refs/heads/releases/*) ;;
+            *)
+              echo "::error::Refusing to tag from '$GITHUB_REF'." \
+                   "Dispatch from 'main' or a 'releases/X.Y.x' branch."
+              exit 1
+              ;;
+          esac
+
+      - name: Verify tag does not already exist
+        run: |
+          TAG="v${{ steps.version.outputs.value }}"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "::error::$TAG already exists at $(git rev-parse --short "$TAG^{commit}")." \
+                 "Tags cannot be deleted - pick the next version."
+            exit 1
+          fi
+
+      # Informational: lets the dispatcher confirm they are tagging what they
+      # think before the (irreversible) push.
+      - name: Show base tag
+        run: |
+          BASE=$(git describe --tags --abbrev=0 --match "v*" HEAD 2>/dev/null || echo "none")
+          echo "Tagging $(git rev-parse --short HEAD) on $GITHUB_REF"
+          echo "Nearest ancestor tag: $BASE"
 
       - name: Verify version matches pyproject.toml
         run: python3 scripts/bump-version.py --check "${{ steps.version.outputs.value }}"

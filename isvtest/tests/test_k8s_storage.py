@@ -1489,6 +1489,7 @@ class TestK8sCsiTenantScopedCredentialsCheck:
         cluster_roles = cluster_roles or []
 
         def _route(cmd: str, timeout: int | None = None) -> CommandResult:
+            """Answer one kubectl invocation issued by the check under test."""
             if fail_on and fail_on in cmd:
                 return _fail(stderr="boom")
             if "get csidriver -o json" in cmd:

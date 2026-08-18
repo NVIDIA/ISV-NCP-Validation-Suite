@@ -1281,6 +1281,7 @@ class K8sCsiTenantScopedCredentialsCheck(BaseValidation):
         return _load_items(result.stdout)
 
     def _list_all_pods(self) -> list[dict[str, Any]] | None:
+        """List Pods across all namespaces, or ``None`` if the ``kubectl`` command fails."""
         result = self.run_command(f"{self._kubectl_base} get pods --all-namespaces -o json")
         if result.exit_code != 0:
             self.log.error("kubectl get pods --all-namespaces failed: %s", result.stderr.strip())

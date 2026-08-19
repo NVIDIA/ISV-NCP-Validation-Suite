@@ -19,6 +19,7 @@ from unittest.mock import patch
 
 import pytest
 
+from isvtest.core.runners import CommandResult
 from isvtest.core.storage import Provider
 from isvtest.core.storage_provider import (
     CAP_USER_QUOTA_DELETE,
@@ -151,3 +152,29 @@ class TestPodReuseConfig:
         check.run()
         assert not check.passed
         assert "pod_name requires pvc_name" in check.message
+
+
+class TestK8sWriterUid:
+    def test_match_is_silent(self, check):
+        check._probe_user = "65534"
+        with patch.object(
+            check, "_exec", return_value=CommandResult(exit_code=0, stdout="65534\n", stderr="", duration=0.0)
+        ):
+            assert check._k8s_writer_uid_error("ns", "pod") is None
+
+    def test_mismatch_tells_operator_to_align(self, check):
+        check._probe_user = "65534"
+        with patch.object(
+            check, "_exec", return_value=CommandResult(exit_code=0, stdout="0\n", stderr="", duration=0.0)
+        ):
+            msg = check._k8s_writer_uid_error("ns", "pod")
+        assert msg is not None
+        assert "uid 0" in msg
+        assert "65534" in msg
+        assert "align" in msg
+
+    def test_non_numeric_probe_user_fails_the_identity_check(self, check):
+        check._probe_user = "alice"
+        msg = check._k8s_writer_uid_error("ns", "pod")
+        assert msg is not None
+        assert "not a numeric UID" in msg

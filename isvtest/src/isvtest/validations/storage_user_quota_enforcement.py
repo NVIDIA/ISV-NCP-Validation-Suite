@@ -23,7 +23,9 @@ quota surface:
 2. Resolve the acquired storage to the shim ``volume_id``.
 3. ``user-quota-crud``: set/get/update/list/delete round-trip for ``probe_user``.
 4. ``user-quota-enforcement``: below-limit write as that UID succeeds; over-limit
-   writes eventually fail with a no-space / quota error.
+   writes eventually fail with a no-space / quota error. On Kubernetes, the
+   mount pod's ``id -u`` must equal numeric ``probe_user`` or this subtest
+   fails (CRUD still runs). Native local writes are unchanged.
 
 ``probe_user`` defaults to ``65534`` (nobody) so it matches the BusyBox mount
 pod's ``runAsUser``. Unreleased — run with ``ISVTEST_INCLUDE_UNRELEASED=1``.
@@ -256,6 +258,11 @@ class StorageUserQuotaEnforcementCheck(BaseValidation):
                 return False
 
             crud_ok = self._run_crud(api, tag, volume)
+
+            mismatch = self._k8s_writer_uid_error(namespace, pod_name)
+            if mismatch:
+                self.report_subtest(f"user-quota-enforcement[{tag}]", False, mismatch)
+                return crud_ok
 
             def writer(relpath: str, count_mib: int) -> CommandResult:
                 return self._dd(namespace, pod_name, f"/data/{relpath}", count_mib)
@@ -592,6 +599,32 @@ class StorageUserQuotaEnforcementCheck(BaseValidation):
             f"-- sh -c {shlex.quote(inner)}"
         )
         return self.run_command(cmd, timeout=timeout or self.timeout)
+
+    def _k8s_writer_uid_error(self, namespace: str, pod_name: str) -> str | None:
+        """Return a failure message when the mount pod would not write as ``probe_user``.
+
+        Kubernetes ``dd`` runs as the pod UID. A mismatch means enforcement would
+        charge a different quota than ``set_user_quota``. Native mounts skip this
+        check.
+        """
+        try:
+            expected = int(str(self._probe_user).strip())
+        except ValueError:
+            return (
+                f"probe_user={self._probe_user!r} is not a numeric UID; "
+                "align probe_user with the mount pod's runAsUser (id -u)"
+            )
+        res = self._exec(namespace, pod_name, "id -u")
+        if res.exit_code != 0:
+            detail = (res.stderr or res.stdout).strip()[:200]
+            return f"could not read mount pod uid via id -u: {detail}"
+        try:
+            actual = int((res.stdout or "").strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            return f"mount pod id -u returned {res.stdout!r}, expected integer uid {expected}"
+        if actual != expected:
+            return f"mount pod runs as uid {actual} but probe_user is {expected}; align the pod runAsUser or probe_user"
+        return None
 
     def _exec_local(self, inner: str, timeout: int | None = None) -> CommandResult:
         return self.run_command(inner, timeout=timeout or self.timeout)

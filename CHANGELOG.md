@@ -30,6 +30,30 @@ Workflow:
 > attached to a milestone. The file you are reading now is the canonical
 > per-tag changelog.
 
+## [0.11.0] - 2026-08-19
+
+### Added
+
+- **Break-fix validations (BFX01-BFX06)** ([#562](https://github.com/NVIDIA/ai-cloud-validation/pull/562))
+  Adds bare-metal and Kubernetes checks for repair and maintenance evidence, hardware identity and logs, host replacement, health agents, notifications, GPU reset, and node cordoning, with NICo coverage that reports unsupported capabilities as explicit gaps.
+- **Fleet management and resource discovery API validations (CAP02-01/CAP03-01)** ([#569](https://github.com/NVIDIA/ai-cloud-validation/pull/569))
+  Verifies that fleet APIs expose complete, valid per-node records and that resource indexes report newly delivered capacity with stable identifiers across polls, including NICo reference coverage.
+- **Storage provider API and quota validations** ([#566](https://github.com/NVIDIA/ai-cloud-validation/pull/566))
+  Adds manifest-driven `StorageProviderApiCheck` and `StorageDirectoryQuotaEnforcementCheck` coverage for management API authentication, volume inventory, tenant quotas, and directory-quota lifecycle and enforcement. Reference shims and in-cluster workflows support AWS FSx for Lustre, VAST, WEKA, and the `my-isv` scaffold.
+
+### Fixed
+
+- **SEC04 least-privilege validation scope** ([#577](https://github.com/NVIDIA/ai-cloud-validation/pull/577))
+  Removes the unsupported source-CIDR requirement so platforms without identity-level network binding no longer fail SEC04, while preserving user, resource, allowed-action, and denied-operation checks.
+- **GPU-capable container runtime detection** ([#580](https://github.com/NVIDIA/ai-cloud-validation/pull/580))
+  Allows `ContainerRuntimeCheck` to validate Docker, nerdctl, containerd, runc, or crun environments with the NVIDIA runtime, using fallback detection when a higher-level runtime cannot launch a GPU workload.
+
+### Internal
+
+- Add the GPU Operator Self-Certify integration PRD ([#575](https://github.com/NVIDIA/ai-cloud-validation/pull/575)).
+- Repin shared GitHub Actions after their organization transfer ([#576](https://github.com/NVIDIA/ai-cloud-validation/pull/576)).
+- Add guarded maintenance-branch releases and branch-aware changelog discovery ([#582](https://github.com/NVIDIA/ai-cloud-validation/pull/582), [#586](https://github.com/NVIDIA/ai-cloud-validation/pull/586)).
+
 ## [0.10.0] - 2026-08-03
 
 ### Added

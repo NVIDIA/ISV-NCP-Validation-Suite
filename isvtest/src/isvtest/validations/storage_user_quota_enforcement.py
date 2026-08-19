@@ -262,7 +262,7 @@ class StorageUserQuotaEnforcementCheck(BaseValidation):
             mismatch = self._k8s_writer_uid_error(namespace, pod_name)
             if mismatch:
                 self.report_subtest(f"user-quota-enforcement[{tag}]", False, mismatch)
-                return crud_ok
+                return False
 
             def writer(relpath: str, count_mib: int) -> CommandResult:
                 return self._dd(namespace, pod_name, f"/data/{relpath}", count_mib)

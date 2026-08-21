@@ -154,6 +154,21 @@ def test_permission_denial_uses_the_scoped_rbac_message(monkeypatch: pytest.Monk
         module._require_permission(["kubectl"], "create", "deployments", namespace="default")
 
 
+def test_permission_denial_with_reason_uses_the_scoped_rbac_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A reason-bearing can-i denial remains an RBAC diagnosis."""
+    module = _load_script()
+    denied = subprocess.CompletedProcess(
+        ["kubectl"],
+        1,
+        stdout="no - RBAC: access denied by cluster policy\n",
+        stderr="",
+    )
+    monkeypatch.setattr(module, "_run", lambda *args, **kwargs: denied)
+
+    with pytest.raises(module.MaintenanceTestError, match="RBAC does not allow create on deployments in default"):
+        module._require_permission(["kubectl"], "create", "deployments", namespace="default")
+
+
 def test_permission_query_error_is_not_reported_as_rbac_denial(monkeypatch: pytest.MonkeyPatch) -> None:
     """Connectivity failures preserve their command-error diagnosis."""
     module = _load_script()

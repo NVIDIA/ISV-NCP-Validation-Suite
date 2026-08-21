@@ -142,11 +142,12 @@ def _require_permission(
     if all_namespaces:
         args.append("--all-namespaces")
     completed = _run(kubectl, *args, check=False)
-    allowed = completed.stdout.strip().lower()
-    if completed.returncode == 0 and allowed == "yes":
+    output = completed.stdout.strip().lower()
+    verdict = output.split(maxsplit=1)[0] if output else ""
+    if completed.returncode == 0 and verdict == "yes":
         return
     scope = f" in {namespace}" if namespace else " cluster-wide"
-    if allowed == "no":
+    if verdict == "no":
         raise MaintenanceTestError(f"Kubernetes RBAC does not allow {verb} on {resource}{scope}")
     if completed.returncode != 0:
         raise MaintenanceTestError(f"kubectl {' '.join(args)} failed: {_command_detail(completed)}")

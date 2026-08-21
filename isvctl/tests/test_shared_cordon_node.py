@@ -181,6 +181,15 @@ def test_node_taints_are_tolerated_without_bypassing_cordon(monkeypatch: pytest.
     ]
 
 
+def test_probe_manifest_has_a_finite_active_deadline() -> None:
+    """An abandoned probe expires even if client-side cleanup cannot run."""
+    module = _load_script()
+
+    manifest = json.loads(module._pod_manifest("probe", "default", "worker-1-host", "pause", []))
+
+    assert manifest["spec"]["activeDeadlineSeconds"] == module.PROBE_ACTIVE_DEADLINE_SECONDS
+
+
 def test_multiple_nodes_require_an_explicit_target(monkeypatch: pytest.MonkeyPatch) -> None:
     """Never choose a control-plane or shared-cluster node on the user's behalf."""
     module = _load_script()
@@ -507,6 +516,7 @@ def test_release_retries_a_timed_out_state_read(monkeypatch: pytest.MonkeyPatch)
     ownership = module.CordonOwnership("worker-1", "our-token")
     get_calls = 0
     patch_calls: list[tuple[str, ...]] = []
+    sleeps: list[float] = []
 
     def fake_get_node(kubectl: list[str], node_name: str) -> dict[str, Any]:
         """Fail the first read and return the owned state on retry."""
@@ -523,11 +533,33 @@ def test_release_retries_a_timed_out_state_read(monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.setattr(module, "_get_node", fake_get_node)
     monkeypatch.setattr(module, "_run", fake_run)
+    monkeypatch.setattr(module.time, "sleep", sleeps.append)
 
     module._release_node(["kubectl"], ownership)
 
     assert get_calls == 2
     assert [call[:3] for call in patch_calls] == [("patch", "node", "worker-1")]
+    assert sleeps == [module.UNCORDON_RETRY_DELAY_SECONDS]
+
+
+def test_unschedulable_poll_retries_a_transient_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A transient GET failure does not end the scheduling assertion early."""
+    module = _load_script()
+    calls = 0
+
+    def fake_get_pod(*_args: Any) -> dict[str, Any]:
+        """Fail one read before returning scheduler evidence."""
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise module.CordonTestError("temporary API error")
+        return _unschedulable_pod()
+
+    monkeypatch.setattr(module, "_get_pod", fake_get_pod)
+    monkeypatch.setattr(module.time, "sleep", lambda _: None)
+
+    assert module._wait_for_unschedulable(["kubectl"], "default", "probe", 1, 0.01)
+    assert calls == 2
 
 
 def test_cleanup_records_timeout_and_still_releases_node(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -575,6 +607,23 @@ def test_create_timeout_preregisters_probe_for_cleanup(
 
     assert result["error"] == "create response timed out"
     assert ("delete", "pod", "isvtest-bfx-existing-deadbeefcafebabe") in [call[:3] for call in calls]
+
+
+def test_unexpected_failure_still_emits_structured_json(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Unexpected provider failures preserve the JSON stdout contract."""
+    module = _load_script()
+    monkeypatch.setattr(module, "_kubectl_command", lambda: ["kubectl"])
+    monkeypatch.setattr(module, "_select_node", lambda *args: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(sys, "argv", ["cordon_node.py"])
+
+    assert module.main() == 1
+    result = json.loads(capsys.readouterr().out)
+
+    assert result["success"] is False
+    assert result["error"] == "Unexpected cordon test failure: boom"
 
 
 def test_blocked_probe_create_timeout_preregisters_both_pods(

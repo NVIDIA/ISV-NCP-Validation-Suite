@@ -6,18 +6,18 @@
 import pytest
 from isvtest.release_manifest import INCLUDE_UNRELEASED_ENV
 
+from isvctl.cli.deploy import REMOTE_TEST_ENV_VARS as FORWARDED_TEST_ENV_VARS
 from isvctl.cli.deploy import _pytest_passthrough, _remote_env_assignments
 
 REMOTE_TEST_ENV_VARS = (
     "NGC_API_KEY",
     "NGC_NIM_API_KEY",
-    INCLUDE_UNRELEASED_ENV,
-    "ISVTEST_BREAKFIX_ALLOW_MUTATION",
-    "ISVTEST_BREAKFIX_NODE",
+    *FORWARDED_TEST_ENV_VARS,
 )
 
 
 def _clear_remote_test_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Clear every environment variable that can affect forwarding tests."""
     for name in REMOTE_TEST_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
 

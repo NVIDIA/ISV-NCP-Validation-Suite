@@ -91,7 +91,9 @@ uv run isvctl deploy run <target-ip> -f isvctl/configs/suites/slurm.yaml -- -v -
 
 The cordon reference requires explicit mutation consent and an exact dedicated
 node on multi-node clusters. It restores the node's schedulability before the
-run exits.
+run exits only while it still owns the cordon. If another actor changes the
+ownership annotation, the run leaves schedulability unchanged and reports
+`cleanup_errors`; verify the node state after any failed run.
 
 ```bash
 ISVTEST_INCLUDE_UNRELEASED=1 \

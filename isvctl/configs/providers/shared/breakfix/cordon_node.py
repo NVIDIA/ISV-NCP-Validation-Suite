@@ -20,10 +20,12 @@ from typing import Any
 DEFAULT_IMAGE = "registry.k8s.io/pause:3.10"
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 30.0
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 15.0
+PROBE_ACTIVE_DEADLINE_SECONDS = 3600
 OWNER_ANNOTATION = "isvtest.nvidia.com/bfx01-04-owner"
 OWNER_ANNOTATION_PATH = "/metadata/annotations/isvtest.nvidia.com~1bfx01-04-owner"
 MUTATION_OPT_IN_ENV = "ISVTEST_BREAKFIX_ALLOW_MUTATION"
 UNCORDON_ATTEMPTS = 3
+UNCORDON_RETRY_DELAY_SECONDS = 1.0
 
 
 class CordonTestError(RuntimeError):
@@ -261,11 +263,13 @@ def _claim_is_observed(kubectl: list[str], ownership: CordonOwnership) -> bool:
 def _release_node(kubectl: list[str], ownership: CordonOwnership) -> None:
     """Conditionally uncordon a node only while this run still owns it."""
     last_error = "conditional patch did not succeed"
-    for _ in range(UNCORDON_ATTEMPTS):
+    for attempt in range(UNCORDON_ATTEMPTS):
         try:
             node = _get_node(kubectl, ownership.node_name)
         except CordonTestError as exc:
             last_error = str(exc)
+            if attempt + 1 < UNCORDON_ATTEMPTS:
+                time.sleep(UNCORDON_RETRY_DELAY_SECONDS)
             continue
         metadata = node.get("metadata", {})
         spec = node.get("spec", {})
@@ -307,10 +311,14 @@ def _release_node(kubectl: list[str], ownership: CordonOwnership) -> None:
             # Re-read on the next attempt. If the patch committed, the missing
             # marker plus schedulable state is recognized as successful.
             last_error = str(exc)
+            if attempt + 1 < UNCORDON_ATTEMPTS:
+                time.sleep(UNCORDON_RETRY_DELAY_SECONDS)
             continue
         if completed.returncode == 0:
             return
         last_error = _command_detail(completed)
+        if attempt + 1 < UNCORDON_ATTEMPTS:
+            time.sleep(UNCORDON_RETRY_DELAY_SECONDS)
     raise CordonTestError(f"Could not safely uncordon node {ownership.node_name!r}: {last_error}")
 
 
@@ -335,6 +343,7 @@ def _pod_manifest(
                 },
             },
             "spec": {
+                "activeDeadlineSeconds": PROBE_ACTIVE_DEADLINE_SECONDS,
                 "restartPolicy": "Never",
                 "nodeSelector": {"kubernetes.io/hostname": hostname},
                 "tolerations": tolerations,
@@ -379,8 +388,13 @@ def _wait_for_unschedulable(
     """Poll until Kubernetes reports that the new probe cannot be scheduled."""
     deadline = time.monotonic() + timeout_seconds
     while True:
-        if _pod_is_unschedulable(_get_pod(kubectl, namespace, name)):
-            return True
+        try:
+            if _pod_is_unschedulable(_get_pod(kubectl, namespace, name)):
+                return True
+        except CordonTestError:
+            # Treat transient API reads as retryable until the assertion's
+            # own deadline expires.
+            pass
         if time.monotonic() >= deadline:
             return False
         time.sleep(poll_interval_seconds)
@@ -531,8 +545,13 @@ def main() -> int:
         result["success"] = True
     except CordonTestError as exc:
         result["error"] = str(exc)
+    except Exception as exc:
+        result["error"] = f"Unexpected cordon test failure: {exc}"
     finally:
-        cleanup_errors = _cleanup(kubectl, args.namespace, created_pods, ownership) if kubectl else []
+        try:
+            cleanup_errors = _cleanup(kubectl, args.namespace, created_pods, ownership) if kubectl else []
+        except Exception as exc:
+            cleanup_errors = [f"unexpected cleanup failure: {exc}"]
         if cleanup_errors:
             result["success"] = False
             result["cleanup_errors"] = cleanup_errors

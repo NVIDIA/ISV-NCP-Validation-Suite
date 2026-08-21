@@ -77,7 +77,10 @@ def test_explicit_config_wires_only_the_maintenance_reference() -> None:
             "name": "return_node_maintenance",
             "phase": "test",
             "command": "python shared/breakfix/return_node_maintenance.py",
-            "args": ["--node={{ env.ISVTEST_BREAKFIX_NODE | default('', true) }}"],
+            "args": [
+                "--node={{ env.ISVTEST_BREAKFIX_NODE | default('', true) }}",
+                "--timeout-seconds=120",
+            ],
             "timeout": 1200,
             "requires_available_validations": ["ReturnNodeMaintenanceCheck"],
         }
@@ -90,7 +93,7 @@ def test_empty_node_renders_as_one_safe_argument(monkeypatch: pytest.MonkeyPatch
     config = RunConfig.model_validate(merge_yaml_files([CONFIG]))
     step = next(item for item in config.commands["bare_metal"].steps if item.name == "return_node_maintenance")
 
-    assert StepExecutor()._render_args(step.args, Context(config)) == ["--node="]
+    assert StepExecutor()._render_args(step.args, Context(config)) == ["--node=", "--timeout-seconds=120"]
 
 
 def test_normal_minikube_config_never_runs_maintenance() -> None:
@@ -139,6 +142,29 @@ def test_explicit_node_is_required_before_kubectl(
     assert module.main() == 1
     payload = json.loads(capsys.readouterr().out)
     assert "requires an explicit --node" in payload["error"]
+
+
+def test_permission_denial_uses_the_scoped_rbac_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A normal `can-i` denial remains distinct from command failure."""
+    module = _load_script()
+    denied = subprocess.CompletedProcess(["kubectl"], 1, stdout="no\n", stderr="")
+    monkeypatch.setattr(module, "_run", lambda *args, **kwargs: denied)
+
+    with pytest.raises(module.MaintenanceTestError, match="RBAC does not allow create on deployments in default"):
+        module._require_permission(["kubectl"], "create", "deployments", namespace="default")
+
+
+def test_permission_query_error_is_not_reported_as_rbac_denial(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Connectivity failures preserve their command-error diagnosis."""
+    module = _load_script()
+    failed = subprocess.CompletedProcess(["kubectl"], 1, stdout="", stderr="connection refused")
+    monkeypatch.setattr(module, "_run", lambda *args, **kwargs: failed)
+
+    with pytest.raises(
+        module.MaintenanceTestError,
+        match=r"kubectl auth can-i create deployments -n default failed",
+    ):
+        module._require_permission(["kubectl"], "create", "deployments", namespace="default")
 
 
 def test_manifests_limit_drain_to_the_owned_probe() -> None:
@@ -410,6 +436,36 @@ def test_requestor_failed_condition_aborts_maintenance(
         )
 
 
+def test_ready_maintenance_failed_reason_aborts_maintenance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The Ready condition's MaintenanceFailed reason is terminal evidence."""
+    module = _load_script()
+    payload = {
+        "metadata": {"generation": 3},
+        "status": {
+            "conditions": [
+                {
+                    "type": "Ready",
+                    "status": "False",
+                    "reason": "MaintenanceFailed",
+                    "observedGeneration": 3,
+                }
+            ]
+        },
+    }
+    monkeypatch.setattr(module, "_get_json", lambda *args, **kwargs: payload)
+
+    with pytest.raises(module.MaintenanceTestError, match="MaintenanceFailed"):
+        module._wait_for_maintenance_ready(
+            ["kubectl"],
+            "default",
+            "maintenance-1",
+            module.time.monotonic() + 1,
+            0.01,
+        )
+
+
 def test_ambiguous_deployment_create_still_runs_cleanup(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -498,6 +554,49 @@ def test_successful_workflow_reports_behavior_and_restoration(
     assert len(deleted) == 2
     assert deleted[0][0] == module.NODE_MAINTENANCE_RESOURCE
     assert deleted[1][0] == "deployment"
+
+
+def test_incomplete_drain_evidence_fails_workflow(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Ready=True cannot pass before the owned drain reaches completion."""
+    module = _load_script()
+    monkeypatch.setenv(module.MUTATION_OPT_IN_ENV, "1")
+    monkeypatch.setattr(sys, "argv", ["return_node_maintenance.py", "--node=worker-1"])
+    monkeypatch.setattr(module, "_kubectl_command", lambda: ["kubectl"])
+    monkeypatch.setattr(module, "_preflight", lambda *args: _node())
+    monkeypatch.setattr(module, "_require_unclaimed_node", lambda *args: _node())
+    monkeypatch.setattr(
+        module,
+        "_create_owned_resource",
+        lambda kubectl, kind, *args, **kwargs: {
+            "metadata": {"uid": "maintenance-uid" if kind == module.NODE_MAINTENANCE_RESOURCE else "deployment-uid"}
+        },
+    )
+    monkeypatch.setattr(module, "_maintenance_requests", lambda *args: [{"metadata": {"uid": "maintenance-uid"}}])
+    monkeypatch.setattr(module, "_wait_for_initial_probe", lambda *args: "old-uid")
+    monkeypatch.setattr(
+        module,
+        "_wait_for_maintenance_ready",
+        lambda *args: {"status": {"drain": {"evictionPods": 1, "drainProgress": 99, "waitForEviction": []}}},
+    )
+    monkeypatch.setattr(module, "_get_json", lambda *args, **kwargs: _node(unschedulable=True))
+    monkeypatch.setattr(
+        module,
+        "_wait_for_replacement_blocked",
+        lambda *args: pytest.fail("incomplete drain must fail before replacement polling"),
+    )
+    monkeypatch.setattr(module, "_delete_owned_resource", lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, "_wait_for_node_restored", lambda *args: True)
+    monkeypatch.setattr(module, "_wait_for_recovery", lambda *args: True)
+    monkeypatch.setattr(module, "_wait_for_probe_absent", lambda *args: True)
+
+    assert module.main() == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["success"] is False
+    assert payload["error"] == "NodeMaintenance reported Ready without completing its drain"
 
 
 def test_cleanup_failure_forces_failed_result(

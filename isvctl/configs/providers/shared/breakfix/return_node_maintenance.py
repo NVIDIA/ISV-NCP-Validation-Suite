@@ -141,10 +141,16 @@ def _require_permission(
         args.extend(["-n", namespace])
     if all_namespaces:
         args.append("--all-namespaces")
-    allowed = _run(kubectl, *args).stdout.strip()
-    if allowed != "yes":
-        scope = f" in {namespace}" if namespace else " cluster-wide"
+    completed = _run(kubectl, *args, check=False)
+    allowed = completed.stdout.strip().lower()
+    if completed.returncode == 0 and allowed == "yes":
+        return
+    scope = f" in {namespace}" if namespace else " cluster-wide"
+    if allowed == "no":
         raise MaintenanceTestError(f"Kubernetes RBAC does not allow {verb} on {resource}{scope}")
+    if completed.returncode != 0:
+        raise MaintenanceTestError(f"kubectl {' '.join(args)} failed: {_command_detail(completed)}")
+    raise MaintenanceTestError(f"Kubernetes RBAC returned an unexpected response for {verb} on {resource}{scope}")
 
 
 def _maintenance_requests(kubectl: list[str], node_name: str) -> list[dict[str, Any]]:
@@ -499,8 +505,8 @@ def _wait_for_maintenance_ready(
         if failed == "True" and failed_generation == generation:
             raise MaintenanceTestError(f"NodeMaintenance failed: {failed_reason or 'operator reported failure'}")
         ready, ready_reason, ready_generation = _condition_status(payload, "Ready")
-        if ready_reason == "RequestorFailed" and ready_generation == generation:
-            raise MaintenanceTestError("NodeMaintenance entered RequestorFailed state")
+        if ready_reason == "MaintenanceFailed" and ready_generation == generation:
+            raise MaintenanceTestError("NodeMaintenance entered MaintenanceFailed state")
         if ready == "True" and ready_reason == "Ready" and ready_generation == generation:
             return payload
         if time.monotonic() >= deadline:

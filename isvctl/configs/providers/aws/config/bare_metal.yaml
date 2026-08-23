@@ -265,6 +265,38 @@ commands:
           - "{{ '--skip' if steps.deploy_nim.skipped | default(false) else '' }}"
         timeout: 300
 
+      # BFX05/BFX06: publish through an ephemeral SNS topic, prove delivery
+      # through its SQS subscriber, and remove both resources.
+      - name: query_planned_notifications
+        phase: test
+        continue_on_failure: true
+        command: "python3 ../../shared/breakfix/query_tenant_notification.py"
+        args:
+          - "--backend"
+          - "aws"
+          - "--event-type"
+          - "planned_maintenance"
+          - "--message"
+          - "Planned node maintenance notification validation"
+          - "--region"
+          - "{{region}}"
+        timeout: 120
+
+      - name: query_failure_notifications
+        phase: test
+        continue_on_failure: true
+        command: "python3 ../../shared/breakfix/query_tenant_notification.py"
+        args:
+          - "--backend"
+          - "aws"
+          - "--event-type"
+          - "node_failure"
+          - "--message"
+          - "Immediate node failure notification validation"
+          - "--region"
+          - "{{region}}"
+        timeout: 120
+
       # Teardown bare-metal instance (boto3)
       # Set AWS_BM_SKIP_TEARDOWN=true to keep the instance alive
       - name: teardown

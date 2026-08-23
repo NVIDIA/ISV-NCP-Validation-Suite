@@ -31,6 +31,10 @@ def main() -> int:
                 "type": "node_failure",
                 "message": "Node became unreachable; GPU fault detected",
                 "notified_at": "2026-06-24T12:00:00Z",
+                "failed_at": "2026-06-24T11:59:30Z",
+                "channel": "webhook",
+                "delivery_status": "delivered",
+                "delivery_id": "demo-failure-delivery-001",
             }
         ],
     )

@@ -31,6 +31,10 @@ def main() -> int:
                 "type": "planned_maintenance",
                 "message": "Scheduled firmware update (demo)",
                 "notified_at": "2026-06-24T12:00:00Z",
+                "scheduled_at": "2026-06-25T12:00:00Z",
+                "channel": "webhook",
+                "delivery_status": "delivered",
+                "delivery_id": "demo-planned-delivery-001",
             }
         ],
     )

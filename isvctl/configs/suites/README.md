@@ -269,8 +269,8 @@ its plan item is not platform-scoped.
 | `return_rack_maintenance` | test | `providers/my-isv/scripts/breakfix/return_rack_maintenance.py` | `operation.{requested,accepted,rack_id}` (BFX01-03) |
 | `request_host_replacement` | test | `providers/my-isv/scripts/breakfix/request_host_replacement.py` | `operation.{requested,node_removed_from_pool,machine_id}` (BFX01-05) |
 | `query_node_health_agents` | test | `providers/my-isv/scripts/breakfix/query_node_health_agents.py` | `agents_observable`, `agents[].{node_id,agent_name,running}` (BFX04-01) |
-| `query_planned_notifications` | test | `providers/my-isv/scripts/breakfix/query_planned_notifications.py` | `notification_channel_observable`, `notifications[].{machine_id,type,message,notified_at}` (BFX05-01) |
-| `query_failure_notifications` | test | `providers/my-isv/scripts/breakfix/query_failure_notifications.py` | `notification_channel_observable`, `notifications[].{machine_id,type,message,notified_at}` (BFX06-01) |
+| `query_planned_notifications` | test | provider implementation or `providers/shared/breakfix/query_tenant_notification.py` | `notification_channel_observable`, `notifications[].{machine_id,type,message,notified_at,scheduled_at,channel,delivery_status,delivery_id}`; PASS requires acknowledged delivery and a schedule after notification (BFX05-01) |
+| `query_failure_notifications` | test | provider implementation or `providers/shared/breakfix/query_tenant_notification.py` | `notification_channel_observable`, `notifications[].{machine_id,type,message,failed_at,notified_at,channel,delivery_status,delivery_id}`; PASS requires acknowledged delivery within five minutes of failure (BFX06-01) |
 
 ### Storage (`storage.yaml`)
 

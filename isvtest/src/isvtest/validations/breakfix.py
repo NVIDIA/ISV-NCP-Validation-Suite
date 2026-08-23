@@ -30,6 +30,7 @@ passes, and the requirement stays visibly unproven.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, ClassVar
 
 import pytest
@@ -388,7 +389,8 @@ class PlannedMaintenanceNotificationCheck(_QueryableRecordsCheck):
 
     Step output:
         success, notification_channel_observable: bool
-        notifications: list[{machine_id, type, message, notified_at}]
+        notifications: list[{machine_id, type, message, notified_at,
+                             scheduled_at, channel, delivery_status, delivery_id}]
 
     Requires a real notification record, not just the observable flag: the flag
     alone is the provider asserting its own capability.
@@ -403,13 +405,18 @@ class PlannedMaintenanceNotificationCheck(_QueryableRecordsCheck):
     api_label: ClassVar[str] = "Planned maintenance notification"
     record_noun: ClassVar[str] = "notification"
 
+    def _is_evidence(self, record: Any) -> bool:
+        """Require successful delivery of a planned-maintenance notification."""
+        return _is_delivered_notification(record, "planned_maintenance", require_schedule=True)
+
 
 class FailureNotificationCheck(_QueryableRecordsCheck):
     """Validate tenants can be notified of immediate node failure (BFX06-01).
 
     Step output:
         success, notification_channel_observable: bool
-        notifications: list[{machine_id, type, message, notified_at}]
+        notifications: list[{machine_id, type, message, notified_at, failed_at,
+                             channel, delivery_status, delivery_id}]
 
     Requires a real notification record, for the same reason as
     PlannedMaintenanceNotificationCheck.
@@ -423,3 +430,53 @@ class FailureNotificationCheck(_QueryableRecordsCheck):
     absent_noun: ClassVar[str] = "immediate failure notifications"
     api_label: ClassVar[str] = "Immediate failure notification"
     record_noun: ClassVar[str] = "notification"
+
+    def _is_evidence(self, record: Any) -> bool:
+        """Require successful delivery of an immediate node-failure notification."""
+        if not _is_delivered_notification(record, "node_failure"):
+            return False
+        failed_at = _parse_timestamp(record.get("failed_at"))
+        notified_at = _parse_timestamp(record.get("notified_at"))
+        if failed_at is None or notified_at is None:
+            return False
+        delay_seconds = (notified_at - failed_at).total_seconds()
+        return 0 <= delay_seconds <= 300
+
+
+_NON_DELIVERY_CHANNELS = {"", "log", "none", "stdout", "unknown"}
+
+
+def _parse_timestamp(value: Any) -> datetime | None:
+    """Parse a timezone-aware ISO 8601 timestamp."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else None
+
+
+def _is_delivered_notification(record: Any, expected_type: str, *, require_schedule: bool = False) -> bool:
+    """Return whether a normalized record proves tenant notification delivery."""
+    if not isinstance(record, dict):
+        return False
+    required_strings = ("machine_id", "message", "delivery_id")
+    if any(not isinstance(record.get(key), str) or not record[key].strip() for key in required_strings):
+        return False
+    if record.get("type") != expected_type:
+        return False
+    channel = record.get("channel")
+    if (
+        not isinstance(channel, str)
+        or channel.strip().lower() in _NON_DELIVERY_CHANNELS
+        or record.get("delivery_status") != "delivered"
+    ):
+        return False
+    notified_at = _parse_timestamp(record.get("notified_at"))
+    if notified_at is None:
+        return False
+    if not require_schedule:
+        return True
+    scheduled_at = _parse_timestamp(record.get("scheduled_at"))
+    return scheduled_at is not None and scheduled_at > notified_at

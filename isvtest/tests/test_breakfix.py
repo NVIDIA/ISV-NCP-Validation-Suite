@@ -32,29 +32,41 @@ def _run(check_class: type[BaseValidation], step_output: dict[str, Any]) -> Base
 
 
 # (check class, observable flag key, record list key, one sample record)
-# BFX05/BFX06 sit here too: a notification channel is held to the same evidence
-# bar as the BFX02 query APIs, so the flag alone cannot pass the check.
 _QUERYABLE_CASES = [
     (MaintenanceEventsCheck, "events_queryable", "events", {"machine_id": "m-1", "status": "maintenance"}),
     (RetirementNoticesCheck, "notices_queryable", "notices", {"machine_id": "m-1", "status": "scheduled"}),
     (RepairHistoryCheck, "history_queryable", "records", {"machine_id": "m-1", "entries": [{"status": "x"}]}),
-    (
-        PlannedMaintenanceNotificationCheck,
-        "notification_channel_observable",
-        "notifications",
-        {"machine_id": "m-1", "type": "planned_maintenance"},
-    ),
-    (
-        FailureNotificationCheck,
-        "notification_channel_observable",
-        "notifications",
-        {"machine_id": "m-1", "type": "node_failure"},
-    ),
 ]
 
 _NOTIFICATION_CASES = [
-    (PlannedMaintenanceNotificationCheck, "Planned maintenance"),
-    (FailureNotificationCheck, "Immediate failure"),
+    (
+        PlannedMaintenanceNotificationCheck,
+        "Planned maintenance",
+        {
+            "machine_id": "m-1",
+            "type": "planned_maintenance",
+            "message": "Scheduled firmware maintenance",
+            "notified_at": "2026-08-23T10:00:00Z",
+            "scheduled_at": "2026-08-24T10:00:00Z",
+            "channel": "webhook",
+            "delivery_status": "delivered",
+            "delivery_id": "delivery-1",
+        },
+    ),
+    (
+        FailureNotificationCheck,
+        "Immediate failure",
+        {
+            "machine_id": "m-1",
+            "type": "node_failure",
+            "message": "Node became unreachable",
+            "failed_at": "2026-08-23T10:00:00Z",
+            "notified_at": "2026-08-23T10:00:30Z",
+            "channel": "webhook",
+            "delivery_status": "delivered",
+            "delivery_id": "delivery-2",
+        },
+    ),
 ]
 
 
@@ -170,25 +182,87 @@ class TestCordonNodeCheck:
 class TestNotificationChecks:
     """Cover the BFX05-01 planned and BFX06-01 immediate notification checks."""
 
-    @pytest.mark.parametrize(("check_class", "label"), _NOTIFICATION_CASES)
-    def test_passes_when_a_notification_is_evidenced(self, check_class: type[BaseValidation], label: str) -> None:
+    @pytest.mark.parametrize(("check_class", "label", "record"), _NOTIFICATION_CASES)
+    def test_passes_when_a_notification_is_evidenced(
+        self, check_class: type[BaseValidation], label: str, record: dict[str, Any]
+    ) -> None:
         """An observable channel with a real notification passes and names the channel."""
         step_output = {
             "success": True,
             "notification_channel_observable": True,
-            "notifications": [{"machine_id": "m-1", "message": "scheduled"}],
+            "notifications": [record],
         }
         check = _run(check_class, step_output)
         assert check.passed
         assert label in check.message
 
-    @pytest.mark.parametrize(("check_class", "label"), _NOTIFICATION_CASES)
-    def test_observable_flag_alone_is_not_evidence(self, check_class: type[BaseValidation], label: str) -> None:
+    @pytest.mark.parametrize(("check_class", "label", "record"), _NOTIFICATION_CASES)
+    def test_observable_flag_alone_is_not_evidence(
+        self, check_class: type[BaseValidation], label: str, record: dict[str, Any]
+    ) -> None:
         """The flag is the provider asserting its own capability; it is not evidence."""
         with pytest.raises(pytest.skip.Exception):
             _run(check_class, {"success": True, "notification_channel_observable": True})
 
-    @pytest.mark.parametrize(("check_class", "label"), _NOTIFICATION_CASES)
-    def test_fails_when_channel_unobservable(self, check_class: type[BaseValidation], label: str) -> None:
+    @pytest.mark.parametrize(("check_class", "label", "record"), _NOTIFICATION_CASES)
+    def test_fails_when_channel_unobservable(
+        self, check_class: type[BaseValidation], label: str, record: dict[str, Any]
+    ) -> None:
         """A channel the provider cannot observe fails."""
         assert not _run(check_class, {"success": True, "notification_channel_observable": False}).passed
+
+    @pytest.mark.parametrize(("check_class", "label", "record"), _NOTIFICATION_CASES)
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("delivery_status", "accepted"),
+            ("delivery_id", ""),
+            ("channel", "stdout"),
+            ("notified_at", "not-a-timestamp"),
+        ],
+    )
+    def test_skips_when_delivery_proof_is_incomplete(
+        self,
+        check_class: type[BaseValidation],
+        label: str,
+        record: dict[str, Any],
+        field: str,
+        value: str,
+    ) -> None:
+        """A synthesized record without successful delivery proof cannot pass."""
+        bad_record = {**record, field: value}
+        with pytest.raises(pytest.skip.Exception):
+            _run(
+                check_class,
+                {
+                    "success": True,
+                    "notification_channel_observable": True,
+                    "notifications": [bad_record],
+                },
+            )
+
+    def test_planned_notification_requires_a_future_schedule(self) -> None:
+        """Planned-maintenance evidence must identify maintenance after notification."""
+        record = {**_NOTIFICATION_CASES[0][2], "scheduled_at": "2026-08-23T09:59:59Z"}
+        with pytest.raises(pytest.skip.Exception):
+            _run(
+                PlannedMaintenanceNotificationCheck,
+                {"success": True, "notification_channel_observable": True, "notifications": [record]},
+            )
+
+    def test_failure_notification_must_be_immediate(self) -> None:
+        """Failure delivery more than five minutes after detection is not immediate."""
+        record = {**_NOTIFICATION_CASES[1][2], "notified_at": "2026-08-23T10:05:01Z"}
+        with pytest.raises(pytest.skip.Exception):
+            _run(
+                FailureNotificationCheck,
+                {"success": True, "notification_channel_observable": True, "notifications": [record]},
+            )
+
+    def test_provider_specific_communication_channel_is_supported(self) -> None:
+        """The provider-neutral contract accepts communication systems beyond built-ins."""
+        record = {**_NOTIFICATION_CASES[0][2], "channel": "pagerduty"}
+        assert _run(
+            PlannedMaintenanceNotificationCheck,
+            {"success": True, "notification_channel_observable": True, "notifications": [record]},
+        ).passed

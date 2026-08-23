@@ -16,8 +16,10 @@ from types import ModuleType, SimpleNamespace
 from typing import Any, ClassVar
 
 import pytest
+import yaml
 
 SCRIPT = Path(__file__).parents[1] / "configs" / "providers" / "shared" / "breakfix" / "query_tenant_notification.py"
+AWS_CONFIG = Path(__file__).parents[1] / "configs" / "providers" / "aws" / "config" / "bare_metal.yaml"
 
 
 def _load_module() -> ModuleType:
@@ -66,6 +68,16 @@ def test_failure_payload_records_detection_time(provider: ModuleType) -> None:
     assert payload["type"] == "node_failure"
 
 
+def test_aws_steps_bind_notification_to_launched_instance() -> None:
+    """Both AWS notification records identify the bare-metal instance under test."""
+    config = yaml.safe_load(AWS_CONFIG.read_text())
+    steps = {step["name"]: step for step in config["commands"]["bare_metal"]["steps"]}
+    for name in ("query_planned_notifications", "query_failure_notifications"):
+        args = steps[name]["args"]
+        index = args.index("--machine-id")
+        assert args[index + 1] == "{{steps.launch_instance.instance_id}}"
+
+
 class _CaptureHandler(BaseHTTPRequestHandler):
     """Capture one test webhook request and acknowledge it."""
 
@@ -86,7 +98,8 @@ class _CaptureHandler(BaseHTTPRequestHandler):
 def test_webhook_backends_accept_acknowledged_delivery(provider: ModuleType, channel: str) -> None:
     """Generic, Slack, and Teams webhook formats accept a 2xx acknowledgement."""
     server = HTTPServer(("127.0.0.1", 0), _CaptureHandler)
-    thread = threading.Thread(target=server.handle_request)
+    server.timeout = 10
+    thread = threading.Thread(target=server.handle_request, daemon=True)
     thread.start()
     try:
         payload = {
@@ -199,6 +212,29 @@ def test_aws_backend_does_not_pass_when_cleanup_fails(provider: ModuleType, monk
     assert sqs.deleted
 
 
+def test_aws_backend_preserves_delivery_and_cleanup_failures(
+    provider: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AWS diagnostics retain the delivery failure when cleanup also fails."""
+    sqs = _FakeSqs()
+    sns = _FakeSns(sqs)
+
+    def no_messages(**_kwargs: Any) -> dict[str, Any]:
+        return {}
+
+    sqs.receive_message = no_messages
+
+    def fail_delete(**_kwargs: Any) -> None:
+        raise RuntimeError("denied")
+
+    sns.delete_topic = fail_delete
+    session = SimpleNamespace(client=lambda name: sns if name == "sns" else sqs)
+    monkeypatch.setitem(provider.sys.modules, "boto3", SimpleNamespace(Session=lambda **kwargs: session))
+    with pytest.raises(provider.DeliveryError, match=r"did not receive.*cleanup failed"):
+        provider._deliver_aws({"delivery_id": "delivery-4c"}, "us-west-2")
+    assert sqs.deleted
+
+
 def test_kubernetes_backend_requires_receiver_ack(provider: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
     """Kubernetes PASS requires the in-cluster receiver to echo the delivery ID."""
     commands: list[list[str]] = []
@@ -243,3 +279,17 @@ def test_kubernetes_backend_does_not_pass_when_cleanup_fails(
     monkeypatch.setattr(provider.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=1))
     with pytest.raises(provider.DeliveryError, match="cleanup failed"):
         provider._deliver_kubernetes({"delivery_id": "delivery-7"})
+
+
+def test_kubernetes_backend_preserves_delivery_and_cleanup_failures(
+    provider: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Kubernetes diagnostics retain the acknowledgement failure when cleanup also fails."""
+    monkeypatch.setattr(
+        provider,
+        "_run",
+        lambda *args, **kwargs: SimpleNamespace(stdout='{"delivery_id":"different","status":"delivered"}\n'),
+    )
+    monkeypatch.setattr(provider.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=1))
+    with pytest.raises(provider.DeliveryError, match=r"did not acknowledge.*cleanup failed"):
+        provider._deliver_kubernetes({"delivery_id": "delivery-8"})

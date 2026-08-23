@@ -94,6 +94,7 @@ def _payload(args: argparse.Namespace, delivery_id: str, started_at: datetime) -
 def _deliver_aws(payload: dict[str, str], region: str) -> str:
     """Publish through SNS and prove receipt through an ephemeral SQS subscriber."""
     try:
+        # Lazy import: boto3 is needed only by the optional AWS transport.
         import boto3
     except ImportError as exc:  # pragma: no cover - dependency is present in the workspace
         raise DeliveryError("AWS notification backend requires boto3") from exc
@@ -149,6 +150,7 @@ def _deliver_aws(payload: dict[str, str], region: str) -> str:
     except Exception as exc:
         raise DeliveryError(f"AWS notification delivery failed: {type(exc).__name__}") from exc
     finally:
+        pending_error = sys.exc_info()[1]
         cleanup_failed = False
         if topic_arn:
             try:
@@ -161,7 +163,10 @@ def _deliver_aws(payload: dict[str, str], region: str) -> str:
             except Exception:
                 cleanup_failed = True
         if cleanup_failed:
-            raise DeliveryError("AWS notification cleanup failed")
+            message = "AWS notification cleanup failed"
+            if isinstance(pending_error, DeliveryError):
+                message = f"{pending_error}; {message}"
+            raise DeliveryError(message) from pending_error
 
 
 def _kubectl_base() -> list[str]:
@@ -289,6 +294,8 @@ def _deliver_kubernetes(payload: dict[str, str]) -> str:
         return "kubernetes_webhook"
     finally:
         if created_namespace:
+            pending_error = sys.exc_info()[1]
+            cleanup_failed = False
             try:
                 cleanup = subprocess.run(
                     [
@@ -305,10 +312,15 @@ def _deliver_kubernetes(payload: dict[str, str]) -> str:
                     timeout=70,
                     check=False,
                 )
-            except (OSError, subprocess.TimeoutExpired) as exc:
-                raise DeliveryError("Kubernetes notification cleanup failed") from exc
-            if cleanup.returncode != 0:
-                raise DeliveryError("Kubernetes notification cleanup failed")
+            except (OSError, subprocess.TimeoutExpired):
+                cleanup_failed = True
+            else:
+                cleanup_failed = cleanup.returncode != 0
+            if cleanup_failed:
+                message = "Kubernetes notification cleanup failed"
+                if isinstance(pending_error, DeliveryError):
+                    message = f"{pending_error}; {message}"
+                raise DeliveryError(message) from pending_error
 
 
 def _deliver_webhook(payload: dict[str, str], url: str, channel: str) -> str:

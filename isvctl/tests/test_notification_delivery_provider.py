@@ -220,11 +220,13 @@ def test_aws_backend_preserves_delivery_and_cleanup_failures(
     sns = _FakeSns(sqs)
 
     def no_messages(**_kwargs: Any) -> dict[str, Any]:
+        """Simulate an empty receive-message poll."""
         return {}
 
     sqs.receive_message = no_messages
 
     def fail_delete(**_kwargs: Any) -> None:
+        """Simulate a topic cleanup failure."""
         raise RuntimeError("denied")
 
     sns.delete_topic = fail_delete

@@ -228,8 +228,20 @@ class TestOperationChecks:
                 "maintenance_mode": "Maintenance",
                 "restored": True,
             },
-            {"requested": True, "accepted": True, "maintenance_mode": "Ready", "restored": True},
-            {"requested": True, "accepted": True, "maintenance_mode": "Maintenance", "restored": False},
+            {
+                "requested": True,
+                "accepted": True,
+                "machine_id": "m-1",
+                "maintenance_mode": "Ready",
+                "restored": True,
+            },
+            {
+                "requested": True,
+                "accepted": True,
+                "machine_id": "m-1",
+                "maintenance_mode": "Maintenance",
+                "restored": False,
+            },
         ],
     )
     def test_node_maintenance_rejects_incomplete_evidence(self, operation: dict[str, Any]) -> None:

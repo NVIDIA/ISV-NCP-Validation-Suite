@@ -187,7 +187,9 @@ class _CaptureHandler(BaseHTTPRequestHandler):
 
 
 @pytest.mark.parametrize("channel", ["webhook", "slack", "teams"])
-def test_webhook_backends_accept_acknowledged_delivery(provider: ModuleType, channel: str) -> None:
+def test_webhook_backends_accept_acknowledged_delivery(
+    provider: ModuleType, channel: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Generic, Slack, and Teams webhook formats accept a 2xx acknowledgement."""
     server = HTTPServer(("127.0.0.1", 0), _CaptureHandler)
     server.timeout = 10
@@ -199,12 +201,15 @@ def test_webhook_backends_accept_acknowledged_delivery(provider: ModuleType, cha
             "machine_id": "node-1",
             "type": "node_failure",
             "message": "Node failed",
+            "failed_at": "before-webhook-setup",
         }
+        monkeypatch.setattr(provider, "_timestamp", lambda value: "webhook-publish-time")
         result = provider._deliver_webhook(payload, f"http://127.0.0.1:{server.server_port}/notify", channel)
     finally:
         thread.join(timeout=5)
         server.server_close()
     assert result == channel
+    assert payload["failed_at"] == "webhook-publish-time"
     if channel == "webhook":
         assert _CaptureHandler.payload["delivery_id"] == "delivery-3"
     elif channel == "slack":
@@ -282,8 +287,15 @@ def test_aws_backend_proves_receipt_and_cleans_up(provider: ModuleType, monkeypa
     session = SimpleNamespace(client=lambda name: sns if name == "sns" else sqs)
     fake_boto3 = SimpleNamespace(Session=lambda **kwargs: session)
     monkeypatch.setitem(provider.sys.modules, "boto3", fake_boto3)
-    payload = {"delivery_id": "delivery-4", "machine_id": "node-1", "type": "node_failure"}
+    monkeypatch.setattr(provider, "_timestamp", lambda value: "aws-publish-time")
+    payload = {
+        "delivery_id": "delivery-4",
+        "machine_id": "node-1",
+        "type": "node_failure",
+        "failed_at": "before-aws-setup",
+    }
     assert provider._deliver_aws(payload, "us-west-2") == "aws_sns"
+    assert json.loads(sqs.body)["failed_at"] == "aws-publish-time"
     assert sns.deleted
     assert sqs.deleted
 
@@ -341,12 +353,21 @@ def test_kubernetes_backend_requires_receiver_ack(provider: ModuleType, monkeypa
 
     monkeypatch.setattr(provider, "_run", fake_run)
     monkeypatch.setattr(provider.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=0))
+    monkeypatch.setattr(provider, "_timestamp", lambda value: "kubernetes-publish-time")
     monkeypatch.setenv("KUBECTL", "kubectl --context test-cluster")
-    payload = {"delivery_id": "delivery-5", "machine_id": "node-1", "type": "planned_maintenance"}
+    payload = {
+        "delivery_id": "delivery-5",
+        "machine_id": "node-1",
+        "type": "node_failure",
+        "failed_at": "before-kubernetes-setup",
+    }
     assert provider._deliver_kubernetes(payload) == "kubernetes_webhook"
     assert any(command[:3] == ["kubectl", "--context", "test-cluster"] for command in commands)
     assert any("apply" in command for command in commands)
     assert any("run" in command for command in commands)
+    sender = next(command for command in commands if "run" in command)
+    sent_payload = json.loads(sender[sender.index("--data-binary") + 1])
+    assert sent_payload["failed_at"] == "kubernetes-publish-time"
 
 
 def test_kubernetes_backend_rejects_wrong_ack(provider: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:

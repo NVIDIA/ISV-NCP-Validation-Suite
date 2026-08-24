@@ -99,6 +99,12 @@ def _payload(args: argparse.Namespace, delivery_id: str, started_at: datetime) -
     return common
 
 
+def _mark_failure_detected(payload: dict[str, str]) -> None:
+    """Timestamp a simulated node failure immediately before publication."""
+    if payload.get("type") == "node_failure":
+        payload["failed_at"] = _timestamp(datetime.now(UTC))
+
+
 def _deliver_aws(payload: dict[str, str], region: str) -> str:
     """Publish through SNS and prove receipt through an ephemeral SQS subscriber."""
     try:
@@ -140,6 +146,7 @@ def _deliver_aws(payload: dict[str, str], region: str) -> str:
             Attributes={"RawMessageDelivery": "true"},
             ReturnSubscriptionArn=True,
         )
+        _mark_failure_detected(payload)
         sns.publish(TopicArn=topic_arn, Message=json.dumps(payload, separators=(",", ":")))
 
         for _ in range(3):
@@ -269,6 +276,7 @@ def _deliver_kubernetes(payload: dict[str, str]) -> str:
         objects = json.dumps(_kubernetes_objects(namespace, receiver_name))
         _run([*kubectl, "apply", "-f", "-"], stdin=objects)
         _run([*kubectl, "wait", "--for=condition=Ready", f"pod/{receiver_name}", "-n", namespace, "--timeout=120s"])
+        _mark_failure_detected(payload)
         result = _run(
             [
                 *kubectl,
@@ -335,6 +343,7 @@ def _deliver_webhook(payload: dict[str, str], url: str, channel: str) -> str:
     """Post to a configured Slack, Teams, or generic HTTP webhook."""
     if not url.startswith("https://") and not url.startswith("http://127.0.0.1:"):
         raise DeliveryError("Webhook URL must use HTTPS (loopback HTTP is allowed for local testing)")
+    _mark_failure_detected(payload)
     outgoing: dict[str, Any] = payload
     text = (
         f"{payload['message']}\nNode: {payload['machine_id']}\n"

@@ -869,14 +869,14 @@ tests:
       checks:
         PlannedMaintenanceNotificationCheck:
           test_id: "BFX05-01"
-          labels: ["bare_metal", "breakfix"]
+          labels: ["bare_metal", "breakfix", "kubernetes"]
 
     failure_notification:
       step: query_failure_notifications
       checks:
         FailureNotificationCheck:
           test_id: "BFX06-01"
-          labels: ["bare_metal", "breakfix"]
+          labels: ["bare_metal", "breakfix", "kubernetes"]
 
   exclude:
     labels: []

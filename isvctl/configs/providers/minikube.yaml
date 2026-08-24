@@ -34,6 +34,38 @@ commands:
         phase: setup
         command: "my-isv/scripts/k8s/setup_minikube.sh"
         timeout: 60
+      - name: query_planned_notifications
+        phase: test
+        continue_on_failure: true
+        command: "python shared/breakfix/query_tenant_notification.py"
+        args:
+          - "--backend"
+          - "kubernetes"
+          - "--event-type"
+          - "planned_maintenance"
+          - "--machine-id"
+          - "notification-probe-node"
+          - "--message"
+          - "Planned node maintenance notification validation"
+        requires_available_validations:
+          - K8sPlannedMaintenanceNotificationCheck
+        timeout: 300
+      - name: query_failure_notifications
+        phase: test
+        continue_on_failure: true
+        command: "python shared/breakfix/query_tenant_notification.py"
+        args:
+          - "--backend"
+          - "kubernetes"
+          - "--event-type"
+          - "node_failure"
+          - "--machine-id"
+          - "notification-probe-node"
+          - "--message"
+          - "Immediate node failure notification validation"
+        requires_available_validations:
+          - K8sFailureNotificationCheck
+        timeout: 300
       - name: teardown
         phase: teardown
         command: "my-isv/scripts/k8s/teardown_minikube.sh"

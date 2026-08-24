@@ -272,6 +272,10 @@ its plan item is not platform-scoped.
 | `query_planned_notifications` | test | provider implementation or `providers/shared/breakfix/query_tenant_notification.py` | `notification_channel_observable`, `notifications[].{machine_id,type,message,notified_at,scheduled_at,channel,delivery_status,delivery_id}`; PASS requires acknowledged delivery and a schedule after notification (BFX05-01) |
 | `query_failure_notifications` | test | provider implementation or `providers/shared/breakfix/query_tenant_notification.py` | `notification_channel_observable`, `notifications[].{machine_id,type,message,failed_at,notified_at,channel,delivery_status,delivery_id}`; PASS requires acknowledged delivery within five minutes of failure (BFX06-01) |
 
+The canonical Kubernetes suite wires both notification checks through
+provider-owned delivery steps. The shared Kubernetes backend proves receipt
+with an ephemeral in-cluster HTTP receiver and removes the probe namespace.
+
 ### Storage (`storage.yaml`)
 
 Umbrella suite for the storage capability area. Today it covers persistent block

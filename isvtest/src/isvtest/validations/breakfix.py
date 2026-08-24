@@ -410,6 +410,10 @@ class PlannedMaintenanceNotificationCheck(_QueryableRecordsCheck):
         return _is_delivered_notification(record, "planned_maintenance", require_schedule=True)
 
 
+class K8sPlannedMaintenanceNotificationCheck(PlannedMaintenanceNotificationCheck):
+    """Validate BFX05-01 through an acknowledged in-cluster delivery."""
+
+
 class FailureNotificationCheck(_QueryableRecordsCheck):
     """Validate tenants can be notified of immediate node failure (BFX06-01).
 
@@ -441,6 +445,10 @@ class FailureNotificationCheck(_QueryableRecordsCheck):
             return False
         delay_seconds = (notified_at - failed_at).total_seconds()
         return 0 <= delay_seconds <= 300
+
+
+class K8sFailureNotificationCheck(FailureNotificationCheck):
+    """Validate BFX06-01 through an acknowledged in-cluster delivery."""
 
 
 _NON_DELIVERY_CHANNELS = {"", "log", "none", "stdout", "unknown"}

@@ -206,6 +206,42 @@ commands:
           TF_AUTO_APPROVE: "true"
           NODE_POOL_STATE_FILE: "terraform-delete.tfstate"
 
+      # BFX05/BFX06: prove acknowledged tenant notification delivery through
+      # an ephemeral in-cluster HTTP receiver, then remove all probe resources.
+      - name: query_planned_notifications
+        phase: test
+        continue_on_failure: true
+        command: "python3 ../../shared/breakfix/query_tenant_notification.py"
+        args:
+          - "--backend"
+          - "kubernetes"
+          - "--event-type"
+          - "planned_maintenance"
+          - "--machine-id"
+          - "notification-probe-node"
+          - "--message"
+          - "Planned node maintenance notification validation"
+        requires_available_validations:
+          - K8sPlannedMaintenanceNotificationCheck
+        timeout: 300
+
+      - name: query_failure_notifications
+        phase: test
+        continue_on_failure: true
+        command: "python3 ../../shared/breakfix/query_tenant_notification.py"
+        args:
+          - "--backend"
+          - "kubernetes"
+          - "--event-type"
+          - "node_failure"
+          - "--machine-id"
+          - "notification-probe-node"
+          - "--message"
+          - "Immediate node failure notification validation"
+        requires_available_validations:
+          - K8sFailureNotificationCheck
+        timeout: 300
+
       - name: teardown
         phase: teardown
         command: "../scripts/eks/teardown.sh"

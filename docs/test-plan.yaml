@@ -2011,6 +2011,7 @@ domains:
                 labels:
                   - bare_metal
                   - breakfix
+                  - kubernetes
                 dependencies:
                   - LimitedEnv
                 req_id: BFX05
@@ -2024,6 +2025,7 @@ domains:
                 labels:
                   - bare_metal
                   - breakfix
+                  - kubernetes
                 dependencies:
                   - LimitedEnv
                 req_id: BFX06

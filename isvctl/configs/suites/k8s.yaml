@@ -403,5 +403,19 @@ tests:
           test_id: "BFX01-04"
           labels: ["kubernetes", "breakfix", "min_req"]
 
+    planned_maintenance_notification:
+      step: query_planned_notifications
+      checks:
+        K8sPlannedMaintenanceNotificationCheck:
+          test_id: "BFX05-01"
+          labels: ["bare_metal", "breakfix", "kubernetes"]
+
+    failure_notification:
+      step: query_failure_notifications
+      checks:
+        K8sFailureNotificationCheck:
+          test_id: "BFX06-01"
+          labels: ["bare_metal", "breakfix", "kubernetes"]
+
   exclude:
     labels: []

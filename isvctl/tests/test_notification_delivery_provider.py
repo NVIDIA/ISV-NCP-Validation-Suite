@@ -21,6 +21,10 @@ import yaml
 
 SCRIPT = Path(__file__).parents[1] / "configs" / "providers" / "shared" / "breakfix" / "query_tenant_notification.py"
 AWS_CONFIG = Path(__file__).parents[1] / "configs" / "providers" / "aws" / "config" / "bare_metal.yaml"
+K8S_SUITE = Path(__file__).parents[1] / "configs" / "suites" / "k8s.yaml"
+MINIKUBE_CONFIG = Path(__file__).parents[1] / "configs" / "providers" / "minikube.yaml"
+AWS_EKS_CONFIG = Path(__file__).parents[1] / "configs" / "providers" / "aws" / "config" / "eks.yaml"
+MY_ISV_K8S_CONFIG = Path(__file__).parents[1] / "configs" / "providers" / "my-isv" / "config" / "k8s.yaml"
 
 
 def _load_module() -> ModuleType:
@@ -77,6 +81,54 @@ def test_aws_steps_bind_notification_to_launched_instance() -> None:
         args = steps[name]["args"]
         index = args.index("--machine-id")
         assert args[index + 1] == "{{steps.launch_instance.instance_id}}"
+
+
+def test_k8s_suite_declares_notification_delivery_validations() -> None:
+    """The canonical Kubernetes suite must expose both notification checks."""
+    config = yaml.safe_load(K8S_SUITE.read_text())
+    validations = config["tests"]["validations"]
+
+    assert validations["planned_maintenance_notification"] == {
+        "step": "query_planned_notifications",
+        "checks": {
+            "K8sPlannedMaintenanceNotificationCheck": {
+                "test_id": "BFX05-01",
+                "labels": ["bare_metal", "breakfix", "kubernetes"],
+            }
+        },
+    }
+    assert validations["failure_notification"] == {
+        "step": "query_failure_notifications",
+        "checks": {
+            "K8sFailureNotificationCheck": {
+                "test_id": "BFX06-01",
+                "labels": ["bare_metal", "breakfix", "kubernetes"],
+            }
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    ("provider_config", "command"),
+    [
+        (MINIKUBE_CONFIG, "python shared/breakfix/query_tenant_notification.py"),
+        (AWS_EKS_CONFIG, "python3 ../../shared/breakfix/query_tenant_notification.py"),
+        (MY_ISV_K8S_CONFIG, "python ../../shared/breakfix/query_tenant_notification.py"),
+    ],
+)
+def test_kubernetes_providers_wire_notification_delivery(provider_config: Path, command: str) -> None:
+    """Kubernetes provider configs must execute both shared delivery probes."""
+    config = yaml.safe_load(provider_config.read_text())
+    steps = {item["name"]: item for item in config["commands"]["kubernetes"]["steps"]}
+
+    planned = steps["query_planned_notifications"]
+    failure = steps["query_failure_notifications"]
+    assert planned["command"] == command
+    assert failure["command"] == command
+    assert planned["requires_available_validations"] == ["K8sPlannedMaintenanceNotificationCheck"]
+    assert failure["requires_available_validations"] == ["K8sFailureNotificationCheck"]
+    assert planned["args"][planned["args"].index("--backend") + 1] == "kubernetes"
+    assert failure["args"][failure["args"].index("--backend") + 1] == "kubernetes"
 
 
 @pytest.mark.parametrize(

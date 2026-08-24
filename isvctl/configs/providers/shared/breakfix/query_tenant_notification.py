@@ -65,6 +65,14 @@ class DeliveryError(RuntimeError):
     """Raised when a notification cannot be proved delivered."""
 
 
+class ProviderArgumentParser(argparse.ArgumentParser):
+    """Raise provider errors instead of exiting without a JSON result."""
+
+    def error(self, message: str) -> None:
+        """Convert invalid arguments into the provider failure path."""
+        raise DeliveryError(f"Invalid arguments: {message}")
+
+
 def _timestamp(value: datetime) -> str:
     """Render a UTC timestamp in the provider-neutral ISO 8601 format."""
     return value.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -365,7 +373,7 @@ def _deliver_webhook(payload: dict[str, str], url: str, channel: str) -> str:
 
 def _parse_args() -> argparse.Namespace:
     """Parse the delivery probe arguments."""
-    parser = argparse.ArgumentParser(description="Deliver and verify one tenant notification")
+    parser = ProviderArgumentParser(description="Deliver and verify one tenant notification")
     parser.add_argument("--backend", choices=("aws", "kubernetes", "webhook"), required=True)
     parser.add_argument("--event-type", choices=("planned_maintenance", "node_failure"), required=True)
     parser.add_argument("--machine-id", default="notification-probe-node")
@@ -390,7 +398,19 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> int:
     """Deliver a notification and emit normalized proof of receipt."""
-    args = _parse_args()
+    try:
+        args = _parse_args()
+    except DeliveryError as exc:
+        return _emit(
+            {
+                "success": False,
+                "platform": "notification",
+                "test_name": "query_tenant_notification",
+                "notification_channel_observable": False,
+                "notifications": [],
+                "error": str(exc),
+            }
+        )
     metadata = {
         "platform": args.backend,
         "test_name": (

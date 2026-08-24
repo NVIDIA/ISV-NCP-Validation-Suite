@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 import threading
 from argparse import Namespace
 from datetime import UTC, datetime
@@ -76,6 +77,45 @@ def test_aws_steps_bind_notification_to_launched_instance() -> None:
         args = steps[name]["args"]
         index = args.index("--machine-id")
         assert args[index + 1] == "{{steps.launch_instance.instance_id}}"
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        [SCRIPT.name, "--backend", "invalid", "--event-type", "node_failure", "--message", "failed"],
+        [SCRIPT.name, "--backend", "aws", "--event-type", "node_failure"],
+        [
+            SCRIPT.name,
+            "--backend",
+            "aws",
+            "--event-type",
+            "planned_maintenance",
+            "--message",
+            "planned",
+            "--schedule-hours=0",
+        ],
+    ],
+)
+def test_invalid_arguments_emit_failure_json(
+    argv: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Parser failures must preserve the notification provider contract."""
+    provider = _load_module()
+    monkeypatch.setattr(sys, "argv", argv)
+
+    assert provider.main() == 1
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert captured.err == ""
+    assert payload["success"] is False
+    assert payload["platform"] == "notification"
+    assert payload["test_name"] == "query_tenant_notification"
+    assert payload["notification_channel_observable"] is False
+    assert payload["notifications"] == []
+    assert payload["error"].startswith("Invalid arguments:")
 
 
 class _CaptureHandler(BaseHTTPRequestHandler):

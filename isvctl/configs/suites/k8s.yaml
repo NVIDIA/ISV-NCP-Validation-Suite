@@ -51,6 +51,8 @@ commands:
         timeout: 1200
         requires_available_validations:
           - CordonNodeCheck
+        requires_settings:
+          breakfix_allow_mutation: true
       - name: teardown
         phase: teardown
         command: "../providers/my-isv/scripts/k8s/teardown.sh"

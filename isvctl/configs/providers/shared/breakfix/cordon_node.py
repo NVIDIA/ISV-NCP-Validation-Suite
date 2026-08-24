@@ -31,6 +31,14 @@ class CordonTestError(RuntimeError):
     """Raised when the cordon workflow cannot prove the required behavior."""
 
 
+class ProviderArgumentParser(argparse.ArgumentParser):
+    """Raise provider errors instead of exiting without a JSON result."""
+
+    def error(self, message: str) -> None:
+        """Convert invalid arguments into the provider failure path."""
+        raise CordonTestError(f"Invalid arguments: {message}")
+
+
 class KubectlTimeoutError(CordonTestError):
     """Raised when a kubectl process exceeds its finite deadline."""
 
@@ -435,7 +443,7 @@ def _cleanup(
 
 def _parser() -> argparse.ArgumentParser:
     """Build the command-line parser."""
-    parser = argparse.ArgumentParser(description="Cordon a node and verify Kubernetes scheduling behavior")
+    parser = ProviderArgumentParser(description="Cordon a node and verify Kubernetes scheduling behavior")
     parser.add_argument(
         "--allow-mutation",
         type=_parse_bool,
@@ -462,7 +470,6 @@ def _parse_bool(value: str) -> bool:
 
 def main() -> int:
     """Run the reversible cordon test and emit its provider-neutral JSON result."""
-    args = _parser().parse_args()
     operation: dict[str, Any] = {
         "cordoned": False,
         "new_workloads_blocked": False,
@@ -472,8 +479,11 @@ def main() -> int:
     kubectl: list[str] = []
     created_pods: list[str] = []
     ownership: CordonOwnership | None = None
+    namespace = "default"
 
     try:
+        args = _parser().parse_args()
+        namespace = args.namespace
         if args.timeout_seconds <= 0 or args.poll_interval_seconds <= 0:
             raise CordonTestError("Timeout and poll interval must be greater than zero")
         if not args.allow_mutation:
@@ -564,7 +574,7 @@ def main() -> int:
         result["error"] = f"Unexpected cordon test failure: {exc}"
     finally:
         try:
-            cleanup_errors = _cleanup(kubectl, args.namespace, created_pods, ownership) if kubectl else []
+            cleanup_errors = _cleanup(kubectl, namespace, created_pods, ownership) if kubectl else []
         except Exception as exc:
             cleanup_errors = [f"unexpected cleanup failure: {exc}"]
         if cleanup_errors:

@@ -19,6 +19,7 @@ import yaml
 from isvctl.config.merger import merge_yaml_files
 from isvctl.config.schema import RunConfig
 from isvctl.orchestrator.context import Context
+from isvctl.orchestrator.loop import _apply_step_setting_gates
 from isvctl.orchestrator.step_executor import StepExecutor
 
 ISVCTL_ROOT = Path(__file__).resolve().parents[1]
@@ -106,6 +107,7 @@ def test_k8s_suite_wires_the_shared_reference() -> None:
     assert cordon_step["phase"] == "test"
     assert cordon_step["timeout"] == 1200
     assert cordon_step["requires_available_validations"] == ["CordonNodeCheck"]
+    assert cordon_step["requires_settings"] == {"breakfix_allow_mutation": True}
     assert cordon_step["args"] == [
         "--allow-mutation={{ breakfix_allow_mutation | default(false, true) }}",
         "--node={{ breakfix_node | default('', true) }}",
@@ -115,13 +117,15 @@ def test_k8s_suite_wires_the_shared_reference() -> None:
 
 
 def test_cordon_settings_render_as_safe_arguments() -> None:
-    """Default settings must render as an explicit denial and empty node."""
+    """Default settings skip the step while retaining safe fallback arguments."""
     config = RunConfig.model_validate(merge_yaml_files([K8S_SUITE]))
     cordon_step = next(step for step in config.commands["kubernetes"].steps if step.name == "cordon_node")
 
     rendered = StepExecutor()._render_args(cordon_step.args, Context(config))
+    gated = _apply_step_setting_gates([cordon_step], config.tests.settings)
 
     assert rendered == ["--allow-mutation=False", "--node="]
+    assert gated[0].skip is True
 
 
 def test_cordon_settings_accept_explicit_cli_overrides() -> None:
@@ -137,8 +141,10 @@ def test_cordon_settings_accept_explicit_cli_overrides() -> None:
     cordon_step = next(step for step in config.commands["kubernetes"].steps if step.name == "cordon_node")
 
     rendered = StepExecutor()._render_args(cordon_step.args, Context(config))
+    gated = _apply_step_setting_gates([cordon_step], config.tests.settings)
 
     assert rendered == ["--allow-mutation=True", "--node=dedicated-worker"]
+    assert gated[0].skip is False
 
 
 def test_normal_minikube_config_never_runs_the_mutating_step() -> None:
@@ -171,6 +177,33 @@ def test_missing_mutation_opt_in_fails_before_kubectl(
         "existing_workloads_running": False,
     }
     assert "tests.settings.breakfix_allow_mutation=true" in result["error"]
+
+
+def test_invalid_mutation_opt_in_emits_failure_json(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Invalid Boolean input must preserve the provider JSON contract."""
+    module = _load_script()
+    monkeypatch.setattr(sys, "argv", ["cordon_node.py", "--allow-mutation=maybe"])
+    monkeypatch.setattr(
+        module,
+        "_kubectl_command",
+        lambda: pytest.fail("kubectl must not run when argument parsing fails"),
+    )
+
+    assert module.main() == 1
+    captured = capsys.readouterr()
+    result = json.loads(captured.out)
+
+    assert captured.err == ""
+    assert result["success"] is False
+    assert result["operation"] == {
+        "cordoned": False,
+        "new_workloads_blocked": False,
+        "existing_workloads_running": False,
+    }
+    assert "expected true or false" in result["error"]
 
 
 def test_node_taints_are_tolerated_without_bypassing_cordon(monkeypatch: pytest.MonkeyPatch) -> None:

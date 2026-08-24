@@ -340,6 +340,29 @@ def _apply_step_validation_gates(steps: list[Any], released_tests: set[str] | No
     return gated_steps
 
 
+def _apply_step_setting_gates(steps: list[Any], settings: dict[str, Any]) -> list[Any]:
+    """Mark steps skipped unless their required test settings match exactly."""
+    gated_steps: list[Any] = []
+    for step in steps:
+        requirements = getattr(step, "requires_settings", {})
+        unmet = [
+            name
+            for name, expected in requirements.items()
+            if name not in settings or type(settings[name]) is not type(expected) or settings[name] != expected
+        ]
+        if not unmet:
+            gated_steps.append(step)
+            continue
+        skipped_step = step.model_copy(update={"skip": True})
+        logger.info(
+            "Skipping step '%s' because required test setting(s) are not enabled: %s",
+            skipped_step.name,
+            ", ".join(unmet),
+        )
+        gated_steps.append(skipped_step)
+    return gated_steps
+
+
 def _apply_capability_step_gates(
     steps: list[Any],
     validation_entries: list[ValidationEntry],
@@ -523,6 +546,8 @@ class Orchestrator:
             logger.info(f"Including unreleased validations because {INCLUDE_UNRELEASED_ENV} is enabled")
 
         steps = _apply_step_validation_gates(steps, released_tests)
+        test_settings = self.config.tests.settings if self.config.tests else {}
+        steps = _apply_step_setting_gates(steps, test_settings)
         all_validations = {}
         if self.config.tests and self.config.tests.validations:
             all_validations = self.config.tests.validations

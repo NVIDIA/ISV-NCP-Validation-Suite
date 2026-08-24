@@ -291,6 +291,7 @@ class ReturnNodeMaintenanceCheck(_OperationCheck):
     failure_message: ClassVar[str] = "Node maintenance return was not accepted"
     label_keys: ClassVar[tuple[str, ...]] = ("machine_id", "node_id")
     pass_template: ClassVar[str] = "Node {label} accepted for maintenance"
+    requires_kubernetes_workload_evidence: ClassVar[bool] = False
 
     def _pass_message(self, label: str, operation: dict[str, Any]) -> str:
         """Report the maintenance mode the provider placed the node into."""
@@ -321,7 +322,7 @@ class ReturnNodeMaintenanceCheck(_OperationCheck):
         if operation.get("restored") is not True:
             self.set_failed("Provider did not restore the node after maintenance validation")
             return
-        if step_output.get("platform") == "kubernetes":
+        if self.requires_kubernetes_workload_evidence or step_output.get("platform") == "kubernetes":
             evidence = {
                 "workload_evacuated": "Owned workload was not evacuated",
                 "replacement_blocked": "Replacement workload was not blocked during maintenance",
@@ -336,6 +337,8 @@ class ReturnNodeMaintenanceCheck(_OperationCheck):
 
 class K8sReturnNodeMaintenanceCheck(ReturnNodeMaintenanceCheck):
     """Validate BFX01-02 through the Kubernetes Maintenance Operator."""
+
+    requires_kubernetes_workload_evidence: ClassVar[bool] = True
 
 
 class ReturnRackMaintenanceCheck(_OperationCheck):

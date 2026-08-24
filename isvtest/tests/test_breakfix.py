@@ -203,6 +203,21 @@ class TestOperationChecks:
             {"success": True, "platform": "kubernetes", "operation": operation},
         ).passed
 
+    def test_kubernetes_check_requires_workload_evidence_without_platform(self) -> None:
+        """The Kubernetes-specific class must not trust a missing platform marker."""
+        operation = {
+            "requested": True,
+            "accepted": True,
+            "node_id": "worker-1",
+            "maintenance_mode": "Maintenance",
+            "restored": True,
+        }
+
+        check = _run(K8sReturnNodeMaintenanceCheck, {"success": True, "operation": operation})
+
+        assert not check.passed
+        assert check.message == "Owned workload was not evacuated"
+
     @pytest.mark.parametrize(
         "operation",
         [

@@ -100,6 +100,10 @@ class StepConfig(BaseModel):
             "Unreleased validations are available only when ISVTEST_INCLUDE_UNRELEASED=1."
         ),
     )
+    requires_settings: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Test settings and exact values required for this step to run",
+    )
     continue_on_failure: bool = Field(default=False, description="Continue to next step even if this step fails")
     phase: str = Field(
         default="setup",

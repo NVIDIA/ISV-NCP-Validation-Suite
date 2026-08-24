@@ -841,7 +841,7 @@ tests:
       checks:
         ReturnNodeMaintenanceCheck:
           test_id: "BFX01-02"
-          labels: ["bare_metal", "breakfix", "min_req"]
+          labels: ["bare_metal", "breakfix", "kubernetes", "min_req"]
 
     return_rack_maintenance:
       step: return_rack_maintenance

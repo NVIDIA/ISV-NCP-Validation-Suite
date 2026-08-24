@@ -2052,6 +2052,7 @@ domains:
                 labels:
                   - bare_metal
                   - breakfix
+                  - kubernetes
                   - min_req
                 priority: P1
                 milestone: M5

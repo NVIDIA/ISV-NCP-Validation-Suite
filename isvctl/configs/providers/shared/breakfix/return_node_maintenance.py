@@ -20,7 +20,6 @@ from urllib.parse import quote
 DEFAULT_IMAGE = "registry.k8s.io/pause:3.10"
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 30.0
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 15.0
-MUTATION_OPT_IN_ENV = "ISVTEST_BREAKFIX_ALLOW_MUTATION"
 NODE_MAINTENANCE_RESOURCE = "nodemaintenances.maintenance.nvidia.com"
 NODE_MAINTENANCE_CRD = f"{NODE_MAINTENANCE_RESOURCE}"
 RUN_LABEL = "isvtest.nvidia.com/bfx01-02-run"
@@ -29,6 +28,14 @@ REQUESTOR_ID = "bfx01-02.isvtest.nvidia.com"
 
 class MaintenanceTestError(RuntimeError):
     """Raised when the maintenance workflow cannot prove the requirement."""
+
+
+class ProviderArgumentParser(argparse.ArgumentParser):
+    """Raise provider errors instead of exiting without a JSON result."""
+
+    def error(self, message: str) -> None:
+        """Convert invalid arguments into the provider failure path."""
+        raise MaintenanceTestError(f"Invalid arguments: {message}")
 
 
 class KubectlTimeoutError(MaintenanceTestError):
@@ -691,7 +698,13 @@ def _wait_for_node_restored(
 
 def _parser() -> argparse.ArgumentParser:
     """Build the command-line parser."""
-    parser = argparse.ArgumentParser(description="Request and restore Kubernetes node maintenance")
+    parser = ProviderArgumentParser(description="Request and restore Kubernetes node maintenance")
+    parser.add_argument(
+        "--allow-mutation",
+        type=_parse_bool,
+        default=False,
+        help="Explicit authorization to mutate node maintenance state",
+    )
     parser.add_argument("--node", default="", help="Explicit Ready node dedicated to this validation")
     parser.add_argument("--namespace", default="default", help="Namespace for owned validation resources")
     parser.add_argument("--image", default=DEFAULT_IMAGE, help="Container image for the owned probe")
@@ -700,9 +713,19 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _parse_bool(value: str) -> bool:
+    """Parse a strict command-line Boolean value."""
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes"}:
+        return True
+    if normalized in {"0", "false", "no"}:
+        return False
+    raise argparse.ArgumentTypeError("expected true or false")
+
+
 def main() -> int:
     """Run one reversible NodeMaintenance request and emit provider-neutral JSON."""
-    args = _parser().parse_args()
+    args = argparse.Namespace(namespace="default", timeout_seconds=300.0, poll_interval_seconds=2.0)
     operation: dict[str, Any] = {
         "requested": False,
         "accepted": False,
@@ -727,11 +750,13 @@ def main() -> int:
     maintenance_name = f"isvtest-bfx01-02-{run_id}"
 
     try:
+        args = _parser().parse_args()
         if args.timeout_seconds <= 0 or args.poll_interval_seconds <= 0:
             raise MaintenanceTestError("Timeout and poll interval must be greater than zero")
-        if os.environ.get(MUTATION_OPT_IN_ENV) != "1":
+        if not args.allow_mutation:
             raise MaintenanceTestError(
-                f"Refusing to mutate cluster state; explicitly set {MUTATION_OPT_IN_ENV}=1 for BFX01-02"
+                "Refusing to mutate cluster state; set "
+                "tests.settings.breakfix_node_maintenance_allow_mutation=true for BFX01-02"
             )
         node_name = args.node.strip()
         if not node_name:

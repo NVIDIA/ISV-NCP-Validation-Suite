@@ -30,8 +30,6 @@ Set these on the local machine. The upload variables are read here, since
 | `ISV_CLIENT_SECRET` | Required for result upload to ISV Lab Service | locally |
 | `NGC_API_KEY` | Required for NIM model benchmarks | forwarded |
 | `ISVTEST_INCLUDE_UNRELEASED` | Include checks not yet in `released_tests.json` | forwarded |
-| `ISVTEST_BREAKFIX_ALLOW_MUTATION` | Explicitly allow a mutating break-fix validation | forwarded |
-| `ISVTEST_BREAKFIX_NODE` | Exact Kubernetes node selected for break-fix validation | forwarded |
 
 Anything else the tests need has to reach the target another way - a config file
 under `isvctl/` travels in the deployment archive, so `-f` overrides are the
@@ -94,7 +92,16 @@ target's active Kubernetes context. It never selects a node implicitly and
 drains only its uniquely labelled probe workload.
 
 ```bash
-ISVTEST_INCLUDE_UNRELEASED=1 ISVTEST_BREAKFIX_ALLOW_MUTATION=1 ISVTEST_BREAKFIX_NODE=<dedicated-test-node> uv run isvctl deploy run <target-ip> -f isvctl/configs/providers/kubernetes-node-maintenance.yaml -- -v -s -k ReturnNodeMaintenanceCheck
+cat >node-maintenance-overrides.yaml <<'EOF'
+tests:
+  settings:
+    breakfix_node_maintenance_allow_mutation: true
+    breakfix_node_maintenance_node: <dedicated-test-node>
+EOF
+
+ISVTEST_INCLUDE_UNRELEASED=1 uv run isvctl deploy run <target-ip> \
+  -f isvctl/configs/suites/k8s.yaml -f node-maintenance-overrides.yaml \
+  -- -v -s -k K8sReturnNodeMaintenanceCheck
 ```
 
 ### With ISV Lab Service Integration

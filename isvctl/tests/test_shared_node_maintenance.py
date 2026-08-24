@@ -19,11 +19,12 @@ import yaml
 from isvctl.config.merger import merge_yaml_files
 from isvctl.config.schema import RunConfig
 from isvctl.orchestrator.context import Context
+from isvctl.orchestrator.loop import _apply_step_setting_gates
 from isvctl.orchestrator.step_executor import StepExecutor
 
 ISVCTL_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ISVCTL_ROOT / "configs" / "providers" / "shared" / "breakfix" / "return_node_maintenance.py"
-CONFIG = ISVCTL_ROOT / "configs" / "providers" / "kubernetes-node-maintenance.yaml"
+K8S_SUITE = ISVCTL_ROOT / "configs" / "suites" / "k8s.yaml"
 MINIKUBE_CONFIG = ISVCTL_ROOT / "configs" / "providers" / "minikube.yaml"
 
 
@@ -67,33 +68,59 @@ def _node(*, unschedulable: bool = False) -> dict[str, Any]:
     }
 
 
-def test_explicit_config_wires_only_the_maintenance_reference() -> None:
-    """Keep the mutating step behind its explicit provider config."""
-    config = yaml.safe_load(CONFIG.read_text())
-    steps = config["commands"]["bare_metal"]["steps"]
+def test_k8s_suite_wires_the_maintenance_reference() -> None:
+    """Keep the BFX01-02 step in the canonical Kubernetes suite."""
+    config = yaml.safe_load(K8S_SUITE.read_text())
+    steps = config["commands"]["kubernetes"]["steps"]
+    step = next(item for item in steps if item["name"] == "return_node_maintenance")
 
-    assert steps == [
-        {
-            "name": "return_node_maintenance",
-            "phase": "test",
-            "command": "python shared/breakfix/return_node_maintenance.py",
-            "args": [
-                "--node={{ env.ISVTEST_BREAKFIX_NODE | default('', true) }}",
-                "--timeout-seconds=120",
-            ],
-            "timeout": 1200,
-            "requires_available_validations": ["ReturnNodeMaintenanceCheck"],
-        }
-    ]
+    assert step == {
+        "name": "return_node_maintenance",
+        "phase": "test",
+        "command": "python ../providers/shared/breakfix/return_node_maintenance.py",
+        "args": [
+            "--allow-mutation={{ breakfix_node_maintenance_allow_mutation | default(false, true) }}",
+            "--node={{ breakfix_node_maintenance_node | default('', true) }}",
+            "--timeout-seconds=120",
+        ],
+        "timeout": 1200,
+        "requires_available_validations": ["K8sReturnNodeMaintenanceCheck"],
+        "requires_settings": {"breakfix_node_maintenance_allow_mutation": True},
+    }
+    check = config["tests"]["validations"]["return_node_maintenance"]["checks"]["K8sReturnNodeMaintenanceCheck"]
+    assert check["test_id"] == "BFX01-02"
+    assert check["labels"] == ["bare_metal", "breakfix", "kubernetes", "min_req"]
 
 
-def test_empty_node_renders_as_one_safe_argument(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An unset target must not become a dangling command-line flag."""
-    monkeypatch.delenv("ISVTEST_BREAKFIX_NODE", raising=False)
-    config = RunConfig.model_validate(merge_yaml_files([CONFIG]))
-    step = next(item for item in config.commands["bare_metal"].steps if item.name == "return_node_maintenance")
+def test_default_settings_skip_maintenance_with_safe_arguments() -> None:
+    """Default settings must skip the mutating step and render safe arguments."""
+    config = RunConfig.model_validate(merge_yaml_files([K8S_SUITE]))
+    step = next(item for item in config.commands["kubernetes"].steps if item.name == "return_node_maintenance")
 
-    assert StepExecutor()._render_args(step.args, Context(config)) == ["--node=", "--timeout-seconds=120"]
+    rendered = StepExecutor()._render_args(step.args, Context(config))
+    gated = _apply_step_setting_gates([step], config.tests.settings)
+
+    assert rendered == ["--allow-mutation=False", "--node=", "--timeout-seconds=120"]
+    assert gated[0].skip is True
+
+
+def test_settings_accept_explicit_maintenance_overrides() -> None:
+    """The canonical suite must render explicit mutation consent and target."""
+    merged = merge_yaml_files(
+        [K8S_SUITE],
+        set_values=[
+            "tests.settings.breakfix_node_maintenance_allow_mutation=true",
+            "tests.settings.breakfix_node_maintenance_node=worker-1",
+        ],
+    )
+    config = RunConfig.model_validate(merged)
+    step = next(item for item in config.commands["kubernetes"].steps if item.name == "return_node_maintenance")
+
+    rendered = StepExecutor()._render_args(step.args, Context(config))
+    gated = _apply_step_setting_gates([step], config.tests.settings)
+
+    assert rendered == ["--allow-mutation=True", "--node=worker-1", "--timeout-seconds=120"]
+    assert gated[0].skip is False
 
 
 def test_normal_minikube_config_never_runs_maintenance() -> None:
@@ -108,9 +135,8 @@ def test_missing_mutation_opt_in_fails_before_kubectl(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """The focused config alone is not mutation authorization."""
+    """The provider alone is not mutation authorization."""
     module = _load_script()
-    monkeypatch.delenv(module.MUTATION_OPT_IN_ENV, raising=False)
     monkeypatch.setattr(sys, "argv", ["return_node_maintenance.py", "--node=worker-1"])
     monkeypatch.setattr(
         module,
@@ -122,7 +148,30 @@ def test_missing_mutation_opt_in_fails_before_kubectl(
     payload = json.loads(capsys.readouterr().out)
     assert payload["success"] is False
     assert payload["operation"]["requested"] is False
-    assert "ISVTEST_BREAKFIX_ALLOW_MUTATION=1" in payload["error"]
+    assert "breakfix_node_maintenance_allow_mutation=true" in payload["error"]
+
+
+def test_invalid_mutation_opt_in_emits_failure_json(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Invalid Boolean input must preserve the provider JSON contract."""
+    module = _load_script()
+    monkeypatch.setattr(sys, "argv", ["return_node_maintenance.py", "--allow-mutation=maybe"])
+    monkeypatch.setattr(
+        module,
+        "_kubectl_command",
+        lambda: pytest.fail("kubectl must not run when argument parsing fails"),
+    )
+
+    assert module.main() == 1
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert captured.err == ""
+    assert payload["success"] is False
+    assert payload["operation"]["requested"] is False
+    assert "expected true or false" in payload["error"]
 
 
 def test_explicit_node_is_required_before_kubectl(
@@ -131,8 +180,7 @@ def test_explicit_node_is_required_before_kubectl(
 ) -> None:
     """Never choose a maintenance target on the caller's behalf."""
     module = _load_script()
-    monkeypatch.setenv(module.MUTATION_OPT_IN_ENV, "1")
-    monkeypatch.setattr(sys, "argv", ["return_node_maintenance.py"])
+    monkeypatch.setattr(sys, "argv", ["return_node_maintenance.py", "--allow-mutation=true"])
     monkeypatch.setattr(
         module,
         "_kubectl_command",
@@ -488,8 +536,11 @@ def test_ambiguous_deployment_create_still_runs_cleanup(
     """A timed-out create must not leak the uniquely named probe."""
     module = _load_script()
     deleted: list[str] = []
-    monkeypatch.setenv(module.MUTATION_OPT_IN_ENV, "1")
-    monkeypatch.setattr(sys, "argv", ["return_node_maintenance.py", "--node=worker-1"])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["return_node_maintenance.py", "--allow-mutation=true", "--node=worker-1"],
+    )
     monkeypatch.setattr(module, "_kubectl_command", lambda: ["kubectl"])
     monkeypatch.setattr(module, "_preflight", lambda *args: _node())
 
@@ -518,8 +569,11 @@ def test_successful_workflow_reports_behavior_and_restoration(
     """A PASS requires operator readiness, evacuation, blocking, and recovery."""
     module = _load_script()
     deleted: list[tuple[str, str]] = []
-    monkeypatch.setenv(module.MUTATION_OPT_IN_ENV, "1")
-    monkeypatch.setattr(sys, "argv", ["return_node_maintenance.py", "--node=worker-1"])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["return_node_maintenance.py", "--allow-mutation=true", "--node=worker-1"],
+    )
     monkeypatch.setattr(module, "_kubectl_command", lambda: ["kubectl"])
     monkeypatch.setattr(module, "_preflight", lambda *args: _node())
     monkeypatch.setattr(module, "_require_unclaimed_node", lambda *args: _node())
@@ -577,8 +631,11 @@ def test_incomplete_drain_evidence_fails_workflow(
 ) -> None:
     """Ready=True cannot pass before the owned drain reaches completion."""
     module = _load_script()
-    monkeypatch.setenv(module.MUTATION_OPT_IN_ENV, "1")
-    monkeypatch.setattr(sys, "argv", ["return_node_maintenance.py", "--node=worker-1"])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["return_node_maintenance.py", "--allow-mutation=true", "--node=worker-1"],
+    )
     monkeypatch.setattr(module, "_kubectl_command", lambda: ["kubectl"])
     monkeypatch.setattr(module, "_preflight", lambda *args: _node())
     monkeypatch.setattr(module, "_require_unclaimed_node", lambda *args: _node())
@@ -620,8 +677,11 @@ def test_cleanup_failure_forces_failed_result(
 ) -> None:
     """Ready maintenance evidence cannot pass if restoration is unconfirmed."""
     module = _load_script()
-    monkeypatch.setenv(module.MUTATION_OPT_IN_ENV, "1")
-    monkeypatch.setattr(sys, "argv", ["return_node_maintenance.py", "--node=worker-1"])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["return_node_maintenance.py", "--allow-mutation=true", "--node=worker-1"],
+    )
     monkeypatch.setattr(module, "_kubectl_command", lambda: ["kubectl"])
     monkeypatch.setattr(module, "_preflight", lambda *args: _node())
     monkeypatch.setattr(module, "_require_unclaimed_node", lambda *args: _node())

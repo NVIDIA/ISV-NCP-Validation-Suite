@@ -334,6 +334,10 @@ class ReturnNodeMaintenanceCheck(_OperationCheck):
         self.set_passed(self._pass_message(label, operation))
 
 
+class K8sReturnNodeMaintenanceCheck(ReturnNodeMaintenanceCheck):
+    """Validate BFX01-02 through the Kubernetes Maintenance Operator."""
+
+
 class ReturnRackMaintenanceCheck(_OperationCheck):
     """Validate returning a rack for maintenance (BFX01-03).
 

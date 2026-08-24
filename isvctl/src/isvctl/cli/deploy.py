@@ -86,11 +86,8 @@ def _capability_option(capability: str | None) -> str:
 def _remote_env_assignments() -> str:
     """Render the environment the remote ``test run`` needs from this process.
 
-    Only values the target cannot obtain on its own: a credential, the release
-    gate, and explicit break-fix mutation controls set per invocation by
-    whoever runs the deploy. Quoted because they end up on a shell command
-    line. Path-valued variables are deliberately not forwarded, since they
-    name files that exist only here.
+    Only values the target cannot obtain on its own: a credential and the
+    release gate. Quoted because they end up on a shell command line.
     """
     forwarded: dict[str, str] = {}
     ngc_api_key = get_ngc_api_key()
@@ -99,10 +96,6 @@ def _remote_env_assignments() -> str:
     include_unreleased = os.environ.get(INCLUDE_UNRELEASED_ENV, "")
     if include_unreleased:
         forwarded[INCLUDE_UNRELEASED_ENV] = include_unreleased
-    for name in ("ISVTEST_BREAKFIX_ALLOW_MUTATION", "ISVTEST_BREAKFIX_NODE"):
-        value = os.environ.get(name, "")
-        if value:
-            forwarded[name] = value
     return " ".join(f"{name}={shlex.quote(value)}" for name, value in forwarded.items())
 
 

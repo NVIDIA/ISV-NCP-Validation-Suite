@@ -15,6 +15,7 @@ from isvtest.validations.breakfix import (
     FailureNotificationCheck,
     GpuResetCheck,
     HostReplacementCheck,
+    K8sReturnNodeMaintenanceCheck,
     MaintenanceEventsCheck,
     NodeHealthAgentCheck,
     PlannedMaintenanceNotificationCheck,
@@ -173,6 +174,9 @@ class TestOperationChecks:
         check = _run(ReturnNodeMaintenanceCheck, step_output)
         assert check.passed
         assert "worker-1" in check.message
+
+        kubernetes_check = _run(K8sReturnNodeMaintenanceCheck, step_output)
+        assert kubernetes_check.passed
 
     @pytest.mark.parametrize(
         "field",

@@ -25,6 +25,8 @@ from isvctl.orchestrator.step_executor import StepExecutor
 ISVCTL_ROOT = Path(__file__).resolve().parents[1]
 CORDON_SCRIPT = ISVCTL_ROOT / "configs" / "providers" / "shared" / "breakfix" / "cordon_node.py"
 MINIKUBE_CONFIG = ISVCTL_ROOT / "configs" / "providers" / "minikube.yaml"
+AWS_EKS_CONFIG = ISVCTL_ROOT / "configs" / "providers" / "aws" / "config" / "eks.yaml"
+MY_ISV_K8S_CONFIG = ISVCTL_ROOT / "configs" / "providers" / "my-isv" / "config" / "k8s.yaml"
 K8S_SUITE = ISVCTL_ROOT / "configs" / "suites" / "k8s.yaml"
 
 
@@ -97,18 +99,36 @@ def _patch_from_args(args: tuple[str, ...]) -> list[dict[str, Any]]:
     return json.loads(args[args.index("-p") + 1])
 
 
-def test_k8s_suite_wires_the_shared_reference() -> None:
-    """Keep the BFX01-04 step in the canonical Kubernetes suite."""
+def test_k8s_suite_declares_the_provider_neutral_validation() -> None:
+    """Keep BFX01-04 in the suite while providers own executable steps."""
     config = yaml.safe_load(K8S_SUITE.read_text())
     steps = config["commands"]["kubernetes"]["steps"]
-    cordon_step = next(step for step in steps if step["name"] == "cordon_node")
+    validation = config["tests"]["validations"]["cordon_node"]
 
-    assert cordon_step["command"] == "python ../providers/shared/breakfix/cordon_node.py"
-    assert cordon_step["phase"] == "test"
-    assert cordon_step["timeout"] == 1200
-    assert cordon_step["requires_available_validations"] == ["CordonNodeCheck"]
-    assert cordon_step["requires_settings"] == {"breakfix_allow_mutation": True}
-    assert cordon_step["args"] == [
+    assert all(step["name"] != "cordon_node" for step in steps)
+    assert validation["step"] == "cordon_node"
+    assert validation["checks"]["CordonNodeCheck"]["test_id"] == "BFX01-04"
+
+
+@pytest.mark.parametrize(
+    ("provider_config", "command"),
+    [
+        (MINIKUBE_CONFIG, "python shared/breakfix/cordon_node.py"),
+        (AWS_EKS_CONFIG, "python3 ../../shared/breakfix/cordon_node.py"),
+        (MY_ISV_K8S_CONFIG, "python ../../shared/breakfix/cordon_node.py"),
+    ],
+)
+def test_kubernetes_providers_wire_the_shared_reference(provider_config: Path, command: str) -> None:
+    """Normal Kubernetes provider configs must execute the shared reference."""
+    config = yaml.safe_load(provider_config.read_text())
+    step = next(item for item in config["commands"]["kubernetes"]["steps"] if item["name"] == "cordon_node")
+
+    assert step["command"] == command
+    assert step["phase"] == "test"
+    assert step["timeout"] == 1200
+    assert step["requires_available_validations"] == ["CordonNodeCheck"]
+    assert step["requires_settings"] == {"breakfix_allow_mutation": True}
+    assert step["args"] == [
         "--allow-mutation={{ breakfix_allow_mutation | default(false, true) }}",
         "--node={{ breakfix_node | default('', true) }}",
     ]
@@ -118,7 +138,7 @@ def test_k8s_suite_wires_the_shared_reference() -> None:
 
 def test_cordon_settings_render_as_safe_arguments() -> None:
     """Default settings skip the step while retaining safe fallback arguments."""
-    config = RunConfig.model_validate(merge_yaml_files([K8S_SUITE]))
+    config = RunConfig.model_validate(merge_yaml_files([MINIKUBE_CONFIG]))
     cordon_step = next(step for step in config.commands["kubernetes"].steps if step.name == "cordon_node")
 
     rendered = StepExecutor()._render_args(cordon_step.args, Context(config))
@@ -131,7 +151,7 @@ def test_cordon_settings_render_as_safe_arguments() -> None:
 def test_cordon_settings_accept_explicit_cli_overrides() -> None:
     """The canonical suite must render explicit mutation consent and target."""
     merged = merge_yaml_files(
-        [K8S_SUITE],
+        [MINIKUBE_CONFIG],
         set_values=[
             "tests.settings.breakfix_allow_mutation=true",
             "tests.settings.breakfix_node=dedicated-worker",
@@ -145,14 +165,6 @@ def test_cordon_settings_accept_explicit_cli_overrides() -> None:
 
     assert rendered == ["--allow-mutation=True", "--node=dedicated-worker"]
     assert gated[0].skip is False
-
-
-def test_normal_minikube_config_never_runs_the_mutating_step() -> None:
-    """An ordinary Minikube validation must not cordon a node implicitly."""
-    config = yaml.safe_load(MINIKUBE_CONFIG.read_text())
-    steps = config["commands"]["kubernetes"]["steps"]
-
-    assert all(step["name"] != "cordon_node" for step in steps)
 
 
 def test_missing_mutation_opt_in_fails_before_kubectl(

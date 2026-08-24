@@ -34,6 +34,17 @@ commands:
         phase: setup
         command: "my-isv/scripts/k8s/setup_minikube.sh"
         timeout: 60
+      - name: cordon_node
+        phase: test
+        command: "python shared/breakfix/cordon_node.py"
+        args:
+          - "--allow-mutation={{ breakfix_allow_mutation | default(false, true) }}"
+          - "--node={{ breakfix_node | default('', true) }}"
+        timeout: 1200
+        requires_available_validations:
+          - CordonNodeCheck
+        requires_settings:
+          breakfix_allow_mutation: true
       - name: teardown
         phase: teardown
         command: "my-isv/scripts/k8s/teardown_minikube.sh"
@@ -44,6 +55,8 @@ tests:
 
   settings:
     show_skipped_tests: true
+    breakfix_allow_mutation: false
+    breakfix_node: ""
 
   validations:
     # Host-level GPU checks (not in k8s.yaml)

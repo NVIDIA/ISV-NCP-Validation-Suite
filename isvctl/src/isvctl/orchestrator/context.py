@@ -27,13 +27,14 @@ from datetime import UTC, datetime
 from typing import Any
 
 from isvtest.config.loader import _ternary
-from jinja2 import ChainableUndefined, Environment
+from jinja2 import ChainableUndefined
+from jinja2.sandbox import SandboxedEnvironment
 
 from isvctl.config.schema import CommandOutput, RunConfig
 from isvctl.redaction import filter_env
 
 
-def _create_jinja_env() -> Environment:
+def _create_jinja_env() -> SandboxedEnvironment:
     """Create Jinja2 environment with custom filters.
 
     Uses ChainableUndefined so that chained attribute access on missing
@@ -41,10 +42,15 @@ def _create_jinja_env() -> Environment:
     returns Undefined instead of raising UndefinedError.  This lets the
     ``| default()`` filter work even when a step has not yet run or failed.
 
+    Uses SandboxedEnvironment so that templates in user-supplied YAML
+    configs cannot reach dangerous attributes (e.g. ``__class__.__mro__``
+    chains) even though the rendered output is only used as command
+    arguments.
+
     Returns:
-        Configured Jinja2 Environment
+        Configured Jinja2 SandboxedEnvironment
     """
-    env = Environment(undefined=ChainableUndefined)
+    env = SandboxedEnvironment(undefined=ChainableUndefined)
     env.filters["tojson"] = lambda x: json.dumps(x)
     env.filters["ternary"] = _ternary
     return env

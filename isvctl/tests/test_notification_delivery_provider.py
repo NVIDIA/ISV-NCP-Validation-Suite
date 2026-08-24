@@ -191,6 +191,11 @@ def test_webhook_backends_accept_acknowledged_delivery(
     provider: ModuleType, channel: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Generic, Slack, and Teams webhook formats accept a 2xx acknowledgement."""
+
+    def webhook_publish_time(_value: datetime) -> str:
+        """Return the deterministic webhook publication time."""
+        return "webhook-publish-time"
+
     server = HTTPServer(("127.0.0.1", 0), _CaptureHandler)
     server.timeout = 10
     thread = threading.Thread(target=server.handle_request, daemon=True)
@@ -203,7 +208,7 @@ def test_webhook_backends_accept_acknowledged_delivery(
             "message": "Node failed",
             "failed_at": "before-webhook-setup",
         }
-        monkeypatch.setattr(provider, "_timestamp", lambda value: "webhook-publish-time")
+        monkeypatch.setattr(provider, "_timestamp", webhook_publish_time)
         result = provider._deliver_webhook(payload, f"http://127.0.0.1:{server.server_port}/notify", channel)
     finally:
         thread.join(timeout=5)
@@ -282,12 +287,17 @@ class _FakeSqs:
 
 def test_aws_backend_proves_receipt_and_cleans_up(provider: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
     """SNS PASS requires the exact delivery ID to arrive and cleans temporary resources."""
+
+    def aws_publish_time(_value: datetime) -> str:
+        """Return the deterministic AWS publication time."""
+        return "aws-publish-time"
+
     sqs = _FakeSqs()
     sns = _FakeSns(sqs)
     session = SimpleNamespace(client=lambda name: sns if name == "sns" else sqs)
     fake_boto3 = SimpleNamespace(Session=lambda **kwargs: session)
     monkeypatch.setitem(provider.sys.modules, "boto3", fake_boto3)
-    monkeypatch.setattr(provider, "_timestamp", lambda value: "aws-publish-time")
+    monkeypatch.setattr(provider, "_timestamp", aws_publish_time)
     payload = {
         "delivery_id": "delivery-4",
         "machine_id": "node-1",
@@ -345,6 +355,10 @@ def test_kubernetes_backend_requires_receiver_ack(provider: ModuleType, monkeypa
     """Kubernetes PASS requires the in-cluster receiver to echo the delivery ID."""
     commands: list[list[str]] = []
 
+    def kubernetes_publish_time(_value: datetime) -> str:
+        """Return the deterministic Kubernetes publication time."""
+        return "kubernetes-publish-time"
+
     def fake_run(command: list[str], **kwargs: Any) -> SimpleNamespace:
         commands.append(command)
         if "run" in command:
@@ -353,7 +367,7 @@ def test_kubernetes_backend_requires_receiver_ack(provider: ModuleType, monkeypa
 
     monkeypatch.setattr(provider, "_run", fake_run)
     monkeypatch.setattr(provider.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=0))
-    monkeypatch.setattr(provider, "_timestamp", lambda value: "kubernetes-publish-time")
+    monkeypatch.setattr(provider, "_timestamp", kubernetes_publish_time)
     monkeypatch.setenv("KUBECTL", "kubectl --context test-cluster")
     payload = {
         "delivery_id": "delivery-5",

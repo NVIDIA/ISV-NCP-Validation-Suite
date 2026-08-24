@@ -24,13 +24,7 @@ from isvctl.orchestrator.step_executor import StepExecutor
 ISVCTL_ROOT = Path(__file__).resolve().parents[1]
 CORDON_SCRIPT = ISVCTL_ROOT / "configs" / "providers" / "shared" / "breakfix" / "cordon_node.py"
 MINIKUBE_CONFIG = ISVCTL_ROOT / "configs" / "providers" / "minikube.yaml"
-BREAKFIX_CONFIG = ISVCTL_ROOT / "configs" / "providers" / "kubernetes-breakfix.yaml"
-
-
-@pytest.fixture(autouse=True)
-def _allow_explicit_test_mutation(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Unit workflows opt in explicitly; production callers must do the same."""
-    monkeypatch.setenv("ISVTEST_BREAKFIX_ALLOW_MUTATION", "1")
+K8S_SUITE = ISVCTL_ROOT / "configs" / "suites" / "k8s.yaml"
 
 
 def _load_script() -> ModuleType:
@@ -102,28 +96,49 @@ def _patch_from_args(args: tuple[str, ...]) -> list[dict[str, Any]]:
     return json.loads(args[args.index("-p") + 1])
 
 
-def test_explicit_breakfix_config_wires_the_shared_reference() -> None:
-    """Keep the mutating reference behind an explicitly selected config."""
-    config = yaml.safe_load(BREAKFIX_CONFIG.read_text())
+def test_k8s_suite_wires_the_shared_reference() -> None:
+    """Keep the BFX01-04 step in the canonical Kubernetes suite."""
+    config = yaml.safe_load(K8S_SUITE.read_text())
     steps = config["commands"]["kubernetes"]["steps"]
     cordon_step = next(step for step in steps if step["name"] == "cordon_node")
 
-    assert cordon_step["command"] == "python shared/breakfix/cordon_node.py"
+    assert cordon_step["command"] == "python ../providers/shared/breakfix/cordon_node.py"
     assert cordon_step["phase"] == "test"
     assert cordon_step["timeout"] == 1200
     assert cordon_step["requires_available_validations"] == ["CordonNodeCheck"]
-    assert cordon_step["args"] == ["--node={{ env.ISVTEST_BREAKFIX_NODE | default('', true) }}"]
+    assert cordon_step["args"] == [
+        "--allow-mutation={{ breakfix_allow_mutation | default(false, true) }}",
+        "--node={{ breakfix_node | default('', true) }}",
+    ]
+    assert config["tests"]["settings"]["breakfix_allow_mutation"] is False
+    assert config["tests"]["settings"]["breakfix_node"] == ""
 
 
-def test_empty_node_selection_renders_as_one_safe_argument(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Single-node runs must render ``--node=`` instead of a dangling flag."""
-    monkeypatch.delenv("ISVTEST_BREAKFIX_NODE", raising=False)
-    config = RunConfig.model_validate(merge_yaml_files([BREAKFIX_CONFIG]))
+def test_cordon_settings_render_as_safe_arguments() -> None:
+    """Default settings must render as an explicit denial and empty node."""
+    config = RunConfig.model_validate(merge_yaml_files([K8S_SUITE]))
     cordon_step = next(step for step in config.commands["kubernetes"].steps if step.name == "cordon_node")
 
     rendered = StepExecutor()._render_args(cordon_step.args, Context(config))
 
-    assert rendered == ["--node="]
+    assert rendered == ["--allow-mutation=False", "--node="]
+
+
+def test_cordon_settings_accept_explicit_cli_overrides() -> None:
+    """The canonical suite must render explicit mutation consent and target."""
+    merged = merge_yaml_files(
+        [K8S_SUITE],
+        set_values=[
+            "tests.settings.breakfix_allow_mutation=true",
+            "tests.settings.breakfix_node=dedicated-worker",
+        ],
+    )
+    config = RunConfig.model_validate(merged)
+    cordon_step = next(step for step in config.commands["kubernetes"].steps if step.name == "cordon_node")
+
+    rendered = StepExecutor()._render_args(cordon_step.args, Context(config))
+
+    assert rendered == ["--allow-mutation=True", "--node=dedicated-worker"]
 
 
 def test_normal_minikube_config_never_runs_the_mutating_step() -> None:
@@ -138,9 +153,8 @@ def test_missing_mutation_opt_in_fails_before_kubectl(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Selecting the explicit config alone must not authorize a cluster mutation."""
+    """The safe default must reject mutation before running kubectl."""
     module = _load_script()
-    monkeypatch.delenv(module.MUTATION_OPT_IN_ENV)
     monkeypatch.setattr(sys, "argv", ["cordon_node.py"])
     monkeypatch.setattr(
         module,
@@ -156,7 +170,7 @@ def test_missing_mutation_opt_in_fails_before_kubectl(
         "new_workloads_blocked": False,
         "existing_workloads_running": False,
     }
-    assert "ISVTEST_BREAKFIX_ALLOW_MUTATION=1" in result["error"]
+    assert "tests.settings.breakfix_allow_mutation=true" in result["error"]
 
 
 def test_node_taints_are_tolerated_without_bypassing_cordon(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -365,7 +379,7 @@ def test_unverified_claim_timeout_still_runs_conditional_cleanup(
 
     monkeypatch.setattr(module, "_run", fake_run)
     monkeypatch.setattr(module.uuid, "uuid4", lambda: type("Uuid", (), {"hex": "deadbeefcafebabe"})())
-    monkeypatch.setattr(sys, "argv", ["cordon_node.py", "--timeout-seconds", "1"])
+    monkeypatch.setattr(sys, "argv", ["cordon_node.py", "--allow-mutation=true", "--timeout-seconds", "1"])
 
     assert module.main() == 1
     result = json.loads(capsys.readouterr().out)
@@ -394,7 +408,7 @@ def test_concurrent_claim_failure_never_uncordons(
         return _completed(args)
 
     monkeypatch.setattr(module, "_run", fake_run)
-    monkeypatch.setattr(sys, "argv", ["cordon_node.py", "--timeout-seconds", "1"])
+    monkeypatch.setattr(sys, "argv", ["cordon_node.py", "--allow-mutation=true", "--timeout-seconds", "1"])
 
     assert module.main() == 1
     result = json.loads(capsys.readouterr().out)
@@ -443,7 +457,7 @@ def test_cordon_workflow_proves_requirements_and_conditionally_restores_node(
 
     monkeypatch.setattr(module, "_run", fake_run)
     monkeypatch.setattr(module.uuid, "uuid4", lambda: type("Uuid", (), {"hex": "deadbeefcafebabe"})())
-    monkeypatch.setattr(sys, "argv", ["cordon_node.py", "--timeout-seconds", "1"])
+    monkeypatch.setattr(sys, "argv", ["cordon_node.py", "--allow-mutation=true", "--timeout-seconds", "1"])
 
     assert module.main() == 0
     result = json.loads(capsys.readouterr().out)
@@ -600,7 +614,7 @@ def test_create_timeout_preregisters_probe_for_cleanup(
 
     monkeypatch.setattr(module, "_run", fake_run)
     monkeypatch.setattr(module.uuid, "uuid4", lambda: type("Uuid", (), {"hex": "deadbeefcafebabe"})())
-    monkeypatch.setattr(sys, "argv", ["cordon_node.py", "--timeout-seconds", "1"])
+    monkeypatch.setattr(sys, "argv", ["cordon_node.py", "--allow-mutation=true", "--timeout-seconds", "1"])
 
     assert module.main() == 1
     result = json.loads(capsys.readouterr().out)
@@ -617,7 +631,7 @@ def test_unexpected_failure_still_emits_structured_json(
     module = _load_script()
     monkeypatch.setattr(module, "_kubectl_command", lambda: ["kubectl"])
     monkeypatch.setattr(module, "_select_node", lambda *args: (_ for _ in ()).throw(RuntimeError("boom")))
-    monkeypatch.setattr(sys, "argv", ["cordon_node.py"])
+    monkeypatch.setattr(sys, "argv", ["cordon_node.py", "--allow-mutation=true"])
 
     assert module.main() == 1
     result = json.loads(capsys.readouterr().out)
@@ -664,7 +678,7 @@ def test_blocked_probe_create_timeout_preregisters_both_pods(
 
     monkeypatch.setattr(module, "_run", fake_run)
     monkeypatch.setattr(module.uuid, "uuid4", lambda: type("Uuid", (), {"hex": "deadbeefcafebabe"})())
-    monkeypatch.setattr(sys, "argv", ["cordon_node.py", "--timeout-seconds", "1"])
+    monkeypatch.setattr(sys, "argv", ["cordon_node.py", "--allow-mutation=true", "--timeout-seconds", "1"])
 
     assert module.main() == 1
     result = json.loads(capsys.readouterr().out)

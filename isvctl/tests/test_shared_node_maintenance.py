@@ -26,6 +26,8 @@ ISVCTL_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ISVCTL_ROOT / "configs" / "providers" / "shared" / "breakfix" / "return_node_maintenance.py"
 K8S_SUITE = ISVCTL_ROOT / "configs" / "suites" / "k8s.yaml"
 MINIKUBE_CONFIG = ISVCTL_ROOT / "configs" / "providers" / "minikube.yaml"
+AWS_EKS_CONFIG = ISVCTL_ROOT / "configs" / "providers" / "aws" / "config" / "eks.yaml"
+MY_ISV_K8S_CONFIG = ISVCTL_ROOT / "configs" / "providers" / "my-isv" / "config" / "k8s.yaml"
 
 
 def _load_script() -> ModuleType:
@@ -68,16 +70,33 @@ def _node(*, unschedulable: bool = False) -> dict[str, Any]:
     }
 
 
-def test_k8s_suite_wires_the_maintenance_reference() -> None:
-    """Keep the BFX01-02 step in the canonical Kubernetes suite."""
+def test_k8s_suite_declares_the_provider_neutral_validation() -> None:
+    """Keep BFX01-02 in the suite while providers own executable steps."""
     config = yaml.safe_load(K8S_SUITE.read_text())
     steps = config["commands"]["kubernetes"]["steps"]
-    step = next(item for item in steps if item["name"] == "return_node_maintenance")
+    assert all(item["name"] != "return_node_maintenance" for item in steps)
+    check = config["tests"]["validations"]["return_node_maintenance"]["checks"]["K8sReturnNodeMaintenanceCheck"]
+    assert check["test_id"] == "BFX01-02"
+    assert check["labels"] == ["bare_metal", "breakfix", "kubernetes", "min_req"]
+
+
+@pytest.mark.parametrize(
+    ("provider_config", "command"),
+    [
+        (MINIKUBE_CONFIG, "python shared/breakfix/return_node_maintenance.py"),
+        (AWS_EKS_CONFIG, "python3 ../../shared/breakfix/return_node_maintenance.py"),
+        (MY_ISV_K8S_CONFIG, "python ../../shared/breakfix/return_node_maintenance.py"),
+    ],
+)
+def test_kubernetes_providers_wire_the_maintenance_reference(provider_config: Path, command: str) -> None:
+    """Normal Kubernetes provider configs must execute the shared reference."""
+    config = yaml.safe_load(provider_config.read_text())
+    step = next(item for item in config["commands"]["kubernetes"]["steps"] if item["name"] == "return_node_maintenance")
 
     assert step == {
         "name": "return_node_maintenance",
         "phase": "test",
-        "command": "python ../providers/shared/breakfix/return_node_maintenance.py",
+        "command": command,
         "args": [
             "--allow-mutation={{ breakfix_node_maintenance_allow_mutation | default(false, true) }}",
             "--node={{ breakfix_node_maintenance_node | default('', true) }}",
@@ -87,14 +106,13 @@ def test_k8s_suite_wires_the_maintenance_reference() -> None:
         "requires_available_validations": ["K8sReturnNodeMaintenanceCheck"],
         "requires_settings": {"breakfix_node_maintenance_allow_mutation": True},
     }
-    check = config["tests"]["validations"]["return_node_maintenance"]["checks"]["K8sReturnNodeMaintenanceCheck"]
-    assert check["test_id"] == "BFX01-02"
-    assert check["labels"] == ["bare_metal", "breakfix", "kubernetes", "min_req"]
+    assert config["tests"]["settings"]["breakfix_node_maintenance_allow_mutation"] is False
+    assert config["tests"]["settings"]["breakfix_node_maintenance_node"] == ""
 
 
 def test_default_settings_skip_maintenance_with_safe_arguments() -> None:
     """Default settings must skip the mutating step and render safe arguments."""
-    config = RunConfig.model_validate(merge_yaml_files([K8S_SUITE]))
+    config = RunConfig.model_validate(merge_yaml_files([MINIKUBE_CONFIG]))
     step = next(item for item in config.commands["kubernetes"].steps if item.name == "return_node_maintenance")
 
     rendered = StepExecutor()._render_args(step.args, Context(config))
@@ -107,7 +125,7 @@ def test_default_settings_skip_maintenance_with_safe_arguments() -> None:
 def test_settings_accept_explicit_maintenance_overrides() -> None:
     """The canonical suite must render explicit mutation consent and target."""
     merged = merge_yaml_files(
-        [K8S_SUITE],
+        [MINIKUBE_CONFIG],
         set_values=[
             "tests.settings.breakfix_node_maintenance_allow_mutation=true",
             "tests.settings.breakfix_node_maintenance_node=worker-1",
@@ -121,14 +139,6 @@ def test_settings_accept_explicit_maintenance_overrides() -> None:
 
     assert rendered == ["--allow-mutation=True", "--node=worker-1", "--timeout-seconds=120"]
     assert gated[0].skip is False
-
-
-def test_normal_minikube_config_never_runs_maintenance() -> None:
-    """Ordinary Kubernetes validation must not request maintenance."""
-    config = yaml.safe_load(MINIKUBE_CONFIG.read_text())
-    steps = config["commands"]["kubernetes"]["steps"]
-
-    assert all(step["name"] != "return_node_maintenance" for step in steps)
 
 
 def test_missing_mutation_opt_in_fails_before_kubectl(

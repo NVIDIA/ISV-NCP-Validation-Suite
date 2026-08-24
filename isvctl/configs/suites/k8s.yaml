@@ -42,18 +42,6 @@ commands:
         phase: setup
         command: "../providers/my-isv/scripts/k8s/setup.sh"
         timeout: 120
-      - name: return_node_maintenance
-        phase: test
-        command: "python ../providers/shared/breakfix/return_node_maintenance.py"
-        args:
-          - "--allow-mutation={{ breakfix_node_maintenance_allow_mutation | default(false, true) }}"
-          - "--node={{ breakfix_node_maintenance_node | default('', true) }}"
-          - "--timeout-seconds=120"
-        timeout: 1200
-        requires_available_validations:
-          - K8sReturnNodeMaintenanceCheck
-        requires_settings:
-          breakfix_node_maintenance_allow_mutation: true
       - name: teardown
         phase: teardown
         command: "../providers/my-isv/scripts/k8s/teardown.sh"
@@ -69,10 +57,6 @@ tests:
 
   settings:
     show_skipped_tests: false
-    # BFX01-02 mutates node maintenance state. A caller must explicitly
-    # override this setting and select a dedicated node.
-    breakfix_node_maintenance_allow_mutation: false
-    breakfix_node_maintenance_node: ""
 
   validations:
     # Provider-agnostic node-pool CRUD outcome checks. Keep this category

@@ -285,6 +285,42 @@ class _FakeSqs:
         self.deleted = True
 
 
+def _fake_boto3(sns: _FakeSns, sqs: _FakeSqs) -> SimpleNamespace:
+    """Return a minimal boto3 module backed by the supplied fake clients."""
+
+    def client(name: str) -> _FakeSns | _FakeSqs:
+        """Return the requested fake AWS client."""
+        return sns if name == "sns" else sqs
+
+    session = SimpleNamespace(client=client)
+
+    def session_factory(**_kwargs: Any) -> SimpleNamespace:
+        """Return the shared fake AWS session."""
+        return session
+
+    return SimpleNamespace(Session=session_factory)
+
+
+def _successful_subprocess(*_args: Any, **_kwargs: Any) -> SimpleNamespace:
+    """Return a successful subprocess result."""
+    return SimpleNamespace(returncode=0)
+
+
+def _failed_subprocess(*_args: Any, **_kwargs: Any) -> SimpleNamespace:
+    """Return a failed subprocess result."""
+    return SimpleNamespace(returncode=1)
+
+
+def _wrong_ack(*_args: Any, **_kwargs: Any) -> SimpleNamespace:
+    """Return an acknowledgement for a different delivery."""
+    return SimpleNamespace(stdout='{"delivery_id":"different","status":"delivered"}\n')
+
+
+def _delivered_ack(*_args: Any, **_kwargs: Any) -> SimpleNamespace:
+    """Return an acknowledgement for the expected delivery."""
+    return SimpleNamespace(stdout='{"delivery_id":"delivery-7","status":"delivered"}\n')
+
+
 def test_aws_backend_proves_receipt_and_cleans_up(provider: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
     """SNS PASS requires the exact delivery ID to arrive and cleans temporary resources."""
 
@@ -294,9 +330,7 @@ def test_aws_backend_proves_receipt_and_cleans_up(provider: ModuleType, monkeypa
 
     sqs = _FakeSqs()
     sns = _FakeSns(sqs)
-    session = SimpleNamespace(client=lambda name: sns if name == "sns" else sqs)
-    fake_boto3 = SimpleNamespace(Session=lambda **kwargs: session)
-    monkeypatch.setitem(provider.sys.modules, "boto3", fake_boto3)
+    monkeypatch.setitem(provider.sys.modules, "boto3", _fake_boto3(sns, sqs))
     monkeypatch.setattr(provider, "_timestamp", aws_publish_time)
     payload = {
         "delivery_id": "delivery-4",
@@ -319,8 +353,7 @@ def test_aws_backend_does_not_pass_when_cleanup_fails(provider: ModuleType, monk
         raise RuntimeError("denied")
 
     sns.delete_topic = fail_delete
-    session = SimpleNamespace(client=lambda name: sns if name == "sns" else sqs)
-    monkeypatch.setitem(provider.sys.modules, "boto3", SimpleNamespace(Session=lambda **kwargs: session))
+    monkeypatch.setitem(provider.sys.modules, "boto3", _fake_boto3(sns, sqs))
     with pytest.raises(provider.DeliveryError, match="cleanup failed"):
         provider._deliver_aws({"delivery_id": "delivery-4b"}, "us-west-2")
     assert sqs.deleted
@@ -344,8 +377,7 @@ def test_aws_backend_preserves_delivery_and_cleanup_failures(
         raise RuntimeError("denied")
 
     sns.delete_topic = fail_delete
-    session = SimpleNamespace(client=lambda name: sns if name == "sns" else sqs)
-    monkeypatch.setitem(provider.sys.modules, "boto3", SimpleNamespace(Session=lambda **kwargs: session))
+    monkeypatch.setitem(provider.sys.modules, "boto3", _fake_boto3(sns, sqs))
     with pytest.raises(provider.DeliveryError, match=r"did not receive.*cleanup failed"):
         provider._deliver_aws({"delivery_id": "delivery-4c"}, "us-west-2")
     assert sqs.deleted
@@ -366,7 +398,7 @@ def test_kubernetes_backend_requires_receiver_ack(provider: ModuleType, monkeypa
         return SimpleNamespace(stdout="")
 
     monkeypatch.setattr(provider, "_run", fake_run)
-    monkeypatch.setattr(provider.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=0))
+    monkeypatch.setattr(provider.subprocess, "run", _successful_subprocess)
     monkeypatch.setattr(provider, "_timestamp", kubernetes_publish_time)
     monkeypatch.setenv("KUBECTL", "kubectl --context test-cluster")
     payload = {
@@ -386,12 +418,8 @@ def test_kubernetes_backend_requires_receiver_ack(provider: ModuleType, monkeypa
 
 def test_kubernetes_backend_rejects_wrong_ack(provider: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
     """An acknowledgement for another notification cannot produce PASS evidence."""
-    monkeypatch.setattr(
-        provider,
-        "_run",
-        lambda *args, **kwargs: SimpleNamespace(stdout='{"delivery_id":"different","status":"delivered"}\n'),
-    )
-    monkeypatch.setattr(provider.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=0))
+    monkeypatch.setattr(provider, "_run", _wrong_ack)
+    monkeypatch.setattr(provider.subprocess, "run", _successful_subprocess)
     with pytest.raises(provider.DeliveryError, match="did not acknowledge"):
         provider._deliver_kubernetes({"delivery_id": "delivery-6"})
 
@@ -400,12 +428,8 @@ def test_kubernetes_backend_does_not_pass_when_cleanup_fails(
     provider: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A delivered webhook cannot PASS while its ephemeral namespace remains."""
-    monkeypatch.setattr(
-        provider,
-        "_run",
-        lambda *args, **kwargs: SimpleNamespace(stdout='{"delivery_id":"delivery-7","status":"delivered"}\n'),
-    )
-    monkeypatch.setattr(provider.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=1))
+    monkeypatch.setattr(provider, "_run", _delivered_ack)
+    monkeypatch.setattr(provider.subprocess, "run", _failed_subprocess)
     with pytest.raises(provider.DeliveryError, match="cleanup failed"):
         provider._deliver_kubernetes({"delivery_id": "delivery-7"})
 
@@ -414,11 +438,7 @@ def test_kubernetes_backend_preserves_delivery_and_cleanup_failures(
     provider: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Kubernetes diagnostics retain the acknowledgement failure when cleanup also fails."""
-    monkeypatch.setattr(
-        provider,
-        "_run",
-        lambda *args, **kwargs: SimpleNamespace(stdout='{"delivery_id":"different","status":"delivered"}\n'),
-    )
-    monkeypatch.setattr(provider.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=1))
+    monkeypatch.setattr(provider, "_run", _wrong_ack)
+    monkeypatch.setattr(provider.subprocess, "run", _failed_subprocess)
     with pytest.raises(provider.DeliveryError, match=r"did not acknowledge.*cleanup failed"):
         provider._deliver_kubernetes({"delivery_id": "delivery-8"})

@@ -58,7 +58,7 @@ commands:
       - name: reset_gpus
         phase: test
         continue_on_failure: true
-        command: "python ../scripts/breakfix/reset_gpus.py"
+        command: "python ../../shared/reset_gpus.py"
         args:
           - "--region"
           - "{{region}}"

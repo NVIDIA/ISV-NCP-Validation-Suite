@@ -98,6 +98,16 @@ def _remote_env_assignments() -> str:
     include_unreleased = os.environ.get(INCLUDE_UNRELEASED_ENV, "")
     if include_unreleased:
         forwarded[INCLUDE_UNRELEASED_ENV] = include_unreleased
+    demo_mode = os.environ.get("ISVCTL_DEMO_MODE", "")
+    if demo_mode:
+        forwarded["ISVCTL_DEMO_MODE"] = demo_mode
+    # NODE_SSH_USER is safe to forward (not a path, not a secret).
+    # NODE_SSH_KEY is a local path that will not resolve on the remote machine.
+    # NODE_SSH_PASS would be exposed in the remote process table; use key auth
+    # on the target node instead.
+    ssh_user = os.environ.get("NODE_SSH_USER", "")
+    if ssh_user:
+        forwarded["NODE_SSH_USER"] = ssh_user
     return " ".join(f"{name}={shlex.quote(value)}" for name, value in forwarded.items())
 
 

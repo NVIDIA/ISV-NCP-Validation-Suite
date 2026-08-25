@@ -157,6 +157,37 @@ class TestNodeHealthAgentCheck:
         """BFX04-01 needs evidence an agent is running; zero records is not that."""
         assert not _run(NodeHealthAgentCheck, {"success": True, "agents_observable": True, "agents": []}).passed
 
+    def test_passes_when_all_agents_running(self) -> None:
+        """All agents running on every node passes and reports the node count."""
+        agents = [
+            {"node_id": "n-1", "agent_name": "gpud", "running": True},
+            {"node_id": "n-2", "agent_name": "gpud", "running": True},
+        ]
+        check = _run(NodeHealthAgentCheck, {"success": True, "agents_observable": True, "agents": agents})
+        assert check.passed
+        assert "2 node(s)" in check.message
+
+    def test_fails_when_some_agents_not_running(self) -> None:
+        """A node with no running agent fails and names the offending node."""
+        agents = [
+            {"node_id": "n-1", "agent_name": "gpud", "running": True},
+            {"node_id": "n-2", "agent_name": "gpud", "running": False},
+        ]
+        check = _run(NodeHealthAgentCheck, {"success": True, "agents_observable": True, "agents": agents})
+        assert not check.passed
+        assert "n-2" in check.message
+
+    def test_skips_when_step_skipped(self) -> None:
+        """A provider step reporting a structured skip propagates as a pytest skip."""
+        with pytest.raises(pytest.skip.Exception):
+            _run(NodeHealthAgentCheck, {"success": True, "skipped": True, "skip_reason": "gap: BFX04-01"})
+
+    def test_fails_when_step_failed(self) -> None:
+        """A failed provider step surfaces its error rather than an agent message."""
+        check = _run(NodeHealthAgentCheck, {"success": False, "error": "connection refused"})
+        assert not check.passed
+        assert "connection refused" in check.message
+
 
 class TestCordonNodeCheck:
     """Cover the BFX01-04 cordon check."""

@@ -238,6 +238,21 @@ commands:
           - "{{steps.launch_instance.key_file}}"
         timeout: 3600
 
+      # BFX01-01: GPU reset via SSH.
+      # Uses post-power-cycle IP/key (power-cycle may reassign the public IP).
+      - name: reset_gpus
+        phase: test
+        continue_on_failure: true
+        command: "python3 ../../shared/reset_gpus.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--host"
+          - "{{steps.power_cycle_instance.public_ip}}"
+          - "--ssh-key"
+          - "{{steps.power_cycle_instance.key_file}}"
+        timeout: 600
+
       # Deploy NIM container via SSH (shared script)
       # Requires NGC_API_KEY env var
       # Uses post-power-cycle IP/key since power-cycle may reassign the public IP

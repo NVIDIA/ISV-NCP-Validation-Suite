@@ -150,6 +150,26 @@ commands:
           TF_VAR_test_pool_taints_json: '[{"key":"isv.ncp.validation/dedicated","value":"test","effect":"NoSchedule"}]'
           TF_VAR_test_pool_node_type: "cpu"
 
+      # BFX01-01: GPU reset via SSH on EKS worker node.
+      # Resolves the node's internal IP via kubectl, then SSHes to it.
+      # Set NODE_SSH_KEY env var if the key is not in ~/.ssh/; EKS Amazon
+      # Linux nodes use ec2-user (overridden by {{ssh_user}} in settings).
+      # BFX01-01: GPU reset — requires a real k8s node name in machine_id.
+      # Set machine_id in settings or pass -e machine_id=<node> to enable.
+      - name: reset_gpus
+        phase: test
+        skip: true
+        continue_on_failure: true
+        command: "python3 ../../shared/reset_gpus.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--machine-id"
+          - "{{machine_id}}"
+          - "--ssh-user"
+          - "{{ssh_user}}"
+        timeout: 600
+
       # Delete the throwaway pool (K8S06-03). In the test phase so
       # K8sNodePoolDeletedCheck can assert it drains after all test steps.
       - name: delete_test_node_pool
@@ -208,6 +228,10 @@ commands:
 
 tests:
   description: "AWS EKS GPU cluster validation"
+  settings:
+    region: "us-west-2"
+    machine_id: "" # k8s node name to reset (e.g. ip-10-0-1-42.us-west-2.compute.internal)
+    ssh_user: "ec2-user" # Amazon Linux 2 default; override for Ubuntu AMIs
 
   validations:
     k8s_multi_cluster:

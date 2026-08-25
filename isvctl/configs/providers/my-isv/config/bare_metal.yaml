@@ -214,6 +214,22 @@ commands:
       # ─── Break-fix (BFX01–BFX06) demo stubs ───────────────────────
       # Independent of the instance lifecycle fixture above; continue on
       # failure so a missing break-fix API does not abort the phase.
+
+      # BFX01-01: GPU reset via SSH — bare metal path passes --host directly.
+      - name: reset_gpus
+        phase: test
+        skip: true
+        continue_on_failure: true
+        command: "python ../../shared/reset_gpus.py"
+        args:
+          - "--region"
+          - "{{region}}"
+          - "--host"
+          - "{{steps.power_cycle_instance.public_ip}}"
+          - "--ssh-key"
+          - "{{steps.launch_instance.key_file}}"
+        timeout: 600
+
       - name: query_serial_numbers
         phase: test
         continue_on_failure: true

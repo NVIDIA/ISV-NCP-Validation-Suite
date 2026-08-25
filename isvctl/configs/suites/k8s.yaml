@@ -394,7 +394,7 @@ tests:
       checks:
         GpuResetCheck:
           test_id: "BFX01-01"
-          labels: ["kubernetes", "breakfix", "min_req"]
+          labels: ["breakfix", "kubernetes", "min_req"]
 
     cordon_node:
       step: cordon_node

@@ -2,7 +2,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Reset GPUs on a node (BFX01-01) - my-isv template."""
+"""GPU reset stub (BFX01-01) - my-isv template.
+
+Replace this script with your platform's GPU reset implementation, or point
+the config command at isvctl/configs/providers/shared/reset_gpus.py if your
+provider uses SSH-based reset (see aws/config/gpu_reset.yaml for an example).
+"""
 
 from __future__ import annotations
 
@@ -16,17 +21,25 @@ from common.stub import emit_stub
 
 
 def main() -> int:
-    """Emit the GPU reset template result (BFX01-01)."""
-    parser = argparse.ArgumentParser(description="Reset GPUs via breakfix API (template)")
+    """Emit the GPU-reset template result (BFX01-01)."""
+    parser = argparse.ArgumentParser(description="GPU reset (template)")
+    parser.add_argument("--host", default="", help="Target node IP or hostname")
+    parser.add_argument("--machine-id", default="", help="Kubernetes node name")
+    parser.add_argument("--ssh-user", default="", help="SSH user")
+    parser.add_argument("--ssh-key", default="", help="Path to SSH private key")
     parser.add_argument("--region", default="", help="Cloud region")
-    parser.add_argument("--machine-id", default="", help="Target machine/node id")
-    args = parser.parse_args()
+    _ = parser.parse_args()
 
-    node_id = args.machine_id or "demo-node-001"
     return emit_stub(
         "reset_gpus",
-        hint="GPU reset breakfix API",
-        operation={"requested": True, "completed": True, "node_id": node_id},
+        hint="GPU reset API or SSH-based reset via shared/reset_gpus.py",
+        operation={
+            "requested": True,
+            "completed": True,
+            "flr_reset": False,
+            "node_id": "demo-node",
+            "message": "demo reset ok",
+        },
     )
 
 

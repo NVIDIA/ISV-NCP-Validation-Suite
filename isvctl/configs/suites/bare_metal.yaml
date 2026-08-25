@@ -789,7 +789,8 @@ tests:
 
     # ─── Break-fix (BFX01–BFX06) ─────────────────────────────────────
     # Bare-metal obligation for offtake Breakfix Requirements. Kubernetes-
-    # only actions (GPU reset, cordon) live in k8s.yaml.
+    # only actions (GPU reset, cordon) live in k8s.yaml; the reset_gpus
+    # step runs in the bare_metal lifecycle but validation is in k8s.yaml.
 
     hardware_serials:
       step: query_serial_numbers

@@ -444,28 +444,12 @@ def _cleanup(
 def _parser() -> argparse.ArgumentParser:
     """Build the command-line parser."""
     parser = ProviderArgumentParser(description="Cordon a node and verify Kubernetes scheduling behavior")
-    parser.add_argument(
-        "--allow-mutation",
-        type=_parse_bool,
-        default=False,
-        help="Explicit authorization to mutate node schedulability",
-    )
     parser.add_argument("--node", help="Specific Ready, schedulable node to test")
     parser.add_argument("--namespace", default="default", help="Namespace for temporary probe pods")
     parser.add_argument("--image", default=DEFAULT_IMAGE, help="Container image for temporary probe pods")
     parser.add_argument("--timeout-seconds", type=float, default=120, help="Timeout for each scheduling assertion")
     parser.add_argument("--poll-interval-seconds", type=float, default=2, help="Pending-pod polling interval")
     return parser
-
-
-def _parse_bool(value: str) -> bool:
-    """Parse a strict command-line Boolean value."""
-    normalized = value.strip().lower()
-    if normalized in {"1", "true", "yes"}:
-        return True
-    if normalized in {"0", "false", "no"}:
-        return False
-    raise argparse.ArgumentTypeError("expected true or false")
 
 
 def main() -> int:
@@ -484,12 +468,19 @@ def main() -> int:
     try:
         args = _parser().parse_args()
         namespace = args.namespace
+        if not args.node:
+            result.update(
+                {
+                    "success": True,
+                    "skipped": True,
+                    "skip_reason": "No dedicated break-fix node configured",
+                    "operation": operation,
+                }
+            )
+            print(json.dumps(result))
+            return 0
         if args.timeout_seconds <= 0 or args.poll_interval_seconds <= 0:
             raise CordonTestError("Timeout and poll interval must be greater than zero")
-        if not args.allow_mutation:
-            raise CordonTestError(
-                "Refusing to mutate cluster state; set tests.settings.breakfix_allow_mutation=true for BFX01-04"
-            )
         kubectl = _kubectl_command()
         selection = _select_node(kubectl, args.node)
         operation["node_id"] = selection.name

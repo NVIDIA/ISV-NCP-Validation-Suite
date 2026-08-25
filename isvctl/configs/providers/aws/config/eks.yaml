@@ -200,20 +200,15 @@ commands:
           NODE_POOL_STATE_FILE: "terraform-delete.tfstate"
 
       # BFX01-04: exercise cordon semantics through the shared Kubernetes
-      # reference. Mutation remains disabled unless the caller explicitly
-      # opts in and selects a dedicated node when the cluster has many nodes.
+      # reference when a dedicated test node is configured.
       - name: cordon_node
         phase: test
         command: "python3 ../../shared/breakfix/cordon_node.py"
         args:
-          - "--allow-mutation={{ breakfix_allow_mutation | default(false, true) }}"
-          - "--node={{ breakfix_node | default('', true) }}"
+          - "--node={{breakfix_node}}"
         timeout: 1200
         requires_available_validations:
           - CordonNodeCheck
-        requires_settings:
-          breakfix_allow_mutation: true
-
       - name: teardown
         phase: teardown
         command: "../scripts/eks/teardown.sh"
@@ -225,8 +220,7 @@ tests:
   description: "AWS EKS GPU cluster validation"
 
   settings:
-    breakfix_allow_mutation: false
-    breakfix_node: ""
+    breakfix_node: "{{env.ISVTEST_BREAKFIX_NODE | default('', true)}}"
 
   validations:
     k8s_multi_cluster:

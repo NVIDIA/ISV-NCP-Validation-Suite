@@ -35,7 +35,6 @@ from isvctl.orchestrator.loop import (
     Orchestrator,
     Phase,
     _apply_capability_step_gates,
-    _apply_step_setting_gates,
     _entries_missing_from_junit,
     _merge_junit_xmls,
     _write_terminal_junit_xml,
@@ -78,28 +77,6 @@ def test_explicit_step_requires_gate_unbound_lifecycle_steps() -> None:
 
     assert all(step.skip for step in vm_steps)
     assert all(not step.skip for step in kubernetes_steps)
-
-
-def test_required_settings_gate_opt_in_steps() -> None:
-    """A step runs only when each required test setting matches exactly."""
-    steps = [
-        StepConfig(
-            name="cordon_node",
-            command="cordon",
-            phase="test",
-            requires_settings={"breakfix_allow_mutation": True},
-        )
-    ]
-
-    missing = _apply_step_setting_gates(steps, {})
-    disabled = _apply_step_setting_gates(steps, {"breakfix_allow_mutation": False})
-    non_boolean = _apply_step_setting_gates(steps, {"breakfix_allow_mutation": 1})
-    enabled = _apply_step_setting_gates(steps, {"breakfix_allow_mutation": True})
-
-    assert missing[0].skip is True
-    assert disabled[0].skip is True
-    assert non_boolean[0].skip is True
-    assert enabled[0].skip is False
 
 
 def test_python_script_path_falls_back_to_current_working_directory(

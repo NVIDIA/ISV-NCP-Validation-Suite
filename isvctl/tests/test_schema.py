@@ -77,7 +77,6 @@ class TestStepConfig:
         assert step.skip is False
         assert step.requires == []
         assert step.requires_available_validations == []
-        assert step.requires_settings == {}
 
     def test_full_step(self) -> None:
         """Test creating a fully specified step config."""
@@ -92,7 +91,6 @@ class TestStepConfig:
             skip=False,
             requires=["vm", "bare_metal"],
             requires_available_validations=["NewCheck"],
-            requires_settings={"allow_mutation": True},
             continue_on_failure=True,
             output_schema="vpc",
         )
@@ -104,7 +102,6 @@ class TestStepConfig:
         assert step.phase == "setup"
         assert step.requires == ["vm", "bare_metal"]
         assert step.requires_available_validations == ["NewCheck"]
-        assert step.requires_settings == {"allow_mutation": True}
         assert step.continue_on_failure is True
         assert step.output_schema == "vpc"
 

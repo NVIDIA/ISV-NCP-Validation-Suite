@@ -298,7 +298,8 @@ volume. The three test-phase steps all reuse that fixture.
 | `cordon_node` | test | `providers/shared/breakfix/cordon_node.py` (BFX01-04) |
 
 Validations use `kubectl` directly (or a custom CLI via the `KUBECTL` env var): node counts, GPU operator, pod health, NCCL/NIM workloads. Break-fix cordon and GPU reset are optional provider steps.
-The shared cordon reference is skipped unless `tests.settings.breakfix_allow_mutation: true`; multi-node clusters also require `tests.settings.breakfix_node` to name a dedicated test node.
+The shared cordon reference skips without changing cluster state unless
+`tests.settings.breakfix_node` names a dedicated test node.
 
 ### Slurm (`slurm.yaml`)
 

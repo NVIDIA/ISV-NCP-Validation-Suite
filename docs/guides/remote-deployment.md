@@ -85,34 +85,6 @@ Pass extra pytest arguments after `--`:
 uv run isvctl deploy run <target-ip> -f isvctl/configs/suites/slurm.yaml -- -v -s -k "test_name"
 ```
 
-### Running the Kubernetes Cordon Breakfix Check
-
-The canonical K8s suite keeps cordoning disabled under `tests.settings`. Supply
-an override file that grants mutation consent and selects an exact dedicated
-node on multi-node clusters:
-
-```yaml
-# cordon-overrides.yaml
-tests:
-  settings:
-    breakfix_allow_mutation: true
-    breakfix_node: "<dedicated-test-node>"
-```
-
-```bash
-ISVTEST_INCLUDE_UNRELEASED=1 \
-uv run isvctl deploy run <target-ip> \
-  -j <jumphost> -u ubuntu \
-  -f isvctl/configs/suites/k8s.yaml \
-  -f cordon-overrides.yaml \
-  --phase test --no-upload \
-  -- -v -s -k CordonNodeCheck
-```
-
-The run restores schedulability only while it still owns the cordon. If another
-actor changes the ownership annotation, cleanup leaves schedulability unchanged
-and reports `cleanup_errors`; verify the node state after any failed run.
-
 ### With ISV Lab Service Integration
 
 Upload results to the ISV Lab Service:

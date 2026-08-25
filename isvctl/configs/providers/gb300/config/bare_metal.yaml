@@ -1,0 +1,54 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Direct GB300 NVSwitch firmware validation.
+#
+# This provider runs on a GB300 BCM head where Bright Cluster Manager and
+# cm-nvfwupd are installed.  It reads existing NVSwitch inventory and executes
+# only `nvfwupd show_version -j`; it never performs a firmware update.
+#
+# Prerequisites:
+#   - passwordless sudo for the read-only cmsh and nvfwupd commands
+#   - tests.settings.gb300_rack set to a rack prefix (for example, rack-a), or
+#     tests.settings.gb300_switch_hosts set to comma-separated NVSwitch names
+#   - tests.settings.gb300_switch_limit controls the number inspected (1-8)
+#
+# Usage:
+#   uv run isvctl test run \
+#     -f isvctl/configs/providers/gb300/config/bare_metal.yaml \
+#     --set tests.settings.gb300_rack=rack-a \
+#     -- -k NvSwitchFirmwareCheck
+
+import:
+  - ../../../suites/bare_metal.yaml
+
+version: "1.0"
+
+commands:
+  bare_metal:
+    phases: ["test"]
+    steps:
+      - name: query_switch_firmware
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/query_switch_firmware.py"
+        args:
+          - "--rack={{ gb300_rack | default('', true) }}"
+          - "--switch-hosts={{ gb300_switch_hosts | default('', true) }}"
+          - "--limit={{ gb300_switch_limit | default(1, true) }}"
+        # Discovery is bounded at 30 seconds and each of the at most eight
+        # serial tray queries is bounded at 120 seconds. Keep one minute for
+        # result normalization so the provider can always emit failure JSON.
+        timeout: 1050
+
+tests:
+  cluster_name: "gb300-direct-firmware-validation"
+  description: "Inspect GB300 NVSwitch tray firmware directly with nvfwupd"
+
+  settings:
+    region: ""
+    instance_type: ""
+    teardown_flag: ""
+    gb300_rack: ""
+    gb300_switch_hosts: ""
+    gb300_switch_limit: 1

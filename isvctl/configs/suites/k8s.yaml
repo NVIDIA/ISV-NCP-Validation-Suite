@@ -403,5 +403,12 @@ tests:
           test_id: "BFX01-04"
           labels: ["kubernetes", "breakfix", "min_req"]
 
+    node_health_agents:
+      step: query_node_health_agents
+      checks:
+        K8sNodeHealthAgentCheck:
+          test_id: "BFX04-01"
+          labels: ["bare_metal", "breakfix", "kubernetes"]
+
   exclude:
     labels: []

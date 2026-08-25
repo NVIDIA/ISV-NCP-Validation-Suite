@@ -1,0 +1,43 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# GB300 bare-metal validation configuration.
+#
+# BFX04-01 performs read-only inspection of NVIDIA Fleet Intelligence Agent
+# (GPUd) or NVSentinel. Set tests.settings.bfx04_nodes to comma-separated SSH
+# targets for direct systemd inspection.
+#
+# Usage:
+#   uv run isvctl test run \
+#     -f isvctl/configs/providers/gb300/config/bare_metal.yaml \
+#     --set tests.settings.bfx04_nodes=gb300-node-01,gb300-node-02 \
+#     -- -k NodeHealthAgentCheck
+
+import:
+  - ../../../suites/bare_metal.yaml
+
+version: "1.0"
+
+commands:
+  bare_metal:
+    phases: ["test"]
+    steps:
+      - name: query_node_health_agents
+        phase: test
+        command: "python ../../shared/breakfix/query_node_health_agents.py"
+        args:
+          - "--nodes={{ bfx04_nodes | default('', true) }}"
+        requires_available_validations:
+          - NodeHealthAgentCheck
+        timeout: 120
+
+tests:
+  cluster_name: "gb300-bare-metal-validation"
+  description: "GB300 bare-metal validation"
+
+  settings:
+    region: ""
+    instance_type: ""
+    teardown_flag: ""
+    show_skipped_tests: true
+    bfx04_nodes: ""

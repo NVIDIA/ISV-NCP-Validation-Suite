@@ -34,6 +34,14 @@ commands:
         phase: setup
         command: "my-isv/scripts/k8s/setup_minikube.sh"
         timeout: 60
+      - name: query_node_health_agents
+        phase: test
+        command: "python shared/breakfix/query_node_health_agents.py"
+        args:
+          - "--nodes="
+        requires_available_validations:
+          - K8sNodeHealthAgentCheck
+        timeout: 120
       - name: teardown
         phase: teardown
         command: "my-isv/scripts/k8s/teardown_minikube.sh"

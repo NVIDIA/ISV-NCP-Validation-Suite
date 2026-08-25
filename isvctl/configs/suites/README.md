@@ -301,6 +301,16 @@ volume. The three test-phase steps all reuse that fixture.
 
 Validations use `kubectl` directly (or a custom CLI via the `KUBECTL` env var): node counts, GPU operator, pod health, NCCL/NIM workloads. Break-fix cordon and GPU reset are optional provider steps.
 
+The GB300 bare-metal provider wires the read-only BFX04-01 query in
+`providers/gb300/config/bare_metal.yaml`. Kubernetes providers wire the same
+shared query to the provider-neutral check in `suites/k8s.yaml`.
+For GB300 bare metal, set `tests.settings.bfx04_nodes` to comma-separated SSH targets;
+each must run `fleetintd`, `gpud`, `nvsentinel`, or `gpu-health-monitor`. With
+no node list, the shared query uses Kubernetes and requires an official Fleet Intelligence Agent
+(`fleet-intelligence-agent`) or NVSentinel GPU Health Monitor
+(`gpu-health-monitor`) Ready/Running DaemonSet-owned pod on every detected GPU
+node. Generic DCGM exporter telemetry does not satisfy this requirement.
+
 ### Slurm (`slurm.yaml`)
 
 | Step | Phase | Script |

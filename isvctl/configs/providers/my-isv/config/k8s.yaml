@@ -73,6 +73,15 @@ commands:
         args: ["--region", "{{region}}"]
         timeout: 600
 
+      - name: query_node_health_agents
+        phase: test
+        command: "python ../../shared/breakfix/query_node_health_agents.py"
+        args:
+          - "--nodes="
+        requires_available_validations:
+          - K8sNodeHealthAgentCheck
+        timeout: 120
+
 tests:
   description: "my-isv Kubernetes platform suite (real cluster required)"
   settings:

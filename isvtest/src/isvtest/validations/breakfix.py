@@ -383,6 +383,10 @@ class NodeHealthAgentCheck(BaseValidation):
         self.set_passed(f"Node health agent running on {len(agents)} node(s)")
 
 
+class K8sNodeHealthAgentCheck(NodeHealthAgentCheck):
+    """Validate BFX04-01 through Kubernetes node and workload inventory."""
+
+
 class PlannedMaintenanceNotificationCheck(_QueryableRecordsCheck):
     """Validate tenants can be notified of planned maintenance (BFX05-01).
 

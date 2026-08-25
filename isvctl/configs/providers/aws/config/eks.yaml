@@ -206,6 +206,17 @@ commands:
           TF_AUTO_APPROVE: "true"
           NODE_POOL_STATE_FILE: "terraform-delete.tfstate"
 
+      # BFX04-01: read-only inventory of Fleet Intelligence/GPUd or
+      # NVSentinel DaemonSet and pod coverage across every GPU node.
+      - name: query_node_health_agents
+        phase: test
+        command: "python3 ../../shared/breakfix/query_node_health_agents.py"
+        args:
+          - "--nodes="
+        requires_available_validations:
+          - K8sNodeHealthAgentCheck
+        timeout: 120
+
       - name: teardown
         phase: teardown
         command: "../scripts/eks/teardown.sh"

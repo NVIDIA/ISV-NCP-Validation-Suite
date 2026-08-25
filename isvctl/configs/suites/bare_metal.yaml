@@ -862,7 +862,7 @@ tests:
       checks:
         NodeHealthAgentCheck:
           test_id: "BFX04-01"
-          labels: ["bare_metal", "breakfix"]
+          labels: ["bare_metal", "breakfix", "kubernetes"]
 
     planned_maintenance_notification:
       step: query_planned_notifications

@@ -1,0 +1,51 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# GB300 bare-metal validation configuration.
+#
+# Run this provider on a GB300 BCM head. The BFX03-03 step reads the configured
+# compute node's BMC credentials from existing BCM inventory and performs only
+# Redfish GETs against a Manager-scoped BMC Journal LogService. It does not
+# clear logs, collect a diagnostic dump, or change BMC state.
+#
+# Required for BFX03-03:
+#   tests.settings.gb300_node_host: gb300-node-01
+#
+# Optional when the BMC certificate does not chain to the BCM host's system
+# trust store:
+#   tests.settings.gb300_bmc_ca_cert: /path/to/trusted-bmc-ca.pem
+#
+# Usage:
+#   uv run isvctl test run \
+#     -f isvctl/configs/providers/gb300/config/bare_metal.yaml \
+#     --set tests.settings.gb300_node_host=gb300-node-01 \
+#     -- -k BmcKernelLogCheck
+
+import:
+  - ../../../suites/bare_metal.yaml
+
+version: "1.0"
+
+commands:
+  bare_metal:
+    phases: ["test"]
+    steps:
+      - name: query_bmc_kernel_logs
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/query_bmc_kernel_logs.py"
+        args:
+          - "--node-host={{ gb300_node_host | default('', true) }}"
+          - "--ca-cert={{ gb300_bmc_ca_cert | default('', true) }}"
+        timeout: 120
+
+tests:
+  cluster_name: "gb300-bare-metal-validation"
+  description: "GB300 bare-metal validation"
+
+  settings:
+    region: ""
+    instance_type: ""
+    teardown_flag: ""
+    gb300_node_host: ""
+    gb300_bmc_ca_cert: ""

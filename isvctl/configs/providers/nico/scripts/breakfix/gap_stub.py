@@ -6,14 +6,16 @@
 
 Several break-fix requirements have no NICo tenant REST surface to exercise:
 the remaining mutating BFX01 workflows have no rack- or replacement-level API,
-and the BFX02-02/BFX04-01/BFX05/BFX06 signals are not exposed at all. Each of
-those steps emits a structured skip naming the gap rather than a hard failure,
-so the suite reports "not available on this platform" instead of "broken".
+and the BFX02-02/BFX05/BFX06 signals are not exposed at all. Each of those
+steps emits a structured skip naming the gap rather than a hard failure, so the
+suite reports "not available on this platform" instead of "broken".
 
-A requirement leaves this table once any part of it is reachable: BFX03-02 now
-has a real step, because NICo does hold tray firmware and only withholds it
-from tenants, and that distinction is worth reporting from the step that made
-the call rather than from a blanket stub.
+A requirement leaves this table once any part of it is reachable, and reachable
+need not mean a REST endpoint. BFX03-02 has a real step because NICo does hold
+tray firmware and only withholds it from tenants, and that distinction is worth
+reporting from the step that made the call rather than from a blanket stub.
+BFX04-01 has one because a GPU health agent runs on the node itself, so it is
+observable by inspecting the node even though NICo never reports it.
 
 One script serves all of them: the per-requirement reason and the zeroed
 contract fields the validation reads live in ``GAPS`` below, selected by
@@ -44,10 +46,6 @@ GAPS: dict[str, tuple[str, dict[str, Any]]] = {
     "BFX02-02": (
         "NICo has no retirement-notice query API (BFX02-02 gap)",
         {"notices_queryable": False, "notices": []},
-    ),
-    "BFX04-01": (
-        "No GPU health monitoring process is observable via NICo REST (BFX04-01 gap)",
-        {"agents_observable": False, "agents": []},
     ),
     "BFX05-01": (
         "Planned maintenance notification channel is not exposed via NICo REST (BFX05-01 gap)",

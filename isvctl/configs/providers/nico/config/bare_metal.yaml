@@ -85,6 +85,8 @@
 #   - Expected machines pre-registered; machines ingested and DPUs initialized
 #   - NICO_ORGANIZATION and NICO_SITE_ID environment variables set
 #   - Optional NICO_INSTANCE_ID narrows inventory checks to a known instance
+#   - Optional NICO_HEALTH_AGENT_NODES lists the SSH-reachable GPU nodes to
+#     inspect for GPUd/NVSentinel (BFX04-01); unset skips that check
 #   - ssh-keygen on the host (used by query_key_access to mint the throwaway key)
 #
 # Usage:
@@ -511,20 +513,19 @@ commands:
           - "BFX01-05"
         timeout: 900
 
+      # ─── Query Node Health Agents ──────────────────────────────────
+      # NICo's REST surface does not report GPUd/NVSentinel state, so
+      # BFX04-01 is evidenced by inspecting the agents' systemd units on
+      # the nodes directly. Skips while NICO_HEALTH_AGENT_NODES is unset.
       - name: query_node_health_agents
         phase: test
         continue_on_failure: true
-        command: "python ../scripts/breakfix/gap_stub.py"
+        command: "python ../../shared/breakfix/query_node_health_agents.py"
         args:
-          - "--org"
-          - "{{org}}"
-          - "--site-id"
-          - "{{site_id}}"
-          - "--api-base"
-          - "{{nico_api_base}}"
-          - "--gap"
-          - "BFX04-01"
-        timeout: 120
+          - "--nodes={{health_agent_nodes}}"
+        requires_available_validations:
+          - NodeHealthAgentCheck
+        timeout: 300
 
       - name: query_planned_notifications
         phase: test
@@ -622,6 +623,7 @@ tests:
     site_id: "{{env.NICO_SITE_ID}}"
     nico_api_base: "{{env.NICO_API_BASE}}"
     instance_id: "{{env.NICO_INSTANCE_ID}}"
+    health_agent_nodes: "{{env.NICO_HEALTH_AGENT_NODES | default('', true)}}"
     # The imported bare_metal suite defines these for the full instance
     # lifecycle, which NICo does not run yet. Blank them so the suite's
     # {{instance_type}} self-reference does not emit missing-variable warnings.

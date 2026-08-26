@@ -219,13 +219,50 @@ def test_transport_failure_is_reported_without_leaking_output(
     assert payload["error_type"] == "node_health_query_failed"
 
 
+def test_unreadable_node_never_becomes_a_not_running_record(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A node we could not reach must not be reported as lacking an agent.
+
+    ``NodeHealthAgentCheck`` reads only ``running``, so emitting a record for an
+    unreachable node would blame a missing agent for an access problem.
+    """
+    module = _load_script()
+    states = {"gpu-01": _states("gpud")}
+
+    def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        node = command[-2]
+        if node not in states:
+            return subprocess.CompletedProcess(command, 255, stdout="", stderr="no route to host")
+        return subprocess.CompletedProcess(command, 0, stdout=states[node], stderr="")
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    with pytest.raises(module.NodeHealthQueryError) as raised:
+        module._query(["gpu-01", "gpu-99"])
+
+    assert "gpu-99" in str(raised.value)
+
+
+def test_every_unreadable_node_is_named(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One run must diagnose a fleet-wide access problem, not just its first node."""
+    module = _load_script()
+    unreachable = subprocess.CompletedProcess([], 255, stdout="", stderr="")
+    monkeypatch.setattr(module.subprocess, "run", lambda *_, **__: unreachable)
+
+    with pytest.raises(module.NodeHealthQueryError) as raised:
+        module._query(["gpu-01", "gpu-02", "gpu-03"])
+
+    assert str(raised.value) == "Health agent query failed for 3 node(s): gpu-01, gpu-02, gpu-03"
+
+
 def test_unreadable_systemctl_output_fails_rather_than_passing(monkeypatch: pytest.MonkeyPatch) -> None:
     """A node without systemd yields no evidence, so it cannot be counted covered."""
     module = _load_script()
     monkeypatch.setattr(module.subprocess, "run", _ssh_stub({"gpu-01": ""}))
 
-    with pytest.raises(module.NodeHealthQueryError, match="unreadable status"):
+    with pytest.raises(module.NodeHealthQueryError, match="gpu-01"):
         module._query(["gpu-01"])
+
+    assert module._probe("gpu-01") is None
 
 
 def test_invalid_arguments_emit_failure_json(

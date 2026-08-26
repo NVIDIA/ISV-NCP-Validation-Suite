@@ -105,6 +105,19 @@ def _active_unit(node: str) -> str:
     return next((unit for unit, state in zip(AGENT_UNITS, states, strict=True) if state == "active"), "")
 
 
+def _probe(node: str) -> str | None:
+    """Return the active agent unit, or None when the node yielded no evidence.
+
+    A node we could not read is not a node without an agent, so it must not
+    become a ``running: False`` record: the check reads only that flag, and
+    would report a missing agent on a host it never reached.
+    """
+    try:
+        return _active_unit(node)
+    except NodeHealthQueryError:
+        return None
+
+
 def _query(nodes: list[str]) -> dict[str, Any]:
     """Return provider-neutral BFX04-01 evidence for every configured node."""
     if not nodes:
@@ -118,7 +131,12 @@ def _query(nodes: list[str]) -> dict[str, Any]:
             "agents": [],
         }
     with ThreadPoolExecutor(max_workers=min(MAX_CONCURRENT_PROBES, len(nodes))) as pool:
-        units = list(pool.map(_active_unit, nodes))
+        units = list(pool.map(_probe, nodes))
+    # Every unreadable node is named, so a fleet-wide access problem takes one
+    # run to diagnose rather than one run per node.
+    unreadable = [node for node, unit in zip(nodes, units, strict=True) if unit is None]
+    if unreadable:
+        raise NodeHealthQueryError(f"Health agent query failed for {len(unreadable)} node(s): {', '.join(unreadable)}")
     return {
         "success": True,
         "platform": "bare_metal",

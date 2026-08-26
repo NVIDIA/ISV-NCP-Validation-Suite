@@ -297,9 +297,11 @@ volume. The three test-phase steps all reuse that fixture.
 | `setup` | setup | `providers/my-isv/scripts/k8s/setup.sh` |
 | `teardown` | teardown | `providers/my-isv/scripts/k8s/teardown.sh` |
 | `reset_gpus` | test | `providers/my-isv/scripts/breakfix/reset_gpus.py` (BFX01-01) |
-| `cordon_node` | test | `providers/my-isv/scripts/breakfix/cordon_node.py` (BFX01-04) |
+| `cordon_node` | test | `providers/shared/breakfix/cordon_node.py` (BFX01-04) |
 
 Validations use `kubectl` directly (or a custom CLI via the `KUBECTL` env var): node counts, GPU operator, pod health, NCCL/NIM workloads. Break-fix cordon and GPU reset are optional provider steps.
+The shared cordon reference skips without changing cluster state unless
+`tests.settings.breakfix_node` names a dedicated test node.
 
 ### Slurm (`slurm.yaml`)
 

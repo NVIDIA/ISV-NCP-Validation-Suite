@@ -68,13 +68,16 @@ commands:
 
       - name: cordon_node
         phase: test
-        continue_on_failure: true
-        command: "python ../scripts/breakfix/cordon_node.py"
-        args: ["--region", "{{region}}"]
-        timeout: 600
+        command: "python3 ../../shared/breakfix/cordon_node.py"
+        args:
+          - "--node={{breakfix_node}}"
+        timeout: 1200
+        requires_available_validations:
+          - CordonNodeCheck
 
 tests:
   description: "my-isv Kubernetes platform suite (real cluster required)"
   settings:
     region: ""
     machine_id: ""
+    breakfix_node: "{{env.ISVTEST_BREAKFIX_NODE | default('', true)}}"

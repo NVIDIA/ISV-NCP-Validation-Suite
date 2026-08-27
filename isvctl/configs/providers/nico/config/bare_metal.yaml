@@ -451,7 +451,7 @@ commands:
           - "{{site_id}}"
           - "--api-base"
           - "{{nico_api_base}}"
-        timeout: 600
+        timeout: 900
 
       - name: return_node_maintenance
         phase: test

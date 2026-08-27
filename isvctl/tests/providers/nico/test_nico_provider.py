@@ -4053,3 +4053,92 @@ def test_gpu_repair_restore_waits_for_the_state_to_clear(monkeypatch: pytest.Mon
     status = module._await_status("org", "i-1", "tok", base_url="http://x", target="Repairing", leaving=True)
 
     assert status == "Updating"
+
+
+def test_gpu_repair_restore_re_mints_the_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Restoration mints a fresh token: a stale one would 401 and strand the node."""
+    module = _load_gpu_repair_script()
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="fresh"))
+
+    assert module._restore_token("stale") == "fresh"
+
+
+def test_gpu_repair_restore_falls_back_to_the_stale_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    """If re-minting fails, the original token is still worth trying."""
+    module = _load_gpu_repair_script()
+
+    def _boom() -> None:
+        raise module.NicoAuthError("issuer unreachable")
+
+    monkeypatch.setattr(module, "resolve_auth", _boom)
+
+    assert module._restore_token("stale") == "stale"
+
+
+def test_gpu_repair_restore_succeeds_on_the_documented_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Clearing online repair normally needs no fallback and raises no warning."""
+    module = _load_gpu_repair_script()
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+    monkeypatch.setattr(module, "forge_patch", lambda *_a, **_kw: {})
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": "Ready"})
+    deleted: list[str] = []
+    monkeypatch.setattr(module, "forge_delete", lambda _o, path, *_a, **_kw: deleted.append(path) or {})
+
+    outcome = module._restore("org", "m-1", "i-1", api_base="http://x", fallback_token="t")
+
+    assert outcome["restored"] is True
+    assert outcome["warnings"] == []
+    assert deleted == []
+
+
+def _fast_clock() -> SimpleNamespace:
+    """A stand-in time module whose monotonic jumps ahead of any poll deadline.
+
+    ``_await_status`` binds its deadline as a default argument, so the module
+    constant cannot be lowered from a test. Advancing the clock instead makes each
+    poll give up after a single fetch rather than spinning for the real deadline.
+    """
+    ticks = iter(range(0, 10_000_000, 1000))
+    return SimpleNamespace(monotonic=lambda: next(ticks), sleep=lambda _s: None)
+
+
+def test_gpu_repair_restore_removes_the_override_when_clearing_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A node still in Repairing gets its override deleted, and that is a finding."""
+    module = _load_gpu_repair_script()
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+    monkeypatch.setattr(module, "forge_patch", lambda *_a, **_kw: {})
+    monkeypatch.setattr(module, "time", _fast_clock())
+
+    deleted: list[str] = []
+
+    def _delete(_org: str, path: str, *_a: object, **_kw: object) -> dict[str, Any]:
+        deleted.append(path)
+        return {}
+
+    monkeypatch.setattr(module, "forge_delete", _delete)
+
+    # Repairing until the override is gone, Ready afterwards.
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": "Ready" if deleted else "Repairing"})
+
+    outcome = module._restore("org", "m-1", "i-1", api_base="http://x", fallback_token="t")
+
+    assert outcome["restored"] is True
+    assert outcome["errors"] == []
+    assert "removed the override directly" in outcome["warnings"][0]
+    assert deleted == [f"machine/m-1/health-report/{module.ONLINE_REPAIR_OVERRIDE_SOURCE}"]
+
+
+def test_gpu_repair_restore_reports_a_stranded_node(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When both attempts fail the node is stranded, which must be an error not a warning."""
+    module = _load_gpu_repair_script()
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+    monkeypatch.setattr(module, "forge_patch", lambda *_a, **_kw: {})
+    monkeypatch.setattr(module, "forge_delete", lambda *_a, **_kw: {})
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": "Repairing"})
+    monkeypatch.setattr(module, "time", _fast_clock())
+
+    outcome = module._restore("org", "m-1", "i-1", api_base="http://x", fallback_token="t")
+
+    assert outcome["restored"] is False
+    assert outcome["warnings"] == []
+    assert len(outcome["errors"]) == 2

@@ -53,11 +53,21 @@ makes. ``allowAutoInstanceDeletionOnFailure`` is pinned ``false`` so NICo never
 deletes the tenant's instance on our behalf.
 
 Online repair is cleared in a ``finally``, so the node cannot be left in
-``Repairing`` even when the teardown phase never runs. A failure to clear it fails
-the step (via ``cleanup_errors``) because a node stuck out of the allocatable pool
-must be visible. ``--skip-restore`` leaves it in repair for debugging; recover with
-``PATCH machine`` ``{"onlineRepair": {"enabled": false}}``, or by removing the
-health override at ``DELETE /machine/{id}/health-report/{source}``.
+``Repairing`` even when the teardown phase never runs. Restoration is deliberately
+belt-and-braces, because a node stranded out of the allocatable pool is the worst
+outcome this step can produce:
+
+- it re-mints the access token first (the run can outlive a short-lived token, and
+  a 401 here would strand the node);
+- if clearing online repair does not take effect, it removes the
+  ``request-online-repair`` health override directly;
+- needing that fallback is reported as a ``cleanup_warnings`` finding but does not
+  fail the step, since nothing was left behind. A node still in ``Repairing`` after
+  both attempts sets ``cleanup_errors`` and fails the step.
+
+``--skip-restore`` leaves the node in repair for debugging; recover with
+``PATCH machine`` ``{"onlineRepair": {"enabled": false}}``, or
+``DELETE /machine/{id}/health-report/request-online-repair``.
 
 Required JSON output fields:
   {
@@ -97,6 +107,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from breakfix._common import emit, list_site_machines
 from common.nico_client import (
     NicoAuthError,
+    forge_delete,
     forge_get,
     forge_patch,
     resolve_auth,
@@ -106,8 +117,15 @@ from common.nico_client import (
 REPAIR_STATUS = "Repairing"
 READY_STATUS = "Ready"
 
+# Health override NICo applies while online repair is active. Removing it is the
+# fallback when clearing online repair through update-machine does not take effect.
+ONLINE_REPAIR_OVERRIDE_SOURCE = "request-online-repair"
+
 POLL_INTERVAL_SECONDS = 5
-POLL_DEADLINE_SECONDS = 180
+# Generous because NICo applies the override through a site workflow that may queue
+# behind other work; a false "never entered repair" is worse than waiting. The step
+# timeout in the provider config must leave room for this twice (enter + restore).
+POLL_DEADLINE_SECONDS = 300
 
 # NICo requires a healthIssue when entering online repair. Category must be one of
 # Hardware, Network, Performance, Storage, Software, Other.
@@ -183,9 +201,7 @@ def _await_status(
 def _gpu_machines_with_instances(machines: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Return machines that have GPUs and an assigned instance."""
     return [
-        m
-        for m in machines
-        if m.get("instanceId") and sum_capabilities(m.get("machineCapabilities") or [], "GPU") > 0
+        m for m in machines if m.get("instanceId") and sum_capabilities(m.get("machineCapabilities") or [], "GPU") > 0
     ]
 
 
@@ -222,6 +238,72 @@ def _skip_reason(machines: list[dict[str, Any]], candidates: list[dict[str, Any]
         f"{len(candidates)} GPU machine(s) have instances but none is in {READY_STATUS}; "
         "online repair requires a Ready instance"
     )
+
+
+def _restore_token(fallback: str) -> str:
+    """Return a freshly minted token, or ``fallback`` when minting fails.
+
+    The run can outlive a short-lived access token (NICo SSA tokens are minutes,
+    not hours), and a 401 while clearing online repair would strand the node out of
+    the allocatable pool. Re-minting costs one request and removes that failure mode.
+    """
+    try:
+        return resolve_auth().token
+    except NicoAuthError:
+        return fallback
+
+
+def _clear_online_repair(org: str, machine_id: str, instance_id: str, token: str, *, api_base: str) -> tuple[bool, str]:
+    """Clear online repair via update-machine; return (left_repair, detail)."""
+    try:
+        forge_patch(org, f"machine/{machine_id}", token, base_url=api_base, body=_exit_body())
+        status = _await_status(org, instance_id, token, base_url=api_base, target=REPAIR_STATUS, leaving=True)
+        if status != REPAIR_STATUS:
+            return True, ""
+        return False, f"instance stayed in {REPAIR_STATUS} after clearing online repair"
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
+
+
+def _remove_repair_override(
+    org: str, machine_id: str, instance_id: str, token: str, *, api_base: str
+) -> tuple[bool, str]:
+    """Delete the online-repair health override directly; return (left_repair, detail)."""
+    try:
+        forge_delete(
+            org, f"machine/{machine_id}/health-report/{ONLINE_REPAIR_OVERRIDE_SOURCE}", token, base_url=api_base
+        )
+        status = _await_status(org, instance_id, token, base_url=api_base, target=REPAIR_STATUS, leaving=True)
+        if status != REPAIR_STATUS:
+            return True, ""
+        return False, f"instance stayed in {REPAIR_STATUS} after removing the {ONLINE_REPAIR_OVERRIDE_SOURCE} override"
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
+
+
+def _restore(org: str, machine_id: str, instance_id: str, *, api_base: str, fallback_token: str) -> dict[str, Any]:
+    """Take the node back out of repair, and report how much effort that took.
+
+    Returns ``{"restored": bool, "warnings": [...], "errors": [...]}``. Clearing
+    online repair the documented way is tried first; if that leaves the node in
+    repair, the health override is removed directly. Only a node still in repair
+    after both attempts is an error -- needing the fallback is a provider finding
+    worth reporting, but nothing was left behind.
+    """
+    token = _restore_token(fallback_token)
+
+    left_repair, detail = _clear_online_repair(org, machine_id, instance_id, token, api_base=api_base)
+    if left_repair:
+        return {"restored": True, "warnings": [], "errors": []}
+
+    recovered, fallback_detail = _remove_repair_override(org, machine_id, instance_id, token, api_base=api_base)
+    if recovered:
+        return {
+            "restored": True,
+            "warnings": [f"Clearing online repair did not take effect ({detail}); removed the override directly"],
+            "errors": [],
+        }
+    return {"restored": False, "warnings": [], "errors": [detail, fallback_detail]}
 
 
 def main() -> int:
@@ -270,9 +352,7 @@ def main() -> int:
         entered = True
         operation["requested"] = True
 
-        status = _await_status(
-            args.org, instance_id, auth.token, base_url=args.api_base, target=REPAIR_STATUS
-        )
+        status = _await_status(args.org, instance_id, auth.token, base_url=args.api_base, target=REPAIR_STATUS)
         operation["repair_state_observed"] = status == REPAIR_STATUS
         if not operation["repair_state_observed"]:
             operation["message"] = (
@@ -288,28 +368,24 @@ def main() -> int:
         result["success"] = False
         result["error"] = f"{type(e).__name__}: {e}"
     finally:
-        # Clear online repair in the process that entered it, so the node cannot be
-        # left out of the allocatable pool even when teardown never executes.
+        # Take the node back out of repair in the process that put it there, so it
+        # cannot be left out of the allocatable pool even when teardown never runs.
         if entered and auth is not None and not args.skip_restore:
-            try:
-                forge_patch(
-                    args.org,
-                    f"machine/{operation['node_id']}",
-                    auth.token,
-                    base_url=args.api_base,
-                    body=_exit_body(),
-                )
-                status = _await_status(
-                    args.org, instance_id, auth.token, base_url=args.api_base, target=REPAIR_STATUS, leaving=True
-                )
-                operation["restored"] = status != REPAIR_STATUS
-                if not operation["restored"]:
-                    raise RuntimeError(f"instance stayed in {REPAIR_STATUS} after clearing online repair")
-            except Exception as e:
-                # A node stranded in repair must fail the step even when the report itself worked.
-                result["cleanup_errors"] = [f"{type(e).__name__}: {e}"]
+            outcome = _restore(
+                args.org,
+                str(operation["node_id"]),
+                instance_id,
+                api_base=args.api_base,
+                fallback_token=auth.token,
+            )
+            operation["restored"] = outcome["restored"]
+            if outcome["warnings"]:
+                result["cleanup_warnings"] = outcome["warnings"]
+            if not outcome["restored"]:
+                # A node stranded in repair must fail the step even when the report worked.
+                result["cleanup_errors"] = outcome["errors"]
                 result["success"] = False
-                result["error"] = f"Failed to clear online repair: {e}"
+                result["error"] = f"Node left in {REPAIR_STATUS}: {'; '.join(outcome['errors'])}"
         elif entered and args.skip_restore:
             result["cleanup_skipped"] = True
 

@@ -9,28 +9,39 @@ import json
 from typing import Any
 from urllib.error import URLError
 
-from common.nico_client import NicoAuthError, forge_get_all, resolve_auth
+from common.nico_client import NicoAuth, NicoAuthError, forge_get_all, resolve_auth
 
 
 def list_site_machines(
-    *, org: str, site_id: str, api_base: str, empty_contract: dict[str, Any] | None = None
+    *,
+    org: str,
+    site_id: str,
+    api_base: str,
+    empty_contract: dict[str, Any] | None = None,
+    auth: NicoAuth | None = None,
+    include_metadata: bool = True,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Fetch machines for a site, or build the structured failure/skip payload.
 
     Returns ``(machines, result)``. When ``machines`` is empty the caller must
     emit ``result`` and stop: it already carries the skip or the error, plus the
     zeroed ``empty_contract`` fields the bound validation still expects to read.
+
+    A caller that already holds credentials passes ``auth`` so the token is minted
+    once per run rather than once per helper. ``include_metadata`` can be turned
+    off by callers that only read a machine's identity and capabilities, which
+    keeps the listing and its per-page parsing small.
     """
     result: dict[str, Any] = {"success": False, "platform": "nico", "site_id": site_id}
     result.update(empty_contract or {})
     try:
-        auth = resolve_auth()
+        auth = auth or resolve_auth()
         machines = forge_get_all(
             org,
             "machine",
             auth.token,
             base_url=api_base,
-            params={"siteId": site_id, "includeMetadata": "true"},
+            params={"siteId": site_id, "includeMetadata": "true" if include_metadata else "false"},
             result_key="machines",
         )
     except NicoAuthError as exc:

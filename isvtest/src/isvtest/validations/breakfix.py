@@ -304,8 +304,10 @@ class GpuRepairRequestCheck(_OperationCheck):
     pass_template: ClassVar[str] = "GPU fault report accepted; node {label} entered a repair state"
 
     def _pass_message(self, label: str, operation: dict[str, Any]) -> str:
-        """Report whether the provider also took the node back out of repair."""
-        return f"{super()._pass_message(label, operation)} (restored={operation.get('restored')})"
+        """Append any provider finding raised while the node was taken back out of repair."""
+        message = super()._pass_message(label, operation)
+        detail = operation.get("message")
+        return f"{message} ({detail})" if detail else message
 
 
 class ReturnNodeMaintenanceCheck(_OperationCheck):

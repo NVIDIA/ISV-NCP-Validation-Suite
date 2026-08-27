@@ -264,6 +264,20 @@ def forge_delete(org: str, path: str, token: str, *, base_url: str, timeout: int
     return forge_request(org, path, token, base_url=base_url, method="DELETE", timeout=timeout)
 
 
+def delete_if_present(org: str, path: str, token: str, *, base_url: str) -> None:
+    """DELETE a NICo resource, treating 404 as already removed.
+
+    Cleanup paths routinely race with the thing they are removing, so "it is not
+    there" is the desired end state rather than a failure.
+    """
+    try:
+        forge_delete(org, path, token, base_url=base_url)
+    except HTTPError as e:
+        if e.code == 404:
+            return
+        raise
+
+
 def forge_get_all(
     org: str,
     path: str,

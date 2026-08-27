@@ -3713,7 +3713,7 @@ def test_remove_deletes_group_before_key_and_restores_flag(monkeypatch: pytest.M
     module = _load_key_access_helpers()
     deletes: list[str] = []
     patched: dict[str, Any] = {}
-    monkeypatch.setattr(module, "forge_delete", lambda org, path, token, **kw: deletes.append(path) or {})
+    monkeypatch.setattr(module, "delete_if_present", lambda org, path, token, **kw: deletes.append(path))
     monkeypatch.setattr(
         module, "forge_patch", lambda org, path, token, *, base_url, body, **kw: patched.update(body) or {}
     )
@@ -3724,24 +3724,36 @@ def test_remove_deletes_group_before_key_and_restores_flag(monkeypatch: pytest.M
     assert patched == {"isSerialConsoleSSHKeysEnabled": False}
 
 
-def test_remove_treats_404_delete_as_already_gone(monkeypatch: pytest.MonkeyPatch) -> None:
-    """DELETE 404 means the resource is already gone; removal reports no error."""
-    module = _load_key_access_helpers()
+def test_delete_if_present_treats_404_as_already_gone(monkeypatch: pytest.MonkeyPatch) -> None:
+    """DELETE 404 means the resource is already gone, which is the desired end state."""
+    module = _load_nico_client()
     monkeypatch.setattr(
         module,
         "forge_delete",
         lambda *a, **k: (_ for _ in ()).throw(HTTPError("http://x", 404, "Not Found", None, None)),
     )
 
-    created = module.ThrowawayKey(sshkey_id="key-1", sshkeygroup_id="kg-1")
-    assert module.remove(org="o", site_id="site-1", api_base="http://x", token="t", created=created) == []
+    assert module.delete_if_present("o", "sshkey/key-1", "t", base_url="http://x") is None
+
+
+def test_delete_if_present_reraises_other_http_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 409 is a real failure; swallowing it would hide a resource that is still there."""
+    module = _load_nico_client()
+    monkeypatch.setattr(
+        module,
+        "forge_delete",
+        lambda *a, **k: (_ for _ in ()).throw(HTTPError("http://x", 409, "Conflict", None, None)),
+    )
+
+    with pytest.raises(HTTPError):
+        module.delete_if_present("o", "sshkey/key-1", "t", base_url="http://x")
 
 
 def test_remove_continues_after_one_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     """A stuck group delete must not strand the key; both failures are reported."""
     module = _load_key_access_helpers()
     monkeypatch.setattr(
-        module, "forge_delete", lambda org, path, token, **kw: (_ for _ in ()).throw(RuntimeError(f"boom {path}"))
+        module, "delete_if_present", lambda org, path, token, **kw: (_ for _ in ()).throw(RuntimeError(f"boom {path}"))
     )
 
     created = module.ThrowawayKey(sshkey_id="key-1", sshkeygroup_id="kg-1")
@@ -3756,7 +3768,7 @@ def test_remove_is_noop_without_ids(monkeypatch: pytest.MonkeyPatch) -> None:
     """Nothing created means nothing to remove."""
     module = _load_key_access_helpers()
     calls: list[str] = []
-    monkeypatch.setattr(module, "forge_delete", lambda *a, **k: calls.append("delete") or {})
+    monkeypatch.setattr(module, "delete_if_present", lambda *a, **k: calls.append("delete"))
     monkeypatch.setattr(module, "forge_patch", lambda *a, **k: calls.append("patch") or {})
 
     created = module.ThrowawayKey()
@@ -4055,24 +4067,39 @@ def test_gpu_repair_restore_waits_for_the_state_to_clear(monkeypatch: pytest.Mon
     assert status == "Updating"
 
 
+def _record_restore_token(module: ModuleType, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Capture the bearer token ``_restore`` actually sends on its exit PATCH."""
+    used: list[str] = []
+    monkeypatch.setattr(module, "forge_patch", lambda _org, _path, token, **_kw: used.append(token) or {})
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": "Ready"})
+    monkeypatch.setattr(module, "delete_if_present", lambda *_a, **_kw: None)
+    return used
+
+
 def test_gpu_repair_restore_re_mints_the_token(monkeypatch: pytest.MonkeyPatch) -> None:
     """Restoration mints a fresh token: a stale one would 401 and strand the node."""
     module = _load_gpu_repair_script()
+    used = _record_restore_token(module, monkeypatch)
     monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="fresh"))
 
-    assert module._restore_token("stale") == "fresh"
+    module._restore("org", "m-1", "i-1", api_base="http://x", fallback_token="stale")
+
+    assert used == ["fresh"]
 
 
 def test_gpu_repair_restore_falls_back_to_the_stale_token(monkeypatch: pytest.MonkeyPatch) -> None:
     """If re-minting fails, the original token is still worth trying."""
     module = _load_gpu_repair_script()
+    used = _record_restore_token(module, monkeypatch)
 
     def _boom() -> None:
         raise module.NicoAuthError("issuer unreachable")
 
     monkeypatch.setattr(module, "resolve_auth", _boom)
 
-    assert module._restore_token("stale") == "stale"
+    module._restore("org", "m-1", "i-1", api_base="http://x", fallback_token="stale")
+
+    assert used == ["stale"]
 
 
 def test_gpu_repair_restore_succeeds_on_the_documented_path(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -4082,12 +4109,12 @@ def test_gpu_repair_restore_succeeds_on_the_documented_path(monkeypatch: pytest.
     monkeypatch.setattr(module, "forge_patch", lambda *_a, **_kw: {})
     monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": "Ready"})
     deleted: list[str] = []
-    monkeypatch.setattr(module, "forge_delete", lambda _o, path, *_a, **_kw: deleted.append(path) or {})
+    monkeypatch.setattr(module, "delete_if_present", lambda _o, path, *_a, **_kw: deleted.append(path))
 
     outcome = module._restore("org", "m-1", "i-1", api_base="http://x", fallback_token="t")
 
     assert outcome["restored"] is True
-    assert outcome["warnings"] == []
+    assert outcome["warning"] == ""
     assert deleted == []
 
 
@@ -4111,11 +4138,10 @@ def test_gpu_repair_restore_removes_the_override_when_clearing_fails(monkeypatch
 
     deleted: list[str] = []
 
-    def _delete(_org: str, path: str, *_a: object, **_kw: object) -> dict[str, Any]:
+    def _delete(_org: str, path: str, *_a: object, **_kw: object) -> None:
         deleted.append(path)
-        return {}
 
-    monkeypatch.setattr(module, "forge_delete", _delete)
+    monkeypatch.setattr(module, "delete_if_present", _delete)
 
     # Repairing until the override is gone, Ready afterwards.
     monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": "Ready" if deleted else "Repairing"})
@@ -4124,7 +4150,7 @@ def test_gpu_repair_restore_removes_the_override_when_clearing_fails(monkeypatch
 
     assert outcome["restored"] is True
     assert outcome["errors"] == []
-    assert "removed the override directly" in outcome["warnings"][0]
+    assert "removed the override directly" in outcome["warning"]
     assert deleted == [f"machine/m-1/health-report/{module.ONLINE_REPAIR_OVERRIDE_SOURCE}"]
 
 
@@ -4133,12 +4159,12 @@ def test_gpu_repair_restore_reports_a_stranded_node(monkeypatch: pytest.MonkeyPa
     module = _load_gpu_repair_script()
     monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
     monkeypatch.setattr(module, "forge_patch", lambda *_a, **_kw: {})
-    monkeypatch.setattr(module, "forge_delete", lambda *_a, **_kw: {})
+    monkeypatch.setattr(module, "delete_if_present", lambda *_a, **_kw: None)
     monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": "Repairing"})
     monkeypatch.setattr(module, "time", _fast_clock())
 
     outcome = module._restore("org", "m-1", "i-1", api_base="http://x", fallback_token="t")
 
     assert outcome["restored"] is False
-    assert outcome["warnings"] == []
+    assert outcome["warning"] == ""
     assert len(outcome["errors"]) == 2

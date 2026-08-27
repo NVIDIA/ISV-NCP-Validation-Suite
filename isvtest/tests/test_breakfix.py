@@ -155,8 +155,8 @@ class TestOperationChecks:
         step_output = {"success": True, "operation": {"requested": True, "repair_state_observed": False}}
         assert not _run(GpuRepairRequestCheck, step_output).passed
 
-    def test_gpu_repair_request_reports_restoration(self) -> None:
-        """A passing GPU repair request states whether the node came back out of repair."""
+    def test_gpu_repair_request_names_the_node_it_moved(self) -> None:
+        """A clean pass names the node and carries no extra provider detail."""
         step_output = {
             "success": True,
             "operation": {"requested": True, "repair_state_observed": True, "restored": True, "node_id": "fm-1"},
@@ -164,7 +164,22 @@ class TestOperationChecks:
         check = _run(GpuRepairRequestCheck, step_output)
         assert check.passed
         assert "fm-1" in check.message
-        assert "restored=True" in check.message
+
+    def test_gpu_repair_request_surfaces_a_provider_finding_on_pass(self) -> None:
+        """A cleanup that needed the fallback still passes, but must not do so silently."""
+        step_output = {
+            "success": True,
+            "operation": {
+                "requested": True,
+                "repair_state_observed": True,
+                "restored": True,
+                "node_id": "fm-1",
+                "message": "removed the override directly",
+            },
+        }
+        check = _run(GpuRepairRequestCheck, step_output)
+        assert check.passed
+        assert "removed the override directly" in check.message
 
 
 class TestNodeHealthAgentCheck:

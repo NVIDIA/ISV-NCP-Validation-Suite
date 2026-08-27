@@ -4168,3 +4168,82 @@ def test_gpu_repair_restore_reports_a_stranded_node(monkeypatch: pytest.MonkeyPa
     assert outcome["restored"] is False
     assert outcome["warning"] == ""
     assert len(outcome["errors"]) == 2
+
+
+def _gpu_repair_argv(*extra: str) -> list[str]:
+    """Build argv for the request_gpu_repair CLI."""
+    return ["request_gpu_repair.py", "--org", "ncx", "--site-id", "site-1", "--api-base", "http://x", *extra]
+
+
+def _stub_gpu_repair_discovery(module: ModuleType, monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Wire discovery so one eligible GPU machine with a Ready instance is found.
+
+    Returns the list that records every mutating PATCH, so a test can assert the
+    guard let nothing through.
+    """
+    patched: list[dict[str, Any]] = []
+    machine = _gpu_machine("m-1", instance="i-1")
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+    monkeypatch.setattr(
+        module,
+        "list_site_machines",
+        lambda **kw: ([machine], {"success": True, "platform": "nico", "site_id": "site-1"}),
+    )
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": "Ready"})
+    monkeypatch.setattr(module, "forge_patch", lambda _o, _p, _t, **kw: patched.append(kw.get("body", {})) or {})
+    return patched
+
+
+def test_gpu_repair_does_not_mutate_an_auto_selected_node(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A shared site's only instance may not be ours, so auto-selection must not mutate."""
+    module = _load_gpu_repair_script()
+    patched = _stub_gpu_repair_discovery(module, monkeypatch)
+    monkeypatch.delenv(module.AUTO_SELECT_ENV, raising=False)
+    monkeypatch.setattr(sys, "argv", _gpu_repair_argv())
+
+    code = module.main()
+    out = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert out["skipped"] is True
+    assert patched == []
+    # The skip has to name the node, so it doubles as a dry run.
+    assert "m-1" in out["skip_reason"]
+    assert module.AUTO_SELECT_ENV in out["skip_reason"]
+
+
+def test_gpu_repair_mutates_when_the_machine_is_named(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Naming the machine is the operator confirming that node, so the step proceeds."""
+    module = _load_gpu_repair_script()
+    patched = _stub_gpu_repair_discovery(module, monkeypatch)
+    monkeypatch.delenv(module.AUTO_SELECT_ENV, raising=False)
+    monkeypatch.setattr(module, "time", _fast_clock())
+    monkeypatch.setattr(sys, "argv", _gpu_repair_argv("--machine-id", "m-1"))
+
+    module.main()
+    out = json.loads(capsys.readouterr().out)
+
+    assert out.get("skipped") is not True
+    assert out["operation"]["requested"] is True
+    assert patched[0]["onlineRepair"]["enabled"] is True
+
+
+def test_gpu_repair_env_opt_in_allows_auto_selection(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The env opt-in accepts whichever eligible node discovery returns."""
+    module = _load_gpu_repair_script()
+    _stub_gpu_repair_discovery(module, monkeypatch)
+    monkeypatch.setenv(module.AUTO_SELECT_ENV, "1")
+    monkeypatch.setattr(module, "time", _fast_clock())
+    monkeypatch.setattr(sys, "argv", _gpu_repair_argv())
+
+    module.main()
+    out = json.loads(capsys.readouterr().out)
+
+    assert out.get("skipped") is not True
+    assert out["operation"]["requested"] is True

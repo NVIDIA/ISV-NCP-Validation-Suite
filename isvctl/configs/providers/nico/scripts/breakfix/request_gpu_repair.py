@@ -47,6 +47,12 @@ Auth:
   - Requires provider admin, or a tenant admin whose tenant has the
     ``TargetedInstanceCreation`` capability. NICo rejects anyone else with 403.
 
+Mutating requires the operator to opt in. A shared site's only eligible machine may
+belong to another tenant, so an auto-discovered target is reported in a structured
+skip rather than moved into repair -- which also makes a plain run a dry run. Confirm
+with ``--machine-id <id>``, or set ``NICO_ALLOW_ONLINE_REPAIR=1`` to accept whichever
+eligible node is found.
+
 Entering online repair requires acknowledging data-corruption and repair-team-access
 risk; those acknowledgements are NICo's required contract, not a choice this step
 makes. ``allowAutoInstanceDeletionOnFailure`` is pinned ``false`` so NICo never
@@ -79,6 +85,7 @@ Reference:
 
 import argparse
 import contextlib
+import os
 import sys
 import time
 from collections.abc import Callable
@@ -106,6 +113,15 @@ READY_STATUS = "Ready"
 # Health override NICo applies while online repair is active. Removing it is the
 # fallback when clearing online repair through update-machine does not take effect.
 ONLINE_REPAIR_OVERRIDE_SOURCE = "request-online-repair"
+
+# A site's only eligible machine may belong to someone else -- shared lab sites
+# routinely carry exactly one tenant instance -- and this step would put it into
+# Repairing. So an auto-selected target is reported, not mutated: the operator opts
+# in by naming the machine, or by setting this to "1" to accept whatever is found.
+# The sibling query_key_access.py mutates by default and opts *out* via
+# --no-provision; the difference is blast radius. Minting a throwaway SSH key
+# affects nobody, whereas moving a stranger's instance into a repair state does.
+AUTO_SELECT_ENV = "NICO_ALLOW_ONLINE_REPAIR"
 
 POLL_INTERVAL_SECONDS = 5
 # Generous because NICo applies the override through a site workflow that may queue
@@ -160,7 +176,7 @@ def _exit_body() -> dict[str, Any]:
 def _instance_status(org: str, instance_id: str, token: str, *, base_url: str) -> str:
     """Return an instance's current status, or an empty string when absent."""
     instance = forge_get(org, f"instance/{instance_id}", token, base_url=base_url)
-    return first_string(instance, "status", "state", "instanceState")
+    return first_string(instance, "status")
 
 
 def _await_status(
@@ -367,6 +383,18 @@ def main() -> int:
         machine, instance_id = target
         machine_id = str(machine.get("id") or "")
         operation["node_id"] = machine_id
+
+        if not args.machine_id and os.environ.get(AUTO_SELECT_ENV) != "1":
+            # Report the target rather than mutating it. This doubles as a dry run:
+            # the operator sees exactly which node would enter repair before allowing it.
+            result["skipped"] = True
+            result["skip_reason"] = (
+                f"Would report a GPU fault against machine {machine_id}, but an auto-selected node "
+                f"is not mutated because it may belong to another tenant. Pass "
+                f"--machine-id {machine_id} to confirm this node, or set {AUTO_SELECT_ENV}=1 to "
+                f"accept whichever eligible node is found"
+            )
+            return emit(result)
 
         forge_patch(args.org, f"machine/{machine_id}", auth.token, base_url=args.api_base, body=_enter_body())
         operation["requested"] = True

@@ -440,6 +440,11 @@ commands:
       # instance move Ready -> Repairing -> Ready. Online repair is cleared in a
       # finally, so a node cannot be stranded out of the pool. Skips when the site
       # has no GPU machine with a Ready instance.
+      #
+      # Skips by default even when a target exists: it names the node it would use
+      # and waits for the operator to confirm, because a shared site's only tenant
+      # instance may not be ours. Allow it with NICO_ALLOW_ONLINE_REPAIR=1, or add
+      # --machine-id <id> here to pin a node you own.
       - name: request_gpu_repair
         phase: test
         continue_on_failure: true

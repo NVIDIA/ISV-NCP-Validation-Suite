@@ -1437,7 +1437,7 @@ docs/requirements/test-requirements-matrix.yaml. Run `make plan` to regenerate.
 | [[BFX01-01]]BFX01-01
 | Infrastructure and Data Services
 | Break-Fix
-| Reset GPUs on an individual node via the Breakfix API
+| Report a GPU fault via the Breakfix API; verify the node enters a repair state
 | BFX01
 | offtake
 | full

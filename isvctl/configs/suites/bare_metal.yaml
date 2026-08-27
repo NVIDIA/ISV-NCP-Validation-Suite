@@ -836,6 +836,18 @@ tests:
           test_id: "BFX02-03"
           labels: ["bare_metal", "breakfix", "min_req"]
 
+    # BFX01-01 is the provider-API half of BFX01's GPU clause: report a GPU fault
+    # and verify the provider moves the node into a repair state. No break-fix API
+    # offers an on-demand GPU reset, so that state transition is the whole
+    # tenant-observable contract. The tenant's own in-cluster reset is BFX01-06 in
+    # k8s.yaml, which proves nothing about the provider and is scoped accordingly.
+    gpu_repair_request:
+      step: request_gpu_repair
+      checks:
+        GpuRepairRequestCheck:
+          test_id: "BFX01-01"
+          labels: ["bare_metal", "breakfix", "min_req"]
+
     return_node_maintenance:
       step: return_node_maintenance
       checks:

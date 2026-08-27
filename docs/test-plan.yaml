@@ -2035,14 +2035,14 @@ domains:
                 milestone: ""
           - description: Breakfix API Lifecycle
             tests:
-              - summary: Reset GPUs on an individual node via the Breakfix API
+              - summary: Report a GPU fault via the Breakfix API; verify the node enters a repair state
                 labels:
+                  - bare_metal
                   - breakfix
-                  - kubernetes
                   - min_req
                 priority: P2
                 milestone: M5
-                notes: ""
+                notes: Provider break-fix APIs expose no on-demand GPU reset; the tenant-observable contract is that a reported GPU fault is accepted and moves the node into repair. The tenant-side in-cluster reset is BFX01-06.
                 github_issues:
                   - "#206"
                 req_id: BFX01
@@ -2099,6 +2099,18 @@ domains:
                   - "#210"
                 req_id: BFX01
                 test_id: BFX01-05
+                status: pending
+              - summary: Reset GPUs on a node from inside the cluster (tenant-side, no provider API)
+                labels:
+                  - breakfix
+                  - kubernetes
+                  - min_req
+                priority: P2
+                milestone: M5
+                notes: Exercises the tenant's own node access (privileged DaemonSet / SSH), not a provider capability. Passes wherever the tenant has root and a working nvidia-smi, so it asserts nothing about the provider. The API-based test is BFX01-01.
+                github_issues: []
+                req_id: BFX01
+                test_id: BFX01-06
                 status: pending
           - description: Breakfix Events Query
             tests:

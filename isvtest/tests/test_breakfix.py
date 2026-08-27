@@ -13,6 +13,7 @@ from isvtest.core.validation import BaseValidation
 from isvtest.validations.breakfix import (
     CordonNodeCheck,
     FailureNotificationCheck,
+    GpuRepairRequestCheck,
     GpuResetCheck,
     HostReplacementCheck,
     MaintenanceEventsCheck,
@@ -144,6 +145,26 @@ class TestOperationChecks:
         check = _run(ReturnNodeMaintenanceCheck, step_output)
         assert check.passed
         assert "maintenance_mode=hw" in check.message
+
+    def test_gpu_repair_request_keys_off_the_observed_state(self) -> None:
+        """An accepted request that never changed the node's state is not a pass.
+
+        The provider returning 200 proves only that the API exists; the check has
+        to see the node actually enter repair.
+        """
+        step_output = {"success": True, "operation": {"requested": True, "repair_state_observed": False}}
+        assert not _run(GpuRepairRequestCheck, step_output).passed
+
+    def test_gpu_repair_request_reports_restoration(self) -> None:
+        """A passing GPU repair request states whether the node came back out of repair."""
+        step_output = {
+            "success": True,
+            "operation": {"requested": True, "repair_state_observed": True, "restored": True, "node_id": "fm-1"},
+        }
+        check = _run(GpuRepairRequestCheck, step_output)
+        assert check.passed
+        assert "fm-1" in check.message
+        assert "restored=True" in check.message
 
 
 class TestNodeHealthAgentCheck:

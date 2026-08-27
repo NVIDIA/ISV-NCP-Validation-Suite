@@ -436,6 +436,23 @@ commands:
           - "{{nico_api_base}}"
         timeout: 120
 
+      # Reports a GPU fault via NICo online repair and watches the assigned
+      # instance move Ready -> Repairing -> Ready. Online repair is cleared in a
+      # finally, so a node cannot be stranded out of the pool. Skips when the site
+      # has no GPU machine with a Ready instance.
+      - name: request_gpu_repair
+        phase: test
+        continue_on_failure: true
+        command: "python ../scripts/breakfix/request_gpu_repair.py"
+        args:
+          - "--org"
+          - "{{org}}"
+          - "--site-id"
+          - "{{site_id}}"
+          - "--api-base"
+          - "{{nico_api_base}}"
+        timeout: 600
+
       - name: return_node_maintenance
         phase: test
         continue_on_failure: true

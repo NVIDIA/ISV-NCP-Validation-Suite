@@ -3921,3 +3921,135 @@ def test_query_key_access_no_provision_never_mutates(
     assert code == 0
     assert out["skipped"] is True
     assert calls == []
+
+
+def _load_gpu_repair_script() -> ModuleType:
+    """Load the request_gpu_repair script as a module for direct unit testing."""
+    return _load_nico_script("breakfix/request_gpu_repair.py", "test_nico_request_gpu_repair")
+
+
+def _gpu_machine(machine_id: str, *, instance: str | None = None, gpus: int = 8) -> dict[str, Any]:
+    """Build a minimal NICo machine record for GPU-repair eligibility tests."""
+    capabilities: list[dict[str, Any]] = [{"type": "CPU", "name": "AMD EPYC", "count": 2}]
+    if gpus:
+        capabilities.append({"type": "GPU", "name": "NVIDIA L40S", "count": gpus})
+    return {"id": machine_id, "instanceId": instance, "machineCapabilities": capabilities}
+
+
+def test_gpu_repair_requires_both_a_gpu_and_an_instance() -> None:
+    """Online repair needs a GPU node that actually has a tenant instance attached."""
+    module = _load_gpu_repair_script()
+    machines = [
+        _gpu_machine("no-instance", instance=None),
+        _gpu_machine("no-gpu", instance="i-1", gpus=0),
+        _gpu_machine("eligible", instance="i-2"),
+    ]
+
+    eligible = module._gpu_machines_with_instances(machines)
+
+    assert [m["id"] for m in eligible] == ["eligible"]
+
+
+def test_gpu_repair_selects_the_first_ready_instance(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Machines whose instance is not Ready are passed over, not attempted."""
+    module = _load_gpu_repair_script()
+    statuses = {"i-busy": "Provisioning", "i-ready": "Ready"}
+    monkeypatch.setattr(module, "forge_get", lambda _org, path, _tok, **_kw: {"status": statuses[path.split("/")[1]]})
+    candidates = [_gpu_machine("m-busy", instance="i-busy"), _gpu_machine("m-ready", instance="i-ready")]
+
+    target = module._select_target(candidates, "org", "tok", base_url="http://x")
+
+    assert target is not None
+    assert target[0]["id"] == "m-ready"
+    assert target[1] == "i-ready"
+
+
+def test_gpu_repair_honours_an_explicit_machine_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An operator-supplied machine id wins over whichever machine is listed first."""
+    module = _load_gpu_repair_script()
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": "Ready"})
+    candidates = [_gpu_machine("m-1", instance="i-1"), _gpu_machine("m-2", instance="i-2")]
+
+    target = module._select_target(candidates, "org", "tok", base_url="http://x", machine_id="m-2")
+
+    assert target is not None
+    assert target[0]["id"] == "m-2"
+
+
+def test_gpu_repair_skip_reason_distinguishes_the_precondition() -> None:
+    """ "No GPU node with an instance" and "none Ready" are different operator problems."""
+    module = _load_gpu_repair_script()
+    machines = [_gpu_machine("m-1", instance=None)]
+
+    no_candidates = module._skip_reason(machines, [], "")
+    none_ready = module._skip_reason(machines, [_gpu_machine("m-2", instance="i-2")], "")
+
+    assert "has both GPUs and an assigned instance" in no_candidates
+    assert "none is in Ready" in none_ready
+    assert "m-9" in module._skip_reason([], [], "m-9")
+
+
+def test_gpu_repair_enter_body_never_authorises_instance_deletion() -> None:
+    """allowAutoInstanceDeletionOnFailure stays false: the instance belongs to the tenant."""
+    module = _load_gpu_repair_script()
+
+    body = module._enter_body()
+
+    assert body["onlineRepair"]["enabled"] is True
+    assert body["onlineRepair"]["policy"]["allowAutoInstanceDeletionOnFailure"] is False
+    assert set(body["healthIssue"]) == {"category", "summary", "details"}
+
+
+def test_gpu_repair_exit_body_carries_only_the_flag() -> None:
+    """NICo rejects an online-repair exit that carries healthIssue, policy, or acknowledgments."""
+    module = _load_gpu_repair_script()
+
+    assert module._exit_body() == {"onlineRepair": {"enabled": False}}
+
+
+def test_gpu_repair_enter_body_does_not_alias_module_state() -> None:
+    """Each call gets its own healthIssue dict, so one run cannot corrupt the next."""
+    module = _load_gpu_repair_script()
+
+    first = module._enter_body()
+    first["healthIssue"]["summary"] = "mutated"
+
+    assert module._enter_body()["healthIssue"]["summary"] != "mutated"
+
+
+def test_gpu_repair_polls_until_the_state_changes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """NICo applies the override through a site workflow, so the state lags the response."""
+    module = _load_gpu_repair_script()
+    seen = iter(["Ready", "Ready", "Repairing"])
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": next(seen)})
+    monkeypatch.setattr(module.time, "sleep", lambda _s: None)
+
+    status = module._await_status("org", "i-1", "tok", base_url="http://x", target="Repairing")
+
+    assert status == "Repairing"
+
+
+def test_gpu_repair_gives_up_at_the_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A node that never transitions returns its last status instead of hanging."""
+    module = _load_gpu_repair_script()
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": "Ready"})
+
+    status = module._await_status("org", "i-1", "tok", base_url="http://x", target="Repairing", deadline_seconds=0)
+
+    assert status == "Ready"
+
+
+def test_gpu_repair_restore_waits_for_the_state_to_clear(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Restoration watches for the node to leave Repairing, not to equal Ready.
+
+    Exiting online repair need not land back on Ready immediately, so keying on
+    equality would report a false failure.
+    """
+    module = _load_gpu_repair_script()
+    seen = iter(["Repairing", "Updating"])
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": next(seen)})
+    monkeypatch.setattr(module.time, "sleep", lambda _s: None)
+
+    status = module._await_status("org", "i-1", "tok", base_url="http://x", target="Repairing", leaving=True)
+
+    assert status == "Updating"

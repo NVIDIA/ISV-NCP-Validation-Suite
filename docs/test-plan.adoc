@@ -311,7 +311,7 @@ a|
 | pending
 |
 
-.142+| Infrastructure and Data Services
+.143+| Infrastructure and Data Services
 .9+| Control Plane accessible
 .9+| Control plane can be accessed
 .9+|
@@ -2183,13 +2183,13 @@ a|
 | approved
 |
 
-.14+| Break-Fix
+.15+| Break-Fix
 .3+| A break-fix service works with a variety of components to detect, triage, remediate, and validate nodes in an AI factory. The critical focus here is on the GPU nodes, but the system can scale beyond.
 .3+| Lazarus, Shoreline
 | [[BFX04-01]]BFX04-01
 | BFX04
 |
-|
+| bare_metal, breakfix
 |
 | P1
 a|
@@ -2203,7 +2203,7 @@ a|
 | [[BFX05-01]]BFX05-01
 | BFX05
 |
-|
+| bare_metal, breakfix
 |
 |
 a|
@@ -2217,7 +2217,7 @@ a|
 | [[BFX06-01]]BFX06-01
 | BFX06
 |
-|
+| bare_metal, breakfix
 |
 |
 a|
@@ -2228,26 +2228,26 @@ a|
 | approved
 |
 
-.5+| Breakfix API Lifecycle
-.5+|
+.6+| Breakfix API Lifecycle
+.6+|
 | [[BFX01-01]]BFX01-01
 | BFX01
 | https://github.com/NVIDIA/ai-cloud-validation/issues/206[#206]
-| min_req
-|
+| bare_metal, breakfix, min_req
+| Provider break-fix APIs expose no on-demand GPU reset; the tenant-observable contract is that a reported GPU fault is accepted and moves the node into repair. The tenant-side in-cluster reset is BFX01-06.
 | P2
 a| https://github.com/NVIDIA/ai-cloud-validation/issues/206[#206]
 |
 | M5
 |
-| Reset GPUs on an individual node via the Breakfix API
+| Report a GPU fault via the Breakfix API; verify the node enters a repair state
 | pending
 |
 
 | [[BFX01-02]]BFX01-02
 | BFX01
 | https://github.com/NVIDIA/ai-cloud-validation/issues/207[#207]
-| min_req
+| bare_metal, breakfix, min_req
 |
 | P1
 a| https://github.com/NVIDIA/ai-cloud-validation/issues/207[#207]
@@ -2261,7 +2261,7 @@ a| https://github.com/NVIDIA/ai-cloud-validation/issues/207[#207]
 | [[BFX01-03]]BFX01-03
 | BFX01
 | https://github.com/NVIDIA/ai-cloud-validation/issues/208[#208]
-| min_req
+| bare_metal, breakfix, min_req
 |
 | P1
 a| https://github.com/NVIDIA/ai-cloud-validation/issues/208[#208]
@@ -2275,7 +2275,7 @@ a| https://github.com/NVIDIA/ai-cloud-validation/issues/208[#208]
 | [[BFX01-04]]BFX01-04
 | BFX01
 | https://github.com/NVIDIA/ai-cloud-validation/issues/209[#209]
-| min_req
+| breakfix, kubernetes, min_req
 |
 | P1
 a| https://github.com/NVIDIA/ai-cloud-validation/issues/209[#209]
@@ -2289,7 +2289,7 @@ a| https://github.com/NVIDIA/ai-cloud-validation/issues/209[#209]
 | [[BFX01-05]]BFX01-05
 | BFX01
 | https://github.com/NVIDIA/ai-cloud-validation/issues/210[#210]
-| min_req
+| bare_metal, breakfix, min_req
 |
 | P1
 a| https://github.com/NVIDIA/ai-cloud-validation/issues/210[#210]
@@ -2300,12 +2300,26 @@ a| https://github.com/NVIDIA/ai-cloud-validation/issues/210[#210]
 | pending
 |
 
+| [[BFX01-06]]BFX01-06
+| BFX01
+|
+| breakfix, kubernetes, min_req
+| Exercises the tenant's own node access (privileged DaemonSet / SSH), not a provider capability. Passes wherever the tenant has root and a working nvidia-smi, so it asserts nothing about the provider. The API-based test is BFX01-01.
+| P2
+a|
+|
+| M5
+|
+| Reset GPUs on a node from inside the cluster (tenant-side, no provider API)
+| pending
+|
+
 .3+| Breakfix Events Query
 .3+|
 | [[BFX02-01]]BFX02-01
 | BFX02
 | https://github.com/NVIDIA/ai-cloud-validation/issues/211[#211]
-| min_req
+| bare_metal, breakfix, min_req
 |
 | P1
 a| https://github.com/NVIDIA/ai-cloud-validation/issues/211[#211]
@@ -2319,7 +2333,7 @@ a| https://github.com/NVIDIA/ai-cloud-validation/issues/211[#211]
 | [[BFX02-02]]BFX02-02
 | BFX02
 | https://github.com/NVIDIA/ai-cloud-validation/issues/212[#212]
-| min_req
+| bare_metal, breakfix, min_req
 |
 | P1
 a| https://github.com/NVIDIA/ai-cloud-validation/issues/212[#212]
@@ -2333,7 +2347,7 @@ a| https://github.com/NVIDIA/ai-cloud-validation/issues/212[#212]
 | [[BFX02-03]]BFX02-03
 | BFX02
 | https://github.com/NVIDIA/ai-cloud-validation/issues/213[#213]
-| min_req
+| bare_metal, breakfix, min_req
 |
 | P1
 a| https://github.com/NVIDIA/ai-cloud-validation/issues/213[#213]
@@ -2363,7 +2377,7 @@ a| https://github.com/NVIDIA/ai-cloud-validation/issues/320[#320]
 | [[BFX03-02]]BFX03-02
 | BFX03
 | https://github.com/NVIDIA/ai-cloud-validation/issues/214[#214]
-| min_req
+| bare_metal, breakfix, min_req
 |
 | P1
 a| https://github.com/NVIDIA/ai-cloud-validation/issues/214[#214]
@@ -2377,7 +2391,7 @@ a| https://github.com/NVIDIA/ai-cloud-validation/issues/214[#214]
 | [[BFX03-03]]BFX03-03
 | BFX03
 | https://github.com/NVIDIA/ai-cloud-validation/issues/215[#215]
-| min_req
+| bare_metal, breakfix, min_req
 |
 | P1
 a| https://github.com/NVIDIA/ai-cloud-validation/issues/215[#215]

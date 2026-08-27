@@ -260,18 +260,52 @@ class _OperationCheck(BaseValidation):
 
 
 class GpuResetCheck(_OperationCheck):
-    """Validate GPU reset via the break-fix API (BFX01-01).
+    """Validate an in-cluster GPU reset using the tenant's own node access (BFX01-06).
+
+    This evidences a *tenant* capability, not a provider one. The reset is performed
+    from inside the cluster (privileged DaemonSet, SSH), so it passes wherever the
+    tenant has root and a working ``nvidia-smi`` -- with or without the provider.
+    The provider-API counterpart is ``GpuRepairRequestCheck`` (BFX01-01).
 
     Step output:
         success, operation: {requested, completed, node_id}
     """
 
-    description: ClassVar[str] = "Reset GPUs on an individual node via the breakfix API"
+    description: ClassVar[str] = "Reset GPUs on a node from inside the cluster (tenant-side)"
 
     completion_key: ClassVar[str] = "completed"
     failure_message: ClassVar[str] = "GPU reset did not complete"
     label_keys: ClassVar[tuple[str, ...]] = ("node_id", "machine_id")
     pass_template: ClassVar[str] = "GPU reset completed for node {label}"
+
+
+class GpuRepairRequestCheck(_OperationCheck):
+    """Validate a GPU fault can be reported through the break-fix API (BFX01-01).
+
+    A provider whose break-fix API exposes no GPU-reset operation still owes a
+    tenant some way to report a GPU fault and have the node moved into a repair
+    state. This checks that path: the request was accepted and the provider acted
+    on it by changing the node's state.
+
+    It deliberately does not claim the GPUs were reset. The provider's repair
+    automation performs the reset asynchronously -- typically minutes to weeks
+    later, out of band from any API response -- so no synchronous check can
+    observe it.
+
+    Step output:
+        success, operation: {requested, repair_state_observed, restored, node_id}
+    """
+
+    description: ClassVar[str] = "Report a GPU fault via the break-fix API and verify the node enters repair"
+
+    completion_key: ClassVar[str] = "repair_state_observed"
+    failure_message: ClassVar[str] = "Provider did not move the node into a repair state after the GPU fault report"
+    label_keys: ClassVar[tuple[str, ...]] = ("node_id", "machine_id")
+    pass_template: ClassVar[str] = "GPU fault report accepted; node {label} entered a repair state"
+
+    def _pass_message(self, label: str, operation: dict[str, Any]) -> str:
+        """Report whether the provider also took the node back out of repair."""
+        return f"{super()._pass_message(label, operation)} (restored={operation.get('restored')})"
 
 
 class ReturnNodeMaintenanceCheck(_OperationCheck):

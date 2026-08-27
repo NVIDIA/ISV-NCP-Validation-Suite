@@ -387,11 +387,9 @@ tests:
           probe_timeout_s: 10
           api_endpoint: "{{ steps.setup.kubernetes.api_endpoint | default('', true) }}"
 
-    # Break-fix actions that are Kubernetes-shaped (BFX01). Bare-metal
-    # BFX checks live in bare_metal.yaml.
-    # BFX01-06, not BFX01-01: this resets GPUs using the tenant's own node access,
-    # so it evidences a tenant capability rather than a provider break-fix API.
-    # The API-based test is BFX01-01 in bare_metal.yaml.
+    # Break-fix actions that are Kubernetes-shaped (BFX01).
+    # Bare-metal BFX checks live in bare_metal.yaml.
+    # Tenant-side GPU reset via node access (privileged DaemonSet / SSH).
     gpu_reset:
       step: reset_gpus
       checks:

@@ -11,6 +11,7 @@ import pytest
 
 from isvtest.core.validation import BaseValidation
 from isvtest.validations.breakfix import (
+    BmcKernelLogCheck,
     CordonNodeCheck,
     FailureNotificationCheck,
     GpuResetCheck,
@@ -22,6 +23,7 @@ from isvtest.validations.breakfix import (
     ReportNodeRepairCheck,
     RetirementNoticesCheck,
     ReturnNodeMaintenanceCheck,
+    ReturnRackMaintenanceCheck,
 )
 
 
@@ -37,19 +39,34 @@ def _run(check_class: type[BaseValidation], step_output: dict[str, Any]) -> Base
 # bar as the BFX02 query APIs, so the flag alone cannot pass the check.
 _QUERYABLE_CASES = [
     (MaintenanceEventsCheck, "events_queryable", "events", {"machine_id": "m-1", "status": "maintenance"}),
-    (RetirementNoticesCheck, "notices_queryable", "notices", {"machine_id": "m-1", "status": "scheduled"}),
+    (
+        RetirementNoticesCheck,
+        "notices_queryable",
+        "notices",
+        {"machine_id": "m-1", "status": "scheduled", "retire_after": "2027-01-15T00:00:00Z"},
+    ),
     (RepairHistoryCheck, "history_queryable", "records", {"machine_id": "m-1", "entries": [{"status": "x"}]}),
     (
         PlannedMaintenanceNotificationCheck,
         "notification_channel_observable",
         "notifications",
-        {"machine_id": "m-1", "type": "planned_maintenance"},
+        {
+            "machine_id": "m-1",
+            "type": "planned_maintenance",
+            "notified_at": "2026-06-24T12:00:00Z",
+            "window_start": "2026-07-01T02:00:00Z",
+        },
     ),
     (
         FailureNotificationCheck,
         "notification_channel_observable",
         "notifications",
-        {"machine_id": "m-1", "type": "node_failure"},
+        {
+            "machine_id": "m-1",
+            "type": "node_failure",
+            "detected_at": "2026-06-24T11:59:30Z",
+            "notified_at": "2026-06-24T12:00:00Z",
+        },
     ),
 ]
 
@@ -102,6 +119,89 @@ class TestQueryableRecordChecks:
         with pytest.raises(pytest.skip.Exception):
             _run(check_class, {"success": True, flag: True, key: [{}]})
 
+    def test_retirement_notice_needs_a_date_not_just_a_subject(self) -> None:
+        """Without retire_after a notice says something will be retired, not when.
+
+        Lead time is the whole value of a retirement notice, so a record that
+        cannot demonstrate any is not evidence the API works.
+        """
+        step_output = {"success": True, "notices_queryable": True, "notices": [{"machine_id": "m-1"}]}
+        with pytest.raises(pytest.skip.Exception):
+            _run(RetirementNoticesCheck, step_output)
+
+    def test_retirement_notice_accepts_a_rack_as_the_subject(self) -> None:
+        """Providers retire whole racks as readily as single machines."""
+        step_output = {
+            "success": True,
+            "notices_queryable": True,
+            "notices": [{"rack_id": "r-1", "retire_after": "2027-01-15T00:00:00Z"}],
+        }
+        assert _run(RetirementNoticesCheck, step_output).passed
+
+    @pytest.mark.parametrize(("check_class", "_label"), _NOTIFICATION_CASES)
+    def test_notification_needs_both_timestamps(self, check_class: type[BaseValidation], _label: str) -> None:
+        """One timestamp cannot evidence an interval, and the interval is the contract.
+
+        ``notified_at`` alone shows only that something arrived: BFX05-01 needs
+        the window it preceded, BFX06-01 the detection it followed.
+        """
+        step_output = {
+            "success": True,
+            "notification_channel_observable": True,
+            "notifications": [{"machine_id": "m-1", "type": "x", "notified_at": "2026-06-24T12:00:00Z"}],
+        }
+        with pytest.raises(pytest.skip.Exception):
+            _run(check_class, step_output)
+
+    @pytest.mark.parametrize(("check_class", "_label"), _NOTIFICATION_CASES)
+    def test_notification_needs_a_subject(self, check_class: type[BaseValidation], _label: str) -> None:
+        """A notification that does not say which machine is not actionable."""
+        step_output = {
+            "success": True,
+            "notification_channel_observable": True,
+            "notifications": [
+                {
+                    "detected_at": "2026-06-24T11:59:30Z",
+                    "notified_at": "2026-06-24T12:00:00Z",
+                    "window_start": "2026-07-01T02:00:00Z",
+                }
+            ],
+        }
+        with pytest.raises(pytest.skip.Exception):
+            _run(check_class, step_output)
+
+    def test_planned_notice_must_precede_the_window(self) -> None:
+        """A warning that arrives after maintenance starts is not a warning."""
+        step_output = {
+            "success": True,
+            "notification_channel_observable": True,
+            "notifications": [
+                {
+                    "machine_id": "m-1",
+                    "notified_at": "2026-07-01T03:00:00Z",
+                    "window_start": "2026-07-01T02:00:00Z",
+                }
+            ],
+        }
+        with pytest.raises(pytest.skip.Exception):
+            _run(PlannedMaintenanceNotificationCheck, step_output)
+
+    def test_failure_notice_must_follow_detection(self) -> None:
+        """Being told before the provider knew is a malformed record, not low latency."""
+        step_output = {
+            "success": True,
+            "notification_channel_observable": True,
+            "notifications": [
+                {
+                    "machine_id": "m-1",
+                    "detected_at": "2026-06-24T12:00:00Z",
+                    "notified_at": "2026-06-24T11:59:30Z",
+                }
+            ],
+        }
+        with pytest.raises(pytest.skip.Exception):
+            _run(FailureNotificationCheck, step_output)
+
     def test_repair_history_needs_entries_not_just_a_machine_record(self) -> None:
         """BFX02-03 counts a machine record only when it carries history entries."""
         step_output = {"success": True, "history_queryable": True, "records": [{"machine_id": "m-1", "entries": []}]}
@@ -123,16 +223,58 @@ class TestQueryableRecordChecks:
 class TestOperationChecks:
     """Cover the BFX01 mutating-operation checks that share _OperationCheck."""
 
-    def test_fails_when_not_completed(self) -> None:
-        """An operation that never completed fails with the provider's message."""
-        check = _run(GpuResetCheck, {"success": True, "operation": {"completed": False, "message": "timeout"}})
+    def test_fails_when_not_accepted(self) -> None:
+        """An operation the provider refused fails with the provider's message."""
+        check = _run(GpuResetCheck, {"success": True, "operation": {"accepted": False, "message": "timeout"}})
         assert not check.passed
 
-    def test_passes_when_completed(self) -> None:
-        """A completed operation passes and names the target node."""
-        check = _run(GpuResetCheck, {"success": True, "operation": {"completed": True, "node_id": "n-1"}})
+    def test_passes_when_accepted(self) -> None:
+        """An accepted request passes and names the target node."""
+        step_output = {
+            "success": True,
+            "operation": {"accepted": True, "node_id": "n-1", "gpu_ids": ["GPU-0"], "request_id": "req-1"},
+        }
+        check = _run(GpuResetCheck, step_output)
         assert check.passed
         assert "n-1" in check.message
+
+    def test_gpu_reset_needs_a_handle_to_poll(self) -> None:
+        """A reset completes asynchronously, so acceptance without a handle is a dead end."""
+        step_output = {"success": True, "operation": {"accepted": True, "node_id": "n-1", "gpu_ids": ["GPU-0"]}}
+        check = _run(GpuResetCheck, step_output)
+        assert not check.passed
+        assert "request_id" in check.message
+
+    def test_gpu_reset_needs_to_name_the_gpus(self) -> None:
+        """A node has many GPUs, so a request that names none has not been scoped."""
+        step_output = {
+            "success": True,
+            "operation": {"accepted": True, "node_id": "n-1", "gpu_ids": [], "request_id": "req-1"},
+        }
+        check = _run(GpuResetCheck, step_output)
+        assert not check.passed
+        assert "gpu_ids" in check.message
+
+    @pytest.mark.parametrize(
+        ("check_class", "operation"),
+        [
+            (GpuResetCheck, {"accepted": True, "gpu_ids": ["GPU-0"], "request_id": "req-1"}),
+            (ReturnRackMaintenanceCheck, {"accepted": True}),
+            (HostReplacementCheck, {"node_removed_from_pool": True}),
+            (ReturnNodeMaintenanceCheck, {"accepted": True}),
+        ],
+    )
+    def test_operation_must_identify_what_it_acted_on(
+        self, check_class: type[BaseValidation], operation: dict[str, Any]
+    ) -> None:
+        """Success without an identifier is not a result, it is an assertion.
+
+        The message would otherwise read "... for node unknown", which tells a
+        reader nothing about whether the operation reached anything.
+        """
+        check = _run(check_class, {"success": True, "operation": operation})
+        assert not check.passed
+        assert "without identifying what it acted on" in check.message
 
     def test_host_replacement_uses_its_own_flag(self) -> None:
         """BFX01-05 keys off node_removed_from_pool, not the generic completed flag."""
@@ -208,6 +350,54 @@ class TestOperationChecks:
         assert "removed the override directly" in check.message
 
 
+def _log_host(**overrides: Any) -> dict[str, Any]:
+    """Build a host record that satisfies the BFX03-03 log-history contract."""
+    return {
+        "host_id": "h-1",
+        "window_start": "2026-06-24T00:00:00Z",
+        "window_end": "2026-06-24T12:00:00Z",
+        "entries_returned": 128,
+        **overrides,
+    }
+
+
+class TestBmcKernelLogCheck:
+    """Cover the BFX03-03 log-history check."""
+
+    def test_passes_when_a_windowed_query_returns_entries(self) -> None:
+        """Entries returned over a stated window is what makes it a history."""
+        check = _run(BmcKernelLogCheck, {"success": True, "hosts": [_log_host()]})
+        assert check.passed
+        assert "128 entries" in check.message
+
+    def test_fails_when_a_host_cannot_name_itself(self) -> None:
+        """A host record with no host_id gives the tenant nothing to go and read."""
+        host = _log_host()
+        del host["host_id"]
+        check = _run(BmcKernelLogCheck, {"success": True, "hosts": [host]})
+        assert not check.passed
+        assert "missing host_id" in check.message
+
+    def test_fails_without_a_query_window(self) -> None:
+        """Entries with no window could be a live tail rather than a history."""
+        host = _log_host()
+        del host["window_start"]
+        check = _run(BmcKernelLogCheck, {"success": True, "hosts": [host]})
+        assert not check.passed
+        assert "query window" in check.message
+
+    def test_fails_when_the_window_is_inverted(self) -> None:
+        """A window ending before it starts was not a real query."""
+        host = _log_host(window_start="2026-06-24T12:00:00Z", window_end="2026-06-24T00:00:00Z")
+        assert not _run(BmcKernelLogCheck, {"success": True, "hosts": [host]}).passed
+
+    def test_fails_when_no_entries_come_back(self) -> None:
+        """A provider that answers with nothing has not demonstrated it can answer."""
+        check = _run(BmcKernelLogCheck, {"success": True, "hosts": [_log_host(entries_returned=0)]})
+        assert not check.passed
+        assert "No log entries" in check.message
+
+
 class TestNodeHealthAgentCheck:
     """Cover the BFX04-01 GPUd/Sentinel health-agent check."""
 
@@ -238,7 +428,15 @@ class TestNotificationChecks:
         step_output = {
             "success": True,
             "notification_channel_observable": True,
-            "notifications": [{"machine_id": "m-1", "message": "scheduled"}],
+            "notifications": [
+                {
+                    "machine_id": "m-1",
+                    "message": "scheduled",
+                    "detected_at": "2026-06-24T11:59:30Z",
+                    "notified_at": "2026-06-24T12:00:00Z",
+                    "window_start": "2026-07-01T02:00:00Z",
+                }
+            ],
         }
         check = _run(check_class, step_output)
         assert check.passed

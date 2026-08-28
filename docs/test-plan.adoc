@@ -2202,11 +2202,11 @@ a|
 
 | [[BFX05-01]]BFX05-01
 | BFX05
-|
+| https://github.com/NVIDIA/ai-cloud-validation/issues/556[#556]
 | bare_metal, breakfix
 |
 |
-a|
+a| https://github.com/NVIDIA/ai-cloud-validation/issues/556[#556]
 | LimitedEnv
 |
 |
@@ -2216,11 +2216,11 @@ a|
 
 | [[BFX06-01]]BFX06-01
 | BFX06
-|
+| https://github.com/NVIDIA/ai-cloud-validation/issues/557[#557]
 | bare_metal, breakfix
 |
 |
-a|
+a| https://github.com/NVIDIA/ai-cloud-validation/issues/557[#557]
 | LimitedEnv
 |
 |
@@ -2240,7 +2240,7 @@ a| https://github.com/NVIDIA/ai-cloud-validation/issues/206[#206]
 |
 | M5
 |
-| Reset GPUs on an individual node via the Breakfix API
+| Request a reset of GPUs on an operator-managed node
 | pending
 |
 
@@ -2398,7 +2398,7 @@ a| https://github.com/NVIDIA/ai-cloud-validation/issues/215[#215]
 |
 | M5
 |
-| Obtain BMC kernel log messages for a node
+| Query a node's log history through a telemetry endpoint
 | pending
 |
 

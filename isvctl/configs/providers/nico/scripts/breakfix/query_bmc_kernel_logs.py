@@ -2,11 +2,18 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Query BMC kernel logs (BFX03-03) for NICo machines.
+"""Query a node's log history (BFX03-03) for NICo machines.
 
-Inspects machine health probes for BMC log/sel/kernel signals. NICo aggregates
-BMC telemetry into the health report rather than exposing raw kernel log
-streams on the tenant REST API.
+BFX03-03 asks for a queryable log history or stream -- OTEL, or an
+OpenSearch/Kibana equivalent -- over a window the tenant chooses. NICo has no
+such endpoint: it folds BMC telemetry into per-machine health probes, which
+report that a signal exists, not what it said or when.
+
+So this always emits a structured skip. It still inspects the probes and
+reports which hosts carry a BMC log signal, because "NICo sees something here"
+is useful context for whoever implements the real endpoint -- but that is
+diagnostic output, deliberately named apart from the ``hosts`` contract
+``BmcKernelLogCheck`` reads, so it cannot be mistaken for satisfying it.
 """
 
 from __future__ import annotations
@@ -38,8 +45,8 @@ def _has_kernel_log_signal(health: dict[str, Any]) -> bool:
 
 
 def main() -> int:
-    """Report per-host BMC kernel-log availability from NICo health probes as JSON."""
-    parser = argparse.ArgumentParser(description="Query BMC kernel logs (NICo)")
+    """Emit the BFX03-03 gap, with per-host BMC probe signals as context."""
+    parser = argparse.ArgumentParser(description="Query a node's log history (NICo)")
     parser.add_argument("--org", required=True)
     parser.add_argument("--site-id", required=True)
     parser.add_argument("--api-base", required=True)
@@ -54,27 +61,25 @@ def main() -> int:
     if not machines:
         return emit(result)
 
-    hosts: list[dict[str, Any]] = []
+    probes: list[dict[str, Any]] = []
     for machine in machines:
         health = machine.get("health") or {}
-        hosts.append(
+        probes.append(
             {
                 "host_id": machine.get("id", ""),
-                "kernel_log_available": _has_kernel_log_signal(health if isinstance(health, dict) else {}),
+                "bmc_log_probe_present": _has_kernel_log_signal(health if isinstance(health, dict) else {}),
             }
         )
 
-    if not any(host["kernel_log_available"] for host in hosts):
-        skip = skip_result(
-            args.site_id,
-            "NICo health API does not expose BMC kernel log messages on the tenant REST surface (BFX03-03 gap)",
-            gap="BFX03-03",
-        )
-        skip["hosts"] = hosts
-        return emit(skip)
-
-    result["hosts"] = hosts
-    return emit(result)
+    skip = skip_result(
+        args.site_id,
+        "NICo exposes no queryable log history or streaming endpoint on the tenant REST surface; "
+        "BMC telemetry is only summarised into health probes (BFX03-03 gap)",
+        gap="BFX03-03",
+    )
+    skip["hosts"] = []
+    skip["bmc_probe_signals"] = probes
+    return emit(skip)
 
 
 if __name__ == "__main__":

@@ -264,14 +264,14 @@ its plan item is not platform-scoped.
 | `query_retirement_notices` | test | `providers/my-isv/scripts/breakfix/query_retirement_notices.py` | `notices_queryable`, `notices` (BFX02-02) |
 | `query_repair_history` | test | `providers/nico/scripts/breakfix/query_repair_history.py` | `history_queryable`, `records[].{machine_id,entries}` -- a record needs non-empty `entries` to count (BFX02-03) |
 | `query_switch_firmware` | test | `providers/my-isv/scripts/breakfix/query_switch_firmware.py` | `trays[].{tray_id,firmware_version}` (BFX03-02) |
-| `query_bmc_kernel_logs` | test | `providers/nico/scripts/breakfix/query_bmc_kernel_logs.py` | `hosts[].{host_id,kernel_log_available}` (BFX03-03) |
+| `query_bmc_kernel_logs` | test | `providers/nico/scripts/breakfix/query_bmc_kernel_logs.py` | `hosts[].{host_id,window_start,window_end,entries_returned}` -- a windowed query that returns entries, not a "logs available" boolean (BFX03-03) |
 | `report_node_repair` | test | `providers/nico/scripts/breakfix/report_node_repair.py` | `operation.{requested,repair_state_observed,restored,node_id}` -- reports a node as needing repair while keeping it, and watches the node enter a repair state (BFX01-06) |
 | `return_node_maintenance` | test | `providers/my-isv/scripts/breakfix/return_node_maintenance.py` | `operation.{requested,accepted,machine_id,maintenance_mode}` (BFX01-02) |
 | `return_rack_maintenance` | test | `providers/my-isv/scripts/breakfix/return_rack_maintenance.py` | `operation.{requested,accepted,rack_id}` (BFX01-03) |
 | `request_host_replacement` | test | `providers/my-isv/scripts/breakfix/request_host_replacement.py` | `operation.{requested,node_removed_from_pool,machine_id}` (BFX01-05) |
 | `query_node_health_agents` | test | `providers/my-isv/scripts/breakfix/query_node_health_agents.py` | `agents_observable`, `agents[].{node_id,agent_name,running}` (BFX04-01) |
-| `query_planned_notifications` | test | `providers/my-isv/scripts/breakfix/query_planned_notifications.py` | `notification_channel_observable`, `notifications[].{machine_id,type,message,notified_at}` (BFX05-01) |
-| `query_failure_notifications` | test | `providers/my-isv/scripts/breakfix/query_failure_notifications.py` | `notification_channel_observable`, `notifications[].{machine_id,type,message,notified_at}` (BFX06-01) |
+| `query_planned_notifications` | test | `providers/my-isv/scripts/breakfix/query_planned_notifications.py` | `notification_channel_observable`, `notifications[].{machine_id,type,message,notified_at,window_start}` -- `notified_at` must precede `window_start` (the lead time) (BFX05-01) |
+| `query_failure_notifications` | test | `providers/my-isv/scripts/breakfix/query_failure_notifications.py` | `notification_channel_observable`, `notifications[].{machine_id,type,message,detected_at,notified_at}` -- `detected_at` to `notified_at` is the latency (BFX06-01) |
 
 ### Storage (`storage.yaml`)
 
@@ -297,7 +297,7 @@ volume. The three test-phase steps all reuse that fixture.
 |------|-------|--------|
 | `setup` | setup | `providers/my-isv/scripts/k8s/setup.sh` |
 | `teardown` | teardown | `providers/my-isv/scripts/k8s/teardown.sh` |
-| `reset_gpus` | test | `providers/my-isv/scripts/breakfix/reset_gpus.py` (BFX01-01) |
+| `reset_gpus` | test | `providers/my-isv/scripts/breakfix/reset_gpus.py` -- `operation.{accepted,node_id,gpu_ids,request_id}`; the reset is asynchronous, so the step reports acceptance plus a handle to poll (BFX01-01) |
 | `cordon_node` | test | `providers/shared/breakfix/cordon_node.py` (BFX01-04) |
 
 Validations use `kubectl` directly (or a custom CLI via the `KUBECTL` env var): node counts, GPU operator, pod health, NCCL/NIM workloads. Break-fix cordon and GPU reset are optional provider steps.

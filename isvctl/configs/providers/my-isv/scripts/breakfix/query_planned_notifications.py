@@ -25,12 +25,14 @@ def main() -> int:
         "query_planned_notifications",
         hint="planned maintenance notification channel",
         notification_channel_observable=True,
+        # notified_at must precede window_start: the lead time is the point.
         notifications=[
             {
                 "machine_id": "demo-machine-001",
                 "type": "planned_maintenance",
                 "message": "Scheduled firmware update (demo)",
                 "notified_at": "2026-06-24T12:00:00Z",
+                "window_start": "2026-07-01T02:00:00Z",
             }
         ],
     )

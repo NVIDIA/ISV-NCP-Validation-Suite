@@ -40,6 +40,8 @@ import pytest
 
 from isvtest.core.validation import BaseValidation
 
+UNKNOWN_LABEL = "unknown"
+
 
 def _record_label(record: dict[str, Any], *keys: str) -> str:
     """Return the first non-blank string value among ``keys``, or ``"unknown"``."""
@@ -47,7 +49,14 @@ def _record_label(record: dict[str, Any], *keys: str) -> str:
         value = record.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
-    return "unknown"
+    return UNKNOWN_LABEL
+
+
+def _has_fields(record: Any, *fields: str) -> bool:
+    """Return whether ``record`` carries every field with a non-empty value."""
+    if not isinstance(record, dict):
+        return False
+    return all(str(record.get(field) or "").strip() for field in fields)
 
 
 def _step_output(check: BaseValidation) -> dict[str, Any] | None:
@@ -87,14 +96,20 @@ class _QueryableRecordsCheck(BaseValidation):
     absent_noun: ClassVar[str]
     api_label: ClassVar[str]
     record_noun: ClassVar[str]
+    # Fields a record must carry to count. Empty means "any non-empty record",
+    # which only suits signals whose mere existence is the evidence.
+    evidence_fields: ClassVar[tuple[str, ...]] = ()
 
     def _is_evidence(self, record: Any) -> bool:
         """Return whether one record demonstrates the signal.
 
-        Defaults to "any non-empty record". Subclasses tighten this when the
-        record needs specific content to prove anything.
+        A record missing the fields that make it actionable is not evidence that
+        the API works -- it is evidence that something answered. Subclasses
+        override instead when the rule is not a flat list of required fields.
         """
-        return bool(record)
+        if not record:
+            return False
+        return _has_fields(record, *self.evidence_fields) if self.evidence_fields else True
 
     def run(self) -> None:
         """Assert the signal is reported observable and backed by real records."""
@@ -135,7 +150,8 @@ class RetirementNoticesCheck(_QueryableRecordsCheck):
     time for the tenant to migrate off the hardware to be worth anything.
 
     Step output:
-        success, notices_queryable: bool, notices: list[dict]
+        success, notices_queryable: bool
+        notices: list[{machine_id | rack_id, retire_after, status?, message?}]
     """
 
     description: ClassVar[str] = "Query retirement notices for a node or rack"
@@ -146,6 +162,17 @@ class RetirementNoticesCheck(_QueryableRecordsCheck):
     absent_noun: ClassVar[str] = "retirement notices"
     api_label: ClassVar[str] = "Retirement notice"
     record_noun: ClassVar[str] = "notice"
+
+    def _is_evidence(self, record: Any) -> bool:
+        """A notice needs a subject and a date, or the tenant cannot act on it.
+
+        Either identifier will do -- providers retire whole racks as readily as
+        single machines -- but ``retire_after`` is what makes it a notice rather
+        than a statement that something will be retired eventually.
+        """
+        if not _has_fields(record, "retire_after"):
+            return False
+        return _has_fields(record, "machine_id") or _has_fields(record, "rack_id")
 
 
 class RepairHistoryCheck(_QueryableRecordsCheck):
@@ -231,6 +258,11 @@ class BmcKernelLogCheck(BaseValidation):
         if len(hosts) < min_hosts:
             self.set_failed(f"Expected at least {min_hosts} host(s), got {len(hosts)}")
             return
+        # A host that cannot name itself gives the tenant nothing to go and read.
+        unidentified = [h for h in hosts if not _has_fields(h, "host_id")]
+        if unidentified:
+            self.set_failed(f"{len(unidentified)} host record(s) missing host_id")
+            return
         unavailable = [h for h in hosts if not h.get("kernel_log_available")]
         if unavailable:
             labels = ", ".join(_record_label(h, "host_id", "machine_id") for h in unavailable[:3])
@@ -259,6 +291,22 @@ class _OperationCheck(BaseValidation):
         """Return the success message for a completed operation."""
         return self.pass_template.format(label=label)
 
+    def _finish(self, operation: dict[str, Any]) -> None:
+        """Pass the check, unless the operation cannot say what it acted on.
+
+        A provider that reports success without naming the resource has not
+        demonstrated the operation reached anything in particular, and the
+        message would read "... for node unknown", which is not a result.
+        """
+        label = _record_label(operation, *self.label_keys)
+        if label == UNKNOWN_LABEL:
+            self.set_failed(
+                "Operation reported success without identifying what it acted on "
+                f"(expected one of: {', '.join(self.label_keys)})"
+            )
+            return
+        self.set_passed(self._pass_message(label, operation))
+
     def run(self) -> None:
         """Assert the provider reported the operation as having taken effect."""
         step_output = _step_output(self)
@@ -268,7 +316,7 @@ class _OperationCheck(BaseValidation):
         if not operation.get(self.completion_key):
             self.set_failed(operation.get("message") or self.failure_message)
             return
-        self.set_passed(self._pass_message(_record_label(operation, *self.label_keys), operation))
+        self._finish(operation)
 
 
 class GpuResetCheck(_OperationCheck):
@@ -398,7 +446,7 @@ class ReportNodeRepairCheck(_OperationCheck):
             # step forgot to, and --skip-restore, which strands the node by design.
             self.set_failed(self.not_restored_message)
             return
-        self.set_passed(self._pass_message(_record_label(operation, *self.label_keys), operation))
+        self._finish(operation)
 
     def _pass_message(self, label: str, operation: dict[str, Any]) -> str:
         """Append any provider finding raised while the node was taken back out of repair."""
@@ -478,6 +526,9 @@ class PlannedMaintenanceNotificationCheck(_QueryableRecordsCheck):
 
     Empty shell: no provider exposes a maintenance notification channel, which
     needs to arrive far enough ahead of the window to drain workloads first.
+
+    ``notified_at`` is required because lead time is the whole value here: a
+    notification with no timestamp cannot be shown to have arrived in advance.
     """
 
     description: ClassVar[str] = "Verify tenants can be notified of planned future node maintenance"
@@ -488,6 +539,7 @@ class PlannedMaintenanceNotificationCheck(_QueryableRecordsCheck):
     absent_noun: ClassVar[str] = "planned maintenance notifications"
     api_label: ClassVar[str] = "Planned maintenance notification"
     record_noun: ClassVar[str] = "notification"
+    evidence_fields: ClassVar[tuple[str, ...]] = ("machine_id", "notified_at")
 
 
 class FailureNotificationCheck(_QueryableRecordsCheck):
@@ -502,6 +554,9 @@ class FailureNotificationCheck(_QueryableRecordsCheck):
 
     Empty shell: no provider exposes a failure notification channel, where the
     contract is latency rather than lead time, there being no window to plan for.
+
+    ``notified_at`` carries that latency, so it is required for the same reason
+    as BFX05-01 even though what it has to be measured against differs.
     """
 
     description: ClassVar[str] = "Verify tenants can be notified of immediate node failure"
@@ -512,3 +567,4 @@ class FailureNotificationCheck(_QueryableRecordsCheck):
     absent_noun: ClassVar[str] = "immediate failure notifications"
     api_label: ClassVar[str] = "Immediate failure notification"
     record_noun: ClassVar[str] = "notification"
+    evidence_fields: ClassVar[tuple[str, ...]] = ("machine_id", "notified_at")

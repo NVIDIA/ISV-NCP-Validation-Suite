@@ -4292,6 +4292,7 @@ def _stub_return_target(module: ModuleType, monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
 
     def _get(_org: str, path: str, _tok: str, **_kw: object) -> dict[str, Any]:
+        """Serve the instance until it is deleted, then the quarantined machine."""
         if path.startswith("instance/"):
             # Gone once the delete lands, which is what _await_deletion watches for.
             if deleted:
@@ -4430,6 +4431,7 @@ def test_return_node_reports_a_machine_returned_to_the_pool(
     monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
 
     def _get(_org: str, path: str, _tok: str, **_kw: object) -> dict[str, Any]:
+        """Delete the instance but keep the machine Ready, i.e. back in the pool."""
         if path.startswith("instance/"):
             if deleted:
                 raise HTTPError("http://x", 404, "Not Found", None, None)
@@ -4448,6 +4450,9 @@ def test_return_node_reports_a_machine_returned_to_the_pool(
     assert out["operation"]["instance_deleted"] is True
     assert out["operation"]["machine_quarantined"] is False
     assert "allocatable pool" in out["operation"]["message"]
+    # The step itself must fail, not just the bound check: exiting 0 here would
+    # tell the orchestrator a destructive step completed when it did not.
+    assert out["success"] is False
 
 
 def test_return_node_does_not_turn_an_api_failure_into_a_skip(
@@ -4478,3 +4483,30 @@ def test_return_node_does_not_turn_an_api_failure_into_a_skip(
     assert out["success"] is False
     assert out.get("skipped") is not True
     assert deleted == []
+
+
+def test_return_node_fails_when_the_instance_outlives_the_delete(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An unconfirmed delete is a failed step, not a successful one with a note.
+
+    The instance may or may not be on its way out. Exiting 0 would tell the
+    orchestrator a destructive operation completed when nothing confirmed it.
+    """
+    module = _load_return_node_script()
+    deleted: list[dict[str, Any]] = []
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+    # The instance never goes away, so _await_deletion spends its deadline.
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"id": "i-1", "machineId": "m-1"})
+    monkeypatch.setattr(module, "forge_delete", lambda *_a, **kw: deleted.append(kw) or {})
+    monkeypatch.setattr(module, "time", _fast_clock())
+    monkeypatch.setenv(module.ALLOW_ENV, "1")
+    monkeypatch.setattr(sys, "argv", _return_argv("--instance-id", "i-1"))
+
+    code = module.main()
+    out = json.loads(capsys.readouterr().out)
+
+    assert code == 1
+    assert out["success"] is False
+    assert out["operation"]["instance_deleted"] is False
+    assert "still existed" in out["operation"]["message"]

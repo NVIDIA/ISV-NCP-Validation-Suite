@@ -256,20 +256,27 @@ def main() -> int:
 
         operation["instance_deleted"] = _await_deletion(args.org, args.instance_id, auth.token, base_url=args.api_base)
         if not operation["instance_deleted"]:
+            # A destructive step that cannot confirm its own outcome has not
+            # succeeded, whatever the API answered: the instance may or may not
+            # be on its way out, and the step must not exit 0 saying otherwise.
+            result["success"] = False
             operation["message"] = (
                 f"NICo accepted the release but instance {args.instance_id} still existed after "
                 f"{POLL_DEADLINE_SECONDS}s"
             )
+            result["error"] = operation["message"]
             return emit(result)
 
         quarantined, status = _await_quarantine(args.org, machine_id, auth.token, base_url=args.api_base)
         operation["machine_quarantined"] = quarantined
         if not quarantined:
+            result["success"] = False
             operation["message"] = (
                 f"Machine {machine_id} was released with a health issue but reported "
                 f"{status or 'an unknown state'} rather than leaving service; a node returned for "
                 "maintenance must not go straight back into the allocatable pool"
             )
+            result["error"] = operation["message"]
 
     except NicoAuthError as e:
         result["success"] = False

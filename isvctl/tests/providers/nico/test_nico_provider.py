@@ -4295,7 +4295,7 @@ def _stub_return_target(module: ModuleType, monkeypatch: pytest.MonkeyPatch) -> 
         if path.startswith("instance/"):
             # Gone once the delete lands, which is what _await_deletion watches for.
             if deleted:
-                raise RuntimeError("404 Not Found")
+                raise HTTPError("http://x", 404, "Not Found", None, None)
             return {"id": "i-1", "machineId": "m-1", "status": "Ready"}
         return {"id": "m-1", "status": "Repairing" if deleted else "Ready"}
 
@@ -4388,7 +4388,9 @@ def test_return_node_skips_a_missing_instance(
     """An instance that is already gone is nothing to return, not a failure."""
     module = _load_return_node_script()
     monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
-    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: (_ for _ in ()).throw(RuntimeError("404")))
+    monkeypatch.setattr(
+        module, "forge_get", lambda *_a, **_kw: (_ for _ in ()).throw(HTTPError("http://x", 404, "gone", None, None))
+    )
     monkeypatch.setenv(module.ALLOW_ENV, "1")
     monkeypatch.setattr(sys, "argv", _return_argv("--instance-id", "i-gone"))
 
@@ -4430,7 +4432,7 @@ def test_return_node_reports_a_machine_returned_to_the_pool(
     def _get(_org: str, path: str, _tok: str, **_kw: object) -> dict[str, Any]:
         if path.startswith("instance/"):
             if deleted:
-                raise RuntimeError("404 Not Found")
+                raise HTTPError("http://x", 404, "Not Found", None, None)
             return {"id": "i-1", "machineId": "m-1"}
         return {"id": "m-1", "status": "Ready"}
 
@@ -4446,3 +4448,33 @@ def test_return_node_reports_a_machine_returned_to_the_pool(
     assert out["operation"]["instance_deleted"] is True
     assert out["operation"]["machine_quarantined"] is False
     assert "allocatable pool" in out["operation"]["message"]
+
+
+def test_return_node_does_not_turn_an_api_failure_into_a_skip(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A 401 must not read as "the instance is already gone".
+
+    "Absent" is the precondition for returning nothing and the evidence that the
+    return worked, so answering either question with a provider outage would
+    hide a real failure behind a clean skip.
+    """
+    module = _load_return_node_script()
+    deleted: list[dict[str, Any]] = []
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+    monkeypatch.setattr(
+        module,
+        "forge_get",
+        lambda *_a, **_kw: (_ for _ in ()).throw(HTTPError("http://x", 401, "Unauthorized", None, None)),
+    )
+    monkeypatch.setattr(module, "forge_delete", lambda *_a, **kw: deleted.append(kw) or {})
+    monkeypatch.setenv(module.ALLOW_ENV, "1")
+    monkeypatch.setattr(sys, "argv", _return_argv("--instance-id", "i-1"))
+
+    code = module.main()
+    out = json.loads(capsys.readouterr().out)
+
+    assert code == 1
+    assert out["success"] is False
+    assert out.get("skipped") is not True
+    assert deleted == []

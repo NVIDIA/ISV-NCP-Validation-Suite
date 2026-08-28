@@ -33,11 +33,15 @@ nothing in this script can undo that -- unlike BFX01-06, which clears online
 repair in a ``finally``. Two independent confirmations are therefore required
 and neither is sufficient alone:
 
-  1. ``--instance-id <uuid>``, naming the exact instance. There is deliberately
-     no discovery: a run cannot select a victim, so a misconfigured site cannot
+  1. ``--instance-id <uuid>``, naming the exact instance -- supplied by the
+     provider config from ``NICO_INSTANCE_ID``. There is deliberately no
+     discovery: a run cannot select a victim, so a misconfigured site cannot
      cost someone their work. Shared lab sites routinely carry exactly one
      tenant instance and it is usually not ours.
   2. ``NICO_ALLOW_RELEASE_FOR_REPAIR=1``, a separate deliberate act.
+
+Two independent environment variables, so neither a stray instance id left over
+from another step nor a blanket opt-in in a CI runner can arm this on its own.
 
 Without both, the step reports what it would delete and stops, which makes a
 plain run a dry run.
@@ -69,12 +73,12 @@ Reference:
 """
 
 import argparse
-import contextlib
 import os
 import sys
 import time
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError
 
 # Allow importing from sibling common/ directory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -125,17 +129,30 @@ def _delete_body() -> dict[str, Any]:
 
 
 def _instance(org: str, instance_id: str, token: str, *, base_url: str) -> dict[str, Any]:
-    """Fetch one instance, or an empty dict when it is gone."""
-    with contextlib.suppress(Exception):
+    """Fetch one instance, or an empty dict when it is genuinely gone.
+
+    Only a 404 counts as gone. Every other failure propagates, because "absent"
+    is load-bearing twice over here: before the delete it means there is nothing
+    to return, and after it means the return worked. Letting a 401 or a 5xx
+    answer either question would turn a provider outage into a clean skip, or
+    into a false report that the instance was destroyed.
+    """
+    try:
         return forge_get(org, f"instance/{instance_id}", token, base_url=base_url)
-    return {}
+    except HTTPError as e:
+        if e.code == 404:
+            return {}
+        raise
 
 
 def _machine_status(org: str, machine_id: str, token: str, *, base_url: str) -> str:
-    """Return a machine's current status, or an empty string when unreadable."""
-    with contextlib.suppress(Exception):
-        return first_string(forge_get(org, f"machine/{machine_id}", token, base_url=base_url), "status")
-    return ""
+    """Return a machine's current status.
+
+    Errors propagate for the same reason as ``_instance``: an unreadable machine
+    is not evidence that it stayed in service, and reporting it as such would
+    blame the provider for a fault on our side.
+    """
+    return first_string(forge_get(org, f"machine/{machine_id}", token, base_url=base_url), "status")
 
 
 def _await_deletion(org: str, instance_id: str, token: str, *, base_url: str) -> bool:
@@ -172,8 +189,8 @@ def _confirmations(instance_id: str) -> str:
     if not instance_id:
         return (
             "No instance named. This step deletes a tenant instance and cannot undo it, so it "
-            "never discovers a target; pass --instance-id <uuid> for the instance you intend to "
-            f"destroy, and set {ALLOW_ENV}=1"
+            "never discovers a target; name the instance you intend to destroy with --instance-id "
+            f"<uuid> (NICO_INSTANCE_ID via the provider config), and set {ALLOW_ENV}=1"
         )
     if os.environ.get(ALLOW_ENV) != "1":
         return (

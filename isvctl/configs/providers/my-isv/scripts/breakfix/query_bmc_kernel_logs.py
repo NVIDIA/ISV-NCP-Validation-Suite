@@ -26,10 +26,19 @@ def main() -> int:
     parser.add_argument("--region", default="", help="Cloud region")
     _ = parser.parse_args()
 
+    # The window is what makes this a log *history*: a provider must answer for
+    # a period the tenant chose, not just tail whatever is happening now.
     return emit_stub(
         "query_bmc_kernel_logs",
-        hint="BMC kernel log query",
-        hosts=[{"host_id": "demo-host-001", "kernel_log_available": True}],
+        hint="node log history query (OTEL, OpenSearch, or equivalent)",
+        hosts=[
+            {
+                "host_id": "demo-host-001",
+                "window_start": "2026-06-24T00:00:00Z",
+                "window_end": "2026-06-24T12:00:00Z",
+                "entries_returned": 128,
+            }
+        ],
     )
 
 

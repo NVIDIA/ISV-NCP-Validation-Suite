@@ -34,6 +34,7 @@ deliverable -- it is what an ISV would implement against.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any, ClassVar
 
 import pytest
@@ -57,6 +58,29 @@ def _has_fields(record: Any, *fields: str) -> bool:
     if not isinstance(record, dict):
         return False
     return all(str(record.get(field) or "").strip() for field in fields)
+
+
+def _timestamp(record: dict[str, Any], field: str) -> datetime | None:
+    """Parse an ISO 8601 timestamp from ``record``, or None when absent/malformed.
+
+    A timestamp that cannot be parsed is treated as missing rather than as an
+    error: these fields exist to be compared, and one that cannot be compared
+    evidences nothing.
+    """
+    try:
+        parsed = datetime.fromisoformat(str(record.get(field) or ""))
+    except ValueError:
+        return None
+    # Mixed offset-aware and naive values cannot be compared; normalise to UTC.
+    return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
+
+
+def _ordered(record: Any, earlier: str, later: str) -> bool:
+    """Return whether ``record`` carries both timestamps and they are in order."""
+    if not isinstance(record, dict):
+        return False
+    first, second = _timestamp(record, earlier), _timestamp(record, later)
+    return first is not None and second is not None and first <= second
 
 
 def _step_output(check: BaseValidation) -> dict[str, Any] | None:
@@ -233,11 +257,17 @@ class BmcKernelLogCheck(BaseValidation):
 
     Empty shell: reframed from serial-over-LAN BMC console access to a queryable
     log history or stream (OTEL, or an OpenSearch/Kibana equivalent), which no
-    provider exposes -- the class name and ``kernel_log_available`` field are
-    leftovers from the original framing, kept because the check is released.
+    provider exposes. The class name is a leftover from the original framing,
+    kept because the check is released.
+
+    The contract asks a provider to prove it can answer a question, not to
+    declare that it could. A boolean "logs are available" is satisfiable by any
+    provider that returns ``true`` and builds nothing, so instead a host must
+    report the window it was asked about and how many entries came back -- the
+    window is what makes it a *history* rather than a live tail.
 
     Step output:
-        success, hosts: list[{host_id, kernel_log_available: bool}]
+        success, hosts: list[{host_id, window_start, window_end, entries_returned: int}]
     """
 
     description: ClassVar[str] = "Query a node's log history through a telemetry endpoint"
@@ -263,12 +293,20 @@ class BmcKernelLogCheck(BaseValidation):
         if unidentified:
             self.set_failed(f"{len(unidentified)} host record(s) missing host_id")
             return
-        unavailable = [h for h in hosts if not h.get("kernel_log_available")]
-        if unavailable:
-            labels = ", ".join(_record_label(h, "host_id", "machine_id") for h in unavailable[:3])
-            self.set_failed(f"BMC kernel logs unavailable for {len(unavailable)} host(s): {labels}")
+        unwindowed = [h for h in hosts if not _ordered(h, "window_start", "window_end")]
+        if unwindowed:
+            labels = ", ".join(_record_label(h, "host_id", "machine_id") for h in unwindowed[:3])
+            self.set_failed(
+                f"{len(unwindowed)} host(s) did not report an ordered query window (window_start, window_end): {labels}"
+            )
             return
-        self.set_passed(f"BMC kernel logs obtainable for {len(hosts)} host(s)")
+        empty = [h for h in hosts if not isinstance(h.get("entries_returned"), int) or h["entries_returned"] < 1]
+        if empty:
+            labels = ", ".join(_record_label(h, "host_id", "machine_id") for h in empty[:3])
+            self.set_failed(f"No log entries returned for {len(empty)} host(s) over the queried window: {labels}")
+            return
+        total = sum(h["entries_returned"] for h in hosts)
+        self.set_passed(f"Log history queryable for {len(hosts)} host(s); {total} entries returned")
 
 
 class _OperationCheck(BaseValidation):
@@ -326,16 +364,38 @@ class GpuResetCheck(_OperationCheck):
     synchronous request to make; reporting the node as needing repair instead is
     BFX01-06 (``ReportNodeRepairCheck``).
 
+    The contract is deliberately asynchronous. A reset runs through provider
+    automation that polls for work and can then wait on human intervention, so
+    a synchronous ``completed`` flag would be asserting something no provider
+    can honour. What a tenant can be owed is that the request is accepted, is
+    scoped to named GPUs, and comes back with a handle to poll -- completion is
+    observed later, out of band, and is not this check's business.
+
     Step output:
-        success, operation: {requested, completed, node_id}
+        success, operation: {accepted, node_id, gpu_ids: list[str], request_id}
     """
 
     description: ClassVar[str] = "Request a reset of GPUs on an operator-managed node"
 
-    completion_key: ClassVar[str] = "completed"
-    failure_message: ClassVar[str] = "GPU reset did not complete"
+    completion_key: ClassVar[str] = "accepted"
+    failure_message: ClassVar[str] = "GPU reset request was not accepted"
     label_keys: ClassVar[tuple[str, ...]] = ("node_id", "machine_id")
-    pass_template: ClassVar[str] = "GPU reset completed for node {label}"
+    pass_template: ClassVar[str] = "GPU reset requested for node {label}"
+
+    def _finish(self, operation: dict[str, Any]) -> None:
+        """Require the request be trackable and scoped before calling it accepted."""
+        if not _has_fields(operation, "request_id"):
+            self.set_failed("GPU reset was accepted without a request_id; the tenant cannot poll it to completion")
+            return
+        if not [g for g in (operation.get("gpu_ids") or []) if str(g).strip()]:
+            self.set_failed("GPU reset was accepted without naming any GPU in gpu_ids")
+            return
+        super()._finish(operation)
+
+    def _pass_message(self, label: str, operation: dict[str, Any]) -> str:
+        """Name the GPUs the request covered and the handle that tracks it."""
+        gpus = [g for g in (operation.get("gpu_ids") or []) if str(g).strip()]
+        return f"{super()._pass_message(label, operation)}: {len(gpus)} GPU(s), request {operation['request_id']}"
 
 
 class ReturnNodeMaintenanceCheck(_OperationCheck):
@@ -519,7 +579,7 @@ class PlannedMaintenanceNotificationCheck(_QueryableRecordsCheck):
 
     Step output:
         success, notification_channel_observable: bool
-        notifications: list[{machine_id, type, message, notified_at}]
+        notifications: list[{machine_id, type, message, notified_at, window_start}]
 
     Requires a real notification record, not just the observable flag: the flag
     alone is the provider asserting its own capability.
@@ -527,8 +587,11 @@ class PlannedMaintenanceNotificationCheck(_QueryableRecordsCheck):
     Empty shell: no provider exposes a maintenance notification channel, which
     needs to arrive far enough ahead of the window to drain workloads first.
 
-    ``notified_at`` is required because lead time is the whole value here: a
-    notification with no timestamp cannot be shown to have arrived in advance.
+    Lead time is the whole value here, and it takes two timestamps to show:
+    ``notified_at`` alone proves only that something arrived. ``window_start``
+    is what it has to arrive before. How much warning is *enough* is a number
+    nobody has set yet, so the check demands only that the notice precede the
+    window; a minimum lead time is the natural parameter to add once agreed.
     """
 
     description: ClassVar[str] = "Verify tenants can be notified of planned future node maintenance"
@@ -539,7 +602,11 @@ class PlannedMaintenanceNotificationCheck(_QueryableRecordsCheck):
     absent_noun: ClassVar[str] = "planned maintenance notifications"
     api_label: ClassVar[str] = "Planned maintenance notification"
     record_noun: ClassVar[str] = "notification"
-    evidence_fields: ClassVar[tuple[str, ...]] = ("machine_id", "notified_at")
+    evidence_fields: ClassVar[tuple[str, ...]] = ("machine_id",)
+
+    def _is_evidence(self, record: Any) -> bool:
+        """A notice must name a machine and land before the window it warns about."""
+        return super()._is_evidence(record) and _ordered(record, "notified_at", "window_start")
 
 
 class FailureNotificationCheck(_QueryableRecordsCheck):
@@ -547,7 +614,7 @@ class FailureNotificationCheck(_QueryableRecordsCheck):
 
     Step output:
         success, notification_channel_observable: bool
-        notifications: list[{machine_id, type, message, notified_at}]
+        notifications: list[{machine_id, type, message, detected_at, notified_at}]
 
     Requires a real notification record, for the same reason as
     PlannedMaintenanceNotificationCheck.
@@ -555,8 +622,10 @@ class FailureNotificationCheck(_QueryableRecordsCheck):
     Empty shell: no provider exposes a failure notification channel, where the
     contract is latency rather than lead time, there being no window to plan for.
 
-    ``notified_at`` carries that latency, so it is required for the same reason
-    as BFX05-01 even though what it has to be measured against differs.
+    Latency also takes two timestamps, but the pair differs: a failure is
+    measured from ``detected_at``, when the provider knew, to ``notified_at``,
+    when it said so. Without the first, "immediate" is unfalsifiable. As with
+    BFX05-01 the acceptable bound is unset, so only the ordering is enforced.
     """
 
     description: ClassVar[str] = "Verify tenants can be notified of immediate node failure"
@@ -567,4 +636,8 @@ class FailureNotificationCheck(_QueryableRecordsCheck):
     absent_noun: ClassVar[str] = "immediate failure notifications"
     api_label: ClassVar[str] = "Immediate failure notification"
     record_noun: ClassVar[str] = "notification"
-    evidence_fields: ClassVar[tuple[str, ...]] = ("machine_id", "notified_at")
+    evidence_fields: ClassVar[tuple[str, ...]] = ("machine_id",)
+
+    def _is_evidence(self, record: Any) -> bool:
+        """A failure notice must name a machine and be sent after detection."""
+        return super()._is_evidence(record) and _ordered(record, "detected_at", "notified_at")

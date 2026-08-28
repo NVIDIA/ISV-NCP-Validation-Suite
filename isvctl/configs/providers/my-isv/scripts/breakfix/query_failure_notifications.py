@@ -25,11 +25,13 @@ def main() -> int:
         "query_failure_notifications",
         hint="immediate failure notification channel",
         notification_channel_observable=True,
+        # detected_at to notified_at is the latency "immediate" is measured by.
         notifications=[
             {
                 "machine_id": "demo-machine-001",
                 "type": "node_failure",
                 "message": "Node became unreachable; GPU fault detected",
+                "detected_at": "2026-06-24T11:59:30Z",
                 "notified_at": "2026-06-24T12:00:00Z",
             }
         ],

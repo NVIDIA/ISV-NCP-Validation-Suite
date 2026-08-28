@@ -2,7 +2,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Reset GPUs on a node (BFX01-01) - my-isv template."""
+"""Request a GPU reset on an operator-managed node (BFX01-01) - my-isv template.
+
+Empty shell: no provider exposes an on-demand GPU reset, so there is no working
+implementation to copy here yet.
+"""
 
 from __future__ import annotations
 

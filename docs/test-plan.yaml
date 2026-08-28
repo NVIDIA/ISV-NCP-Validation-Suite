@@ -2018,6 +2018,8 @@ domains:
                 legacy_ids: [BFX-XX-02]
                 status: approved
                 notes: ""
+                github_issues:
+                  - "#556"
                 priority: ""
                 milestone: ""
               - summary: Verify that Tenants can be notified, by some communication system, of immediate node failure
@@ -2031,11 +2033,13 @@ domains:
                 legacy_ids: [BFX-XX-03]
                 status: approved
                 notes: ""
+                github_issues:
+                  - "#557"
                 priority: ""
                 milestone: ""
           - description: Breakfix API Lifecycle
             tests:
-              - summary: Reset GPUs on an individual node via the Breakfix API
+              - summary: Request a reset of GPUs on an operator-managed node
                 labels:
                   - breakfix
                   - kubernetes
@@ -2182,7 +2186,7 @@ domains:
                 req_id: BFX03
                 test_id: BFX03-02
                 status: pending
-              - summary: Obtain BMC kernel log messages for a node
+              - summary: Query a node's log history through a telemetry endpoint
                 labels:
                   - bare_metal
                   - breakfix

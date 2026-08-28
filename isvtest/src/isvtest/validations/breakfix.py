@@ -26,6 +26,10 @@ the signal as observable *and* return at least one record demonstrating it. A
 self-declared boolean is not evidence -- a provider could emit it for an API it
 never called -- so a capability claimed with no records skips rather than
 passes, and the requirement stays visibly unproven.
+
+Several checks here are *empty shells*: the class and its JSON contract exist,
+but no provider implements the capability yet, so the contract is the whole
+deliverable -- it is what an ISV would implement against.
 """
 
 from __future__ import annotations
@@ -127,6 +131,9 @@ class MaintenanceEventsCheck(_QueryableRecordsCheck):
 class RetirementNoticesCheck(_QueryableRecordsCheck):
     """Validate retirement notices for a node/rack are queryable (BFX02-02).
 
+    Empty shell: no provider exposes retirement notices, which need enough lead
+    time for the tenant to migrate off the hardware to be worth anything.
+
     Step output:
         success, notices_queryable: bool, notices: list[dict]
     """
@@ -195,13 +202,18 @@ class NvSwitchFirmwareCheck(BaseValidation):
 
 
 class BmcKernelLogCheck(BaseValidation):
-    """Validate BMC kernel log messages are obtainable for a node (BFX03-03).
+    """Validate a node's log history is queryable through a telemetry endpoint (BFX03-03).
+
+    Empty shell: reframed from serial-over-LAN BMC console access to a queryable
+    log history or stream (OTEL, or an OpenSearch/Kibana equivalent), which no
+    provider exposes -- the class name and ``kernel_log_available`` field are
+    leftovers from the original framing, kept because the check is released.
 
     Step output:
         success, hosts: list[{host_id, kernel_log_available: bool}]
     """
 
-    description: ClassVar[str] = "Obtain BMC kernel log messages for a node"
+    description: ClassVar[str] = "Query a node's log history through a telemetry endpoint"
     timeout: ClassVar[int] = 120
 
     def run(self) -> None:
@@ -260,13 +272,17 @@ class _OperationCheck(BaseValidation):
 
 
 class GpuResetCheck(_OperationCheck):
-    """Validate GPU reset via the break-fix API (BFX01-01).
+    """Validate a requested GPU reset on an operator-managed node (BFX01-01).
+
+    Empty shell: no provider exposes an on-demand GPU reset, so there is no
+    synchronous request to make; reporting the node as needing repair instead is
+    BFX01-06 (``ReportNodeRepairCheck``).
 
     Step output:
         success, operation: {requested, completed, node_id}
     """
 
-    description: ClassVar[str] = "Reset GPUs on an individual node via the breakfix API"
+    description: ClassVar[str] = "Request a reset of GPUs on an operator-managed node"
 
     completion_key: ClassVar[str] = "completed"
     failure_message: ClassVar[str] = "GPU reset did not complete"
@@ -296,6 +312,9 @@ class ReturnNodeMaintenanceCheck(_OperationCheck):
 class ReturnRackMaintenanceCheck(_OperationCheck):
     """Validate returning a rack for maintenance (BFX01-03).
 
+    Empty shell: no provider exposes rack-level maintenance handover, which has
+    to return every node in the rack as one operation to mean anything.
+
     Step output:
         success, operation: {requested, accepted, rack_id}
     """
@@ -310,6 +329,10 @@ class ReturnRackMaintenanceCheck(_OperationCheck):
 
 class HostReplacementCheck(_OperationCheck):
     """Validate host replacement when health thresholds are breached (BFX01-05).
+
+    Empty shell, and the missing piece is the trigger rather than the API: no
+    provider publishes the health thresholds that are supposed to be breached,
+    so there is no condition to induce.
 
     Step output:
         success, operation: {requested, node_removed_from_pool, machine_id}
@@ -452,6 +475,9 @@ class PlannedMaintenanceNotificationCheck(_QueryableRecordsCheck):
 
     Requires a real notification record, not just the observable flag: the flag
     alone is the provider asserting its own capability.
+
+    Empty shell: no provider exposes a maintenance notification channel, which
+    needs to arrive far enough ahead of the window to drain workloads first.
     """
 
     description: ClassVar[str] = "Verify tenants can be notified of planned future node maintenance"
@@ -473,6 +499,9 @@ class FailureNotificationCheck(_QueryableRecordsCheck):
 
     Requires a real notification record, for the same reason as
     PlannedMaintenanceNotificationCheck.
+
+    Empty shell: no provider exposes a failure notification channel, where the
+    contract is latency rather than lead time, there being no window to plan for.
     """
 
     description: ClassVar[str] = "Verify tenants can be notified of immediate node failure"

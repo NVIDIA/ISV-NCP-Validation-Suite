@@ -1437,7 +1437,7 @@ docs/requirements/test-requirements-matrix.yaml. Run `make plan` to regenerate.
 | [[BFX01-01]]BFX01-01
 | Infrastructure and Data Services
 | Break-Fix
-| Reset GPUs on an individual node via the Breakfix API
+| Request a reset of GPUs on an operator-managed node
 | BFX01
 | offtake
 | full
@@ -1536,7 +1536,7 @@ docs/requirements/test-requirements-matrix.yaml. Run `make plan` to regenerate.
 | [[BFX03-03]]BFX03-03
 | Infrastructure and Data Services
 | Break-Fix
-| Obtain BMC kernel log messages for a node
+| Query a node's log history through a telemetry endpoint
 | BFX03
 | offtake
 | full

@@ -2,7 +2,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Query BMC kernel logs (BFX03-03) - my-isv template."""
+"""Query a node's log history (BFX03-03) - my-isv template.
+
+Empty shell: the requirement is a queryable log history or stream, not
+serial-over-LAN console access, and the ``kernel_log_available`` field name is a
+leftover from that original BMC framing.
+"""
 
 from __future__ import annotations
 

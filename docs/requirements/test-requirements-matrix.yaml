@@ -1129,6 +1129,13 @@ mappings:
         coverage: full
     annotations: ''
     notes: ''
+  - test_id: BFX01-06
+    requirements:
+      - req_id: BFX01
+        source: offtake
+        coverage: full
+    annotations: ''
+    notes: ''
   - test_id: BFX02-01
     requirements:
       - req_id: BFX02

@@ -1479,6 +1479,15 @@ docs/requirements/test-requirements-matrix.yaml. Run `make plan` to regenerate.
 | full
 |
 
+| [[BFX01-06]]BFX01-06
+| Infrastructure and Data Services
+| Break-Fix
+| Report an individual node to the provider for maintenance via the API
+| BFX01
+| offtake
+| full
+|
+
 | [[BFX02-01]]BFX02-01
 | Infrastructure and Data Services
 | Break-Fix

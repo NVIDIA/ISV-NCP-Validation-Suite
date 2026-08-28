@@ -265,6 +265,7 @@ its plan item is not platform-scoped.
 | `query_repair_history` | test | `providers/nico/scripts/breakfix/query_repair_history.py` | `history_queryable`, `records[].{machine_id,entries}` -- a record needs non-empty `entries` to count (BFX02-03) |
 | `query_switch_firmware` | test | `providers/my-isv/scripts/breakfix/query_switch_firmware.py` | `trays[].{tray_id,firmware_version}` (BFX03-02) |
 | `query_bmc_kernel_logs` | test | `providers/nico/scripts/breakfix/query_bmc_kernel_logs.py` | `hosts[].{host_id,kernel_log_available}` (BFX03-03) |
+| `report_node_repair` | test | `providers/nico/scripts/breakfix/report_node_repair.py` | `operation.{requested,repair_state_observed,restored,node_id}` -- reports a node as needing repair while keeping it, and watches the node enter a repair state (BFX01-06) |
 | `return_node_maintenance` | test | `providers/my-isv/scripts/breakfix/return_node_maintenance.py` | `operation.{requested,accepted,machine_id,maintenance_mode}` (BFX01-02) |
 | `return_rack_maintenance` | test | `providers/my-isv/scripts/breakfix/return_rack_maintenance.py` | `operation.{requested,accepted,rack_id}` (BFX01-03) |
 | `request_host_replacement` | test | `providers/my-isv/scripts/breakfix/request_host_replacement.py` | `operation.{requested,node_removed_from_pool,machine_id}` (BFX01-05) |

@@ -836,6 +836,15 @@ tests:
           test_id: "BFX02-03"
           labels: ["bare_metal", "breakfix", "min_req"]
 
+    # Report a node as needing repair while keeping it, and verify the provider
+    # moves it into a repair state. The destructive counterpart is BFX01-02 below.
+    report_node_repair:
+      step: report_node_repair
+      checks:
+        ReportNodeRepairCheck:
+          test_id: "BFX01-06"
+          labels: ["bare_metal", "breakfix", "min_req"]
+
     return_node_maintenance:
       step: return_node_maintenance
       checks:

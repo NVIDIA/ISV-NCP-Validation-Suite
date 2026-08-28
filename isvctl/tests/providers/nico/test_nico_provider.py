@@ -4247,3 +4247,30 @@ def test_node_repair_env_opt_in_allows_auto_selection(
 
     assert out.get("skipped") is not True
     assert out["operation"]["requested"] is True
+
+
+def test_node_repair_skip_restore_leaves_the_node_reported_as_unrestored(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--skip-restore strands the node by design, so it must not look restored.
+
+    The step keeps exit code 0 -- the report itself worked -- so the contract has
+    to carry the truth. ReportNodeRepairCheck fails on restored=False, which is
+    what stops a debugging run from being read as a clean pass.
+    """
+    module = _load_node_repair_script()
+    entered = _stub_node_repair_discovery(module, monkeypatch)
+    # Ready while the target is selected, Repairing once the report lands.
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": "Repairing" if entered else "Ready"})
+    deleted: list[str] = []
+    monkeypatch.setattr(module, "delete_if_present", lambda _o, path, *_a, **_kw: deleted.append(path))
+    monkeypatch.setattr(module, "time", _fast_clock())
+    monkeypatch.setattr(sys, "argv", _node_repair_argv("--machine-id", "m-1", "--skip-restore"))
+
+    module.main()
+    out = json.loads(capsys.readouterr().out)
+
+    assert out["cleanup_skipped"] is True
+    assert out["operation"]["repair_state_observed"] is True
+    assert out["operation"]["restored"] is False
+    assert deleted == []

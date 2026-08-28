@@ -155,6 +155,32 @@ class TestOperationChecks:
         step_output = {"success": True, "operation": {"requested": True, "repair_state_observed": False}}
         assert not _run(ReportNodeRepairCheck, step_output).passed
 
+    def test_node_repair_report_fails_a_node_left_in_repair(self) -> None:
+        """Reporting a node is only non-destructive if the node comes back.
+
+        A step that fails its own restore already reports ``success: False``. This
+        covers the shapes that do not: a provider whose step forgot to, and
+        ``--skip-restore``, which strands the node deliberately.
+        """
+        step_output = {
+            "success": True,
+            "operation": {"requested": True, "repair_state_observed": True, "restored": False, "node_id": "fm-1"},
+        }
+        check = _run(ReportNodeRepairCheck, step_output)
+        assert not check.passed
+        assert "left in a repair state" in check.message
+
+    def test_node_repair_report_surfaces_a_failed_restore_from_the_step(self) -> None:
+        """The script fails itself when restore fails, and that error reaches the reader."""
+        step_output = {
+            "success": False,
+            "error": "Node left in Repairing: timeout; override delete failed",
+            "operation": {"requested": True, "repair_state_observed": True, "restored": False},
+        }
+        check = _run(ReportNodeRepairCheck, step_output)
+        assert not check.passed
+        assert "Node left in Repairing" in check.message
+
     def test_node_repair_report_names_the_node_it_moved(self) -> None:
         """A clean pass names the node and carries no extra provider detail."""
         step_output = {

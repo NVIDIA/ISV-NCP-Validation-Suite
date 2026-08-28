@@ -340,6 +340,11 @@ class ReportNodeRepairCheck(_OperationCheck):
     asynchronously -- typically minutes to weeks later, out of band from any API
     response -- so no synchronous check can observe a fix.
 
+    Reporting a node is only non-destructive if the node comes back, so ``restored``
+    is part of the pass condition rather than incidental cleanup. This is the only
+    BFX01 check whose step is expected to undo itself, hence the extra condition on
+    top of ``_OperationCheck``.
+
     Step output:
         success, operation: {requested, repair_state_observed, restored, node_id}
     """
@@ -350,6 +355,27 @@ class ReportNodeRepairCheck(_OperationCheck):
     failure_message: ClassVar[str] = "Provider did not move the node into a repair state after the report"
     label_keys: ClassVar[tuple[str, ...]] = ("node_id", "machine_id")
     pass_template: ClassVar[str] = "Node {label} reported for repair; provider moved it into a repair state"
+
+    not_restored_message: ClassVar[str] = (
+        "Node was left in a repair state; the report was accepted but the node was not returned to the pool"
+    )
+
+    def run(self) -> None:
+        """Assert the node entered a repair state *and* was taken back out of it."""
+        step_output = _step_output(self)
+        if step_output is None:
+            return
+        operation = step_output.get("operation") or {}
+        if not operation.get(self.completion_key):
+            self.set_failed(operation.get("message") or self.failure_message)
+            return
+        if not operation.get("restored"):
+            # A step that reports its own restore failure already fails via
+            # ``success``. This catches the cases that do not: a provider whose
+            # step forgot to, and --skip-restore, which strands the node by design.
+            self.set_failed(self.not_restored_message)
+            return
+        self.set_passed(self._pass_message(_record_label(operation, *self.label_keys), operation))
 
     def _pass_message(self, label: str, operation: dict[str, Any]) -> str:
         """Append any provider finding raised while the node was taken back out of repair."""

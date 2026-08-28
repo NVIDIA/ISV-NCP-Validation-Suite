@@ -23,14 +23,18 @@ def main() -> int:
     args = parser.parse_args()
 
     machine_id = args.machine_id or "demo-machine-001"
+    # Returning a node has to leave it out of service: a machine that goes
+    # straight back into the pool was deleted, not returned for maintenance.
     return emit_stub(
         "return_node_maintenance",
-        hint="return-node-for-maintenance API",
+        hint="return-node-for-maintenance API (relinquish the instance, quarantine the machine)",
         operation={
             "requested": True,
             "accepted": True,
+            "instance_deleted": True,
+            "machine_quarantined": True,
+            "instance_id": "demo-instance-001",
             "machine_id": machine_id,
-            "maintenance_mode": True,
         },
     )
 

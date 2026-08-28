@@ -458,10 +458,17 @@ commands:
           - "{{nico_api_base}}"
         timeout: 900
 
+      # Relinquishes an instance via NICo release-for-repair (DELETE instance +
+      # machineHealthIssue) and watches the machine leave the allocatable pool.
+      #
+      # Irreversible, so it never picks its own target: it skips unless an
+      # instance is named here with --instance-id <uuid> AND
+      # NICO_ALLOW_RELEASE_FOR_REPAIR=1 is set. A plain run reports what it
+      # would destroy and stops.
       - name: return_node_maintenance
         phase: test
         continue_on_failure: true
-        command: "python ../scripts/breakfix/gap_stub.py"
+        command: "python ../scripts/breakfix/return_node_maintenance.py"
         args:
           - "--org"
           - "{{org}}"
@@ -469,9 +476,7 @@ commands:
           - "{{site_id}}"
           - "--api-base"
           - "{{nico_api_base}}"
-          - "--gap"
-          - "BFX01-02"
-        timeout: 600
+        timeout: 900
 
       - name: return_rack_maintenance
         phase: test

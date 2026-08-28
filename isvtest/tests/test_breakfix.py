@@ -261,7 +261,7 @@ class TestOperationChecks:
             (GpuResetCheck, {"accepted": True, "gpu_ids": ["GPU-0"], "request_id": "req-1"}),
             (ReturnRackMaintenanceCheck, {"accepted": True}),
             (HostReplacementCheck, {"node_removed_from_pool": True}),
-            (ReturnNodeMaintenanceCheck, {"accepted": True}),
+            (ReturnNodeMaintenanceCheck, {"instance_deleted": True, "machine_quarantined": True}),
         ],
     )
     def test_operation_must_identify_what_it_acted_on(
@@ -281,12 +281,47 @@ class TestOperationChecks:
         step_output = {"success": True, "operation": {"completed": True, "node_removed_from_pool": False}}
         assert not _run(HostReplacementCheck, step_output).passed
 
-    def test_node_maintenance_reports_mode(self) -> None:
-        """BFX01-02 appends the maintenance mode the provider placed the node into."""
-        step_output = {"success": True, "operation": {"accepted": True, "machine_id": "m-1", "maintenance_mode": "hw"}}
+    def test_node_return_passes_when_relinquished_and_held(self) -> None:
+        """BFX01-02 passes only when the instance is gone and the machine is held."""
+        step_output = {
+            "success": True,
+            "operation": {
+                "accepted": True,
+                "instance_deleted": True,
+                "machine_quarantined": True,
+                "machine_id": "m-1",
+            },
+        }
         check = _run(ReturnNodeMaintenanceCheck, step_output)
         assert check.passed
-        assert "maintenance_mode=hw" in check.message
+        assert "m-1" in check.message
+
+    def test_node_return_fails_when_the_instance_survives(self) -> None:
+        """Nothing was returned if the instance is still there."""
+        step_output = {
+            "success": True,
+            "operation": {"accepted": True, "instance_deleted": False, "machine_id": "m-1"},
+        }
+        assert not _run(ReturnNodeMaintenanceCheck, step_output).passed
+
+    def test_node_return_fails_when_the_machine_goes_back_to_the_pool(self) -> None:
+        """A node re-offered to the next tenant was deleted, not returned for maintenance.
+
+        This is the half providers get wrong: a bare delete looks identical
+        until you ask what happened to the machine afterwards.
+        """
+        step_output = {
+            "success": True,
+            "operation": {
+                "accepted": True,
+                "instance_deleted": True,
+                "machine_quarantined": False,
+                "machine_id": "m-1",
+            },
+        }
+        check = _run(ReturnNodeMaintenanceCheck, step_output)
+        assert not check.passed
+        assert "allocatable pool" in check.message
 
     def test_node_repair_report_keys_off_the_observed_state(self) -> None:
         """An accepted report that never changed the node's state is not a pass.

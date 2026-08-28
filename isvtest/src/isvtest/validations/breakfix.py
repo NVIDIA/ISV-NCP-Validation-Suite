@@ -401,20 +401,39 @@ class GpuResetCheck(_OperationCheck):
 class ReturnNodeMaintenanceCheck(_OperationCheck):
     """Validate returning an individual node for maintenance (BFX01-02).
 
+    The destructive counterpart to ``ReportNodeRepairCheck`` (BFX01-06): the
+    tenant is relinquishing the node rather than keeping it, so the instance is
+    destroyed and does not come back.
+
+    Two things have to be true, and the second is the one providers get wrong.
+    The instance must be gone -- otherwise nothing was returned -- and the
+    machine must not have gone straight back into the allocatable pool. A node
+    handed back "for maintenance" that is immediately offered to the next tenant
+    was not returned for maintenance; it was just deleted, and whatever prompted
+    the return is now someone else's problem.
+
     Step output:
-        success, operation: {requested, accepted, machine_id, maintenance_mode}
+        success, operation: {requested, accepted, instance_deleted,
+        machine_quarantined, instance_id, machine_id}
     """
 
     description: ClassVar[str] = "Return an individual node to the provider for maintenance via the API"
 
-    completion_key: ClassVar[str] = "accepted"
-    failure_message: ClassVar[str] = "Node maintenance return was not accepted"
+    completion_key: ClassVar[str] = "instance_deleted"
+    failure_message: ClassVar[str] = "Instance was not deleted, so the node was not returned"
     label_keys: ClassVar[tuple[str, ...]] = ("machine_id", "node_id")
-    pass_template: ClassVar[str] = "Node {label} accepted for maintenance"
+    pass_template: ClassVar[str] = "Node {label} returned for maintenance"
 
-    def _pass_message(self, label: str, operation: dict[str, Any]) -> str:
-        """Report the maintenance mode the provider placed the node into."""
-        return f"{super()._pass_message(label, operation)} (maintenance_mode={operation.get('maintenance_mode')})"
+    not_quarantined_message: ClassVar[str] = (
+        "Node was returned but went back into the allocatable pool instead of being held for repair"
+    )
+
+    def _finish(self, operation: dict[str, Any]) -> None:
+        """Require the machine to have left service, not just the instance to be gone."""
+        if not operation.get("machine_quarantined"):
+            self.set_failed(operation.get("message") or self.not_quarantined_message)
+            return
+        super()._finish(operation)
 
 
 class ReturnRackMaintenanceCheck(_OperationCheck):

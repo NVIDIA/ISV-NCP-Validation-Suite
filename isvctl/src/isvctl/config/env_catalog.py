@@ -146,6 +146,13 @@ ENV_VARS: tuple[EnvVar, ...] = (
         "allow BFX01-06 to move an auto-selected NICo node into repair",
         persistable=False,
     ),
+    EnvVar(
+        "NICO_ALLOW_RELEASE_FOR_REPAIR",
+        "Flags",
+        Requirement.OPTIONAL,
+        "allow BFX01-02 to delete the named NICo instance (irreversible)",
+        persistable=False,
+    ),
     # NICo — optional by default; --provider nico runs strict provider-specific
     # checks for the same variables.
     EnvVar(

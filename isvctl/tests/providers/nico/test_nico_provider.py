@@ -4274,3 +4274,239 @@ def test_node_repair_skip_restore_leaves_the_node_reported_as_unrestored(
     assert out["operation"]["repair_state_observed"] is True
     assert out["operation"]["restored"] is False
     assert deleted == []
+
+
+def _load_return_node_script() -> ModuleType:
+    """Load the return_node_maintenance script as a module for direct unit testing."""
+    return _load_nico_script("breakfix/return_node_maintenance.py", "test_nico_return_node_maintenance")
+
+
+def _return_argv(*extra: str) -> list[str]:
+    """Build argv for the return_node_maintenance CLI."""
+    return ["return_node_maintenance.py", "--org", "ncx", "--site-id", "site-1", "--api-base", "http://x", *extra]
+
+
+def _stub_return_target(module: ModuleType, monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Wire a deletable instance and record every DELETE body sent."""
+    deleted: list[dict[str, Any]] = []
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+
+    def _get(_org: str, path: str, _tok: str, **_kw: object) -> dict[str, Any]:
+        """Serve the instance until it is deleted, then the quarantined machine."""
+        if path.startswith("instance/"):
+            # Gone once the delete lands, which is what _await_deletion watches for.
+            if deleted:
+                raise HTTPError("http://x", 404, "Not Found", None, None)
+            return {"id": "i-1", "machineId": "m-1", "status": "Ready"}
+        return {"id": "m-1", "status": "Repairing" if deleted else "Ready"}
+
+    monkeypatch.setattr(module, "forge_get", _get)
+    monkeypatch.setattr(module, "forge_delete", lambda _o, _p, _t, **kw: deleted.append(kw.get("body", {})) or {})
+    monkeypatch.setattr(module, "time", _fast_clock())
+    return deleted
+
+
+def test_return_node_refuses_without_an_instance_id(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The delete is irreversible, so the step never discovers its own target."""
+    module = _load_return_node_script()
+    deleted = _stub_return_target(module, monkeypatch)
+    monkeypatch.setenv(module.ALLOW_ENV, "1")
+    monkeypatch.setattr(sys, "argv", _return_argv())
+
+    code = module.main()
+    out = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert out["skipped"] is True
+    assert deleted == []
+    assert "--instance-id" in out["skip_reason"]
+
+
+def test_return_node_refuses_without_the_env_opt_in(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Naming an instance is only the first of two confirmations."""
+    module = _load_return_node_script()
+    deleted = _stub_return_target(module, monkeypatch)
+    monkeypatch.delenv(module.ALLOW_ENV, raising=False)
+    monkeypatch.setattr(sys, "argv", _return_argv("--instance-id", "i-1"))
+
+    code = module.main()
+    out = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert out["skipped"] is True
+    assert deleted == []
+    # The dry run has to name what it would have destroyed.
+    assert "i-1" in out["skip_reason"]
+    assert module.ALLOW_ENV in out["skip_reason"]
+
+
+def test_return_node_deletes_with_both_confirmations(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Both confirmations present: relinquish the instance and quarantine the machine."""
+    module = _load_return_node_script()
+    deleted = _stub_return_target(module, monkeypatch)
+    monkeypatch.setenv(module.ALLOW_ENV, "1")
+    monkeypatch.setattr(sys, "argv", _return_argv("--instance-id", "i-1"))
+
+    module.main()
+    out = json.loads(capsys.readouterr().out)
+
+    assert out.get("skipped") is not True
+    assert out["operation"]["instance_deleted"] is True
+    assert out["operation"]["machine_quarantined"] is True
+    assert out["operation"]["machine_id"] == "m-1"
+    # One delete, carrying the health issue that quarantines the machine.
+    assert len(deleted) == 1
+    assert "machineHealthIssue" in deleted[0]
+
+
+def test_return_node_delete_carries_the_health_issue(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bare delete returns the machine to the pool; the health issue quarantines it."""
+    module = _load_return_node_script()
+
+    body = module._delete_body()
+
+    assert set(body["machineHealthIssue"]) == {"category", "summary", "details"}
+
+
+def test_return_node_delete_body_does_not_alias_module_state() -> None:
+    """Each call gets its own health issue, so one run cannot corrupt the next."""
+    module = _load_return_node_script()
+
+    module._delete_body()["machineHealthIssue"]["summary"] = "mutated"
+
+    assert module._delete_body()["machineHealthIssue"]["summary"] != "mutated"
+
+
+def test_return_node_skips_a_missing_instance(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An instance that is already gone is nothing to return, not a failure."""
+    module = _load_return_node_script()
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+    monkeypatch.setattr(
+        module, "forge_get", lambda *_a, **_kw: (_ for _ in ()).throw(HTTPError("http://x", 404, "gone", None, None))
+    )
+    monkeypatch.setenv(module.ALLOW_ENV, "1")
+    monkeypatch.setattr(sys, "argv", _return_argv("--instance-id", "i-gone"))
+
+    code = module.main()
+    out = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert out["skipped"] is True
+
+
+def test_return_node_refuses_an_instance_with_no_machine(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Without a machineId the aftermath is unobservable, so do not destroy it blind."""
+    module = _load_return_node_script()
+    deleted: list[dict[str, Any]] = []
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"id": "i-1", "status": "Ready"})
+    monkeypatch.setattr(module, "forge_delete", lambda *_a, **kw: deleted.append(kw) or {})
+    monkeypatch.setenv(module.ALLOW_ENV, "1")
+    monkeypatch.setattr(sys, "argv", _return_argv("--instance-id", "i-1"))
+
+    code = module.main()
+    out = json.loads(capsys.readouterr().out)
+
+    assert code == 1
+    assert out["success"] is False
+    assert deleted == []
+
+
+def test_return_node_reports_a_machine_returned_to_the_pool(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Deleting the instance but re-offering the machine is the failure worth catching."""
+    module = _load_return_node_script()
+    deleted: list[dict[str, Any]] = []
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+
+    def _get(_org: str, path: str, _tok: str, **_kw: object) -> dict[str, Any]:
+        """Delete the instance but keep the machine Ready, i.e. back in the pool."""
+        if path.startswith("instance/"):
+            if deleted:
+                raise HTTPError("http://x", 404, "Not Found", None, None)
+            return {"id": "i-1", "machineId": "m-1"}
+        return {"id": "m-1", "status": "Ready"}
+
+    monkeypatch.setattr(module, "forge_get", _get)
+    monkeypatch.setattr(module, "forge_delete", lambda *_a, **kw: deleted.append(kw) or {})
+    monkeypatch.setattr(module, "time", _fast_clock())
+    monkeypatch.setenv(module.ALLOW_ENV, "1")
+    monkeypatch.setattr(sys, "argv", _return_argv("--instance-id", "i-1"))
+
+    module.main()
+    out = json.loads(capsys.readouterr().out)
+
+    assert out["operation"]["instance_deleted"] is True
+    assert out["operation"]["machine_quarantined"] is False
+    assert "allocatable pool" in out["operation"]["message"]
+    # The step itself must fail, not just the bound check: exiting 0 here would
+    # tell the orchestrator a destructive step completed when it did not.
+    assert out["success"] is False
+
+
+def test_return_node_does_not_turn_an_api_failure_into_a_skip(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A 401 must not read as "the instance is already gone".
+
+    "Absent" is the precondition for returning nothing and the evidence that the
+    return worked, so answering either question with a provider outage would
+    hide a real failure behind a clean skip.
+    """
+    module = _load_return_node_script()
+    deleted: list[dict[str, Any]] = []
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+    monkeypatch.setattr(
+        module,
+        "forge_get",
+        lambda *_a, **_kw: (_ for _ in ()).throw(HTTPError("http://x", 401, "Unauthorized", None, None)),
+    )
+    monkeypatch.setattr(module, "forge_delete", lambda *_a, **kw: deleted.append(kw) or {})
+    monkeypatch.setenv(module.ALLOW_ENV, "1")
+    monkeypatch.setattr(sys, "argv", _return_argv("--instance-id", "i-1"))
+
+    code = module.main()
+    out = json.loads(capsys.readouterr().out)
+
+    assert code == 1
+    assert out["success"] is False
+    assert out.get("skipped") is not True
+    assert deleted == []
+
+
+def test_return_node_fails_when_the_instance_outlives_the_delete(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An unconfirmed delete is a failed step, not a successful one with a note.
+
+    The instance may or may not be on its way out. Exiting 0 would tell the
+    orchestrator a destructive operation completed when nothing confirmed it.
+    """
+    module = _load_return_node_script()
+    deleted: list[dict[str, Any]] = []
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+    # The instance never goes away, so _await_deletion spends its deadline.
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"id": "i-1", "machineId": "m-1"})
+    monkeypatch.setattr(module, "forge_delete", lambda *_a, **kw: deleted.append(kw) or {})
+    monkeypatch.setattr(module, "time", _fast_clock())
+    monkeypatch.setenv(module.ALLOW_ENV, "1")
+    monkeypatch.setattr(sys, "argv", _return_argv("--instance-id", "i-1"))
+
+    code = module.main()
+    out = json.loads(capsys.readouterr().out)
+
+    assert code == 1
+    assert out["success"] is False
+    assert out["operation"]["instance_deleted"] is False
+    assert "still existed" in out["operation"]["message"]

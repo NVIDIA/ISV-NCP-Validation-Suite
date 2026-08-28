@@ -5,8 +5,8 @@
 """Query a node's log history (BFX03-03) - my-isv template.
 
 Empty shell: the requirement is a queryable log history or stream, not
-serial-over-LAN console access, and the ``kernel_log_available`` field name is a
-leftover from that original BMC framing.
+serial-over-LAN console access. This script's name and ``BmcKernelLogCheck`` are
+leftovers from that original BMC framing; the payload below is not.
 """
 
 from __future__ import annotations

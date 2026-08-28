@@ -259,9 +259,17 @@ def forge_patch(
     return forge_request(org, path, token, base_url=base_url, method="PATCH", body=body, timeout=timeout)
 
 
-def forge_delete(org: str, path: str, token: str, *, base_url: str, timeout: int = 30) -> dict[str, Any]:
-    """DELETE a NICo API resource."""
-    return forge_request(org, path, token, base_url=base_url, method="DELETE", timeout=timeout)
+def forge_delete(
+    org: str, path: str, token: str, *, base_url: str, body: dict[str, Any] | None = None, timeout: int = 30
+) -> dict[str, Any]:
+    """DELETE a NICo API resource.
+
+    ``body`` is optional because most deletes need none, but release-for-repair
+    sends a ``machineHealthIssue`` alongside the delete: the same call both
+    relinquishes the instance and says why, so the machine is quarantined for
+    repair instead of going straight back into the allocatable pool.
+    """
+    return forge_request(org, path, token, base_url=base_url, method="DELETE", body=body, timeout=timeout)
 
 
 def delete_if_present(org: str, path: str, token: str, *, base_url: str) -> None:

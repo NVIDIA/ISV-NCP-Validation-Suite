@@ -3933,3 +3933,317 @@ def test_query_key_access_no_provision_never_mutates(
     assert code == 0
     assert out["skipped"] is True
     assert calls == []
+
+
+def _load_node_repair_script() -> ModuleType:
+    """Load the report_node_repair script as a module for direct unit testing."""
+    return _load_nico_script("breakfix/report_node_repair.py", "test_nico_report_node_repair")
+
+
+def _repair_machine(machine_id: str, *, instance: str | None = None) -> dict[str, Any]:
+    """Build a minimal NICo machine record for node-repair eligibility tests."""
+    return {"id": machine_id, "instanceId": instance}
+
+
+def test_node_repair_requires_an_assigned_instance() -> None:
+    """Online repair is node-generic but still needs a tenant instance attached."""
+    module = _load_node_repair_script()
+    machines = [_repair_machine("no-instance", instance=None), _repair_machine("eligible", instance="i-1")]
+
+    eligible = module._machines_with_instances(machines)
+
+    assert [m["id"] for m in eligible] == ["eligible"]
+
+
+def test_node_repair_does_not_require_gpus() -> None:
+    """BFX01-06 reports a node, not a component, so a GPU-less node is eligible."""
+    module = _load_node_repair_script()
+
+    assert module._machines_with_instances([{"id": "cpu-only", "instanceId": "i-1"}])
+
+
+def test_node_repair_selects_the_first_ready_instance(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Machines whose instance is not Ready are passed over, not attempted."""
+    module = _load_node_repair_script()
+    statuses = {"i-busy": "Provisioning", "i-ready": "Ready"}
+    monkeypatch.setattr(module, "forge_get", lambda _org, path, _tok, **_kw: {"status": statuses[path.split("/")[1]]})
+    candidates = [_repair_machine("m-busy", instance="i-busy"), _repair_machine("m-ready", instance="i-ready")]
+
+    target = module._select_target(candidates, "org", "tok", base_url="http://x")
+
+    assert target is not None
+    assert target[0]["id"] == "m-ready"
+    assert target[1] == "i-ready"
+
+
+def test_node_repair_honours_an_explicit_machine_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An operator-supplied machine id wins over whichever machine is listed first."""
+    module = _load_node_repair_script()
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": "Ready"})
+    candidates = [_repair_machine("m-1", instance="i-1"), _repair_machine("m-2", instance="i-2")]
+
+    target = module._select_target(candidates, "org", "tok", base_url="http://x", machine_id="m-2")
+
+    assert target is not None
+    assert target[0]["id"] == "m-2"
+
+
+def test_node_repair_skip_reason_distinguishes_the_precondition() -> None:
+    """ "No node with an instance" and "none Ready" are different operator problems."""
+    module = _load_node_repair_script()
+    machines = [_repair_machine("m-1", instance=None)]
+
+    no_candidates = module._skip_reason(machines, [], "")
+    none_ready = module._skip_reason(machines, [_repair_machine("m-2", instance="i-2")], "")
+
+    assert "has an assigned instance" in no_candidates
+    assert "none is in Ready" in none_ready
+    assert "m-9" in module._skip_reason([], [], "m-9")
+
+
+def test_node_repair_enter_body_never_authorises_instance_deletion() -> None:
+    """allowAutoInstanceDeletionOnFailure stays false: the instance belongs to the tenant."""
+    module = _load_node_repair_script()
+
+    body = module._enter_body()
+
+    assert body["onlineRepair"]["enabled"] is True
+    assert body["onlineRepair"]["policy"]["allowAutoInstanceDeletionOnFailure"] is False
+    assert set(body["healthIssue"]) == {"category", "summary", "details"}
+
+
+def test_node_repair_exit_body_carries_only_the_flag() -> None:
+    """NICo rejects an online-repair exit that carries healthIssue, policy, or acknowledgments."""
+    module = _load_node_repair_script()
+
+    assert module._exit_body() == {"onlineRepair": {"enabled": False}}
+
+
+def test_node_repair_enter_body_does_not_alias_module_state() -> None:
+    """Each call gets its own healthIssue dict, so one run cannot corrupt the next."""
+    module = _load_node_repair_script()
+
+    first = module._enter_body()
+    first["healthIssue"]["summary"] = "mutated"
+
+    assert module._enter_body()["healthIssue"]["summary"] != "mutated"
+
+
+def test_node_repair_polls_until_the_state_changes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """NICo applies the override through a site workflow, so the state lags the response."""
+    module = _load_node_repair_script()
+    seen = iter(["Ready", "Ready", "Repairing"])
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": next(seen)})
+    monkeypatch.setattr(module.time, "sleep", lambda _s: None)
+
+    status = module._await_status("org", "i-1", "tok", base_url="http://x", target="Repairing")
+
+    assert status == "Repairing"
+
+
+def test_node_repair_gives_up_at_the_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A node that never transitions returns its last status instead of hanging."""
+    module = _load_node_repair_script()
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": "Ready"})
+
+    status = module._await_status("org", "i-1", "tok", base_url="http://x", target="Repairing", deadline_seconds=0)
+
+    assert status == "Ready"
+
+
+def test_node_repair_restore_waits_for_the_state_to_clear(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Restoration watches for the node to leave Repairing, not to equal Ready.
+
+    Exiting online repair need not land back on Ready immediately, so keying on
+    equality would report a false failure.
+    """
+    module = _load_node_repair_script()
+    seen = iter(["Repairing", "Updating"])
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": next(seen)})
+    monkeypatch.setattr(module.time, "sleep", lambda _s: None)
+
+    status = module._await_status("org", "i-1", "tok", base_url="http://x", target="Repairing", leaving=True)
+
+    assert status == "Updating"
+
+
+def _record_restore_token(module: ModuleType, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Capture the bearer token ``_restore`` actually sends on its exit PATCH."""
+    used: list[str] = []
+    monkeypatch.setattr(module, "forge_patch", lambda _org, _path, token, **_kw: used.append(token) or {})
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": "Ready"})
+    monkeypatch.setattr(module, "delete_if_present", lambda *_a, **_kw: None)
+    return used
+
+
+def test_node_repair_restore_re_mints_the_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Restoration mints a fresh token: a stale one would 401 and strand the node."""
+    module = _load_node_repair_script()
+    used = _record_restore_token(module, monkeypatch)
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="fresh"))
+
+    module._restore("org", "m-1", "i-1", api_base="http://x", fallback_token="stale")
+
+    assert used == ["fresh"]
+
+
+def test_node_repair_restore_falls_back_to_the_stale_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    """If re-minting fails, the original token is still worth trying."""
+    module = _load_node_repair_script()
+    used = _record_restore_token(module, monkeypatch)
+
+    def _boom() -> None:
+        raise module.NicoAuthError("issuer unreachable")
+
+    monkeypatch.setattr(module, "resolve_auth", _boom)
+
+    module._restore("org", "m-1", "i-1", api_base="http://x", fallback_token="stale")
+
+    assert used == ["stale"]
+
+
+def test_node_repair_restore_succeeds_on_the_documented_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Clearing online repair normally needs no fallback and raises no warning."""
+    module = _load_node_repair_script()
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+    monkeypatch.setattr(module, "forge_patch", lambda *_a, **_kw: {})
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": "Ready"})
+    deleted: list[str] = []
+    monkeypatch.setattr(module, "delete_if_present", lambda _o, path, *_a, **_kw: deleted.append(path))
+
+    outcome = module._restore("org", "m-1", "i-1", api_base="http://x", fallback_token="t")
+
+    assert outcome["restored"] is True
+    assert outcome["warning"] == ""
+    assert deleted == []
+
+
+def _fast_clock() -> SimpleNamespace:
+    """A stand-in time module whose monotonic jumps ahead of any poll deadline.
+
+    ``_await_status`` binds its deadline as a default argument, so the module
+    constant cannot be lowered from a test. Advancing the clock instead makes each
+    poll give up after a single fetch rather than spinning for the real deadline.
+    """
+    ticks = iter(range(0, 10_000_000, 1000))
+    return SimpleNamespace(monotonic=lambda: next(ticks), sleep=lambda _s: None)
+
+
+def test_node_repair_restore_removes_the_override_when_clearing_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A node still in Repairing gets its override deleted, and that is a finding."""
+    module = _load_node_repair_script()
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+    monkeypatch.setattr(module, "forge_patch", lambda *_a, **_kw: {})
+    monkeypatch.setattr(module, "time", _fast_clock())
+
+    deleted: list[str] = []
+
+    def _delete(_org: str, path: str, *_a: object, **_kw: object) -> None:
+        deleted.append(path)
+
+    monkeypatch.setattr(module, "delete_if_present", _delete)
+
+    # Repairing until the override is gone, Ready afterwards.
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": "Ready" if deleted else "Repairing"})
+
+    outcome = module._restore("org", "m-1", "i-1", api_base="http://x", fallback_token="t")
+
+    assert outcome["restored"] is True
+    assert outcome["errors"] == []
+    assert "removed the override directly" in outcome["warning"]
+    assert deleted == [f"machine/m-1/health-report/{module.ONLINE_REPAIR_OVERRIDE_SOURCE}"]
+
+
+def test_node_repair_restore_reports_a_stranded_node(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When both attempts fail the node is stranded, which must be an error not a warning."""
+    module = _load_node_repair_script()
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+    monkeypatch.setattr(module, "forge_patch", lambda *_a, **_kw: {})
+    monkeypatch.setattr(module, "delete_if_present", lambda *_a, **_kw: None)
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": "Repairing"})
+    monkeypatch.setattr(module, "time", _fast_clock())
+
+    outcome = module._restore("org", "m-1", "i-1", api_base="http://x", fallback_token="t")
+
+    assert outcome["restored"] is False
+    assert outcome["warning"] == ""
+    assert len(outcome["errors"]) == 2
+
+
+def _node_repair_argv(*extra: str) -> list[str]:
+    """Build argv for the report_node_repair CLI."""
+    return ["report_node_repair.py", "--org", "ncx", "--site-id", "site-1", "--api-base", "http://x", *extra]
+
+
+def _stub_node_repair_discovery(module: ModuleType, monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Wire discovery so one eligible machine with a Ready instance is found.
+
+    Returns the list that records every mutating PATCH, so a test can assert the
+    guard let nothing through.
+    """
+    patched: list[dict[str, Any]] = []
+    machine = _repair_machine("m-1", instance="i-1")
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+    monkeypatch.setattr(
+        module,
+        "list_site_machines",
+        lambda **kw: ([machine], {"success": True, "platform": "nico", "site_id": "site-1"}),
+    )
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": "Ready"})
+    monkeypatch.setattr(module, "forge_patch", lambda _o, _p, _t, **kw: patched.append(kw.get("body", {})) or {})
+    return patched
+
+
+def test_node_repair_does_not_mutate_an_auto_selected_node(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A shared site's only instance may not be ours, so auto-selection must not mutate."""
+    module = _load_node_repair_script()
+    patched = _stub_node_repair_discovery(module, monkeypatch)
+    monkeypatch.delenv(module.AUTO_SELECT_ENV, raising=False)
+    monkeypatch.setattr(sys, "argv", _node_repair_argv())
+
+    code = module.main()
+    out = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert out["skipped"] is True
+    assert patched == []
+    # The skip has to name the node, so it doubles as a dry run.
+    assert "m-1" in out["skip_reason"]
+    assert module.AUTO_SELECT_ENV in out["skip_reason"]
+
+
+def test_node_repair_mutates_when_the_machine_is_named(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Naming the machine is the operator confirming that node, so the step proceeds."""
+    module = _load_node_repair_script()
+    patched = _stub_node_repair_discovery(module, monkeypatch)
+    monkeypatch.delenv(module.AUTO_SELECT_ENV, raising=False)
+    monkeypatch.setattr(module, "time", _fast_clock())
+    monkeypatch.setattr(sys, "argv", _node_repair_argv("--machine-id", "m-1"))
+
+    module.main()
+    out = json.loads(capsys.readouterr().out)
+
+    assert out.get("skipped") is not True
+    assert out["operation"]["requested"] is True
+    assert patched[0]["onlineRepair"]["enabled"] is True
+
+
+def test_node_repair_env_opt_in_allows_auto_selection(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The env opt-in accepts whichever eligible node discovery returns."""
+    module = _load_node_repair_script()
+    _stub_node_repair_discovery(module, monkeypatch)
+    monkeypatch.setenv(module.AUTO_SELECT_ENV, "1")
+    monkeypatch.setattr(module, "time", _fast_clock())
+    monkeypatch.setattr(sys, "argv", _node_repair_argv())
+
+    module.main()
+    out = json.loads(capsys.readouterr().out)
+
+    assert out.get("skipped") is not True
+    assert out["operation"]["requested"] is True

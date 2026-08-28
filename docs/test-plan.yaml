@@ -2100,6 +2100,19 @@ domains:
                 req_id: BFX01
                 test_id: BFX01-05
                 status: pending
+              - summary: Report an individual node to the provider for maintenance via the API
+                labels:
+                  - bare_metal
+                  - breakfix
+                  - min_req
+                priority: P1
+                milestone: M5
+                notes: The non-destructive counterpart to BFX01-02 - the tenant keeps the node and its workload while flagging that it needs repair eventually. Return relinquishes the node; report does not.
+                github_issues:
+                  - "#610"
+                req_id: BFX01
+                test_id: BFX01-06
+                status: pending
           - description: Breakfix Events Query
             tests:
               - summary: Query upcoming/current maintenance events for a node

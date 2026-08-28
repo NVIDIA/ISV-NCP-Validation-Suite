@@ -139,6 +139,13 @@ ENV_VARS: tuple[EnvVar, ...] = (
         "skip AWS teardown phase",
         persistable=False,
     ),
+    EnvVar(
+        "NICO_ALLOW_ONLINE_REPAIR",
+        "Flags",
+        Requirement.OPTIONAL,
+        "allow BFX01-06 to move an auto-selected NICo node into repair",
+        persistable=False,
+    ),
     # NICo — optional by default; --provider nico runs strict provider-specific
     # checks for the same variables.
     EnvVar(

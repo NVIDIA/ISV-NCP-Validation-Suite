@@ -19,6 +19,7 @@ from isvtest.validations.breakfix import (
     NodeHealthAgentCheck,
     PlannedMaintenanceNotificationCheck,
     RepairHistoryCheck,
+    ReportNodeRepairCheck,
     RetirementNoticesCheck,
     ReturnNodeMaintenanceCheck,
 )
@@ -144,6 +145,41 @@ class TestOperationChecks:
         check = _run(ReturnNodeMaintenanceCheck, step_output)
         assert check.passed
         assert "maintenance_mode=hw" in check.message
+
+    def test_node_repair_report_keys_off_the_observed_state(self) -> None:
+        """An accepted report that never changed the node's state is not a pass.
+
+        The provider returning 200 proves only that the API exists; the check has
+        to see the node actually enter repair.
+        """
+        step_output = {"success": True, "operation": {"requested": True, "repair_state_observed": False}}
+        assert not _run(ReportNodeRepairCheck, step_output).passed
+
+    def test_node_repair_report_names_the_node_it_moved(self) -> None:
+        """A clean pass names the node and carries no extra provider detail."""
+        step_output = {
+            "success": True,
+            "operation": {"requested": True, "repair_state_observed": True, "restored": True, "node_id": "fm-1"},
+        }
+        check = _run(ReportNodeRepairCheck, step_output)
+        assert check.passed
+        assert "fm-1" in check.message
+
+    def test_node_repair_report_surfaces_a_provider_finding_on_pass(self) -> None:
+        """A cleanup that needed the fallback still passes, but must not do so silently."""
+        step_output = {
+            "success": True,
+            "operation": {
+                "requested": True,
+                "repair_state_observed": True,
+                "restored": True,
+                "node_id": "fm-1",
+                "message": "removed the override directly",
+            },
+        }
+        check = _run(ReportNodeRepairCheck, step_output)
+        assert check.passed
+        assert "removed the override directly" in check.message
 
 
 class TestNodeHealthAgentCheck:

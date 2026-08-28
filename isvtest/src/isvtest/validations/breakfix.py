@@ -324,6 +324,40 @@ class HostReplacementCheck(_OperationCheck):
     pass_template: ClassVar[str] = "Host replacement removed {label} from the pool"
 
 
+class ReportNodeRepairCheck(_OperationCheck):
+    """Validate reporting a node to the provider for maintenance (BFX01-06).
+
+    The non-destructive counterpart to ``ReturnNodeMaintenanceCheck`` (BFX01-02):
+    the tenant keeps the node and its workload while flagging that it needs repair
+    eventually. So the pass condition is that the provider *acted* on the report by
+    moving the node into a repair state, not that the node was handed back.
+
+    Keying on the state change rather than on acceptance is deliberate. A 200 proves
+    only that the endpoint exists; the tenant-visible contract is that the provider
+    records the complaint against the node.
+
+    It claims nothing about the repair itself. Providers run repair automation
+    asynchronously -- typically minutes to weeks later, out of band from any API
+    response -- so no synchronous check can observe a fix.
+
+    Step output:
+        success, operation: {requested, repair_state_observed, restored, node_id}
+    """
+
+    description: ClassVar[str] = "Report an individual node to the provider for maintenance via the API"
+
+    completion_key: ClassVar[str] = "repair_state_observed"
+    failure_message: ClassVar[str] = "Provider did not move the node into a repair state after the report"
+    label_keys: ClassVar[tuple[str, ...]] = ("node_id", "machine_id")
+    pass_template: ClassVar[str] = "Node {label} reported for repair; provider moved it into a repair state"
+
+    def _pass_message(self, label: str, operation: dict[str, Any]) -> str:
+        """Append any provider finding raised while the node was taken back out of repair."""
+        message = super()._pass_message(label, operation)
+        detail = operation.get("message")
+        return f"{message} ({detail})" if detail else message
+
+
 class CordonNodeCheck(BaseValidation):
     """Validate cordon: unschedulable with existing workloads continuing (BFX01-04).
 

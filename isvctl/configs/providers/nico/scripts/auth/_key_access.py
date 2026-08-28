@@ -45,10 +45,9 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.error import HTTPError
 
 from common.nico_client import (
-    forge_delete,
+    delete_if_present,
     forge_get,
     forge_patch,
     forge_post,
@@ -151,16 +150,6 @@ def provision(*, org: str, site_id: str, api_base: str, token: str, created: Thr
             pass
 
 
-def _delete_if_present(org: str, path: str, token: str, *, base_url: str) -> None:
-    """DELETE a NICo resource; treat 404 as already removed."""
-    try:
-        forge_delete(org, path, token, base_url=base_url)
-    except HTTPError as e:
-        if e.code == 404:
-            return
-        raise
-
-
 def remove(*, org: str, site_id: str, api_base: str, token: str, created: ThrowawayKey) -> list[str]:
     """Remove what ``provision`` created; return a list of cleanup failures.
 
@@ -175,7 +164,7 @@ def remove(*, org: str, site_id: str, api_base: str, token: str, created: Throwa
         if not resource_id:
             continue
         try:
-            _delete_if_present(org, f"{resource}/{resource_id}", token, base_url=api_base)
+            delete_if_present(org, f"{resource}/{resource_id}", token, base_url=api_base)
         except Exception as e:
             errors.append(f"{resource} {resource_id}: {type(e).__name__}: {e}")
 

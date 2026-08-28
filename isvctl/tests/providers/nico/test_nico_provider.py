@@ -3713,7 +3713,7 @@ def test_remove_deletes_group_before_key_and_restores_flag(monkeypatch: pytest.M
     module = _load_key_access_helpers()
     deletes: list[str] = []
     patched: dict[str, Any] = {}
-    monkeypatch.setattr(module, "forge_delete", lambda org, path, token, **kw: deletes.append(path) or {})
+    monkeypatch.setattr(module, "delete_if_present", lambda org, path, token, **kw: deletes.append(path))
     monkeypatch.setattr(
         module, "forge_patch", lambda org, path, token, *, base_url, body, **kw: patched.update(body) or {}
     )
@@ -3724,24 +3724,36 @@ def test_remove_deletes_group_before_key_and_restores_flag(monkeypatch: pytest.M
     assert patched == {"isSerialConsoleSSHKeysEnabled": False}
 
 
-def test_remove_treats_404_delete_as_already_gone(monkeypatch: pytest.MonkeyPatch) -> None:
-    """DELETE 404 means the resource is already gone; removal reports no error."""
-    module = _load_key_access_helpers()
+def test_delete_if_present_treats_404_as_already_gone(monkeypatch: pytest.MonkeyPatch) -> None:
+    """DELETE 404 means the resource is already gone, which is the desired end state."""
+    module = _load_nico_client()
     monkeypatch.setattr(
         module,
         "forge_delete",
         lambda *a, **k: (_ for _ in ()).throw(HTTPError("http://x", 404, "Not Found", None, None)),
     )
 
-    created = module.ThrowawayKey(sshkey_id="key-1", sshkeygroup_id="kg-1")
-    assert module.remove(org="o", site_id="site-1", api_base="http://x", token="t", created=created) == []
+    assert module.delete_if_present("o", "sshkey/key-1", "t", base_url="http://x") is None
+
+
+def test_delete_if_present_reraises_other_http_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 409 is a real failure; swallowing it would hide a resource that is still there."""
+    module = _load_nico_client()
+    monkeypatch.setattr(
+        module,
+        "forge_delete",
+        lambda *a, **k: (_ for _ in ()).throw(HTTPError("http://x", 409, "Conflict", None, None)),
+    )
+
+    with pytest.raises(HTTPError):
+        module.delete_if_present("o", "sshkey/key-1", "t", base_url="http://x")
 
 
 def test_remove_continues_after_one_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     """A stuck group delete must not strand the key; both failures are reported."""
     module = _load_key_access_helpers()
     monkeypatch.setattr(
-        module, "forge_delete", lambda org, path, token, **kw: (_ for _ in ()).throw(RuntimeError(f"boom {path}"))
+        module, "delete_if_present", lambda org, path, token, **kw: (_ for _ in ()).throw(RuntimeError(f"boom {path}"))
     )
 
     created = module.ThrowawayKey(sshkey_id="key-1", sshkeygroup_id="kg-1")
@@ -3756,7 +3768,7 @@ def test_remove_is_noop_without_ids(monkeypatch: pytest.MonkeyPatch) -> None:
     """Nothing created means nothing to remove."""
     module = _load_key_access_helpers()
     calls: list[str] = []
-    monkeypatch.setattr(module, "forge_delete", lambda *a, **k: calls.append("delete") or {})
+    monkeypatch.setattr(module, "delete_if_present", lambda *a, **k: calls.append("delete"))
     monkeypatch.setattr(module, "forge_patch", lambda *a, **k: calls.append("patch") or {})
 
     created = module.ThrowawayKey()

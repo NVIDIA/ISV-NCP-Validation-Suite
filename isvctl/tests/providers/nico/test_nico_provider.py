@@ -4276,6 +4276,123 @@ def test_node_repair_skip_restore_leaves_the_node_reported_as_unrestored(
     assert deleted == []
 
 
+def test_node_repair_classifies_which_enter_failures_need_a_clear() -> None:
+    """Only an outright refusal proves nothing was applied; every other failure is ambiguous."""
+    module = _load_node_repair_script()
+
+    def _http(code: int) -> HTTPError:
+        return HTTPError("http://x", code, "boom", None, None)  # type: ignore[arg-type]
+
+    assert module._enter_may_have_applied(_http(400)) is False
+    assert module._enter_may_have_applied(_http(403)) is False
+    # A gateway that stopped waiting had already handed the request to NICo.
+    assert module._enter_may_have_applied(_http(504)) is True
+    assert module._enter_may_have_applied(TimeoutError("read timed out")) is True
+    assert module._enter_may_have_applied(ConnectionResetError("peer reset")) is True
+
+
+def _fail_the_enter_patch(
+    module: ModuleType, monkeypatch: pytest.MonkeyPatch, enter_error: Exception
+) -> list[dict[str, Any]]:
+    """Fail the enter-repair PATCH with ``enter_error`` and record every PATCH body.
+
+    The exit PATCH ``_restore`` sends still succeeds, so the recorded bodies show
+    whether the clear was attempted at all.
+    """
+    bodies: list[dict[str, Any]] = []
+
+    def _patch(_org: str, _path: str, _token: str, **kw: Any) -> dict[str, Any]:
+        body = kw.get("body", {})
+        bodies.append(body)
+        if body.get("onlineRepair", {}).get("enabled"):
+            raise enter_error
+        return {}
+
+    monkeypatch.setattr(module, "forge_patch", _patch)
+    return bodies
+
+
+def test_node_repair_clears_repair_when_the_enter_response_is_lost(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An enter PATCH that times out may already have applied, so the clear must still run.
+
+    NICo can enable online repair and apply the health override before the client
+    gives up reading the response. Keying the restore on a *confirmed* request left
+    the machine in Repairing, out of the allocatable pool, with nothing to clear it.
+    """
+    module = _load_node_repair_script()
+    _stub_node_repair_discovery(module, monkeypatch)
+    bodies = _fail_the_enter_patch(module, monkeypatch, TimeoutError("read timed out"))
+    monkeypatch.setattr(module, "delete_if_present", lambda *_a, **_kw: None)
+    monkeypatch.setattr(module, "time", _fast_clock())
+    monkeypatch.setattr(sys, "argv", _node_repair_argv("--machine-id", "m-1"))
+
+    code = module.main()
+    out = json.loads(capsys.readouterr().out)
+
+    assert bodies == [module._enter_body(), module._exit_body()]
+    # The step still fails: the report was never confirmed. But the node is clear.
+    assert code == 1
+    assert out["success"] is False
+    assert out["operation"]["restored"] is True
+    assert "TimeoutError" in out["error"]
+
+
+def test_node_repair_does_not_clear_when_nico_refuses_the_enter(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A 4xx means the machine was never touched, so the refusal is reported unchanged."""
+    module = _load_node_repair_script()
+    _stub_node_repair_discovery(module, monkeypatch)
+    refused = HTTPError("http://x", 403, "Forbidden", None, None)  # type: ignore[arg-type]
+    bodies = _fail_the_enter_patch(module, monkeypatch, refused)
+    deleted: list[str] = []
+    monkeypatch.setattr(module, "delete_if_present", lambda _o, path, *_a, **_kw: deleted.append(path))
+    monkeypatch.setattr(module, "time", _fast_clock())
+    monkeypatch.setattr(sys, "argv", _node_repair_argv("--machine-id", "m-1"))
+
+    code = module.main()
+    out = json.loads(capsys.readouterr().out)
+
+    assert bodies == [module._enter_body()]
+    assert deleted == []
+    assert code == 1
+    assert "403" in out["error"]
+    # Nothing was stranded, so the refusal must not be dressed up as a cleanup failure.
+    assert "cleanup_errors" not in out
+
+
+def test_node_repair_keeps_the_root_cause_when_the_clear_also_fails(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A NICo outage strands the node and is usually why the clear failed too."""
+    module = _load_node_repair_script()
+    _stub_node_repair_discovery(module, monkeypatch)
+
+    attempted: list[str] = []
+
+    def _patch(*_a: object, **_kw: object) -> dict[str, Any]:
+        attempted.append("patch")
+        raise TimeoutError("read timed out")
+
+    monkeypatch.setattr(module, "forge_patch", _patch)
+    monkeypatch.setattr(module, "delete_if_present", lambda *_a, **_kw: None)
+    # Ready while the target is selected, Repairing once the lost enter has landed.
+    monkeypatch.setattr(module, "forge_get", lambda *_a, **_kw: {"status": "Repairing" if attempted else "Ready"})
+    monkeypatch.setattr(module, "time", _fast_clock())
+    monkeypatch.setattr(sys, "argv", _node_repair_argv("--machine-id", "m-1"))
+
+    code = module.main()
+    out = json.loads(capsys.readouterr().out)
+
+    assert code == 1
+    assert out["operation"]["restored"] is False
+    assert "TimeoutError" in out["error"]
+    assert f"Node left in {module.REPAIR_STATUS}" in out["error"]
+    assert out["cleanup_errors"]
+
+
 def _load_return_node_script() -> ModuleType:
     """Load the return_node_maintenance script as a module for direct unit testing."""
     return _load_nico_script("breakfix/return_node_maintenance.py", "test_nico_return_node_maintenance")

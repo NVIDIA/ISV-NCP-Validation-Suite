@@ -63,7 +63,9 @@ deletes the tenant's instance on our behalf.
 Online repair is cleared in a ``finally``, so the node cannot be left in
 ``Repairing`` even when the teardown phase never runs. See ``_restore`` for how far
 that goes and why -- a node stranded out of the allocatable pool is the worst
-outcome this step can produce.
+outcome this step can produce. The clear runs whenever the enter request *may* have
+been applied, not only when NICo confirmed it: a PATCH that timed out on the read
+can still have enabled online repair. See ``_enter_may_have_applied``.
 
 ``--skip-restore`` leaves the node in repair for debugging; recover with
 ``PATCH machine`` ``{"onlineRepair": {"enabled": false}}``, or
@@ -93,6 +95,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError
 
 # Allow importing from sibling common/ directory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -163,6 +166,21 @@ def _enter_body() -> dict[str, Any]:
         },
         "healthIssue": dict(NODE_HEALTH_ISSUE),
     }
+
+
+def _enter_may_have_applied(error: BaseException) -> bool:
+    """Return whether a failed enter-repair request may still have taken effect.
+
+    A 4xx means NICo read the request and refused it, so the machine is untouched
+    and there is nothing to clear. Anything else leaves it unknown: a read timeout,
+    a dropped connection, or a 5xx from a gateway that stopped waiting all happen
+    *after* the request reached NICo, which may already have enabled online repair
+    and applied the health override. An unknown enter must be followed by a clear,
+    because the alternative is a node stranded out of the allocatable pool.
+    """
+    if isinstance(error, HTTPError):
+        return not 400 <= error.code < 500
+    return True
 
 
 def _exit_body() -> dict[str, Any]:
@@ -364,6 +382,10 @@ def main() -> int:
 
     result["operation"] = operation
     instance_id = ""
+    # Whether the enter-repair mutation may have landed, which is not the same
+    # question as operation["requested"] (NICo answered and confirmed it). A PATCH
+    # that timed out after being applied has to be cleared too.
+    restore_required = False
 
     try:
         if auth is None:
@@ -392,7 +414,12 @@ def main() -> int:
             )
             return emit(result)
 
-        forge_patch(args.org, f"machine/{machine_id}", auth.token, base_url=args.api_base, body=_enter_body())
+        try:
+            forge_patch(args.org, f"machine/{machine_id}", auth.token, base_url=args.api_base, body=_enter_body())
+        except Exception as e:
+            restore_required = _enter_may_have_applied(e)
+            raise
+        restore_required = True
         operation["requested"] = True
 
         status = _await_status(args.org, instance_id, auth.token, base_url=args.api_base, target=REPAIR_STATUS)
@@ -413,7 +440,7 @@ def main() -> int:
     finally:
         # Take the node back out of repair in the process that put it there, so it
         # cannot be left out of the allocatable pool even when teardown never runs.
-        if operation["requested"]:
+        if restore_required:
             if args.skip_restore:
                 result["cleanup_skipped"] = True
             else:
@@ -434,7 +461,11 @@ def main() -> int:
                     # A node stranded in repair must fail the step even when the report worked.
                     result["cleanup_errors"] = outcome["errors"]
                     result["success"] = False
-                    result["error"] = f"Node left in {REPAIR_STATUS}: {'; '.join(outcome['errors'])}"
+                    stranded = f"Node left in {REPAIR_STATUS}: {'; '.join(outcome['errors'])}"
+                    # A restore reached from a failed enter already carries the root
+                    # cause, and it is usually why the restore failed too, so keep it.
+                    prior = result.get("error")
+                    result["error"] = f"{prior}; {stranded}" if prior else stranded
 
     return emit(result)
 

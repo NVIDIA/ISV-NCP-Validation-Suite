@@ -20,6 +20,7 @@ This module provides shared functionality for:
 - NIM inference validation
 """
 
+import base64
 import json
 import os
 import subprocess
@@ -46,6 +47,23 @@ def get_ngc_api_key() -> str:
         The API key string, or empty string if neither variable is set.
     """
     return os.environ.get("NGC_API_KEY", "") or os.environ.get("NGC_NIM_API_KEY", "")
+
+
+def build_ngc_dockerconfigjson(ngc_api_key: str, registry: str = "nvcr.io") -> str:
+    """Build a .dockerconfigjson payload for authenticating to the NGC registry.
+
+    Used to create docker-registry secrets via stdin (--from-file=/dev/stdin)
+    instead of passing the API key as a command-line argument.
+
+    Args:
+        ngc_api_key: NGC API key.
+        registry: Docker registry hostname.
+
+    Returns:
+        JSON string suitable for a kubernetes.io/dockerconfigjson secret.
+    """
+    auth = base64.b64encode(f"$oauthtoken:{ngc_api_key}".encode()).decode()
+    return json.dumps({"auths": {registry: {"username": "$oauthtoken", "password": ngc_api_key, "auth": auth}}})
 
 
 def ensure_ngc_secrets(namespace: str, ngc_api_key: str | None = None) -> tuple[bool, str]:
@@ -92,21 +110,22 @@ def ensure_ngc_secrets(namespace: str, ngc_api_key: str | None = None) -> tuple[
     if result.returncode != 0:
         logger.info(f"Creating NGC image pull secret ({NGC_IMAGE_SECRET_NAME})...")
         try:
-            # Pass API key directly as command argument (no shell interpretation needed)
-            # Note: Key may be visible in /proc/cmdline briefly during execution
+            # Build the dockerconfigjson and pass it via stdin so the API key
+            # never appears in the process command line (visible via /proc/<pid>/cmdline).
+            dockerconfigjson = build_ngc_dockerconfigjson(ngc_api_key)
             cmd = kubectl_parts + [
                 "create",
                 "secret",
-                "docker-registry",
+                "generic",
                 NGC_IMAGE_SECRET_NAME,
-                "--docker-server=nvcr.io",
-                "--docker-username=$oauthtoken",
-                f"--docker-password={ngc_api_key}",
+                "--type=kubernetes.io/dockerconfigjson",
+                "--from-file=.dockerconfigjson=/dev/stdin",
                 "-n",
                 namespace,
             ]
             subprocess.run(
                 cmd,
+                input=dockerconfigjson,
                 capture_output=True,
                 text=True,
                 timeout=30,

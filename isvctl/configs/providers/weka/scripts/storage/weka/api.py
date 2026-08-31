@@ -102,6 +102,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import warnings
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
@@ -187,6 +188,11 @@ def _build_ssl_context(insecure: bool) -> ssl.SSLContext:
     """Build the TLS context for provider API calls."""
     ctx = ssl.create_default_context()
     if insecure:
+        warnings.warn(
+            "WEKA_INSECURE_SKIP_VERIFY is enabled: TLS certificate verification is "
+            "disabled and credentials may be exposed to MITM attacks. Dev/test only.",
+            stacklevel=2,
+        )
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
     return ctx

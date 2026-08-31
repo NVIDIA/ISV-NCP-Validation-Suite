@@ -24,6 +24,7 @@ Reference: https://docs.nvidia.com/nim/large-language-models/latest/deploy-helm.
 """
 
 import base64
+import json
 import os
 import re
 import shlex
@@ -39,7 +40,7 @@ import pytest
 
 from isvtest.config.settings import get_k8s_namespace
 from isvtest.core.k8s import get_gpu_nodes, get_kubectl_base_shell, get_kubectl_command
-from isvtest.core.ngc import build_ngc_dockerconfigjson, get_ngc_api_key, validate_nim_inference
+from isvtest.core.ngc import create_ngc_docker_config, get_ngc_api_key, validate_nim_inference
 from isvtest.core.workload import BaseWorkloadCheck
 
 
@@ -320,7 +321,7 @@ class K8sNimHelmWorkload(BaseWorkloadCheck):
         try:
             # Build the dockerconfigjson and pass it via stdin so the API key never
             # appears in the process command line (visible via /proc/<pid>/cmdline).
-            dockerconfigjson = build_ngc_dockerconfigjson(ngc_api_key)
+            dockerconfigjson = json.dumps(create_ngc_docker_config(ngc_api_key))
             cmd = kubectl_parts + [
                 "create",
                 "secret",
@@ -353,18 +354,20 @@ class K8sNimHelmWorkload(BaseWorkloadCheck):
             self.log.info("Creating NGC API secret (ngc-api)...")
 
         try:
-            # Use list form (no shell) to pass credentials directly and securely
+            # Pass the key via stdin so it never appears in the process command
+            # line (visible via /proc/<pid>/cmdline).
             cmd = kubectl_parts + [
                 "create",
                 "secret",
                 "generic",
                 "ngc-api",
-                f"--from-literal=NGC_API_KEY={ngc_api_key}",  # Key name required by NIM Helm chart
+                "--from-file=NGC_API_KEY=/dev/stdin",  # Key name required by NIM Helm chart
                 "-n",
                 namespace,
             ]
             subprocess.run(
                 cmd,
+                input=ngc_api_key,
                 capture_output=True,
                 text=True,
                 timeout=30,

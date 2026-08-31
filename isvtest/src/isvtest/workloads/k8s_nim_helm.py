@@ -23,11 +23,15 @@ This workload will:
 Reference: https://docs.nvidia.com/nim/large-language-models/latest/deploy-helm.html
 """
 
+import base64
+import json
 import os
 import re
 import shlex
 import subprocess
 import time
+import urllib.error
+import urllib.request
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -36,7 +40,7 @@ import pytest
 
 from isvtest.config.settings import get_k8s_namespace
 from isvtest.core.k8s import get_gpu_nodes, get_kubectl_base_shell, get_kubectl_command
-from isvtest.core.ngc import get_ngc_api_key, validate_nim_inference
+from isvtest.core.ngc import create_ngc_docker_config, get_ngc_api_key, validate_nim_inference
 from isvtest.core.workload import BaseWorkloadCheck
 
 
@@ -315,20 +319,22 @@ class K8sNimHelmWorkload(BaseWorkloadCheck):
             self.log.info("Creating NGC image pull secret (ngc-secret)...")
 
         try:
-            # Use list form (no shell) to pass credentials directly and securely
+            # Build the dockerconfigjson and pass it via stdin so the API key never
+            # appears in the process command line (visible via /proc/<pid>/cmdline).
+            dockerconfigjson = json.dumps(create_ngc_docker_config(ngc_api_key))
             cmd = kubectl_parts + [
                 "create",
                 "secret",
-                "docker-registry",
+                "generic",
                 "ngc-secret",
-                "--docker-server=nvcr.io",
-                "--docker-username=$oauthtoken",  # Literal string - NGC special username
-                f"--docker-password={ngc_api_key}",
+                "--type=kubernetes.io/dockerconfigjson",
+                "--from-file=.dockerconfigjson=/dev/stdin",
                 "-n",
                 namespace,
             ]
             subprocess.run(
                 cmd,
+                input=dockerconfigjson,
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -348,18 +354,20 @@ class K8sNimHelmWorkload(BaseWorkloadCheck):
             self.log.info("Creating NGC API secret (ngc-api)...")
 
         try:
-            # Use list form (no shell) to pass credentials directly and securely
+            # Pass the key via stdin so it never appears in the process command
+            # line (visible via /proc/<pid>/cmdline).
             cmd = kubectl_parts + [
                 "create",
                 "secret",
                 "generic",
                 "ngc-api",
-                f"--from-literal=NGC_API_KEY={ngc_api_key}",  # Key name required by NIM Helm chart
+                "--from-file=NGC_API_KEY=/dev/stdin",  # Key name required by NIM Helm chart
                 "-n",
                 namespace,
             ]
             subprocess.run(
                 cmd,
+                input=ngc_api_key,
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -389,35 +397,22 @@ class K8sNimHelmWorkload(BaseWorkloadCheck):
 
         self.log.info(f"Downloading NIM Helm chart: {chart_url}")
 
-        # Use helm pull to download the chart with authentication
-        # helm fetch/pull supports --username and --password for authenticated downloads
+        # Fetch directly over HTTPS with a Basic Authorization header instead of
+        # `helm pull --username --password`, so the API key never appears in the
+        # process command line (visible via /proc/<pid>/cmdline).
+        auth = base64.b64encode(f"$oauthtoken:{ngc_api_key}".encode()).decode()
+        request = urllib.request.Request(chart_url, headers={"Authorization": f"Basic {auth}"})
         try:
-            result = subprocess.run(
-                [
-                    "helm",
-                    "pull",
-                    chart_url,
-                    "--username",
-                    "$oauthtoken",
-                    "--password",
-                    ngc_api_key,
-                ],
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-
-            if result.returncode != 0:
-                self.set_failed(f"Failed to download Helm chart: {result.stderr}")
-                return False
+            with urllib.request.urlopen(request, timeout=120) as response, open(chart_filename, "wb") as chart_file:
+                chart_file.write(response.read())
 
             # Store the chart path for later use
             self._chart_path = chart_filename
             self.log.info(f"Helm chart downloaded: {chart_filename}")
             return True
 
-        except subprocess.TimeoutExpired:
-            self.set_failed("Helm chart download timed out")
+        except (urllib.error.URLError, OSError) as e:
+            self.set_failed(f"Failed to download Helm chart: {e}")
             return False
         except Exception as e:
             self.set_failed(f"Failed to download Helm chart: {e}")

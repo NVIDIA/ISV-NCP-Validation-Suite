@@ -20,6 +20,7 @@ This module provides shared functionality for:
 - NIM inference validation
 """
 
+import base64
 import json
 import os
 import subprocess
@@ -92,21 +93,22 @@ def ensure_ngc_secrets(namespace: str, ngc_api_key: str | None = None) -> tuple[
     if result.returncode != 0:
         logger.info(f"Creating NGC image pull secret ({NGC_IMAGE_SECRET_NAME})...")
         try:
-            # Pass API key directly as command argument (no shell interpretation needed)
-            # Note: Key may be visible in /proc/cmdline briefly during execution
+            # Build the dockerconfigjson and pass it via stdin so the API key
+            # never appears in the process command line (visible via /proc/<pid>/cmdline).
+            dockerconfigjson = json.dumps(create_ngc_docker_config(ngc_api_key))
             cmd = kubectl_parts + [
                 "create",
                 "secret",
-                "docker-registry",
+                "generic",
                 NGC_IMAGE_SECRET_NAME,
-                "--docker-server=nvcr.io",
-                "--docker-username=$oauthtoken",
-                f"--docker-password={ngc_api_key}",
+                "--type=kubernetes.io/dockerconfigjson",
+                "--from-file=.dockerconfigjson=/dev/stdin",
                 "-n",
                 namespace,
             ]
             subprocess.run(
                 cmd,
+                input=dockerconfigjson,
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -302,8 +304,6 @@ def create_ngc_docker_config(ngc_api_key: str) -> dict[str, Any]:
     Returns:
         Docker config dictionary suitable for .dockerconfigjson.
     """
-    import base64
-
     return {
         "auths": {
             "nvcr.io": {

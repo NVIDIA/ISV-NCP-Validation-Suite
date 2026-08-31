@@ -20,6 +20,8 @@ compatibility with SSH agents, certificates, and complex authentication setups.
 """
 
 import logging
+import re
+import shlex
 import subprocess
 import sys
 import threading
@@ -27,6 +29,8 @@ from dataclasses import dataclass
 from typing import IO
 
 logger = logging.getLogger(__name__)
+
+_ENV_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 @dataclass
@@ -142,7 +146,10 @@ class SSHClient:
         # Build the remote command with optional env vars
         remote_cmd = command
         if env:
-            env_prefix = " ".join(f'{k}="{v}"' for k, v in env.items())
+            for key in env:
+                if not _ENV_NAME_RE.match(key):
+                    raise ValueError(f"Invalid environment variable name: {key!r}")
+            env_prefix = " ".join(f"{k}={shlex.quote(v)}" for k, v in env.items())
             remote_cmd = f"{env_prefix} {command}"
 
         # Use bash -l -s to run script from stdin (like heredoc)

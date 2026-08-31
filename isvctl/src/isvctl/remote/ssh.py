@@ -20,6 +20,7 @@ compatibility with SSH agents, certificates, and complex authentication setups.
 """
 
 import logging
+import shlex
 import subprocess
 import sys
 import threading
@@ -142,7 +143,7 @@ class SSHClient:
         # Build the remote command with optional env vars
         remote_cmd = command
         if env:
-            env_prefix = " ".join(f'{k}="{v}"' for k, v in env.items())
+            env_prefix = " ".join(f"{k}={shlex.quote(v)}" for k, v in env.items())
             remote_cmd = f"{env_prefix} {command}"
 
         # Use bash -l -s to run script from stdin (like heredoc)

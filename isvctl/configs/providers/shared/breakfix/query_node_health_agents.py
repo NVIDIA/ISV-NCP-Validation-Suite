@@ -4,14 +4,21 @@
 
 """Read-only reference implementation of the BFX04-01 node-health-agent query.
 
-Reports, per configured GPU node, whether a supported NVIDIA node-health agent
-is running: NVIDIA Fleet Intelligence Agent (GPUd) or the NVSentinel GPU Health
-Monitor. Evidence comes from ``systemctl is-active`` over SSH, so it works on
-any bare-metal fleet whose control-plane API does not expose agent state.
+Reports, per configured GPU node, whether a GPU health monitoring process is
+running, and names the one it found. Evidence comes from ``systemctl is-active``
+over SSH, so it works on any bare-metal fleet whose control-plane API does not
+expose agent state.
+
+BFX04-01 itself names no product -- the requirement is that *something* is
+watching GPU health -- so the unit list below is this reference's answer to
+"which processes count here", not the requirement's. A fleet running a different
+agent extends ``AGENT_UNITS`` rather than failing the check.
 
 Nodes are named through ``--nodes``. With none configured the step emits a
 structured skip: an unconfigured site is indistinguishable from one with no
-agents, and a pass there would assert nothing.
+agents, and a pass there would assert nothing. Name the whole GPU fleet, not a
+sample -- the check judges the nodes it is given, so a short list narrows what
+BFX04-01 proves rather than making it easier to pass.
 
 Probes fan out across nodes because they are dominated by SSH round-trip
 latency. A serial probe of a full rack would outlive the step timeout and the
@@ -30,9 +37,10 @@ from typing import Any
 
 TEST_NAME = "query_node_health_agents"
 
-# systemd units shipped by the two agents BFX04-01 accepts. Generic GPU
-# telemetry (a DCGM exporter, say) is deliberately absent: it reports metrics
-# but performs none of the health detection the requirement is about.
+# systemd units this reference probes: NVIDIA Fleet Intelligence Agent (GPUd)
+# and the NVSentinel GPU Health Monitor, as of Aug 2026. Generic GPU telemetry
+# (a DCGM exporter, say) is deliberately absent: it reports metrics but performs
+# none of the health detection the requirement is about.
 AGENT_UNITS = ("fleetintd", "gpud", "nvsentinel", "gpu-health-monitor")
 
 # SSH targets must be bare host names or addresses. Anything else could be read
@@ -109,8 +117,10 @@ def _probe(node: str) -> str | None:
     """Return the active agent unit, or None when the node yielded no evidence.
 
     A node we could not read is not a node without an agent, so it must not
-    become a ``running: False`` record: the check reads only that flag, and
-    would report a missing agent on a host it never reached.
+    become a ``running: False`` record, which would report a missing agent on a
+    host the probe never reached. It fails the step instead. A node that *was*
+    read and has nothing running does belong in the output, as the check expects
+    every GPU node accounted for rather than the covered ones listed.
     """
     try:
         return _active_unit(node)

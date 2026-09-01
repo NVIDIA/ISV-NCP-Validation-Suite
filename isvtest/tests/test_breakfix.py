@@ -434,9 +434,18 @@ class TestBmcKernelLogCheck:
         assert "No log entries" in check.message
 
 
-def _agents(*records: dict[str, Any]) -> dict[str, Any]:
-    """Return a BFX04-01 step payload carrying ``records``."""
-    return {"success": True, "agents_observable": True, "agents": list(records)}
+def _agents(*records: dict[str, Any], nodes_expected: int | None = None) -> dict[str, Any]:
+    """Return a BFX04-01 step payload carrying ``records``.
+
+    Defaults the declared fleet size to full coverage so each test states only
+    the rule it is about; the coverage tests pass ``nodes_expected`` explicitly.
+    """
+    return {
+        "success": True,
+        "agents_observable": True,
+        "nodes_expected": len(records) if nodes_expected is None else nodes_expected,
+        "agents": list(records),
+    }
 
 
 class TestNodeHealthAgentCheck:
@@ -499,6 +508,40 @@ class TestNodeHealthAgentCheck:
         check = _run(NodeHealthAgentCheck, _agents({"agent_name": "nvsentinel", "running": True}))
         assert not check.passed
         assert "node_id" in check.message
+
+    def test_fails_when_records_cover_only_part_of_the_fleet(self) -> None:
+        """Probing 3 of 64 GPU nodes must not carry BFX04-01 for the whole site."""
+        check = _run(
+            NodeHealthAgentCheck,
+            _agents({"node_id": "gpu-1", "agent_name": "gpud", "running": True}, nodes_expected=64),
+        )
+        assert not check.passed
+        assert "1 of 64" in check.message
+
+    @pytest.mark.parametrize("expected", [None, 0, -1, "8", True])
+    def test_fails_when_the_fleet_size_is_not_reported(self, expected: object) -> None:
+        """Without a usable GPU node count the result cannot show fleet coverage."""
+        step_output = _agents({"node_id": "gpu-1", "agent_name": "gpud", "running": True})
+        if expected is None:
+            del step_output["nodes_expected"]
+        else:
+            step_output["nodes_expected"] = expected
+
+        check = _run(NodeHealthAgentCheck, step_output)
+        assert not check.passed
+        assert "nodes_expected" in check.message
+
+    def test_passes_when_records_exceed_the_reported_fleet_size(self) -> None:
+        """Extra records are over-coverage, not a coverage gap."""
+        check = _run(
+            NodeHealthAgentCheck,
+            _agents(
+                {"node_id": "gpu-1", "agent_name": "gpud", "running": True},
+                {"node_id": "gpu-2", "agent_name": "gpud", "running": True},
+                nodes_expected=1,
+            ),
+        )
+        assert check.passed
 
     def test_skips_when_the_provider_reports_no_gpu_nodes(self) -> None:
         """No GPU nodes at the site is not applicable rather than failing."""

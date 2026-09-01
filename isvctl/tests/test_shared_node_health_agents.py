@@ -14,6 +14,7 @@ import threading
 import time
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 import yaml
@@ -90,26 +91,64 @@ def test_nico_provider_wires_the_shared_reference() -> None:
     assert step["phase"] == "test"
     assert step["timeout"] == 300
     assert step["requires_available_validations"] == ["NodeHealthAgentCheck"]
-    assert step["args"] == ["--nodes={{health_agent_nodes}}"]
+    assert step["args"][0] == "--nodes={{health_agent_nodes}}"
+    # Sourced from the inventory step, not from the node list, so a partial
+    # list cannot be measured against itself.
+    assert step["args"][1].startswith("--expected-nodes={{steps.query_fleet_inventory.nodes")
     assert config["tests"]["settings"]["health_agent_nodes"] == "{{env.NICO_HEALTH_AGENT_NODES | default('', true)}}"
+
+
+def _render_nico_args(inventory: dict[str, Any] | None = None) -> list[str]:
+    """Render the NICo step's args, optionally with a fleet inventory in context."""
+    config = RunConfig.model_validate(merge_yaml_files([NICO_CONFIG]))
+    step = next(item for item in config.commands["bare_metal"].steps if item.name == "query_node_health_agents")
+    context = Context(config)
+    if inventory is not None:
+        context.set_step_output("query_fleet_inventory", inventory)
+    return StepExecutor()._render_args(step.args, context)
 
 
 def test_nodes_render_empty_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     """An unset target list renders empty so the provider can skip safely."""
     monkeypatch.delenv("NICO_HEALTH_AGENT_NODES", raising=False)
-    config = RunConfig.model_validate(merge_yaml_files([NICO_CONFIG]))
-    step = next(item for item in config.commands["bare_metal"].steps if item.name == "query_node_health_agents")
 
-    assert StepExecutor()._render_args(step.args, Context(config)) == ["--nodes="]
+    assert _render_nico_args()[0] == "--nodes="
 
 
 def test_nodes_accept_configured_environment_targets(monkeypatch: pytest.MonkeyPatch) -> None:
     """Configured GPU nodes are rendered into the provider command."""
     monkeypatch.setenv("NICO_HEALTH_AGENT_NODES", "gpu-01,gpu-02")
-    config = RunConfig.model_validate(merge_yaml_files([NICO_CONFIG]))
-    step = next(item for item in config.commands["bare_metal"].steps if item.name == "query_node_health_agents")
 
-    assert StepExecutor()._render_args(step.args, Context(config)) == ["--nodes=gpu-01,gpu-02"]
+    assert _render_nico_args()[0] == "--nodes=gpu-01,gpu-02"
+
+
+def test_expected_nodes_counts_only_the_fleet_gpu_nodes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Machines without GPUs are outside BFX04-01, so they must not inflate coverage."""
+    monkeypatch.setenv("NICO_HEALTH_AGENT_NODES", "gpu-01,gpu-02")
+    inventory = {"nodes": [{"gpu_count": 8}, {"gpu_count": 0}, {"gpu_count": 4}]}
+
+    assert _render_nico_args(inventory)[1] == "--expected-nodes=2"
+
+
+def test_a_missing_inventory_renders_a_zero_the_script_must_reject(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The two halves of the silent-zero trap, asserted together.
+
+    ``| length`` over a step that never ran renders "0" rather than empty, so
+    the orchestrator's missing-step guard does not fire and the step is invoked
+    with a fleet of nobody. Nothing upstream catches that, which is why the
+    script treats a zero as a failure rather than as full coverage.
+    """
+    monkeypatch.setenv("NICO_HEALTH_AGENT_NODES", "gpu-01,gpu-02")
+
+    assert _render_nico_args()[1] == "--expected-nodes=0"
+
+    module = _load_script()
+    monkeypatch.setattr(sys, "argv", [SCRIPT.name, "--nodes=gpu-01,gpu-02", "--expected-nodes=0"])
+    assert module.main() == 1
+    assert "at least 1" in json.loads(capsys.readouterr().out)["error"]
 
 
 def test_unconfigured_nodes_skip_before_any_ssh(
@@ -203,6 +242,44 @@ def test_probe_ends_ssh_options_before_the_node(monkeypatch: pytest.MonkeyPatch)
         f"systemctl is-active {' '.join(module.AGENT_UNITS)} 2>/dev/null || true",
     ]
     assert "BatchMode=yes" in calls[0]
+
+
+def test_declared_fleet_size_reaches_the_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The check compares coverage against the declared size, so it must be reported."""
+    module = _load_script()
+    monkeypatch.setattr(module.subprocess, "run", _ssh_stub({"gpu-01": _states("gpud")}))
+
+    result = module._query(["gpu-01"], expected=64)
+
+    assert result["nodes_expected"] == 64
+
+
+def test_a_probed_fleet_must_declare_its_size() -> None:
+    """Omitting the count would let a subset probe pass for the whole fleet."""
+    module = _load_script()
+
+    with pytest.raises(module.NodeHealthQueryError, match="--expected-nodes is required"):
+        module._parse_expected("", ["gpu-01"])
+
+
+def test_a_zero_fleet_size_is_rejected_rather_than_covered() -> None:
+    """A YAML aggregate over a step that never ran renders 0, not empty.
+
+    The orchestrator's missing-step guard only fires on an empty render, so
+    ``| length`` over a failed inventory step would slip through as a fleet of
+    nobody that any number of records covers. It has to fail here instead.
+    """
+    module = _load_script()
+
+    with pytest.raises(module.NodeHealthQueryError, match="at least 1"):
+        module._parse_expected("0", ["gpu-01"])
+
+
+def test_unconfigured_nodes_need_no_fleet_size() -> None:
+    """The skip path asserts nothing, so it demands nothing to compare against."""
+    module = _load_script()
+
+    assert module._parse_expected("", []) == 0
 
 
 def test_a_fleet_can_name_its_own_agent_units(monkeypatch: pytest.MonkeyPatch) -> None:

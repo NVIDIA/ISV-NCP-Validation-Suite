@@ -594,17 +594,27 @@ class NodeHealthAgentCheck(BaseValidation):
     refuse. It is also what makes the result actionable, since an operator
     reading "a process is running" cannot tell whether it is the right one.
 
-    ``agents`` is expected to cover every GPU node the platform has, not just the
-    ones the step was configured with or could reach. A step that reports a single
-    healthy node and silently omits the rest passes while proving nothing about
-    the fleet, so a node with nothing running belongs in the list as
+    ``agents`` must cover every GPU node the platform has, not just the ones the
+    step was configured with or could reach. A step that reports a single healthy
+    node and silently omits the rest passes while proving nothing about the
+    fleet, so a node with nothing running belongs in the list as
     ``running: false`` -- and may omit ``agent_name``, having none to report --
     rather than being dropped. A site with no GPU nodes at all is the one case
     with nothing to assert, and is a structured skip rather than an empty list.
 
+    ``nodes_expected`` is what makes that coverage an assertion instead of a
+    request. Without it the check can only judge the list it is handed and has no
+    way to know the list is whole, so a step configured with three of a site's
+    sixty-four GPU nodes passes BFX04-01 for the whole site. Naming the fleet
+    size separately forces the provider to say what it was covering, and to say
+    it somewhere other than the list it is being graded on -- the same reason
+    ``agent_name`` is required above. A provider that will not report its GPU
+    node count has not answered the requirement, so its absence fails rather
+    than relaxing into "however many turned up".
+
     Step output:
         success, agents: list[{node_id, agent_name, running: bool}]
-        agents_observable: bool
+        agents_observable: bool, nodes_expected: int
     """
 
     description: ClassVar[str] = "Check that a GPU health monitoring process is running"
@@ -642,6 +652,21 @@ class NodeHealthAgentCheck(BaseValidation):
             self.set_failed(
                 f"{len(unnamed)} node(s) reported a running health monitoring process "
                 f"without naming it in agent_name: {labels}"
+            )
+            return
+        # Last, so the coverage figure is only quoted once the records behind it
+        # have been shown to be real.
+        expected = step_output.get("nodes_expected")
+        if not isinstance(expected, int) or isinstance(expected, bool) or expected < 1:
+            self.set_failed(
+                "Step output did not report how many GPU nodes the platform has "
+                "in nodes_expected, so this result cannot show it covered the fleet"
+            )
+            return
+        if len(agents) < expected:
+            self.set_failed(
+                f"Health agent records cover {len(agents)} of {expected} GPU node(s); "
+                f"the {expected - len(agents)} unreported node(s) are unproven"
             )
             return
         names = sorted({str(a["agent_name"]).strip() for a in agents})

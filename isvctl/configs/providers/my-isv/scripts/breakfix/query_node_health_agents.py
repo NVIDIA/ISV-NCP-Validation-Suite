@@ -25,6 +25,10 @@ def main() -> int:
         "query_node_health_agents",
         hint="GPU health monitoring process probe",
         agents_observable=True,
+        # nodes_expected is how many GPU nodes this platform has, and must come
+        # from your inventory rather than from len(agents): the check compares
+        # the two, so a partial sweep fails instead of passing for the fleet.
+        nodes_expected=1,
         # agent_name must hold whichever process this platform actually found:
         # the check accepts any name but rejects a running record without one.
         agents=[{"node_id": "demo-node-001", "agent_name": "nvsentinel", "running": True}],

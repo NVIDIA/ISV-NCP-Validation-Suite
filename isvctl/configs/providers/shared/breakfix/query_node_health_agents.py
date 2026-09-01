@@ -17,9 +17,17 @@ script or failing the check.
 
 Nodes are named through ``--nodes``. With none configured the step emits a
 structured skip: an unconfigured site is indistinguishable from one with no
-agents, and a pass there would assert nothing. Name the whole GPU fleet, not a
-sample -- the check judges the nodes it is given, so a short list narrows what
-BFX04-01 proves rather than making it easier to pass.
+agents, and a pass there would assert nothing.
+
+``--expected-nodes`` is how a short list stops being a quiet pass. The probe
+judges the nodes it is given, so naming three of a site's sixty-four would
+otherwise carry BFX04-01 for the whole site. The fleet size is therefore
+declared separately -- ideally from the provider's own inventory rather than by
+hand -- and the check fails when the records do not cover it. Deriving it in
+YAML has one trap worth knowing: an aggregate like ``| length`` over a step that
+never ran renders ``0`` rather than empty, so the orchestrator's missing-step
+guard does not fire. A zero is rejected below instead, which turns that into a
+loud failure rather than a fleet of nobody that everything covers.
 
 Probes fan out across nodes because they are dominated by SSH round-trip
 latency. A serial probe of a full rack would outlive the step timeout and the
@@ -110,6 +118,27 @@ def _parse_units(value: str) -> tuple[str, ...]:
     return tuple(units)
 
 
+def _parse_expected(value: str, nodes: list[str]) -> int:
+    """Return the declared GPU fleet size, rejecting a count that asserts nothing."""
+    if not nodes:
+        return 0
+    if not value.strip():
+        raise NodeHealthQueryError(
+            "--expected-nodes is required alongside --nodes: without the platform's GPU node count "
+            "a probe of a subset would pass BFX04-01 for the whole fleet"
+        )
+    try:
+        expected = int(value)
+    except ValueError:
+        raise NodeHealthQueryError(f"Invalid expected node count: {value!r}") from None
+    if expected < 1:
+        raise NodeHealthQueryError(
+            f"Expected node count must be at least 1 with {len(nodes)} node(s) to probe, got {expected}; "
+            "a platform reporting no GPU nodes cannot be covered by probing some"
+        )
+    return expected
+
+
 def _active_unit(node: str, units: tuple[str, ...] = AGENT_UNITS) -> str:
     """Return the supported agent unit active on ``node``, or an empty string.
 
@@ -191,6 +220,7 @@ def _query(
     nodes: list[str],
     budget_seconds: float = PROBE_BUDGET_SECONDS,
     units: tuple[str, ...] = AGENT_UNITS,
+    expected: int = 0,
 ) -> dict[str, Any]:
     """Return provider-neutral BFX04-01 evidence for every configured node."""
     if not nodes:
@@ -222,6 +252,10 @@ def _query(
         "platform": "bare_metal",
         "test_name": TEST_NAME,
         "agents_observable": True,
+        # The separately declared fleet size. It falls back to the probed count
+        # only for direct callers that passed none; the CLI always supplies one,
+        # because a size read off the list under test compares it to itself.
+        "nodes_expected": expected or len(nodes),
         "agents": [{"node_id": node, "agent_name": probed[node], "running": bool(probed[node])} for node in nodes],
     }
 
@@ -235,13 +269,23 @@ def main() -> int:
         help="Comma-separated GPU nodes to inspect over SSH",
     )
     parser.add_argument(
+        "--expected-nodes",
+        default="",
+        help="How many GPU nodes the platform has, so partial coverage cannot pass unnoticed",
+    )
+    parser.add_argument(
         "--units",
         default="",
         help=f"Comma-separated systemd units that count as a GPU health agent (default: {', '.join(AGENT_UNITS)})",
     )
     try:
         args = parser.parse_args()
-        result = _query(_parse_nodes(args.nodes), units=_parse_units(args.units))
+        nodes = _parse_nodes(args.nodes)
+        result = _query(
+            nodes,
+            units=_parse_units(args.units),
+            expected=_parse_expected(args.expected_nodes, nodes),
+        )
     except NodeHealthQueryError as exc:
         result = {
             "success": False,

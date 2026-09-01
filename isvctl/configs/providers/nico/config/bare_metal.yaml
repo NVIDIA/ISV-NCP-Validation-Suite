@@ -86,7 +86,9 @@
 #   - NICO_ORGANIZATION and NICO_SITE_ID environment variables set
 #   - Optional NICO_INSTANCE_ID narrows inventory checks to a known instance
 #   - Optional NICO_HEALTH_AGENT_NODES lists the SSH-reachable GPU nodes to
-#     inspect for GPUd/NVSentinel (BFX04-01); unset skips that check
+#     inspect for GPUd/NVSentinel (BFX04-01); unset skips that check. The list
+#     must name every GPU node the site has -- the fleet size is counted from
+#     query_fleet_inventory, so a partial list fails rather than passing
 #   - ssh-keygen on the host (used by query_key_access to mint the throwaway key)
 #
 # Usage:
@@ -517,12 +519,18 @@ commands:
       # NICo's REST surface does not report GPUd/NVSentinel state, so
       # BFX04-01 is evidenced by inspecting the agents' systemd units on
       # the nodes directly. Skips while NICO_HEALTH_AGENT_NODES is unset.
+      #
+      # The fleet size comes from query_fleet_inventory rather than from the
+      # node list, so a hand-written list covering part of the site fails
+      # instead of carrying BFX04-01 for all of it. Counting only machines
+      # with GPUs keeps the comparison against the nodes actually at issue.
       - name: query_node_health_agents
         phase: test
         continue_on_failure: true
         command: "python ../../shared/breakfix/query_node_health_agents.py"
         args:
           - "--nodes={{health_agent_nodes}}"
+          - "--expected-nodes={{steps.query_fleet_inventory.nodes | selectattr('gpu_count', 'greaterthan', 0) | list | length}}"
         requires_available_validations:
           - NodeHealthAgentCheck
         timeout: 300

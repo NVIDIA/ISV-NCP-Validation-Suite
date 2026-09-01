@@ -481,6 +481,13 @@ class TestNodeHealthAgentCheck:
         assert not check.passed
         assert "gpu-2" in check.message
 
+    @pytest.mark.parametrize("running", ["false", "true", 1, None])
+    def test_fails_when_running_is_not_a_boolean_true(self, running: object) -> None:
+        """The contract says bool; "false" is a truthy string and must not pass."""
+        check = _run(NodeHealthAgentCheck, _agents({"node_id": "gpu-1", "agent_name": "gpud", "running": running}))
+        assert not check.passed
+        assert "gpu-1" in check.message
+
     def test_fails_when_a_running_agent_is_unnamed(self) -> None:
         """``running`` with no agent_name is the provider's say-so, not evidence."""
         check = _run(NodeHealthAgentCheck, _agents({"node_id": "gpu-1", "running": True}))

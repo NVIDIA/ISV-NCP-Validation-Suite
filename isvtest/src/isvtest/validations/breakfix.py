@@ -627,7 +627,9 @@ class NodeHealthAgentCheck(BaseValidation):
         if unidentified:
             self.set_failed(f"{len(unidentified)} health agent record(s) missing node_id")
             return
-        not_running = [a for a in agents if not a.get("running")]
+        # ``is not True`` rather than falsiness: the contract says bool, and the
+        # string "false" is truthy, so a provider serialising it would pass.
+        not_running = [a for a in agents if a.get("running") is not True]
         if not_running:
             labels = ", ".join(_record_label(a, "node_id", "machine_id") for a in not_running[:3])
             self.set_failed(f"No GPU health monitoring process running on {len(not_running)} node(s): {labels}")

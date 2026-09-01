@@ -518,6 +518,25 @@ class TestNodeHealthAgentCheck:
         assert not check.passed
         assert "1 of 64" in check.message
 
+    def test_repeated_records_for_one_node_do_not_cover_a_fleet(self) -> None:
+        """Coverage counts distinct nodes: one node_id restated is still one node.
+
+        Counting records would let a provider repeat its single healthy node up to
+        ``nodes_expected`` and satisfy the check that exists precisely because its
+        own account of its coverage is not trusted.
+        """
+        check = _run(
+            NodeHealthAgentCheck,
+            _agents(
+                {"node_id": "gpu-1", "agent_name": "gpud", "running": True},
+                {"node_id": "gpu-1", "agent_name": "gpud", "running": True},
+                {"node_id": " gpu-1 ", "agent_name": "gpud", "running": True},
+                nodes_expected=3,
+            ),
+        )
+        assert not check.passed
+        assert "1 of 3" in check.message
+
     @pytest.mark.parametrize("expected", [None, 0, -1, "8", True])
     def test_fails_when_the_fleet_size_is_not_reported(self, expected: object) -> None:
         """Without a usable GPU node count the result cannot show fleet coverage."""

@@ -663,14 +663,18 @@ class NodeHealthAgentCheck(BaseValidation):
                 "in nodes_expected, so this result cannot show it covered the fleet"
             )
             return
-        if len(agents) < expected:
+        # Distinct nodes, not records: counting records would let one healthy
+        # node_id repeated to the fleet size satisfy the very check that exists
+        # because the provider's own account of its coverage is not trusted.
+        covered = {str(a["node_id"]).strip() for a in agents}
+        if len(covered) < expected:
             self.set_failed(
-                f"Health agent records cover {len(agents)} of {expected} GPU node(s); "
-                f"the {expected - len(agents)} unreported node(s) are unproven"
+                f"Health agent records cover {len(covered)} of {expected} GPU node(s); "
+                f"the {expected - len(covered)} unreported node(s) are unproven"
             )
             return
         names = sorted({str(a["agent_name"]).strip() for a in agents})
-        self.set_passed(f"GPU health monitoring process running on {len(agents)} node(s): {', '.join(names[:3])}")
+        self.set_passed(f"GPU health monitoring process running on {len(covered)} node(s): {', '.join(names[:3])}")
 
 
 class PlannedMaintenanceNotificationCheck(_QueryableRecordsCheck):

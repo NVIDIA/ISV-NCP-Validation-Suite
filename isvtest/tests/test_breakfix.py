@@ -120,6 +120,35 @@ class TestQueryableRecordChecks:
         with pytest.raises(pytest.skip.Exception):
             _run(check_class, {"success": True, flag: True, key: [{}]})
 
+    @pytest.mark.parametrize(
+        "event",
+        [
+            {"zzz": 1},
+            {"status": "maintenance"},
+            {"machine_id": "m-1"},
+            {"machine_id": "", "status": "maintenance"},
+        ],
+    )
+    def test_maintenance_event_needs_a_subject_and_a_state(self, event: dict[str, Any]) -> None:
+        """An event must say which node and what is happening to it.
+
+        Without ``machine_id`` there is nothing to go and look at; without
+        ``status`` there is no telling an upcoming window from one underway. This
+        check was the only ``_QueryableRecordsCheck`` left with no evidence bar,
+        so any non-empty record used to pass.
+        """
+        with pytest.raises(pytest.skip.Exception):
+            _run(MaintenanceEventsCheck, {"success": True, "events_queryable": True, "events": [event]})
+
+    def test_maintenance_event_does_not_require_prose(self) -> None:
+        """A provider that schedules maintenance without a message still reported it."""
+        step_output = {
+            "success": True,
+            "events_queryable": True,
+            "events": [{"machine_id": "m-1", "status": "maintenance"}],
+        }
+        assert _run(MaintenanceEventsCheck, step_output).passed
+
     def test_retirement_notice_needs_a_date_not_just_a_subject(self) -> None:
         """Without retire_after a notice says something will be retired, not when.
 

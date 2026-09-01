@@ -152,8 +152,15 @@ class _QueryableRecordsCheck(BaseValidation):
 class MaintenanceEventsCheck(_QueryableRecordsCheck):
     """Validate upcoming/current maintenance events are queryable (BFX02-01).
 
+    An event has to say which node and what is happening to it. Those two are
+    what make it an event a tenant can act on rather than a row that came back:
+    without ``machine_id`` there is nothing to go and look at, and without
+    ``status`` there is no way to tell an upcoming window from one underway.
+    ``message`` stays optional -- a provider that schedules maintenance without
+    prose has still reported the event.
+
     Step output:
-        success, events: list[{machine_id, status, message}]
+        success, events: list[{machine_id, status, message?}]
         events_queryable: bool -- API exposes maintenance event records
     """
 
@@ -165,6 +172,7 @@ class MaintenanceEventsCheck(_QueryableRecordsCheck):
     absent_noun: ClassVar[str] = "maintenance events"
     api_label: ClassVar[str] = "Maintenance event"
     record_noun: ClassVar[str] = "event"
+    evidence_fields: ClassVar[tuple[str, ...]] = ("machine_id", "status")
 
 
 class RetirementNoticesCheck(_QueryableRecordsCheck):

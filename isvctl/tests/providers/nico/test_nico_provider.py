@@ -4617,6 +4617,30 @@ def test_switch_firmware_reports_the_tenant_gap_rather_than_failing(
     assert out["trays"] == []
 
 
+def test_switch_firmware_skips_a_site_without_nico_flow(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Trays live in NICo Flow; a site without it has no inventory to inspect.
+
+    Observed on a live v2.2.0 site as 412 "Site does not have NICo Flow
+    enabled". Kept distinct from the 403 tenant gap because the facts differ:
+    the capability is absent from the site rather than withheld from the caller,
+    and reporting a lab-configuration detail as a provider gap would mislead.
+    """
+    module = _load_switch_firmware_script()
+
+    def _no_flow(*_a: object, **_kw: object) -> list[dict[str, Any]]:
+        raise HTTPError("http://x", 412, "Precondition Failed", None, None)
+
+    code, out = _run_firmware(module, monkeypatch, capsys, _no_flow)
+
+    assert code == 0
+    assert out["skipped"] is True
+    assert out["gap"] == module.GAP_ID
+    assert "NICo Flow" in out["skip_reason"]
+    assert "PROVIDER_ADMIN" not in out["skip_reason"]
+
+
 def test_switch_firmware_fails_on_other_http_errors(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

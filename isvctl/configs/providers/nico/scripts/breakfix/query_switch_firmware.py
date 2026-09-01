@@ -22,15 +22,19 @@ version. No BMC, no vendor tooling, no command execution on the hardware.
 
 **BFX03-02 is only half satisfied, and deliberately so.** ``get-all-tray`` is
 ``PROVIDER_ADMIN``-scoped, while the requirement asks for something a *tenant*
-can inspect. Both halves are worth reporting differently:
+can inspect. Three answers are possible and each means something different:
 
-  - Provider credentials: the firmware versions come back and the check passes.
-    That is the "better than nothing" half -- it proves NICo holds the data and
-    exposes it, so the remaining work is authorisation rather than plumbing.
+  - Provider credentials on a Flow site: the firmware versions come back and the
+    check passes. That is the "better than nothing" half -- it proves NICo holds
+    the data and exposes it, so the remaining work is authorisation rather than
+    plumbing.
   - Tenant credentials: NICo answers 403, and that is *the finding*, not a
-    failure of this step. It emits a structured skip naming the gap, so a
-    tenant-perspective run reports "not available to a tenant" rather than
-    "broken".
+    failure of this step. A structured skip names the gap, so a
+    tenant-perspective run reports "not available to a tenant", not "broken".
+  - A site without NICo Flow: NICo answers 412 and there is no tray inventory at
+    all. Also a skip, but a different fact -- the capability is absent from the
+    site rather than withheld from the caller. Confusing the two would report a
+    lab-configuration detail as a provider gap.
 
 A run therefore cannot tell you the tenant half works, only whether the
 provider half does. Nothing here escalates privilege to paper over that.
@@ -94,12 +98,26 @@ FIRMWARE_KEY = "firmwareVersion"
 # Tray covers every rack component; only NVSwitch trays are in scope here.
 SWITCH_TRAY_TYPE = "NVSwitch"
 
-# get-all-tray is PROVIDER_ADMIN-scoped. A tenant-scoped caller getting 403 is
-# the requirement's gap, not a broken step, so it is reported as a skip.
 GAP_ID = "BFX03-02"
+
+# Two different "not available here" answers, worth telling apart because they
+# are different findings. Neither is a provider fault, so both skip.
+#
+# 401/403: get-all-tray is PROVIDER_ADMIN-scoped, so a tenant-scoped caller is
+#   turned away. That is exactly the half of BFX03-02 NICo does not satisfy.
 TENANT_GAP_REASON = (
     "NICo exposes switch tray firmware only to PROVIDER_ADMIN callers (get-all-tray returned 403); "
     "a tenant cannot inspect switch tray firmware, which is the tenant-visible half of BFX03-02"
+)
+# 412: trays live in NICo Flow, and a site without Flow has no tray inventory to
+#   report at all. Observed on a live v2.2.0 site as
+#   {"source":"nico","message":"Site does not have NICo Flow enabled"}. The spec
+#   documents this prerequisite and a 412 for the sibling get-all-tasks but not
+#   for get-all-tray, so the live build is the authority here.
+NO_FLOW_REASON = (
+    "The site does not have NICo Flow enabled, so it holds no switch tray inventory to inspect "
+    "(get-all-tray returned 412). Tray firmware is a NICo Flow capability; a site without it cannot "
+    "demonstrate BFX03-02 either way"
 )
 
 
@@ -135,8 +153,9 @@ def main() -> int:
         result["error"] = str(exc)
         return emit(result)
     except HTTPError as exc:
-        if exc.code in (401, 403):
-            skip = skip_result(args.site_id, TENANT_GAP_REASON, gap=GAP_ID)
+        reason = {401: TENANT_GAP_REASON, 403: TENANT_GAP_REASON, 412: NO_FLOW_REASON}.get(exc.code)
+        if reason:
+            skip = skip_result(args.site_id, reason, gap=GAP_ID)
             skip["trays"] = []
             return emit(skip)
         result["error"] = f"{type(exc).__name__}: {exc}"

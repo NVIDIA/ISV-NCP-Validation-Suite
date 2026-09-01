@@ -1994,7 +1994,7 @@ domains:
           - description: A break-fix service works with a variety of components to detect, triage, remediate, and validate nodes in an AI factory. The critical focus here is on the GPU nodes, but the system can scale beyond.
             example: Lazarus, Shoreline
             tests:
-              - summary: Check that GPUd or Sentinel is running
+              - summary: Check that a GPU health monitoring process is running (e.g. NV Sentinel or GPUd as of Aug 2026)
                 priority: P1
                 labels:
                   - bare_metal
@@ -2006,6 +2006,8 @@ domains:
                 legacy_ids: [BFX-XX-01]
                 status: approved
                 notes: ""
+                github_issues:
+                  - "#555"
                 milestone: ""
               - summary: Verify that Tenants can be notified, by some communication system, of planned future node maintenance
                 labels:

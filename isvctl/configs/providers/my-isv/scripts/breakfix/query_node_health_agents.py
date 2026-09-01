@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Query node health agents GPUd/Sentinel (BFX04-01) - my-isv template."""
+"""Query the GPU health monitoring process on each node (BFX04-01) - my-isv template."""
 
 from __future__ import annotations
 
@@ -23,9 +23,11 @@ def main() -> int:
 
     return emit_stub(
         "query_node_health_agents",
-        hint="GPUd/Sentinel health agent probe",
+        hint="GPU health monitoring process probe",
         agents_observable=True,
-        agents=[{"node_id": "demo-node-001", "agent_name": "sentinel", "running": True}],
+        # agent_name must hold whichever process this platform actually found:
+        # the check accepts any name but rejects a running record without one.
+        agents=[{"node_id": "demo-node-001", "agent_name": "nvsentinel", "running": True}],
     )
 
 

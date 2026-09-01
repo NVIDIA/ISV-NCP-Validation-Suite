@@ -46,7 +46,7 @@ GAPS: dict[str, tuple[str, dict[str, Any]]] = {
         {"notices_queryable": False, "notices": []},
     ),
     "BFX04-01": (
-        "GPUd/Sentinel/Maestro node health agents are not observable via NICo REST (BFX04-01 gap)",
+        "No GPU health monitoring process is observable via NICo REST (BFX04-01 gap)",
         {"agents_observable": False, "agents": []},
     ),
     "BFX05-01": (

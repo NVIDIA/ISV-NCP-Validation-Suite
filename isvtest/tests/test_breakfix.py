@@ -434,8 +434,13 @@ class TestBmcKernelLogCheck:
         assert "No log entries" in check.message
 
 
+def _agents(*records: dict[str, Any]) -> dict[str, Any]:
+    """Return a BFX04-01 step payload carrying ``records``."""
+    return {"success": True, "agents_observable": True, "agents": list(records)}
+
+
 class TestNodeHealthAgentCheck:
-    """Cover the BFX04-01 GPUd/Sentinel health-agent check."""
+    """Cover the BFX04-01 GPU health monitoring process check."""
 
     def test_fails_when_agents_not_observable(self) -> None:
         """A platform that cannot observe health agents fails."""
@@ -444,6 +449,55 @@ class TestNodeHealthAgentCheck:
     def test_fails_when_no_agents_returned(self) -> None:
         """BFX04-01 needs evidence an agent is running; zero records is not that."""
         assert not _run(NodeHealthAgentCheck, {"success": True, "agents_observable": True, "agents": []}).passed
+
+    def test_passes_and_names_the_agents_it_found(self) -> None:
+        """Any agent name satisfies the check, and the result reports which ones."""
+        check = _run(
+            NodeHealthAgentCheck,
+            _agents(
+                {"node_id": "gpu-1", "agent_name": "nvsentinel", "running": True},
+                {"node_id": "gpu-2", "agent_name": "gpud", "running": True},
+            ),
+        )
+        assert check.passed
+        assert "gpud" in check.message
+        assert "nvsentinel" in check.message
+
+    def test_passes_for_an_agent_the_check_has_never_heard_of(self) -> None:
+        """The requirement is a health monitoring process, not a named product."""
+        assert _run(
+            NodeHealthAgentCheck, _agents({"node_id": "gpu-1", "agent_name": "acme-gpu-watch", "running": True})
+        ).passed
+
+    def test_fails_when_any_reported_node_lacks_a_running_agent(self) -> None:
+        """One uncovered GPU node prevents a false partial-coverage pass."""
+        check = _run(
+            NodeHealthAgentCheck,
+            _agents(
+                {"node_id": "gpu-1", "agent_name": "nvsentinel", "running": True},
+                {"node_id": "gpu-2", "agent_name": "", "running": False},
+            ),
+        )
+        assert not check.passed
+        assert "gpu-2" in check.message
+
+    def test_fails_when_a_running_agent_is_unnamed(self) -> None:
+        """``running`` with no agent_name is the provider's say-so, not evidence."""
+        check = _run(NodeHealthAgentCheck, _agents({"node_id": "gpu-1", "running": True}))
+        assert not check.passed
+        assert "agent_name" in check.message
+
+    def test_fails_when_a_record_cannot_name_its_node(self) -> None:
+        """An agent nobody can locate gives an operator nothing to act on."""
+        check = _run(NodeHealthAgentCheck, _agents({"agent_name": "nvsentinel", "running": True}))
+        assert not check.passed
+        assert "node_id" in check.message
+
+    def test_skips_when_the_provider_reports_no_gpu_nodes(self) -> None:
+        """No GPU nodes at the site is not applicable rather than failing."""
+        step_output = _agents() | {"skipped": True, "skip_reason": "No GPU nodes detected"}
+        with pytest.raises(pytest.skip.Exception, match="No GPU nodes detected"):
+            _run(NodeHealthAgentCheck, step_output)
 
 
 class TestCordonNodeCheck:

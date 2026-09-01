@@ -18,6 +18,7 @@ from isvtest.validations.breakfix import (
     HostReplacementCheck,
     MaintenanceEventsCheck,
     NodeHealthAgentCheck,
+    NvSwitchFirmwareCheck,
     PlannedMaintenanceNotificationCheck,
     RepairHistoryCheck,
     ReportNodeRepairCheck,
@@ -487,3 +488,43 @@ class TestNotificationChecks:
     def test_fails_when_channel_unobservable(self, check_class: type[BaseValidation], label: str) -> None:
         """A channel the provider cannot observe fails."""
         assert not _run(check_class, {"success": True, "notification_channel_observable": False}).passed
+
+
+def _tray(**overrides: Any) -> dict[str, Any]:
+    """Build a tray record that satisfies the BFX03-02 contract."""
+    return {"tray_id": "nvsw-001", "firmware_version": "1.0.0", **overrides}
+
+
+class TestNvSwitchFirmwareCheck:
+    """Cover the BFX03-02 switch tray firmware check."""
+
+    def test_passes_when_every_tray_reports_a_version(self) -> None:
+        """A named tray with a firmware version is the passing case."""
+        check = _run(NvSwitchFirmwareCheck, {"success": True, "trays": [_tray()]})
+        assert check.passed
+        assert "1 NV switch tray" in check.message
+
+    def test_fails_when_a_tray_cannot_name_itself(self) -> None:
+        """A version with no tray attached does not say which hardware to update."""
+        tray = _tray()
+        del tray["tray_id"]
+        check = _run(NvSwitchFirmwareCheck, {"success": True, "trays": [tray]})
+        assert not check.passed
+        assert "missing tray_id" in check.message
+
+    def test_fails_when_a_tray_reports_no_version(self) -> None:
+        """The failure names the tray, so an operator knows where to look."""
+        check = _run(NvSwitchFirmwareCheck, {"success": True, "trays": [_tray(firmware_version="")]})
+        assert not check.passed
+        assert "missing firmware_version" in check.message
+        assert "nvsw-001" in check.message
+
+    def test_fails_when_fewer_trays_than_required(self) -> None:
+        """min_trays lets a suite demand more than one tray's worth of evidence."""
+        check = NvSwitchFirmwareCheck(config={"step_output": {"success": True, "trays": [_tray()]}, "min_trays": 2})
+        check.run()
+        assert not check.passed
+
+    def test_fails_when_the_trays_list_is_absent(self) -> None:
+        """A step that reports no trays key has not answered the question."""
+        assert not _run(NvSwitchFirmwareCheck, {"success": True}).passed

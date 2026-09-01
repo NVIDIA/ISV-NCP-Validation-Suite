@@ -6,10 +6,14 @@
 
 Several break-fix requirements have no NICo tenant REST surface to exercise:
 the remaining mutating BFX01 workflows have no rack- or replacement-level API,
-and the BFX02-02/BFX03-02/BFX04-01/BFX05/BFX06 signals are not exposed at all.
-Each of those steps emits a structured skip naming the gap rather than a hard
-failure, so the suite reports "not available on this platform" instead of
-"broken".
+and the BFX02-02/BFX04-01/BFX05/BFX06 signals are not exposed at all. Each of
+those steps emits a structured skip naming the gap rather than a hard failure,
+so the suite reports "not available on this platform" instead of "broken".
+
+A requirement leaves this table once any part of it is reachable: BFX03-02 now
+has a real step, because NICo does hold tray firmware and only withholds it
+from tenants, and that distinction is worth reporting from the step that made
+the call rather than from a blanket stub.
 
 One script serves all of them: the per-requirement reason and the zeroed
 contract fields the validation reads live in ``GAPS`` below, selected by
@@ -40,10 +44,6 @@ GAPS: dict[str, tuple[str, dict[str, Any]]] = {
     "BFX02-02": (
         "NICo has no retirement-notice query API (BFX02-02 gap)",
         {"notices_queryable": False, "notices": []},
-    ),
-    "BFX03-02": (
-        "NV switch tray firmware is not queryable via NICo tenant REST API (BFX03-02 gap)",
-        {"trays": []},
     ),
     "BFX04-01": (
         "GPUd/Sentinel/Maestro node health agents are not observable via NICo REST (BFX04-01 gap)",

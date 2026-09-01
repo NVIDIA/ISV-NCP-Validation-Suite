@@ -9,6 +9,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 from types import ModuleType
 
@@ -43,6 +44,7 @@ def _ssh_stub(
     """Return a ``subprocess.run`` stub answering per-node ``systemctl`` probes."""
 
     def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        """Answer one probe with the canned states for the node it targets."""
         if calls is not None:
             calls.append(command)
         node = command[-2]
@@ -108,6 +110,7 @@ def test_unconfigured_nodes_skip_before_any_ssh(
     module = _load_script()
 
     def refuse(*_: object, **__: object) -> subprocess.CompletedProcess[str]:
+        """Fail the test if the script attempts any SSH probe."""
         raise AssertionError("no SSH probe may run without configured nodes")
 
     monkeypatch.setattr(module.subprocess, "run", refuse)
@@ -222,13 +225,14 @@ def test_transport_failure_is_reported_without_leaking_output(
 def test_unreadable_node_never_becomes_a_not_running_record(monkeypatch: pytest.MonkeyPatch) -> None:
     """A node we could not reach must not be reported as lacking an agent.
 
-    ``NodeHealthAgentCheck`` reads only ``running``, so emitting a record for an
-    unreachable node would blame a missing agent for an access problem.
+    Emitting a record for an unreachable node would blame a missing agent for an
+    access problem, so the step fails naming the node instead.
     """
     module = _load_script()
     states = {"gpu-01": _states("gpud")}
 
     def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        """Answer known nodes with canned states; fail the SSH transport otherwise."""
         node = command[-2]
         if node not in states:
             return subprocess.CompletedProcess(command, 255, stdout="", stderr="no route to host")
@@ -252,6 +256,50 @@ def test_every_unreadable_node_is_named(monkeypatch: pytest.MonkeyPatch) -> None
         module._query(["gpu-01", "gpu-02", "gpu-03"])
 
     assert str(raised.value) == "Health agent query failed for 3 node(s): gpu-01, gpu-02, gpu-03"
+
+
+def test_sweep_abandons_probes_once_the_budget_expires(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A fleet too large to probe in the budget must fail by name, not be killed.
+
+    Without the deadline the step outlives its timeout and the orchestrator kills
+    it, discarding stdout and with it the JSON contract -- so the run reports no
+    finding at all rather than naming the nodes it never reached.
+    """
+    module = _load_script()
+
+    def crawl(node: str) -> str:
+        """Answer far more slowly than the sweep's budget allows."""
+        time.sleep(5)
+        return "gpud"
+
+    monkeypatch.setattr(module, "_probe", crawl)
+
+    with pytest.raises(module.NodeHealthQueryError) as raised:
+        module._query(["gpu-01", "gpu-02"], budget_seconds=0.05)
+
+    assert "exceeded its 0.05s budget" in str(raised.value)
+    assert "gpu-01" in str(raised.value)
+    assert "gpu-02" in str(raised.value)
+
+
+def test_a_completed_probe_survives_a_budget_expiry(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Abandoning the sweep must not discard evidence already collected."""
+    module = _load_script()
+
+    def uneven(node: str) -> str:
+        """Answer immediately for the first node and stall on the second."""
+        if node == "gpu-02":
+            time.sleep(5)
+        return "gpud"
+
+    monkeypatch.setattr(module, "_probe", uneven)
+
+    with pytest.raises(module.NodeHealthQueryError) as raised:
+        module._query(["gpu-01", "gpu-02"], budget_seconds=0.5)
+
+    message = str(raised.value)
+    assert "1 node(s) unprobed: gpu-02" in message
+    assert "gpu-01" not in message
 
 
 def test_unreadable_systemctl_output_fails_rather_than_passing(monkeypatch: pytest.MonkeyPatch) -> None:

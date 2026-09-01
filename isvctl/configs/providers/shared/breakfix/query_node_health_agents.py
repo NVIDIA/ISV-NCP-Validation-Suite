@@ -23,6 +23,13 @@ BFX04-01 proves rather than making it easier to pass.
 Probes fan out across nodes because they are dominated by SSH round-trip
 latency. A serial probe of a full rack would outlive the step timeout and the
 executor would kill the process before it could emit its JSON contract.
+
+Fanning out bounds the wall time but does not cap it: an unreachable fleet costs
+``ceil(nodes / MAX_CONCURRENT_PROBES) * PROBE_TIMEOUT_SECONDS``, which on a large
+enough fleet still outruns the step timeout. So the sweep also has its own
+deadline, set below that timeout, and stops when it expires. Whatever remains
+unprobed fails the step by name -- a diagnosis the orchestrator cannot give,
+because killing the process discards stdout and with it the JSON contract.
 """
 
 from __future__ import annotations
@@ -32,7 +39,7 @@ import json
 import re
 import subprocess
 import sys
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 TEST_NAME = "query_node_health_agents"
@@ -50,6 +57,11 @@ NODE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 CONNECT_TIMEOUT_SECONDS = 10
 PROBE_TIMEOUT_SECONDS = 20
 MAX_CONCURRENT_PROBES = 8
+
+# Wall-clock ceiling for the whole sweep, chosen to sit below the step timeout
+# the providers configure (300s) with room for interpreter start-up and for one
+# in-flight probe to drain. Raise both together, never this alone.
+PROBE_BUDGET_SECONDS = 240.0
 
 
 class NodeHealthQueryError(RuntimeError):
@@ -128,7 +140,28 @@ def _probe(node: str) -> str | None:
         return None
 
 
-def _query(nodes: list[str]) -> dict[str, Any]:
+def _sweep(nodes: list[str], budget_seconds: float) -> dict[str, str | None]:
+    """Probe every node concurrently, abandoning the sweep when the budget expires.
+
+    Returns the units keyed by node; a node missing from the mapping was never
+    probed within the budget. Shutdown does not wait, so the result is reported
+    while any in-flight probe drains -- it is bounded by its own subprocess
+    timeout, and stdout has already been written by the time it finishes.
+    """
+    units: dict[str, str | None] = {}
+    pool = ThreadPoolExecutor(max_workers=min(MAX_CONCURRENT_PROBES, len(nodes)))
+    try:
+        pending = {pool.submit(_probe, node): node for node in nodes}
+        for future in as_completed(pending, timeout=budget_seconds):
+            units[pending[future]] = future.result()
+    except TimeoutError:
+        pass
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+    return units
+
+
+def _query(nodes: list[str], budget_seconds: float = PROBE_BUDGET_SECONDS) -> dict[str, Any]:
     """Return provider-neutral BFX04-01 evidence for every configured node."""
     if not nodes:
         return {
@@ -140,11 +173,18 @@ def _query(nodes: list[str]) -> dict[str, Any]:
             "agents_observable": False,
             "agents": [],
         }
-    with ThreadPoolExecutor(max_workers=min(MAX_CONCURRENT_PROBES, len(nodes))) as pool:
-        units = list(pool.map(_probe, nodes))
-    # Every unreadable node is named, so a fleet-wide access problem takes one
-    # run to diagnose rather than one run per node.
-    unreadable = [node for node, unit in zip(nodes, units, strict=True) if unit is None]
+    units = _sweep(nodes, budget_seconds)
+    # Every node that yielded nothing is named, so a fleet-wide access problem
+    # takes one run to diagnose rather than one run per node. Abandoned and
+    # unreadable are reported apart: the first is this sweep running out of
+    # time, the second is the node refusing to answer.
+    abandoned = [node for node in nodes if node not in units]
+    unreadable = [node for node in nodes if units.get(node) is None and node in units]
+    if abandoned:
+        raise NodeHealthQueryError(
+            f"Health agent query exceeded its {budget_seconds:g}s budget with "
+            f"{len(abandoned)} node(s) unprobed: {', '.join(abandoned)}"
+        )
     if unreadable:
         raise NodeHealthQueryError(f"Health agent query failed for {len(unreadable)} node(s): {', '.join(unreadable)}")
     return {
@@ -152,10 +192,7 @@ def _query(nodes: list[str]) -> dict[str, Any]:
         "platform": "bare_metal",
         "test_name": TEST_NAME,
         "agents_observable": True,
-        "agents": [
-            {"node_id": node, "agent_name": unit, "running": bool(unit)}
-            for node, unit in zip(nodes, units, strict=True)
-        ],
+        "agents": [{"node_id": node, "agent_name": units[node], "running": bool(units[node])} for node in nodes],
     }
 
 

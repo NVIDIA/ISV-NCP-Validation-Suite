@@ -4281,6 +4281,7 @@ def test_node_repair_classifies_which_enter_failures_need_a_clear() -> None:
     module = _load_node_repair_script()
 
     def _http(code: int) -> HTTPError:
+        """Build an HTTPError carrying only the status code, which is all the classifier reads."""
         return HTTPError("http://x", code, "boom", None, None)  # type: ignore[arg-type]
 
     assert module._enter_may_have_applied(_http(400)) is False
@@ -4292,7 +4293,7 @@ def test_node_repair_classifies_which_enter_failures_need_a_clear() -> None:
 
 
 def _fail_the_enter_patch(
-    module: ModuleType, monkeypatch: pytest.MonkeyPatch, enter_error: Exception
+    module: ModuleType, monkeypatch: pytest.MonkeyPatch, enter_error: BaseException
 ) -> list[dict[str, Any]]:
     """Fail the enter-repair PATCH with ``enter_error`` and record every PATCH body.
 
@@ -4302,6 +4303,7 @@ def _fail_the_enter_patch(
     bodies: list[dict[str, Any]] = []
 
     def _patch(_org: str, _path: str, _token: str, **kw: Any) -> dict[str, Any]:
+        """Record the body of every PATCH, failing only the enter-repair one."""
         body = kw.get("body", {})
         bodies.append(body)
         if body.get("onlineRepair", {}).get("enabled"):
@@ -4339,6 +4341,26 @@ def test_node_repair_clears_repair_when_the_enter_response_is_lost(
     assert "TimeoutError" in out["error"]
 
 
+def test_node_repair_clears_repair_when_the_enter_is_interrupted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A KeyboardInterrupt during the enter PATCH is exactly as ambiguous as a timeout.
+
+    ``except Exception`` around the enter PATCH would let a Ctrl-C or SystemExit skip
+    ``restore_required``, propagate straight out, and strand the node in Repairing.
+    """
+    module = _load_node_repair_script()
+    _stub_node_repair_discovery(module, monkeypatch)
+    bodies = _fail_the_enter_patch(module, monkeypatch, KeyboardInterrupt())
+    monkeypatch.setattr(module, "delete_if_present", lambda *_a, **_kw: None)
+    monkeypatch.setattr(module, "time", _fast_clock())
+    monkeypatch.setattr(sys, "argv", _node_repair_argv("--machine-id", "m-1"))
+
+    with pytest.raises(KeyboardInterrupt):
+        module.main()
+
+    # The interrupt still propagates, but the clear must have been attempted first.
+    assert bodies == [module._enter_body(), module._exit_body()]
+
+
 def test_node_repair_does_not_clear_when_nico_refuses_the_enter(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -4373,6 +4395,7 @@ def test_node_repair_keeps_the_root_cause_when_the_clear_also_fails(
     attempted: list[str] = []
 
     def _patch(*_a: object, **_kw: object) -> dict[str, Any]:
+        """Always fail the enter-repair PATCH, recording that it was attempted."""
         attempted.append("patch")
         raise TimeoutError("read timed out")
 

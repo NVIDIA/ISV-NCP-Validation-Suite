@@ -416,7 +416,9 @@ def main() -> int:
 
         try:
             forge_patch(args.org, f"machine/{machine_id}", auth.token, base_url=args.api_base, body=_enter_body())
-        except Exception as e:
+        except BaseException as e:
+            # BaseException, not Exception: a KeyboardInterrupt or SystemExit during
+            # the PATCH is exactly as ambiguous as a timeout, and must still clear.
             restore_required = _enter_may_have_applied(e)
             raise
         restore_required = True

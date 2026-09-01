@@ -4550,20 +4550,47 @@ def test_switch_firmware_reports_provider_visible_trays(
     ]
 
 
-def test_switch_firmware_tolerates_alternate_field_spellings(
+def test_switch_firmware_falls_back_through_documented_identifiers(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Reporting "no firmware version" over a field name would be a false finding.
+    """Tray.id is not a required field, so identity falls back within the schema.
 
-    The tray schema is less exercised than machine's, so the step accepts the
-    plausible spellings rather than blaming the provider for our guess.
+    componentId and name are the other documented identifiers; reporting a tray
+    as unidentified when it named itself one of those ways would be our fault,
+    not the provider's.
     """
     module = _load_switch_firmware_script()
-    trays = [{"trayId": "nvsw-1", "firmware_version": "9.9.9"}]
+    trays = [{"componentId": "fm100-abc", "firmwareVersion": "9.9.9"}, {"name": "nvsw-2", "firmwareVersion": "9.9.8"}]
 
     _code, out = _run_firmware(module, monkeypatch, capsys, lambda *_a, **_kw: trays)
 
-    assert out["trays"] == [{"tray_id": "nvsw-1", "firmware_version": "9.9.9"}]
+    assert out["trays"] == [
+        {"tray_id": "fm100-abc", "firmware_version": "9.9.9"},
+        {"tray_id": "nvsw-2", "firmware_version": "9.9.8"},
+    ]
+
+
+def test_switch_firmware_requests_only_switch_trays(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Tray covers every rack component, so the query must narrow to NVSwitch.
+
+    Without the filter the listing also returns Compute and PowerShelf trays,
+    and demanding a firmware version from a power shelf would fail the provider
+    for a question BFX03-02 never asked.
+    """
+    module = _load_switch_firmware_script()
+    seen: list[dict[str, str]] = []
+
+    def _list(_org: str, _path: str, _tok: str, **kw: Any) -> list[dict[str, Any]]:
+        """Record the query parameters and return one switch tray."""
+        seen.append(kw.get("params", {}))
+        return [{"id": "nvsw-1", "firmwareVersion": "1.0.0"}]
+
+    _run_firmware(module, monkeypatch, capsys, _list)
+
+    assert seen[0]["type"] == module.SWITCH_TRAY_TYPE
+    assert seen[0]["siteId"] == "site-1"
 
 
 @pytest.mark.parametrize("status", [401, 403])

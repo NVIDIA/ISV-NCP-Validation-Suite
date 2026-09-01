@@ -578,34 +578,103 @@ class CordonNodeCheck(BaseValidation):
 
 
 class NodeHealthAgentCheck(BaseValidation):
-    """Validate GPUd or Sentinel (node health agent) is running (BFX04-01).
+    """Validate a GPU health monitoring process is running on every node (BFX04-01).
+
+    Deliberately agent-neutral. The requirement originally named GPUd and NV
+    Sentinel, but a test written against a named product outlives the product,
+    and either could be cancelled; what a tenant is owed is that *something* is
+    watching GPU health. So this check never matches on a name -- the provider's
+    step decides which processes count on its platform and reports the one it
+    found there.
+
+    Which is why ``agent_name`` is required rather than merely documented. Once
+    the name is not matched, it is the only thing separating a real probe from a
+    hardcoded ``true``: a record of ``{"running": true}`` is the provider
+    asserting its own capability, the same say-so the BFX02/BFX05/BFX06 checks
+    refuse. It is also what makes the result actionable, since an operator
+    reading "a process is running" cannot tell whether it is the right one.
+
+    ``agents`` must cover every GPU node the platform has, not just the ones the
+    step was configured with or could reach. A step that reports a single healthy
+    node and silently omits the rest passes while proving nothing about the
+    fleet, so a node with nothing running belongs in the list as
+    ``running: false`` -- and may omit ``agent_name``, having none to report --
+    rather than being dropped. A site with no GPU nodes at all is the one case
+    with nothing to assert, and is a structured skip rather than an empty list.
+
+    ``nodes_expected`` is what makes that coverage an assertion instead of a
+    request. Without it the check can only judge the list it is handed and has no
+    way to know the list is whole, so a step configured with three of a site's
+    sixty-four GPU nodes passes BFX04-01 for the whole site. Naming the fleet
+    size separately forces the provider to say what it was covering, and to say
+    it somewhere other than the list it is being graded on -- the same reason
+    ``agent_name`` is required above. A provider that will not report its GPU
+    node count has not answered the requirement, so its absence fails rather
+    than relaxing into "however many turned up".
 
     Step output:
         success, agents: list[{node_id, agent_name, running: bool}]
-        agents_observable: bool
+        agents_observable: bool, nodes_expected: int
     """
 
-    description: ClassVar[str] = "Check that GPUd or Sentinel is running"
+    description: ClassVar[str] = "Check that a GPU health monitoring process is running"
     timeout: ClassVar[int] = 120
 
     def run(self) -> None:
-        """Assert a node health agent is reported and running on every node."""
+        """Assert every node reports a named GPU health monitoring process, running."""
         step_output = _step_output(self)
         if step_output is None:
             return
         if not step_output.get("agents_observable"):
-            self.set_failed("Node health agents (GPUd/Sentinel) are not observable on this platform")
+            self.set_failed("GPU health monitoring processes are not observable on this platform")
             return
-        agents = step_output.get("agents") or []
+        agents = [a for a in (step_output.get("agents") or []) if isinstance(a, dict)]
         if not agents:
-            self.set_failed("No node health agent (GPUd/Sentinel) records returned; none is running")
+            self.set_failed("No health monitoring process records returned; none is running")
             return
-        not_running = [a for a in agents if isinstance(a, dict) and not a.get("running")]
+        # Checked before the running state so the failures below can name nodes.
+        unidentified = [a for a in agents if not _has_fields(a, "node_id")]
+        if unidentified:
+            self.set_failed(f"{len(unidentified)} health agent record(s) missing node_id")
+            return
+        # ``is not True`` rather than falsiness: the contract says bool, and the
+        # string "false" is truthy, so a provider serialising it would pass.
+        not_running = [a for a in agents if a.get("running") is not True]
         if not_running:
             labels = ", ".join(_record_label(a, "node_id", "machine_id") for a in not_running[:3])
-            self.set_failed(f"Health agent not running on {len(not_running)} node(s): {labels}")
+            self.set_failed(f"No GPU health monitoring process running on {len(not_running)} node(s): {labels}")
             return
-        self.set_passed(f"Node health agent running on {len(agents)} node(s)")
+        # Only demanded of running records: a node with nothing running has no
+        # name to report, and it already failed above.
+        unnamed = [a for a in agents if not _has_fields(a, "agent_name")]
+        if unnamed:
+            labels = ", ".join(_record_label(a, "node_id", "machine_id") for a in unnamed[:3])
+            self.set_failed(
+                f"{len(unnamed)} node(s) reported a running health monitoring process "
+                f"without naming it in agent_name: {labels}"
+            )
+            return
+        # Last, so the coverage figure is only quoted once the records behind it
+        # have been shown to be real.
+        expected = step_output.get("nodes_expected")
+        if not isinstance(expected, int) or isinstance(expected, bool) or expected < 1:
+            self.set_failed(
+                "Step output did not report how many GPU nodes the platform has "
+                "in nodes_expected, so this result cannot show it covered the fleet"
+            )
+            return
+        # Distinct nodes, not records: counting records would let one healthy
+        # node_id repeated to the fleet size satisfy the very check that exists
+        # because the provider's own account of its coverage is not trusted.
+        covered = {str(a["node_id"]).strip() for a in agents}
+        if len(covered) < expected:
+            self.set_failed(
+                f"Health agent records cover {len(covered)} of {expected} GPU node(s); "
+                f"the {expected - len(covered)} unreported node(s) are unproven"
+            )
+            return
+        names = sorted({str(a["agent_name"]).strip() for a in agents})
+        self.set_passed(f"GPU health monitoring process running on {len(covered)} node(s): {', '.join(names[:3])}")
 
 
 class PlannedMaintenanceNotificationCheck(_QueryableRecordsCheck):

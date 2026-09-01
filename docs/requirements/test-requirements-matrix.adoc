@@ -1410,7 +1410,7 @@ docs/requirements/test-requirements-matrix.yaml. Run `make plan` to regenerate.
 | [[BFX04-01]]BFX04-01
 | Infrastructure and Data Services
 | Break-Fix
-| Check that GPUd or Sentinel is running
+| Check that a GPU health monitoring process is running (e.g. NV Sentinel or GPUd as of Aug 2026)
 | BFX04
 | reference
 | full

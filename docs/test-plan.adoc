@@ -2188,15 +2188,15 @@ a|
 .3+| Lazarus, Shoreline
 | [[BFX04-01]]BFX04-01
 | BFX04
-|
+| https://github.com/NVIDIA/ai-cloud-validation/issues/555[#555]
 | bare_metal, breakfix
 |
 | P1
-a|
+a| https://github.com/NVIDIA/ai-cloud-validation/issues/555[#555]
 | LimitedEnv
 |
 |
-| Check that GPUd or Sentinel is running
+| Check that a GPU health monitoring process is running (e.g. NV Sentinel or GPUd as of Aug 2026)
 | approved
 |
 

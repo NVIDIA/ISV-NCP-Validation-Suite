@@ -9,6 +9,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from types import ModuleType
@@ -263,43 +264,63 @@ def test_sweep_abandons_probes_once_the_budget_expires(monkeypatch: pytest.Monke
 
     Without the deadline the step outlives its timeout and the orchestrator kills
     it, discarding stdout and with it the JSON contract -- so the run reports no
-    finding at all rather than naming the nodes it never reached.
+    finding at all rather than naming the nodes it never reached. The elapsed
+    assertion is the other half: returning the finding is only useful if it
+    arrives without waiting on the stragglers it is reporting.
     """
     module = _load_script()
+    release = threading.Event()
 
     def crawl(node: str) -> str:
-        """Answer far more slowly than the sweep's budget allows."""
-        time.sleep(5)
+        """Block until the test releases it, far beyond the sweep's budget."""
+        release.wait(timeout=10)
         return "gpud"
 
     monkeypatch.setattr(module, "_probe", crawl)
 
-    with pytest.raises(module.NodeHealthQueryError) as raised:
-        module._query(["gpu-01", "gpu-02"], budget_seconds=0.05)
+    started = time.monotonic()
+    try:
+        with pytest.raises(module.NodeHealthQueryError) as raised:
+            module._query(["gpu-01", "gpu-02"], budget_seconds=0.05)
+        elapsed = time.monotonic() - started
+    finally:
+        release.set()
 
+    # Generous next to the 10s probes it abandons, so a loaded CI runner cannot
+    # fail this, while still proving the sweep did not wait for them.
+    assert elapsed < 2.0
     assert "exceeded its 0.05s budget" in str(raised.value)
     assert "gpu-01" in str(raised.value)
     assert "gpu-02" in str(raised.value)
 
 
 def test_a_completed_probe_survives_a_budget_expiry(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Abandoning the sweep must not discard evidence already collected."""
+    """Abandoning the sweep must not discard evidence already collected.
+
+    Asserts on the sweep rather than the error text: ``_query`` reports abandoned
+    nodes before it looks at unreadable ones, so the same message would come back
+    had the completed probe been retained as ``None``.
+    """
     module = _load_script()
+    release = threading.Event()
 
     def uneven(node: str) -> str:
-        """Answer immediately for the first node and stall on the second."""
+        """Answer immediately for the first node and block on the second."""
         if node == "gpu-02":
-            time.sleep(5)
+            release.wait(timeout=10)
         return "gpud"
 
     monkeypatch.setattr(module, "_probe", uneven)
 
-    with pytest.raises(module.NodeHealthQueryError) as raised:
-        module._query(["gpu-01", "gpu-02"], budget_seconds=0.5)
+    started = time.monotonic()
+    try:
+        units = module._sweep(["gpu-01", "gpu-02"], budget_seconds=0.5)
+        elapsed = time.monotonic() - started
+    finally:
+        release.set()
 
-    message = str(raised.value)
-    assert "1 node(s) unprobed: gpu-02" in message
-    assert "gpu-01" not in message
+    assert elapsed < 2.5
+    assert units == {"gpu-01": "gpud"}
 
 
 def test_unreadable_systemctl_output_fails_rather_than_passing(monkeypatch: pytest.MonkeyPatch) -> None:

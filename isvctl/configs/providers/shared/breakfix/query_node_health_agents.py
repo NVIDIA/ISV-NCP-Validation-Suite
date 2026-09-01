@@ -128,15 +128,11 @@ def _parse_expected(value: str, nodes: list[str]) -> int:
             "a probe of a subset would pass BFX04-01 for the whole fleet"
         )
     try:
-        expected = int(value)
+        # A count below 1 is rejected by _query, which owns that invariant for
+        # every caller rather than only for this one.
+        return int(value)
     except ValueError:
         raise NodeHealthQueryError(f"Invalid expected node count: {value!r}") from None
-    if expected < 1:
-        raise NodeHealthQueryError(
-            f"Expected node count must be at least 1 with {len(nodes)} node(s) to probe, got {expected}; "
-            "a platform reporting no GPU nodes cannot be covered by probing some"
-        )
-    return expected
 
 
 def _active_unit(node: str, units: tuple[str, ...] = AGENT_UNITS) -> str:
@@ -218,11 +214,18 @@ def _sweep(nodes: list[str], budget_seconds: float, units: tuple[str, ...] = AGE
 
 def _query(
     nodes: list[str],
+    *,
+    expected: int,
     budget_seconds: float = PROBE_BUDGET_SECONDS,
     units: tuple[str, ...] = AGENT_UNITS,
-    expected: int = 0,
 ) -> dict[str, Any]:
-    """Return provider-neutral BFX04-01 evidence for every configured node."""
+    """Return provider-neutral BFX04-01 evidence for every configured node.
+
+    ``expected`` is required and has no default on purpose. The one value that
+    must never fill it in is ``len(nodes)``: the fleet size exists to be compared
+    against the list being probed, so sourcing it from that list compares it to
+    itself and any subset covers the fleet.
+    """
     if not nodes:
         return {
             "success": True,
@@ -233,6 +236,13 @@ def _query(
             "agents_observable": False,
             "agents": [],
         }
+    # Enforced here rather than only at the CLI boundary so no caller can reach
+    # the contract below with a size that asserts nothing.
+    if expected < 1:
+        raise NodeHealthQueryError(
+            f"Expected node count must be at least 1 with {len(nodes)} node(s) to probe, got {expected}; "
+            "a platform reporting no GPU nodes cannot be covered by probing some"
+        )
     probed = _sweep(nodes, budget_seconds, units)
     # Every node that yielded nothing is named, so a fleet-wide access problem
     # takes one run to diagnose rather than one run per node. Abandoned and
@@ -252,10 +262,7 @@ def _query(
         "platform": "bare_metal",
         "test_name": TEST_NAME,
         "agents_observable": True,
-        # The separately declared fleet size. It falls back to the probed count
-        # only for direct callers that passed none; the CLI always supplies one,
-        # because a size read off the list under test compares it to itself.
-        "nodes_expected": expected or len(nodes),
+        "nodes_expected": expected,
         "agents": [{"node_id": node, "agent_name": probed[node], "running": bool(probed[node])} for node in nodes],
     }
 

@@ -184,7 +184,7 @@ def test_any_supported_agent_unit_covers_its_node(unit: str, monkeypatch: pytest
     module = _load_script()
     monkeypatch.setattr(module.subprocess, "run", _ssh_stub({"gpu-01": _states(unit)}))
 
-    result = module._query(["gpu-01"])
+    result = module._query(["gpu-01"], expected=1)
 
     assert result["agents_observable"] is True
     assert result["agents"] == [{"node_id": "gpu-01", "agent_name": unit, "running": True}]
@@ -195,7 +195,7 @@ def test_node_without_an_active_agent_is_reported_as_not_running(monkeypatch: py
     module = _load_script()
     monkeypatch.setattr(module.subprocess, "run", _ssh_stub({"gpu-01": _states()}))
 
-    result = module._query(["gpu-01"])
+    result = module._query(["gpu-01"], expected=1)
 
     assert result["agents"] == [{"node_id": "gpu-01", "agent_name": "", "running": False}]
 
@@ -206,7 +206,7 @@ def test_evidence_stays_aligned_with_its_node(monkeypatch: pytest.MonkeyPatch) -
     states = {"gpu-01": _states("gpud"), "gpu-02": _states(), "gpu-03": _states("nvsentinel")}
     monkeypatch.setattr(module.subprocess, "run", _ssh_stub(states))
 
-    result = module._query(["gpu-01", "gpu-02", "gpu-03"])
+    result = module._query(["gpu-01", "gpu-02", "gpu-03"], expected=3)
 
     assert result["agents"] == [
         {"node_id": "gpu-01", "agent_name": "gpud", "running": True},
@@ -221,7 +221,7 @@ def test_repeated_nodes_are_probed_once(monkeypatch: pytest.MonkeyPatch) -> None
     calls: list[list[str]] = []
     monkeypatch.setattr(module.subprocess, "run", _ssh_stub({"gpu-01": _states("gpud")}, calls))
 
-    result = module._query(module._parse_nodes("gpu-01, gpu-01"))
+    result = module._query(module._parse_nodes("gpu-01, gpu-01"), expected=1)
 
     assert len(calls) == 1
     assert [agent["node_id"] for agent in result["agents"]] == ["gpu-01"]
@@ -233,7 +233,7 @@ def test_probe_ends_ssh_options_before_the_node(monkeypatch: pytest.MonkeyPatch)
     calls: list[list[str]] = []
     monkeypatch.setattr(module.subprocess, "run", _ssh_stub({"gpu-01": _states("gpud")}, calls))
 
-    module._query(["gpu-01"])
+    module._query(["gpu-01"], expected=1)
 
     assert calls[0][:1] == ["ssh"]
     assert calls[0][-3:] == [
@@ -268,11 +268,27 @@ def test_a_zero_fleet_size_is_rejected_rather_than_covered() -> None:
     The orchestrator's missing-step guard only fires on an empty render, so
     ``| length`` over a failed inventory step would slip through as a fleet of
     nobody that any number of records covers. It has to fail here instead.
+
+    Asserted on ``_query`` rather than on the CLI parser because that is where
+    the invariant belongs: every caller is held to it, not just this one, and the
+    rejection lands before any node is probed.
     """
     module = _load_script()
 
     with pytest.raises(module.NodeHealthQueryError, match="at least 1"):
-        module._parse_expected("0", ["gpu-01"])
+        module._query(["gpu-01"], expected=0)
+
+
+def test_a_probed_fleet_size_cannot_come_from_the_probed_list() -> None:
+    """``expected`` has no default, so ``len(nodes)`` cannot quietly become the fleet.
+
+    The size exists to be compared against the list under test; sourcing it from
+    that list compares it to itself and lets any subset cover the fleet.
+    """
+    module = _load_script()
+
+    with pytest.raises(TypeError, match="expected"):
+        module._query(["gpu-01"])  # type: ignore[call-arg]
 
 
 def test_unconfigured_nodes_need_no_fleet_size() -> None:
@@ -288,7 +304,7 @@ def test_a_fleet_can_name_its_own_agent_units(monkeypatch: pytest.MonkeyPatch) -
     calls: list[list[str]] = []
     monkeypatch.setattr(module.subprocess, "run", _ssh_stub({"gpu-01": "active\n"}, calls))
 
-    result = module._query(["gpu-01"], units=("acme-gpu-watch",))
+    result = module._query(["gpu-01"], expected=1, units=("acme-gpu-watch",))
 
     assert calls[0][-1] == "systemctl is-active acme-gpu-watch 2>/dev/null || true"
     assert result["agents"] == [{"node_id": "gpu-01", "agent_name": "acme-gpu-watch", "running": True}]
@@ -357,7 +373,7 @@ def test_unreadable_node_never_becomes_a_not_running_record(monkeypatch: pytest.
     monkeypatch.setattr(module.subprocess, "run", fake_run)
 
     with pytest.raises(module.NodeHealthQueryError) as raised:
-        module._query(["gpu-01", "gpu-99"])
+        module._query(["gpu-01", "gpu-99"], expected=2)
 
     assert "gpu-99" in str(raised.value)
 
@@ -369,7 +385,7 @@ def test_every_unreadable_node_is_named(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(module.subprocess, "run", lambda *_, **__: unreachable)
 
     with pytest.raises(module.NodeHealthQueryError) as raised:
-        module._query(["gpu-01", "gpu-02", "gpu-03"])
+        module._query(["gpu-01", "gpu-02", "gpu-03"], expected=3)
 
     assert str(raised.value) == "Health agent query failed for 3 node(s): gpu-01, gpu-02, gpu-03"
 
@@ -396,7 +412,7 @@ def test_sweep_abandons_probes_once_the_budget_expires(monkeypatch: pytest.Monke
     started = time.monotonic()
     try:
         with pytest.raises(module.NodeHealthQueryError) as raised:
-            module._query(["gpu-01", "gpu-02"], budget_seconds=0.05)
+            module._query(["gpu-01", "gpu-02"], expected=2, budget_seconds=0.05)
         elapsed = time.monotonic() - started
     finally:
         release.set()
@@ -444,7 +460,7 @@ def test_unreadable_systemctl_output_fails_rather_than_passing(monkeypatch: pyte
     monkeypatch.setattr(module.subprocess, "run", _ssh_stub({"gpu-01": ""}))
 
     with pytest.raises(module.NodeHealthQueryError, match="gpu-01"):
-        module._query(["gpu-01"])
+        module._query(["gpu-01"], expected=1)
 
     assert module._probe("gpu-01") is None
 

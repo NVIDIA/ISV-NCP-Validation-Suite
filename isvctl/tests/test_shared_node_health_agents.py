@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import functools
 import importlib.util
 import json
 import subprocess
@@ -28,8 +29,13 @@ BARE_METAL_SUITE = ISVCTL_ROOT / "configs" / "suites" / "bare_metal.yaml"
 NICO_CONFIG = ISVCTL_ROOT / "configs" / "providers" / "nico" / "config" / "bare_metal.yaml"
 
 
+@functools.cache
 def _load_script() -> ModuleType:
-    """Load the shared node-health-agent script as a module for direct testing."""
+    """Load the shared node-health-agent script as a module for direct testing.
+
+    Cached: every patch a test applies to the module goes through ``monkeypatch``
+    and is unwound afterwards, so re-executing the script per test buys nothing.
+    """
     spec = importlib.util.spec_from_file_location("test_shared_node_health_agents_script", SCRIPT)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
@@ -55,9 +61,12 @@ def _ssh_stub(
 
 
 def _states(*active_units: str) -> str:
-    """Return ``systemctl is-active`` output marking ``active_units`` active."""
-    units = ("fleetintd", "gpud", "nvsentinel", "gpu-health-monitor")
-    return "".join(f"{'active' if unit in active_units else 'inactive'}\n" for unit in units)
+    """Return ``systemctl is-active`` output marking ``active_units`` active.
+
+    Reads the unit list off the module so extending ``AGENT_UNITS`` cannot leave
+    the fixtures returning too few states, which the script reads as unreadable.
+    """
+    return "".join(f"{'active' if unit in active_units else 'inactive'}\n" for unit in _load_script().AGENT_UNITS)
 
 
 def test_bare_metal_suite_declares_the_provider_neutral_validation() -> None:
@@ -130,7 +139,7 @@ def test_unconfigured_nodes_skip_before_any_ssh(
     }
 
 
-@pytest.mark.parametrize("unit", ["fleetintd", "gpud", "nvsentinel", "gpu-health-monitor"])
+@pytest.mark.parametrize("unit", _load_script().AGENT_UNITS)
 def test_any_supported_agent_unit_covers_its_node(unit: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """Either accepted agent, under any of its unit names, proves coverage."""
     module = _load_script()
@@ -191,9 +200,38 @@ def test_probe_ends_ssh_options_before_the_node(monkeypatch: pytest.MonkeyPatch)
     assert calls[0][-3:] == [
         "--",
         "gpu-01",
-        "systemctl is-active fleetintd gpud nvsentinel gpu-health-monitor 2>/dev/null || true",
+        f"systemctl is-active {' '.join(module.AGENT_UNITS)} 2>/dev/null || true",
     ]
     assert "BatchMode=yes" in calls[0]
+
+
+def test_a_fleet_can_name_its_own_agent_units(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A site running another agent configures it rather than editing shared/."""
+    module = _load_script()
+    calls: list[list[str]] = []
+    monkeypatch.setattr(module.subprocess, "run", _ssh_stub({"gpu-01": "active\n"}, calls))
+
+    result = module._query(["gpu-01"], units=("acme-gpu-watch",))
+
+    assert calls[0][-1] == "systemctl is-active acme-gpu-watch 2>/dev/null || true"
+    assert result["agents"] == [{"node_id": "gpu-01", "agent_name": "acme-gpu-watch", "running": True}]
+
+
+def test_unset_units_fall_back_to_the_reference_default() -> None:
+    """An unconfigured --units keeps this reference's own answer to the question."""
+    module = _load_script()
+
+    assert module._parse_units("") == module.AGENT_UNITS
+    assert module._parse_units("acme-watch, other.service") == ("acme-watch", "other.service")
+
+
+@pytest.mark.parametrize("value", ["unit;reboot", "$(reboot)", "-oProxyCommand=x"])
+def test_unsafe_unit_names_are_rejected(value: str) -> None:
+    """Units reach a remote shell, so they cannot smuggle shell syntax either."""
+    module = _load_script()
+
+    with pytest.raises(module.NodeHealthQueryError, match="Invalid health agent unit name"):
+        module._parse_units(value)
 
 
 @pytest.mark.parametrize("value", ["-oProxyCommand=x", "gpu-01;reboot", "$(reboot)", "root@gpu-01"])
@@ -271,7 +309,7 @@ def test_sweep_abandons_probes_once_the_budget_expires(monkeypatch: pytest.Monke
     module = _load_script()
     release = threading.Event()
 
-    def crawl(node: str) -> str:
+    def crawl(node: str, *_: object) -> str:
         """Block until the test releases it, far beyond the sweep's budget."""
         release.wait(timeout=10)
         return "gpud"
@@ -304,7 +342,7 @@ def test_a_completed_probe_survives_a_budget_expiry(monkeypatch: pytest.MonkeyPa
     module = _load_script()
     release = threading.Event()
 
-    def uneven(node: str) -> str:
+    def uneven(node: str, *_: object) -> str:
         """Answer immediately for the first node and block on the second."""
         if node == "gpu-02":
             release.wait(timeout=10)

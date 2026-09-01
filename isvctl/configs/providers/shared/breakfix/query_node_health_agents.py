@@ -12,7 +12,8 @@ expose agent state.
 BFX04-01 itself names no product -- the requirement is that *something* is
 watching GPU health -- so the unit list below is this reference's answer to
 "which processes count here", not the requirement's. A fleet running a different
-agent extends ``AGENT_UNITS`` rather than failing the check.
+agent names its own units through ``--units`` rather than editing this shared
+script or failing the check.
 
 Nodes are named through ``--nodes``. With none configured the step emits a
 structured skip: an unconfigured site is indistinguishable from one with no
@@ -44,23 +45,33 @@ from typing import Any
 
 TEST_NAME = "query_node_health_agents"
 
-# systemd units this reference probes: NVIDIA Fleet Intelligence Agent (GPUd)
-# and the NVSentinel GPU Health Monitor, as of Aug 2026. Generic GPU telemetry
-# (a DCGM exporter, say) is deliberately absent: it reports metrics but performs
-# none of the health detection the requirement is about.
+# systemd units this reference probes by default: NVIDIA Fleet Intelligence
+# Agent (GPUd) and the NVSentinel GPU Health Monitor, as of Aug 2026. Generic
+# GPU telemetry (a DCGM exporter, say) is deliberately absent: it reports
+# metrics but performs none of the health detection the requirement is about.
 AGENT_UNITS = ("fleetintd", "gpud", "nvsentinel", "gpu-health-monitor")
 
 # SSH targets must be bare host names or addresses. Anything else could be read
 # by ssh(1) as an option (`-oProxyCommand=...`) or by the remote shell.
 NODE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
+# Unit names reach the remote shell inside the systemctl argument list, so they
+# are held to systemd's own alphabet rather than interpolated as given.
+UNIT_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9@._-]*$")
+
 CONNECT_TIMEOUT_SECONDS = 10
 PROBE_TIMEOUT_SECONDS = 20
-MAX_CONCURRENT_PROBES = 8
+# Sized so a full rack still fits inside the budget below: the sweep costs
+# ceil(nodes / MAX_CONCURRENT_PROBES) * PROBE_TIMEOUT_SECONDS at worst, and each
+# probe is a blocked thread waiting on SSH rather than any local work.
+MAX_CONCURRENT_PROBES = 32
 
-# Wall-clock ceiling for the whole sweep, chosen to sit below the step timeout
-# the providers configure (300s) with room for interpreter start-up and for one
-# in-flight probe to drain. Raise both together, never this alone.
+# Wall-clock ceiling for reporting, chosen to sit below the step timeout the
+# providers configure (300s). The process itself can outlive this by one probe
+# timeout -- the pool's threads are non-daemon, so the interpreter joins the
+# in-flight probes on the way out even though the JSON is already written --
+# so budget for PROBE_BUDGET_SECONDS + PROBE_TIMEOUT_SECONDS against that
+# timeout, and raise the two together, never this alone.
 PROBE_BUDGET_SECONDS = 240.0
 
 
@@ -76,15 +87,30 @@ class ProviderArgumentParser(argparse.ArgumentParser):
         raise NodeHealthQueryError(f"Invalid arguments: {message}")
 
 
+def _split(value: str) -> list[str]:
+    """Return the de-duplicated, non-empty items of a comma- or space-separated list."""
+    return list(dict.fromkeys(part for part in re.split(r"[\s,]+", value) if part))
+
+
 def _parse_nodes(value: str) -> list[str]:
     """Return the de-duplicated node list, rejecting unsafe SSH targets."""
-    nodes = list(dict.fromkeys(part for part in re.split(r"[\s,]+", value) if part))
+    nodes = _split(value)
     if any(not NODE_PATTERN.fullmatch(node) for node in nodes):
         raise NodeHealthQueryError("Invalid bare-metal node name")
     return nodes
 
 
-def _active_unit(node: str) -> str:
+def _parse_units(value: str) -> tuple[str, ...]:
+    """Return the unit list to probe, falling back to this reference's default."""
+    units = _split(value)
+    if not units:
+        return AGENT_UNITS
+    if any(not UNIT_PATTERN.fullmatch(unit) for unit in units):
+        raise NodeHealthQueryError("Invalid health agent unit name")
+    return tuple(units)
+
+
+def _active_unit(node: str, units: tuple[str, ...] = AGENT_UNITS) -> str:
     """Return the supported agent unit active on ``node``, or an empty string.
 
     ``systemctl is-active`` prints one state per unit argument, in order, and
@@ -93,7 +119,7 @@ def _active_unit(node: str) -> str:
     keeps the remote shell's status clean so a non-zero status can only mean the
     SSH transport itself failed.
     """
-    remote_command = f"systemctl is-active {' '.join(AGENT_UNITS)} 2>/dev/null || true"
+    remote_command = f"systemctl is-active {' '.join(units)} 2>/dev/null || true"
     command = [
         "ssh",
         "-o",
@@ -120,12 +146,12 @@ def _active_unit(node: str) -> str:
         raise NodeHealthQueryError(f"Health agent query failed for {node}")
 
     states = completed.stdout.split()
-    if len(states) != len(AGENT_UNITS):
+    if len(states) != len(units):
         raise NodeHealthQueryError(f"Health agent query returned an unreadable status for {node}")
-    return next((unit for unit, state in zip(AGENT_UNITS, states, strict=True) if state == "active"), "")
+    return next((unit for unit, state in zip(units, states, strict=True) if state == "active"), "")
 
 
-def _probe(node: str) -> str | None:
+def _probe(node: str, units: tuple[str, ...] = AGENT_UNITS) -> str | None:
     """Return the active agent unit, or None when the node yielded no evidence.
 
     A node we could not read is not a node without an agent, so it must not
@@ -135,12 +161,12 @@ def _probe(node: str) -> str | None:
     every GPU node accounted for rather than the covered ones listed.
     """
     try:
-        return _active_unit(node)
+        return _active_unit(node, units)
     except NodeHealthQueryError:
         return None
 
 
-def _sweep(nodes: list[str], budget_seconds: float) -> dict[str, str | None]:
+def _sweep(nodes: list[str], budget_seconds: float, units: tuple[str, ...] = AGENT_UNITS) -> dict[str, str | None]:
     """Probe every node concurrently, abandoning the sweep when the budget expires.
 
     Returns the units keyed by node; a node missing from the mapping was never
@@ -148,20 +174,24 @@ def _sweep(nodes: list[str], budget_seconds: float) -> dict[str, str | None]:
     while any in-flight probe drains -- it is bounded by its own subprocess
     timeout, and stdout has already been written by the time it finishes.
     """
-    units: dict[str, str | None] = {}
+    probed: dict[str, str | None] = {}
     pool = ThreadPoolExecutor(max_workers=min(MAX_CONCURRENT_PROBES, len(nodes)))
     try:
-        pending = {pool.submit(_probe, node): node for node in nodes}
+        pending = {pool.submit(_probe, node, units): node for node in nodes}
         for future in as_completed(pending, timeout=budget_seconds):
-            units[pending[future]] = future.result()
+            probed[pending[future]] = future.result()
     except TimeoutError:
         pass
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
-    return units
+    return probed
 
 
-def _query(nodes: list[str], budget_seconds: float = PROBE_BUDGET_SECONDS) -> dict[str, Any]:
+def _query(
+    nodes: list[str],
+    budget_seconds: float = PROBE_BUDGET_SECONDS,
+    units: tuple[str, ...] = AGENT_UNITS,
+) -> dict[str, Any]:
     """Return provider-neutral BFX04-01 evidence for every configured node."""
     if not nodes:
         return {
@@ -173,13 +203,13 @@ def _query(nodes: list[str], budget_seconds: float = PROBE_BUDGET_SECONDS) -> di
             "agents_observable": False,
             "agents": [],
         }
-    units = _sweep(nodes, budget_seconds)
+    probed = _sweep(nodes, budget_seconds, units)
     # Every node that yielded nothing is named, so a fleet-wide access problem
     # takes one run to diagnose rather than one run per node. Abandoned and
     # unreadable are reported apart: the first is this sweep running out of
     # time, the second is the node refusing to answer.
-    abandoned = [node for node in nodes if node not in units]
-    unreadable = [node for node in nodes if units.get(node) is None and node in units]
+    abandoned = [node for node in nodes if node not in probed]
+    unreadable = [node for node in nodes if node in probed and probed[node] is None]
     if abandoned:
         raise NodeHealthQueryError(
             f"Health agent query exceeded its {budget_seconds:g}s budget with "
@@ -192,7 +222,7 @@ def _query(nodes: list[str], budget_seconds: float = PROBE_BUDGET_SECONDS) -> di
         "platform": "bare_metal",
         "test_name": TEST_NAME,
         "agents_observable": True,
-        "agents": [{"node_id": node, "agent_name": units[node], "running": bool(units[node])} for node in nodes],
+        "agents": [{"node_id": node, "agent_name": probed[node], "running": bool(probed[node])} for node in nodes],
     }
 
 
@@ -204,9 +234,14 @@ def main() -> int:
         default="",
         help="Comma-separated GPU nodes to inspect over SSH",
     )
+    parser.add_argument(
+        "--units",
+        default="",
+        help=f"Comma-separated systemd units that count as a GPU health agent (default: {', '.join(AGENT_UNITS)})",
+    )
     try:
         args = parser.parse_args()
-        result = _query(_parse_nodes(args.nodes))
+        result = _query(_parse_nodes(args.nodes), units=_parse_units(args.units))
     except NodeHealthQueryError as exc:
         result = {
             "success": False,

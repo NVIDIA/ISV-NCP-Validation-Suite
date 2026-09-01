@@ -223,6 +223,16 @@ class RepairHistoryCheck(_QueryableRecordsCheck):
 class NvSwitchFirmwareCheck(BaseValidation):
     """Validate NV switch tray firmware versions are inspectable (BFX03-02).
 
+    Partial: NICo holds tray firmware but exposes it only to provider admins,
+    while the requirement asks for something a tenant can inspect. The provider
+    step reports that split itself -- data on provider credentials, a structured
+    skip naming the gap on tenant credentials -- so this check only ever judges
+    the half that answered.
+
+    A tray must identify itself as well as report a version, for the same reason
+    a log-history host must (BFX03-03): a version with no tray attached tells an
+    operator nothing about which hardware to go and update.
+
     Step output:
         success, trays: list[{tray_id, firmware_version}]
     """
@@ -242,9 +252,14 @@ class NvSwitchFirmwareCheck(BaseValidation):
         min_trays = self._parse_positive_int("min_trays", default=1)
         if min_trays is None:
             return
-        missing = [t for t in trays if not (isinstance(t, dict) and (t.get("firmware_version") or "").strip())]
+        unidentified = [t for t in trays if not _has_fields(t, "tray_id")]
+        if unidentified:
+            self.set_failed(f"{len(unidentified)} switch tray(s) missing tray_id")
+            return
+        missing = [t for t in trays if not _has_fields(t, "firmware_version")]
         if missing:
-            self.set_failed(f"{len(missing)} switch tray(s) missing firmware_version")
+            labels = ", ".join(_record_label(t, "tray_id") for t in missing[:3])
+            self.set_failed(f"{len(missing)} switch tray(s) missing firmware_version: {labels}")
             return
         if len(trays) < min_trays:
             self.set_failed(f"Expected at least {min_trays} NV switch tray(s), got {len(trays)}")

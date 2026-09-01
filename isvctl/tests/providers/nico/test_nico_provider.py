@@ -4650,3 +4650,249 @@ def test_return_node_fails_when_the_instance_outlives_the_delete(
     assert out["success"] is False
     assert out["operation"]["instance_deleted"] is False
     assert "still existed" in out["operation"]["message"]
+
+
+def _load_switch_firmware_script() -> ModuleType:
+    """Load the query_switch_firmware script as a module for direct unit testing."""
+    return _load_nico_script("breakfix/query_switch_firmware.py", "test_nico_query_switch_firmware")
+
+
+def _firmware_argv() -> list[str]:
+    """Build argv for the query_switch_firmware CLI."""
+    return ["query_switch_firmware.py", "--org", "ncx", "--site-id", "site-1", "--api-base", "http://x"]
+
+
+def _run_firmware(
+    module: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], lister: object
+) -> tuple[int, dict[str, Any]]:
+    """Run the script with ``forge_get_all`` stubbed, returning exit code and JSON."""
+    monkeypatch.setattr(module, "resolve_auth", lambda: SimpleNamespace(token="t"))
+    monkeypatch.setattr(module, "forge_get_all", lister)
+    monkeypatch.setattr(sys, "argv", _firmware_argv())
+    code = module.main()
+    return code, json.loads(capsys.readouterr().out)
+
+
+def test_switch_firmware_reports_provider_visible_trays(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Provider credentials see tray firmware, which is the half NICo does expose."""
+    module = _load_switch_firmware_script()
+    trays = [{"id": "nvsw-1", "firmwareVersion": "1.2.3"}, {"id": "nvsw-2", "firmwareVersion": "1.2.4"}]
+
+    code, out = _run_firmware(module, monkeypatch, capsys, lambda *_a, **_kw: trays)
+
+    assert code == 0
+    assert out["success"] is True
+    assert out["trays"] == [
+        {"tray_id": "nvsw-1", "firmware_version": "1.2.3"},
+        {"tray_id": "nvsw-2", "firmware_version": "1.2.4"},
+    ]
+
+
+def test_switch_firmware_falls_back_through_documented_identifiers(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Tray.id is not a required field, so identity falls back within the schema.
+
+    componentId and name are the other documented identifiers; reporting a tray
+    as unidentified when it named itself one of those ways would be our fault,
+    not the provider's.
+    """
+    module = _load_switch_firmware_script()
+    trays = [{"componentId": "fm100-abc", "firmwareVersion": "9.9.9"}, {"name": "nvsw-2", "firmwareVersion": "9.9.8"}]
+
+    _code, out = _run_firmware(module, monkeypatch, capsys, lambda *_a, **_kw: trays)
+
+    assert out["trays"] == [
+        {"tray_id": "fm100-abc", "firmware_version": "9.9.9"},
+        {"tray_id": "nvsw-2", "firmware_version": "9.9.8"},
+    ]
+
+
+def test_switch_firmware_requests_only_switch_trays(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Tray covers every rack component, so the query must narrow to NVSwitch.
+
+    Without the filter the listing also returns Compute and PowerShelf trays,
+    and demanding a firmware version from a power shelf would fail the provider
+    for a question BFX03-02 never asked.
+    """
+    module = _load_switch_firmware_script()
+    seen: list[dict[str, str]] = []
+
+    def _list(_org: str, _path: str, _tok: str, **kw: Any) -> list[dict[str, Any]]:
+        """Record the query parameters and return one switch tray."""
+        seen.append(kw.get("params", {}))
+        return [{"id": "nvsw-1", "firmwareVersion": "1.0.0"}]
+
+    _run_firmware(module, monkeypatch, capsys, _list)
+
+    assert seen[0]["type"] == module.SWITCH_TRAY_TYPE
+    assert seen[0]["siteId"] == "site-1"
+
+
+def test_switch_firmware_reports_the_tenant_gap_rather_than_failing(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """get-all-tray is PROVIDER_ADMIN-scoped, so a 403 is the finding.
+
+    BFX03-02 asks for something a tenant can inspect. A tenant-scoped caller
+    being turned away is the requirement's gap, not a broken step, so it skips
+    and names it instead of reporting a failure against the provider.
+    """
+    module = _load_switch_firmware_script()
+
+    def _refuse(*_a: object, **_kw: object) -> list[dict[str, Any]]:
+        raise HTTPError("http://x", 403, "Forbidden", None, None)
+
+    code, out = _run_firmware(module, monkeypatch, capsys, _refuse)
+
+    assert code == 0
+    assert out["skipped"] is True
+    assert out["gap"] == module.GAP_ID
+    assert "PROVIDER_ADMIN" in out["skip_reason"]
+    assert out["trays"] == []
+
+
+def test_switch_firmware_fails_on_unauthenticated_requests(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A 401 is an expired or rejected token, not the tenant-visibility gap.
+
+    Mapping it to the 403 skip would hide a credential problem behind a finding
+    that only applies when the caller is authenticated as the wrong role.
+    """
+    module = _load_switch_firmware_script()
+
+    def _unauthenticated(*_a: object, **_kw: object) -> list[dict[str, Any]]:
+        raise HTTPError("http://x", 401, "Unauthorized", None, None)
+
+    code, out = _run_firmware(module, monkeypatch, capsys, _unauthenticated)
+
+    assert code == 1
+    assert out["success"] is False
+    assert out["error_type"] == "auth"
+    assert out.get("skipped") is not True
+
+
+def _assert_no_flow_skip(out: dict[str, Any], module: ModuleType) -> None:
+    """Shared assertions for the 412 skip: names the REST flag, not the tenant gap."""
+    assert out["skipped"] is True
+    assert out["gap"] == module.GAP_ID
+    assert "Site.capabilities.flow" in out["skip_reason"]
+    assert "rack_management_enabled" in out["skip_reason"]
+    assert "PROVIDER_ADMIN" not in out["skip_reason"]
+    assert out["trays"] == []
+
+
+def test_switch_firmware_skips_a_site_without_nico_flow(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Trays are gated by Site.capabilities.flow; a site without it has no inventory.
+
+    Observed on a live site as 412 "Site does not have NICo Flow enabled". The
+    skip names the REST flag and warns that Core's rack_management_enabled is a
+    separate switch -- /admin shows the latter, which does not gate GET /tray.
+    When the expected-switch lookup also fails, the skip still names the flag
+    rather than turning a lab-configuration skip into an error.
+    """
+    module = _load_switch_firmware_script()
+
+    def _no_flow(*_a: object, **_kw: object) -> list[dict[str, Any]]:
+        raise HTTPError("http://x", 412, "Precondition Failed", None, None)
+
+    code, out = _run_firmware(module, monkeypatch, capsys, _no_flow)
+
+    assert code == 0
+    _assert_no_flow_skip(out, module)
+    assert "expected-switch" not in out["skip_reason"]
+
+
+def test_switch_firmware_412_reports_declared_switch_count(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Hardware already declared makes the 412 skip an ask for the flag, not a dead end."""
+    module = _load_switch_firmware_script()
+
+    def _list(_org: str, path: str, _tok: str, **_kw: Any) -> list[dict[str, Any]]:
+        if path == "tray":
+            raise HTTPError("http://x", 412, "Precondition Failed", None, None)
+        if path == "expected-switch":
+            return [{"id": str(i)} for i in range(18)]
+        raise AssertionError(path)
+
+    code, out = _run_firmware(module, monkeypatch, capsys, _list)
+
+    assert code == 0
+    _assert_no_flow_skip(out, module)
+    assert "18 expected-switch" in out["skip_reason"]
+
+
+def test_switch_firmware_412_reports_when_no_switches_are_declared(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Zero declared switches is a different fact from 'hardware is waiting on the flag'."""
+    module = _load_switch_firmware_script()
+
+    def _list(_org: str, path: str, _tok: str, **_kw: Any) -> list[dict[str, Any]]:
+        if path == "tray":
+            raise HTTPError("http://x", 412, "Precondition Failed", None, None)
+        if path == "expected-switch":
+            return []
+        raise AssertionError(path)
+
+    code, out = _run_firmware(module, monkeypatch, capsys, _list)
+
+    assert code == 0
+    _assert_no_flow_skip(out, module)
+    assert "No expected-switch records are declared" in out["skip_reason"]
+
+
+def test_switch_firmware_fails_on_other_http_errors(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A 500 is a provider failure, not an authorisation gap."""
+    module = _load_switch_firmware_script()
+
+    def _boom(*_a: object, **_kw: object) -> list[dict[str, Any]]:
+        raise HTTPError("http://x", 500, "Server Error", None, None)
+
+    code, out = _run_firmware(module, monkeypatch, capsys, _boom)
+
+    assert code == 1
+    assert out["success"] is False
+    assert out.get("skipped") is not True
+
+
+def test_switch_firmware_skips_a_site_with_no_trays(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """No trays cannot demonstrate the API either way, so it must not pass."""
+    module = _load_switch_firmware_script()
+
+    code, out = _run_firmware(module, monkeypatch, capsys, lambda *_a, **_kw: [])
+
+    assert code == 0
+    assert out["skipped"] is True
+    assert out["trays"] == []
+
+
+def test_switch_firmware_reports_missing_auth(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Unconfigured credentials are a structured auth error, not a gap."""
+    module = _load_switch_firmware_script()
+
+    def _no_auth() -> object:
+        raise module.NicoAuthError("not configured")
+
+    monkeypatch.setattr(module, "resolve_auth", _no_auth)
+    monkeypatch.setattr(sys, "argv", _firmware_argv())
+
+    code = module.main()
+    out = json.loads(capsys.readouterr().out)
+
+    assert code == 1
+    assert out["error_type"] == "auth"

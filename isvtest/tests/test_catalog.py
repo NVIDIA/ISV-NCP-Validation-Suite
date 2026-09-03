@@ -15,6 +15,8 @@
 
 """Tests for the catalog module."""
 
+import subprocess
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -310,12 +312,41 @@ class TestGetCatalogVersion:
         assert len(version) > 0
 
     def test_returns_dev_when_not_installed(self) -> None:
-        """Test that 'dev' is returned when package is not installed."""
+        """Test that 'dev' is returned when package is not installed.
+
+        The checkout lookup is disabled too: it takes precedence over the
+        metadata, and these tests run from a checkout that would answer it.
+        """
         from importlib.metadata import PackageNotFoundError
 
-        with patch(
-            "isvreporter.version.version",
-            side_effect=PackageNotFoundError("isvtest"),
-        ):
-            version = get_catalog_version()
-            assert version == "dev"
+        from isvreporter.version import describe_checkout
+
+        describe_checkout.cache_clear()
+        with patch("isvreporter.version._repository_root", return_value=None):
+            with patch(
+                "isvreporter.version.version",
+                side_effect=PackageNotFoundError("isvtest"),
+            ):
+                version = get_catalog_version()
+                assert version == "dev"
+        describe_checkout.cache_clear()
+
+    def test_a_build_between_releases_reports_its_distance_from_the_tag(self) -> None:
+        """The catalog must not claim a release number it was not built at.
+
+        A catalog built past a tag carries checks that release never had, so
+        publishing it under the tag's number is what let renamed checks go
+        unmatched and read as never run.
+        """
+        from isvreporter.version import describe_checkout
+
+        describe_checkout.cache_clear()
+        with patch("isvreporter.version._repository_root", return_value=Path("/repo")):
+            with patch(
+                "subprocess.run",
+                return_value=subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout="v0.9.0-3-g08339c7\n", stderr=""
+                ),
+            ):
+                assert get_catalog_version() == "0.9.0.post3+g08339c7"
+        describe_checkout.cache_clear()

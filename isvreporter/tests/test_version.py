@@ -15,22 +15,116 @@
 
 """Tests for version module."""
 
+import subprocess
+from collections.abc import Iterator
 from importlib.metadata import PackageNotFoundError
+from pathlib import Path
 from unittest.mock import patch
 
-from isvreporter.version import get_version
+import pytest
+
+from isvreporter.version import describe_checkout, get_version, is_released_version
+
+
+@pytest.fixture(autouse=True)
+def _uncached_describe() -> Iterator[None]:
+    """Drop the describe cache so each test starts from a cold lookup.
+
+    The result is cached for the life of the process, and these tests run
+    inside a checkout that would otherwise answer every one of them.
+    """
+    describe_checkout.cache_clear()
+    yield
+    describe_checkout.cache_clear()
+
+
+def _describe(output: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(args=[], returncode=0, stdout=f"{output}\n", stderr="")
 
 
 class TestGetVersion:
     """Tests for get_version function."""
 
-    def test_returns_metadata_version_when_installed(self) -> None:
-        """When package is installed, version comes from importlib.metadata."""
-        with patch("isvreporter.version.version", return_value="1.2.3") as mock:
-            assert get_version("isvreporter") == "1.2.3"
-            mock.assert_called_once_with("isvreporter")
+    def test_returns_metadata_version_when_not_in_a_checkout(self) -> None:
+        """Installed from a wheel, the metadata version is all there is."""
+        with patch("isvreporter.version._repository_root", return_value=None):
+            with patch("isvreporter.version.version", return_value="1.2.3") as mock:
+                assert get_version("isvreporter") == "1.2.3"
+                mock.assert_called_once_with("isvreporter")
 
     def test_returns_dev_when_package_not_found(self) -> None:
-        """When metadata lookup fails, return 'dev'."""
-        with patch("isvreporter.version.version", side_effect=PackageNotFoundError("nope")):
-            assert get_version("nonexistent") == "dev"
+        """When metadata lookup fails and there is no checkout, return 'dev'."""
+        with patch("isvreporter.version._repository_root", return_value=None):
+            with patch("isvreporter.version.version", side_effect=PackageNotFoundError("nope")):
+                assert get_version("nonexistent") == "dev"
+
+    def test_a_clean_release_tag_reports_the_bare_version(self) -> None:
+        """On the tag itself there is no provenance to add."""
+        with patch("isvreporter.version._repository_root", return_value=Path("/repo")):
+            with patch("subprocess.run", return_value=_describe("v0.10.0-0-g6634373")):
+                assert get_version("isvtest") == "0.10.0"
+
+    def test_commits_past_a_tag_carry_the_distance_and_commit(self) -> None:
+        """The lab-42 case: 0.9.0 plus three commits is not 0.9.0."""
+        with patch("isvreporter.version._repository_root", return_value=Path("/repo")):
+            with patch("subprocess.run", return_value=_describe("v0.9.0-3-g08339c7")):
+                assert get_version("isvtest") == "0.9.0.post3+g08339c7"
+
+    def test_uncommitted_changes_are_marked_dirty(self) -> None:
+        """A dirty tree is not the tag even at distance zero."""
+        with patch("isvreporter.version._repository_root", return_value=Path("/repo")):
+            with patch("subprocess.run", return_value=_describe("v0.9.0-0-g6634373-dirty")):
+                assert get_version("isvtest") == "0.9.0.post0+g6634373.dirty"
+
+    def test_the_tag_beats_stale_installed_metadata(self) -> None:
+        """Metadata is written at install time and goes stale when the tree moves."""
+        with patch("isvreporter.version._repository_root", return_value=Path("/repo")):
+            with patch("subprocess.run", return_value=_describe("v0.10.0-0-g6634373")):
+                with patch("isvreporter.version.version", return_value="0.9.0"):
+                    assert get_version("isvtest") == "0.10.0"
+
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            OSError("git not installed"),
+            subprocess.CalledProcessError(128, "git"),
+            subprocess.TimeoutExpired("git", 5),
+        ],
+    )
+    def test_a_failed_lookup_falls_back_rather_than_breaking_the_run(self, failure: Exception) -> None:
+        """No git, no tags, or a hung call must never fail a reporting call."""
+        with patch("isvreporter.version._repository_root", return_value=Path("/repo")):
+            with patch("subprocess.run", side_effect=failure):
+                with patch("isvreporter.version.version", return_value="0.9.0"):
+                    assert get_version("isvtest") == "0.9.0"
+
+    def test_unparseable_describe_output_falls_back(self) -> None:
+        """An unrelated repository above site-packages must not win."""
+        with patch("isvreporter.version._repository_root", return_value=Path("/repo")):
+            with patch("subprocess.run", return_value=_describe("some-other-scheme")):
+                with patch("isvreporter.version.version", return_value="0.9.0"):
+                    assert get_version("isvtest") == "0.9.0"
+
+    def test_the_checkout_is_described_once_per_process(self) -> None:
+        """Every package's lookup would otherwise spawn its own git."""
+        with patch("isvreporter.version._repository_root", return_value=Path("/repo")):
+            with patch("subprocess.run", return_value=_describe("v0.9.0-3-g08339c7")) as mock:
+                get_version("isvtest")
+                get_version("isvctl")
+                get_version("isvreporter")
+                assert mock.call_count == 1
+
+
+class TestIsReleasedVersion:
+    """Tests for the rule the service applies to the reported version."""
+
+    @pytest.mark.parametrize("candidate", ["0.9.0", "1.0", "0.10.0", "2", "1.0rc1"])
+    def test_release_numbers_are_released(self, candidate: str) -> None:
+        assert is_released_version(candidate)
+
+    @pytest.mark.parametrize(
+        "candidate",
+        ["0.9.0.post3+g08339c7", "0.9.0.post0+g6634373.dirty", "dev", "0.9.0.dev1"],
+    )
+    def test_builds_between_releases_are_not(self, candidate: str) -> None:
+        assert not is_released_version(candidate)

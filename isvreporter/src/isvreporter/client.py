@@ -23,6 +23,8 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from isvreporter.version import is_released_version
+
 # Constants
 OUTPUT_DIR = Path("_output")
 TEST_RUN_ID_FILE = OUTPUT_DIR / "testrun_id.txt"
@@ -319,6 +321,17 @@ def upload_test_catalog(
     Returns:
         True if catalog was uploaded or already exists, False on error
     """
+    # A catalog is a release's published contract, and the service refuses one
+    # for anything else. Skipping here keeps a normal branch run from printing a
+    # rejection it can do nothing about, and says why in its place.
+    if not is_released_version(isv_test_version):
+        print(
+            f"Test catalog not uploaded: {isv_test_version} is a build between releases, "
+            "so no catalog is published for it. Results will be scored against a "
+            "neighbouring release and flagged in the coverage report."
+        )
+        return True
+
     # Check if this version's catalog already exists
     try:
         check_url = f"{endpoint}/v1/test-catalog"

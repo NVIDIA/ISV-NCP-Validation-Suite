@@ -25,6 +25,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from isvreporter.version import is_released_version
+
 from isvctl.redaction import redact_text
 
 logger = logging.getLogger(__name__)
@@ -72,6 +74,24 @@ def get_isv_test_version() -> str | None:
         return None
 
 
+def warn_if_unreleased(isv_test_version: str | None) -> None:
+    """Warn once, at run creation, when this build is not a release.
+
+    Said here rather than only in the report because this is the moment the
+    operator is watching, and because a build taken between releases runs checks
+    no published catalog describes - its results are scored against a
+    neighbouring release and can silently land nowhere.
+    """
+    if isv_test_version is None or is_released_version(isv_test_version):
+        return
+    logger.warning(
+        "Reporting as %s, which is not a release. No test catalog is published for a build "
+        "taken between releases, so these results will be scored against a neighbouring "
+        "release and flagged in the coverage report. Check out a release tag to avoid this.",
+        isv_test_version,
+    )
+
+
 def create_test_run(
     lab_id: int,
     platform: str,
@@ -116,6 +136,7 @@ def create_test_run(
 
     # Auto-detect ISV test version from package
     isv_test_version = get_isv_test_version()
+    warn_if_unreleased(isv_test_version)
 
     try:
         jwt_token = get_jwt_token(ssa_issuer, client_id, client_secret)

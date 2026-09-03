@@ -252,6 +252,27 @@ def _build_suite_map() -> dict[str, dict[str, Any]]:
     return suite_map
 
 
+def released_entries(entries: list[dict[str, Any]], released: set[str]) -> list[dict[str, Any]]:
+    """Return the entries of *entries* that *released* accounts for.
+
+    The rule deciding which checks a release contains, in one place. It is
+    load-bearing twice over -- once when building the catalog that gets
+    published, once when digesting the catalog a build holds -- and the two must
+    agree exactly or a build digests a different name set than the catalog it
+    published, which reports every build in the field as modified.
+
+    ``resolve_class_key`` handles variant names (``Check-3b``) matching their
+    base class, so an exact hit is tried first: it is the overwhelmingly common
+    case, and the fallback rescans the released set for every miss.
+    """
+    released_keys = tuple(released)
+    return [
+        entry
+        for entry in entries
+        if str(entry["name"]) in released or resolve_class_key(str(entry["name"]), released_keys) is not None
+    ]
+
+
 def build_catalog(*, released_only: bool = True) -> list[dict[str, Any]]:
     """Discover all validation tests and return structured catalog entries.
 
@@ -332,10 +353,10 @@ def build_catalog(*, released_only: bool = True) -> list[dict[str, Any]]:
         if released_tests is None:
             logger.info("Including unreleased tests in catalog because %s is enabled", INCLUDE_UNRELEASED_ENV)
         else:
-            omitted_names = sorted(
-                entry["name"] for entry in catalog if resolve_class_key(entry["name"], released_tests) is None
-            )
-            catalog = [entry for entry in catalog if resolve_class_key(entry["name"], released_tests) is not None]
+            kept = released_entries(catalog, released_tests)
+            kept_names = {entry["name"] for entry in kept}
+            omitted_names = sorted(entry["name"] for entry in catalog if entry["name"] not in kept_names)
+            catalog = kept
             if omitted_names:
                 logger.info("Omitted %d unreleased tests from catalog", len(omitted_names))
                 logger.debug("Unreleased tests omitted from catalog: %s", ", ".join(omitted_names))

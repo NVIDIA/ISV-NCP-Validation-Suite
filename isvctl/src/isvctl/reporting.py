@@ -25,7 +25,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from isvreporter.version import build_is_release, build_ref, parse_build_ref
+from isvreporter.version import build_ref, parse_build_ref
 
 from isvctl.redaction import redact_text
 
@@ -87,15 +87,17 @@ def warn_if_unreleased(isv_test_version: str | None) -> None:
     from a copied tree or an air-gapped cluster: that question is settled by the
     catalog digest on the service side, which reports it in the coverage view
     rather than guessing about it here.
-    """
-    ref = build_ref()
-    if isv_test_version is None or build_is_release(isv_test_version, ref) is not False:
-        return
 
-    parsed = parse_build_ref(ref)
-    if parsed is None:
+    Reads the reference itself rather than asking ``build_is_release`` and then
+    re-reading it, so the parts named in the message are the same parts the
+    decision was made from.
+    """
+    parsed = parse_build_ref(build_ref())
+    if isv_test_version is None or parsed is None:
         return
     tag, distance, commit, dirty = parsed
+    if distance == 0 and not dirty and tag == isv_test_version:
+        return
 
     if tag != isv_test_version:
         logger.warning(

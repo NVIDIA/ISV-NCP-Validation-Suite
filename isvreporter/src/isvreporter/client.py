@@ -326,7 +326,7 @@ def upload_test_catalog(
     # rejection it can do nothing about, and says why in its place.
     if not is_released_version(isv_test_version):
         print(
-            f"Test catalog not uploaded: {isv_test_version} is a build between releases, "
+            f"Test catalog not uploaded: {isv_test_version} is not a release version, "
             "so no catalog is published for it. Results will be scored against a "
             "neighbouring release and flagged in the coverage report."
         )

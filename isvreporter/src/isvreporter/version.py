@@ -39,8 +39,8 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # --long so a tagged commit still reports its distance (0) rather than a bare
-# tag, which keeps one output shape to parse. --match so an unrelated repository
-# above site-packages fails the lookup instead of contributing its own tags.
+# tag, which keeps one output shape to parse. --match so a tag that is not a
+# release marker cannot become the version.
 _DESCRIBE_COMMAND = (
     "git",
     "describe",
@@ -56,13 +56,26 @@ _DESCRIBE_PATTERN = re.compile(r"^v(?P<tag>.+)-(?P<distance>\d+)-g(?P<commit>[0-
 # A hung git call must not hold up a test run that is otherwise ready to report.
 _DESCRIBE_TIMEOUT_SECONDS = 5
 
+# Where this module sits in the workspace tree. A repository that does not hold
+# the file at this path is somebody else's checkout, whatever its tags say.
+_SOURCE_RELATIVE_PATH = Path("isvreporter/src/isvreporter/version.py")
+
 
 def _repository_root() -> Path | None:
-    """Return the git checkout this module lives in, or None when installed."""
-    for parent in Path(__file__).resolve().parents:
+    """Return the git checkout this module lives in, or None when installed.
+
+    Only this workspace's own tree counts. Creating an environment inside
+    another repository is ordinary - ``uv sync`` puts ``.venv`` under whatever
+    tree it is run from, and ``--target`` installs anywhere at all - and a
+    ``v*`` tag there describes cleanly enough to be taken for ours, which would
+    report a partner's version for our checks. An editable install still
+    counts, because its files stay in the source tree.
+    """
+    here = Path(__file__).resolve()
+    for parent in here.parents:
         # A worktree records .git as a file, so existence is the test, not is_dir.
         if (parent / ".git").exists():
-            return parent
+            return parent if here == parent / _SOURCE_RELATIVE_PATH else None
     return None
 
 

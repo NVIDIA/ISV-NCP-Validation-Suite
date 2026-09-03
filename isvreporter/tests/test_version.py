@@ -23,7 +23,12 @@ from unittest.mock import patch
 
 import pytest
 
-from isvreporter.version import describe_checkout, get_version, is_released_version
+from isvreporter.version import (
+    _repository_root,
+    describe_checkout,
+    get_version,
+    is_released_version,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -99,7 +104,7 @@ class TestGetVersion:
                     assert get_version("isvtest") == "0.9.0"
 
     def test_unparseable_describe_output_falls_back(self) -> None:
-        """An unrelated repository above site-packages must not win."""
+        """A tag scheme this workspace does not use must not become the version."""
         with patch("isvreporter.version._repository_root", return_value=Path("/repo")):
             with patch("subprocess.run", return_value=_describe("some-other-scheme")):
                 with patch("isvreporter.version.version", return_value="0.9.0"):
@@ -113,6 +118,49 @@ class TestGetVersion:
                 get_version("isvctl")
                 get_version("isvreporter")
                 assert mock.call_count == 1
+
+
+class TestRepositoryRoot:
+    """Which trees count as this workspace's own checkout."""
+
+    @pytest.mark.parametrize(
+        "install_path",
+        [
+            # A wheel in a virtualenv created inside the other repository.
+            ".venv/lib/python3.12/site-packages/isvreporter/version.py",
+            # `--target`, which lands anywhere and carries no segment to recognise.
+            "libs/isvreporter/version.py",
+        ],
+    )
+    def test_an_installed_copy_claims_no_checkout(self, tmp_path: Path, install_path: str) -> None:
+        """A partner's tags must not be reported as ours.
+
+        Installing into an environment under another repository is ordinary, and
+        that repository's `v*` tag would describe just as cleanly as ours. The
+        foreign repository is built for real, so the walk has something to find
+        and the test fails if the module stops checking what it found.
+        """
+        foreign = tmp_path / "their-repo"
+        (foreign / ".git").mkdir(parents=True)
+        module = foreign / install_path
+        module.parent.mkdir(parents=True)
+        module.write_text("")
+
+        with patch("isvreporter.version.__file__", str(module)):
+            assert _repository_root() is None
+
+    def test_a_source_tree_is_the_checkout(self, tmp_path: Path) -> None:
+        """Including an editable install, whose files stay in the tree."""
+        root = tmp_path / "client"
+        package = root / "isvreporter" / "src" / "isvreporter"
+        package.mkdir(parents=True)
+        # The worktree spelling: .git as a file rather than a directory.
+        (root / ".git").write_text("gitdir: /elsewhere\n")
+        module = package / "version.py"
+        module.write_text("")
+
+        with patch("isvreporter.version.__file__", str(module)):
+            assert _repository_root() == root.resolve()
 
 
 class TestIsReleasedVersion:

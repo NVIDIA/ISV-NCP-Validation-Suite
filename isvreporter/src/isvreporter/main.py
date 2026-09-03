@@ -308,7 +308,10 @@ def update(
         try:
             typer.echo(f"Reading test catalog: {test_catalog}")
             catalog_data = json.loads(test_catalog.read_text())
-            catalog_version = catalog_data.get("isvTestVersion", isv_test_version or "unknown")
+            # `or` rather than a .get default: a file carrying an explicit null
+            # names a version no more than a file missing the key does, and a
+            # .get default only covers the missing key.
+            catalog_version = catalog_data.get("isvTestVersion") or isv_test_version or "unknown"
             catalog_entries = catalog_data.get("entries", [])
 
             upload_test_catalog(

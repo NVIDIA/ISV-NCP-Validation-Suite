@@ -27,6 +27,7 @@ from isvtest.catalog import (
     build_capability_vocabulary,
     build_catalog,
     build_suite_vocabulary,
+    catalog_digest,
     catalog_document,
     get_catalog_version,
 )
@@ -312,41 +313,104 @@ class TestGetCatalogVersion:
         assert len(version) > 0
 
     def test_returns_dev_when_not_installed(self) -> None:
-        """Test that 'dev' is returned when package is not installed.
-
-        The checkout lookup is disabled too: it takes precedence over the
-        metadata, and these tests run from a checkout that would answer it.
-        """
+        """Test that 'dev' is returned when package is not installed."""
         from importlib.metadata import PackageNotFoundError
 
-        from isvreporter.version import describe_checkout
+        with patch(
+            "isvreporter.version.version",
+            side_effect=PackageNotFoundError("isvtest"),
+        ):
+            assert get_catalog_version() == "dev"
 
-        describe_checkout.cache_clear()
-        with patch("isvreporter.version._repository_root", return_value=None):
-            with patch(
-                "isvreporter.version.version",
-                side_effect=PackageNotFoundError("isvtest"),
-            ):
-                version = get_catalog_version()
-                assert version == "dev"
-        describe_checkout.cache_clear()
+    def test_the_checkout_never_changes_the_catalog_version(self) -> None:
+        """The catalog version is the release number, drift or no drift.
 
-    def test_a_build_between_releases_reports_its_distance_from_the_tag(self) -> None:
-        """The catalog must not claim a release number it was not built at.
-
-        A catalog built past a tag carries checks that release never had, so
-        publishing it under the tag's number is what let renamed checks go
-        unmatched and read as never run.
+        Whether the build has moved past that release is a separate fact, and
+        it is settled by :func:`catalog_digest` comparing the checks this build
+        holds against the ones the release published - not by decorating the
+        version string, which every consumer is entitled to read plainly.
         """
         from isvreporter.version import describe_checkout
 
         describe_checkout.cache_clear()
-        with patch("isvreporter.version._repository_root", return_value=Path("/repo")):
-            with patch(
-                "subprocess.run",
-                return_value=subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout="v0.9.0-3-g08339c7\n", stderr=""
-                ),
-            ):
-                assert get_catalog_version() == "0.9.0.post3+g08339c7"
-        describe_checkout.cache_clear()
+        try:
+            with patch("isvreporter.version._repository_root", return_value=Path("/repo")):
+                with patch(
+                    "subprocess.run",
+                    return_value=subprocess.CompletedProcess(
+                        args=[], returncode=0, stdout="v0.9.0-3-g08339c7\n", stderr=""
+                    ),
+                ):
+                    with patch("isvreporter.version.version", return_value="0.9.0"):
+                        assert get_catalog_version() == "0.9.0"
+        finally:
+            describe_checkout.cache_clear()
+
+
+class TestCatalogDigest:
+    """The build's own account of which checks it contains."""
+
+    def test_identical_name_sets_digest_identically(self) -> None:
+        """Order and duplicates must not matter; the set of names is the fact."""
+        one = [{"name": "BmGpuCheck"}, {"name": "K8sNodeCountCheck"}]
+        other = [{"name": "K8sNodeCountCheck"}, {"name": "BmGpuCheck"}, {"name": "BmGpuCheck"}]
+        with patch(
+            "isvtest.catalog.load_released_tests",
+            return_value={"BmGpuCheck", "K8sNodeCountCheck"},
+        ):
+            assert catalog_digest(one) == catalog_digest(other)
+
+    def test_a_renamed_check_changes_the_digest(self) -> None:
+        """The lab-42 signature: a build claiming 0.9.0 while running 0.10.0's names."""
+        released = {"BmGpuCheck", "GpuCheck"}
+        with patch("isvtest.catalog.load_released_tests", return_value=released):
+            before = catalog_digest([{"name": "GpuCheck"}])
+            after = catalog_digest([{"name": "BmGpuCheck"}])
+        assert before != after
+
+    def test_only_names_are_digested(self) -> None:
+        """Descriptions and labels churn constantly and are not what results match on."""
+        with patch("isvtest.catalog.load_released_tests", return_value={"GpuCheck"}):
+            plain = catalog_digest([{"name": "GpuCheck"}])
+            decorated = catalog_digest([{"name": "GpuCheck", "description": "rewritten", "labels": ["gpu"]}])
+        assert plain == decorated
+
+    def test_unreleased_tests_do_not_read_as_drift(self) -> None:
+        """Rafay runs with ISVTEST_INCLUDE_UNRELEASED, and is not thereby off-release.
+
+        build_catalog() honours that variable, so the entries handed here can
+        include tests no release published. A published catalog holds a
+        release's released checks, so digesting what the operator chose to run
+        would report every such partner as running a build that is not the
+        release.
+        """
+        with patch("isvtest.catalog.load_released_tests", return_value={"GpuCheck"}):
+            released_only = catalog_digest([{"name": "GpuCheck"}])
+            with_unreleased = catalog_digest([{"name": "GpuCheck"}, {"name": "BrandNewCheck"}])
+        assert released_only == with_unreleased
+
+    def test_declines_to_digest_when_the_manifest_is_unreadable(self) -> None:
+        """Digesting an unfiltered catalog would report a genuine release as drift."""
+        with patch("isvtest.catalog.load_released_tests", side_effect=OSError("gone")):
+            assert catalog_digest([{"name": "GpuCheck"}]) is None
+
+    def test_matches_the_digest_the_service_computes_for_the_same_names(self) -> None:
+        """Pinned to a literal, because this is a wire contract, not an implementation.
+
+        The service applies the same rule to the entry names of a published
+        catalog and compares. A change here that its counterpart in
+        ``CatalogDigestTest`` does not also make is a change that makes every
+        client's digest disagree with every catalog's.
+        """
+        with patch(
+            "isvtest.catalog.load_released_tests",
+            return_value={"BmGpuCheck", "K8sNodeCountCheck"},
+        ):
+            digest = catalog_digest([{"name": "BmGpuCheck"}, {"name": "K8sNodeCountCheck"}])
+        assert digest == "sha256:3e45280c8827ebf2aa21f07c78a6c8ba3d442be3d78aeaa4c3dcdcf645b37013"
+
+    def test_is_the_shape_the_service_column_holds(self) -> None:
+        with patch("isvtest.catalog.load_released_tests", return_value={"GpuCheck"}):
+            digest = catalog_digest([{"name": "GpuCheck"}])
+        assert digest.startswith("sha256:")
+        assert len(digest) == 71

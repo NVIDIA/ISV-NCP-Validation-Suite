@@ -16,6 +16,7 @@
 """Tests for the test catalog upload functionality in the API client."""
 
 import json
+from collections.abc import Iterator
 from http import HTTPStatus
 from unittest.mock import MagicMock, patch
 from urllib.error import HTTPError, URLError
@@ -25,6 +26,82 @@ import pytest
 from isvreporter.client import upload_test_catalog
 
 
+@pytest.fixture
+def _on_a_release_tag() -> Iterator[None]:
+    """Present the build as a clean release tag, so the upload gate lets it past.
+
+    Applied to the mechanics tests below, which are about the HTTP exchange
+    rather than about who is allowed to publish. The gate itself is exercised by
+    TestUploadTestCatalogReleaseGate.
+    """
+    with patch("isvreporter.client.build_is_release", return_value=True):
+        yield
+
+
+class TestUploadTestCatalogReleaseGate:
+    """Who is allowed to publish a catalog, and who is only presumed to be."""
+
+    @patch("isvreporter.client.urlopen")
+    def test_a_clean_release_tag_may_publish(self, mock_urlopen: MagicMock) -> None:
+        get_response = MagicMock()
+        get_response.read.return_value = json.dumps([]).encode()
+        get_response.__enter__ = MagicMock(return_value=get_response)
+        get_response.__exit__ = MagicMock(return_value=False)
+        post_response = MagicMock()
+        post_response.read.return_value = json.dumps({"status": "created"}).encode()
+        post_response.__enter__ = MagicMock(return_value=post_response)
+        post_response.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.side_effect = [get_response, post_response]
+
+        with patch("isvreporter.client.build_ref", return_value="v1.2.3-0-gdeadbee"):
+            assert _upload("1.2.3") is True
+        assert mock_urlopen.call_count == 2
+
+    @patch("isvreporter.client.urlopen")
+    def test_a_build_past_the_tag_may_not(self, mock_urlopen: MagicMock) -> None:
+        """The lab-42 build: its checks are not the ones 1.2.3 published."""
+        with patch("isvreporter.client.build_ref", return_value="v1.2.3-9-g08339c7"):
+            assert _upload("1.2.3") is True
+        mock_urlopen.assert_not_called()
+
+    @patch("isvreporter.client.urlopen")
+    def test_a_build_that_cannot_tell_may_not_either(self, mock_urlopen: MagicMock) -> None:
+        """A copied tree or an air-gapped cluster is not thereby a release.
+
+        Letting the unknown case through is precisely how a working tree's
+        catalog would come to be published under a release's number, which
+        "latest catalog" then resolves to for good.
+        """
+        with patch("isvreporter.client.build_ref", return_value=None):
+            assert _upload("1.2.3") is True
+        mock_urlopen.assert_not_called()
+
+    @patch("isvreporter.client.urlopen")
+    def test_a_stale_install_may_not_either(self, mock_urlopen: MagicMock) -> None:
+        """Metadata says 1.2.3, the tree is at v2.0.0: neither is safe to publish."""
+        with patch("isvreporter.client.build_ref", return_value="v2.0.0-0-gdeadbee"):
+            assert _upload("1.2.3") is True
+        mock_urlopen.assert_not_called()
+
+    def test_refusing_to_publish_never_fails_the_run(self) -> None:
+        """Results still upload; only the catalog is withheld."""
+        with patch("isvreporter.client.build_ref", return_value="v1.2.3-9-g08339c7"):
+            assert _upload("1.2.3") is True
+
+
+def _upload(version: str) -> bool:
+    return upload_test_catalog(
+        endpoint="https://api.example.com",
+        jwt_token="test-token",
+        isv_test_version=version,
+        entries=[{"name": "TestA"}],
+        schema_version=2,
+        capabilities=["KUBERNETES"],
+        suites=["network"],
+    )
+
+
+@pytest.mark.usefixtures("_on_a_release_tag")
 class TestUploadTestCatalog:
     """Tests for upload_test_catalog function."""
 

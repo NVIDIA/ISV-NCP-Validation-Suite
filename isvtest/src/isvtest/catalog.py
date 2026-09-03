@@ -23,6 +23,7 @@ Suite placement and capability requirements come only from canonical
 ``isvctl/configs/suites/*.yaml`` wiring.
 """
 
+import hashlib
 import logging
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -34,7 +35,7 @@ from isvreporter.version import get_version
 from isvtest.core.composite import CompositeCheck, is_composite
 from isvtest.core.discovery import discover_all_tests
 from isvtest.core.resolution import DECLARABLE_CAPABILITIES, canonical_suite_name, resolve_class_key
-from isvtest.release_manifest import INCLUDE_UNRELEASED_ENV, load_released_test_filter
+from isvtest.release_manifest import INCLUDE_UNRELEASED_ENV, load_released_test_filter, load_released_tests
 
 logger = logging.getLogger(__name__)
 
@@ -418,3 +419,53 @@ def get_catalog_version() -> str:
         Version string (e.g. "1.2.3") or "dev" if not installed as a package.
     """
     return get_version("isvtest")
+
+
+def catalog_digest(entries: list[dict[str, Any]]) -> str | None:
+    """Return a digest identifying which checks this build actually contains.
+
+    The one fact a running build can state about itself without a git checkout,
+    a git binary or a network: the set of checks it is able to run. Partners
+    copy the source tree onto a cluster and run air-gapped, so anything derived
+    from the surroundings of the code is unavailable exactly when it is most
+    needed; this is derived from the code itself and so is always available.
+
+    The service holds the published catalog for every release and applies this
+    same rule to its entry names. An equal digest proves the build is the
+    release it claims to be; an unequal one proves it is not. Neither is a
+    guess, and no search for a best-matching version is involved - it is one
+    equality test against the version the build itself declared.
+
+    Names only, deduplicated and sorted, newline-joined, UTF-8. Names are what
+    coverage matches results on, so a rewritten description or a re-labelled
+    check does not read as a different build. The corollary is the known blind
+    spot: a build that changes only what a check *does*, never what it is
+    called, is indistinguishable from the release here.
+
+    The release manifest is applied here regardless of
+    ``ISVTEST_INCLUDE_UNRELEASED``, which the caller's ``build_catalog()`` does
+    honour. A published catalog holds a release's released checks, so digesting
+    what the operator chose to *run* would report every partner who sets that
+    variable - Rafay among them - as running a build that is not the release.
+
+    Args:
+        entries: Catalog entries, as returned by :func:`build_catalog`, with or
+            without unreleased tests included.
+
+    Returns:
+        ``"sha256:"`` followed by the hex digest, or ``None`` if the release
+        manifest cannot be read and the released set is therefore unknown.
+    """
+    try:
+        released = load_released_tests()
+    except (OSError, ValueError) as exc:
+        # Claiming a digest over an unfiltered catalog would report a genuine
+        # release as drift, which is worse than declining to say anything.
+        logger.warning("Cannot digest the catalog without the release manifest: %s", exc)
+        return None
+
+    names = sorted(
+        {str(entry["name"]) for entry in entries if resolve_class_key(str(entry["name"]), released) is not None}
+    )
+    payload = "\n".join(names).encode("utf-8")
+    return f"sha256:{hashlib.sha256(payload).hexdigest()}"

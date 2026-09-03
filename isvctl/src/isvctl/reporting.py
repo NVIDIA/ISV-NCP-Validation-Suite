@@ -25,7 +25,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from isvreporter.version import is_released_version
+from isvreporter.version import build_is_release, build_ref, parse_build_ref
 
 from isvctl.redaction import redact_text
 
@@ -75,21 +75,69 @@ def get_isv_test_version() -> str | None:
 
 
 def warn_if_unreleased(isv_test_version: str | None) -> None:
-    """Warn once, at run creation, when this build is not a release.
+    """Warn at run creation when this checkout is demonstrably not a release.
 
     Said here rather than only in the report because this is the moment the
-    operator is watching, and because a build taken between releases runs checks
-    no published catalog describes - its results are scored against a
-    neighbouring release and can silently land nowhere.
+    operator is watching, and a build taken between releases runs checks the
+    published catalog does not describe - its results are then scored against a
+    release that never had them and can silently land nowhere.
+
+    Only speaks when the checkout proves the point. There is no warning when
+    there is nothing to go on, which is the ordinary case for a partner running
+    from a copied tree or an air-gapped cluster: that question is settled by the
+    catalog digest on the service side, which reports it in the coverage view
+    rather than guessing about it here.
     """
-    if isv_test_version is None or is_released_version(isv_test_version):
+    ref = build_ref()
+    if isv_test_version is None or build_is_release(isv_test_version, ref) is not False:
         return
+
+    parsed = parse_build_ref(ref)
+    if parsed is None:
+        return
+    tag, distance, commit, dirty = parsed
+
+    if tag != isv_test_version:
+        logger.warning(
+            "Reporting as %s, but this checkout is at v%s. The installed packages are stale "
+            "with respect to the tree, so the checks that run are not the ones %s published. "
+            "Re-sync the workspace (uv sync) to report accurately.",
+            isv_test_version,
+            tag,
+            isv_test_version,
+        )
+        return
+
     logger.warning(
-        "Reporting as %s, which is not a release. No test catalog is published for a build "
-        "taken between releases, so these results will be scored against a neighbouring "
-        "release and flagged in the coverage report. Check out a release tag to avoid this.",
+        "Reporting as %s, but this checkout is %d commit(s) past v%s (at %s%s). No test catalog "
+        "is published for a build between releases, so these results are scored against v%s and "
+        "any check added since will be flagged in the coverage report. Check out a release tag "
+        "to avoid this.",
         isv_test_version,
+        distance,
+        tag,
+        commit,
+        ", with uncommitted changes" if dirty else "",
+        tag,
     )
+
+
+def _catalog_digest_of(catalog_document: dict[str, Any] | None) -> str | None:
+    """Digest the catalog this run built, or None when there is nothing to digest.
+
+    Never fatal. A run that has produced results must be able to report them
+    even when its own provenance cannot be established; the service reads a
+    missing digest as "unknown" and says nothing rather than guessing.
+    """
+    if not catalog_document:
+        return None
+    try:
+        from isvtest.catalog import catalog_digest
+
+        return catalog_digest(catalog_document["entries"])
+    except Exception as e:
+        logger.warning("Could not compute the test catalog digest: %s", e)
+        return None
 
 
 def create_test_run(
@@ -272,7 +320,13 @@ def update_test_run(
             except Exception as e:
                 logger.warning("Failed to upload JUnit XML: %s", e)
 
-        # Update test run with status and log, even if JUnit upload failed
+        # Update test run with status and log, even if JUnit upload failed.
+        #
+        # The digest comes from the catalog this run already built in-process,
+        # so it describes the build that produced these very results. It is what
+        # lets the service state, rather than infer, whether the build was the
+        # release it reports itself as - and unlike the build ref beside it, it
+        # survives a copied tree and an air-gapped cluster.
         client_update_test_run(
             endpoint=endpoint,
             lab_id=lab_id,
@@ -283,6 +337,8 @@ def update_test_run(
             log_output=log_output,
             isv_software_version=isv_software_version,
             isv_test_version=isv_test_version,
+            isv_test_catalog_digest=_catalog_digest_of(catalog_document),
+            isv_test_build_ref=build_ref(),
         )
         return True
     except SystemExit:

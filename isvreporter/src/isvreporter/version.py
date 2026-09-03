@@ -13,23 +13,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Version resolution for all workspace packages.
+"""Version resolution and build provenance for all workspace packages.
 
 The canonical version lives in each package's pyproject.toml. At runtime,
 importlib.metadata reads it from installed package metadata (works in wheels,
-editable installs, and airgapped environments after ``uv sync``).
+editable installs, and airgapped environments after ``uv sync``). That number
+is reported verbatim: it is the one thing about the build that is known
+exactly, and every consumer is entitled to read it as a plain release number.
 
-That number alone is only trustworthy on a release tag. A checkout taken
-between releases still carries the previous bump's version, so a tree several
-commits past ``v0.9.0`` reports ``0.9.0`` while running checks that release
-never had - results then get scored against a catalog that does not describe
-them. When this code is running from a git checkout the tag is therefore
-consulted directly and the distance from it travels in a PEP 440 suffix
-(``0.9.0.post3+g08339c7``), which the service reads as "no published catalog
-describes this build".
+What it does not say is whether this checkout has moved past that release. A
+tree several commits past ``v0.9.0`` still carries ``0.9.0`` while running
+checks that release never had. That is a separate fact and it travels in its
+own field, never folded into the version string.
+
+The authoritative answer to it is the catalog digest in ``isvtest.catalog``,
+which compares the checks this build contains against the ones the release
+published, and needs no checkout at all. What lives here is the optional
+detail layered on top: when a git checkout does happen to be present, the
+commit distance from the tag turns "not the 0.9.0 release" into "9 commits
+past v0.9.0 at 08339c7". Nothing depends on it - partners copy the source
+tree onto clusters and run air-gapped, where it is simply absent.
 """
 
 import logging
+import os
 import re
 import subprocess
 from functools import lru_cache
@@ -56,6 +63,15 @@ _DESCRIBE_PATTERN = re.compile(r"^v(?P<tag>.+)-(?P<distance>\d+)-g(?P<commit>[0-
 # A hung git call must not hold up a test run that is otherwise ready to report.
 _DESCRIBE_TIMEOUT_SECONDS = 5
 
+# Lets a pipeline that builds an artifact elsewhere pass down provenance the
+# running copy cannot rediscover - the air-gapped case, where there is no
+# checkout to describe and no network to ask.
+BUILD_REF_ENV = "ISVTEST_BUILD_REF"
+
+# Matches the service column that stores it; truncated rather than dropped so an
+# over-long value still carries its leading, most identifying part.
+_BUILD_REF_MAX_LENGTH = 128
+
 # Where this module sits in the workspace tree. A repository that does not hold
 # the file at this path is somebody else's checkout, whatever its tags say.
 _SOURCE_RELATIVE_PATH = Path("isvreporter/src/isvreporter/version.py")
@@ -81,12 +97,19 @@ def _repository_root() -> Path | None:
 
 @lru_cache(maxsize=1)
 def describe_checkout() -> str | None:
-    """Return the version this checkout is really at, or None when not in one.
+    """Return this checkout's ``git describe`` output, or None when unavailable.
 
     The workspace releases its packages in lockstep off a single repository tag,
-    so one description covers all of them. Returns the bare tag on a clean
-    tagged commit, and otherwise appends the distance and commit
-    (``0.9.0.post3+g08339c7``, plus ``.dirty`` for uncommitted changes).
+    so one description covers all of them. Reported verbatim
+    (``v0.9.0-9-g08339c7``, with ``-dirty`` appended for uncommitted changes)
+    rather than reshaped into a version: the recipient should receive the
+    observation, not this module's interpretation of it.
+
+    None is the ordinary answer, not an error. There is no checkout when the
+    package was installed from a wheel, when a partner copied the source tree
+    onto a cluster without ``.git``, or when the environment is air-gapped and
+    shallow-cloned. Every such case leaves the catalog digest to answer the
+    question this only decorates.
 
     Cached: the answer cannot change within a process, and every package's
     version lookup would otherwise spawn its own git.
@@ -105,53 +128,98 @@ def describe_checkout() -> str | None:
             check=True,
         )
     except (OSError, subprocess.SubprocessError) as exc:
-        # No git binary, no tags, a shallow clone: all leave the metadata
-        # version as the best available answer, none is worth failing a run for.
+        # No git binary, no tags, a shallow clone: none is worth failing a run
+        # for, and none leaves us worse off than a partner running air-gapped.
         logger.debug("Could not describe the checkout at %s: %s", root, exc)
         return None
 
-    match = _DESCRIBE_PATTERN.match(completed.stdout.strip())
-    if match is None:
-        logger.debug("Unexpected git describe output: %r", completed.stdout.strip())
+    described = completed.stdout.strip()
+    if _DESCRIBE_PATTERN.match(described) is None:
+        logger.debug("Unexpected git describe output: %r", described)
         return None
+    return described
 
-    tag = match["tag"]
-    distance = int(match["distance"])
-    if distance == 0 and not match["dirty"]:
-        return tag
 
-    local = f"g{match['commit']}" + (".dirty" if match["dirty"] else "")
-    return f"{tag}.post{distance}+{local}"
+def build_ref() -> str | None:
+    """Return where this build came from, or None when nothing can say.
+
+    Prefers ``ISVTEST_BUILD_REF``, so a pipeline that builds an artifact and
+    ships it into an air-gapped cluster can pass down provenance it knows and
+    the running copy cannot rediscover. Falls back to describing the checkout
+    when there is one.
+
+    The value is free text from the environment and is not validated beyond a
+    length bound: an operator supplying their own reference should not have to
+    match ``git describe`` output to be believed, and nothing downstream is
+    permitted to depend on it.
+    """
+    supplied = os.environ.get(BUILD_REF_ENV, "").strip()
+    if supplied:
+        return supplied[:_BUILD_REF_MAX_LENGTH]
+    return describe_checkout()
 
 
 def get_version(package_name: str) -> str:
     """Return the version of *package_name*, or ``"dev"`` if unavailable.
 
-    In a git checkout the tag wins over the installed metadata. It is the more
-    accurate of the two: metadata is written at install time and goes stale the
-    moment the tree moves, whether by pulling past a release or by pulling to
-    one without re-syncing.
+    The installed package metadata, verbatim. Deliberately no git and no
+    suffix: this is the base version, and build provenance belongs in
+    :func:`build_ref` and the catalog digest rather than folded in here, where
+    it would corrupt the one value every consumer can read as a plain release
+    number.
 
     Args:
         package_name: Distribution name (e.g. ``"isvreporter"``).
 
     Returns:
-        Version string such as ``"1.2.3"`` or ``"0.9.0.post3+g08339c7"``.
+        Version string such as ``"1.2.3"``.
     """
-    described = describe_checkout()
-    if described is not None:
-        return described
-
     try:
         return version(package_name)
     except PackageNotFoundError:
         return "dev"
 
 
-def is_released_version(candidate: str) -> bool:
-    """Whether *candidate* names a release rather than a build between releases.
+def parse_build_ref(ref: str | None) -> tuple[str, int, str, bool] | None:
+    """Split a ``git describe`` reference into (tag, distance, commit, dirty).
 
-    Mirrors the service's own rule, so the client can warn about a version the
-    service is about to treat as having no published catalog.
+    Returns None for anything this cannot read, including the operator-supplied
+    free text :func:`build_ref` also accepts. Callers must treat that as "no
+    detail available" rather than as evidence of anything.
     """
-    return re.fullmatch(r"\d+(\.\d+)*((a|b|rc)\d+)?", candidate.strip()) is not None
+    if ref is None:
+        return None
+    match = _DESCRIBE_PATTERN.match(ref.strip())
+    if match is None:
+        return None
+    return match["tag"], int(match["distance"]), match["commit"], bool(match["dirty"])
+
+
+def build_is_release(package_version: str, ref: str | None) -> bool | None:
+    """Whether this build is the release its version names, per *ref*.
+
+    Returns True on a clean commit tagged with the reported version, False when
+    the reference demonstrably differs from it, and **None when there is nothing
+    to go on** - no checkout, unreadable output, or operator-supplied free text.
+
+    None is the common case in the field and must not be read as either answer.
+    It is the honest report from a mechanism that only works where git does; the
+    catalog digest answers the same question everywhere, and the service prefers
+    it. This exists so the client can warn an operator locally, before a run,
+    without waiting to be told by the service afterwards.
+
+    A tag that disagrees with the installed metadata counts as not-a-release:
+    the install is stale with respect to the tree, so the checks that run are
+    not the ones the reported version published.
+
+    *ref* is required rather than defaulting to :func:`build_ref`. A caller
+    holding a known-absent reference and a caller that has not looked yet are
+    different situations with different answers, and a predicate that quietly
+    shells out to git would hide the one dependency this design exists to keep
+    optional.
+    """
+    parsed = parse_build_ref(ref)
+    if parsed is None:
+        return None
+    tag, distance, _commit, dirty = parsed
+    return distance == 0 and not dirty and tag == package_version.strip()

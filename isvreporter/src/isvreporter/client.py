@@ -23,7 +23,7 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from isvreporter.version import is_released_version
+from isvreporter.version import build_is_release, build_ref
 
 # Constants
 OUTPUT_DIR = Path("_output")
@@ -143,6 +143,8 @@ def update_test_run(
     log_output: str | None = None,
     isv_software_version: str | None = None,
     isv_test_version: str | None = None,
+    isv_test_catalog_digest: str | None = None,
+    isv_test_build_ref: str | None = None,
 ) -> dict[str, Any]:
     """
     Update an existing test run record with completion status.
@@ -158,6 +160,14 @@ def update_test_run(
         log_output: Full test execution log output (optional)
         isv_software_version: ISV software stack version (opaque string from ISV)
         isv_test_version: ISV test tool version (e.g., "1.12.3")
+        isv_test_catalog_digest: Digest of the checks this build contains, from
+            ``isvtest.catalog.catalog_digest``. The service compares it against
+            the catalog published for isv_test_version to establish whether this
+            build is that release. Omitted when it cannot be computed.
+        isv_test_build_ref: ``git describe`` output for the checkout, when there
+            is one (e.g. ``"v0.9.0-9-g08339c7"``). Detail only - it enriches the
+            message the digest already decided, and is absent for the many
+            partners running from a copied tree or an air-gapped cluster.
 
     Returns:
         API response dictionary
@@ -186,6 +196,12 @@ def update_test_run(
 
     if isv_test_version is not None:
         payload["isvTestVersion"] = isv_test_version
+
+    if isv_test_catalog_digest is not None:
+        payload["isvTestCatalogDigest"] = isv_test_catalog_digest
+
+    if isv_test_build_ref is not None:
+        payload["isvTestBuildRef"] = isv_test_build_ref
 
     headers = {
         "Content-Type": "application/json",
@@ -321,14 +337,21 @@ def upload_test_catalog(
     Returns:
         True if catalog was uploaded or already exists, False on error
     """
-    # A catalog is a release's published contract, and the service refuses one
-    # for anything else. Skipping here keeps a normal branch run from printing a
-    # rejection it can do nothing about, and says why in its place.
-    if not is_released_version(isv_test_version):
+    # A catalog is a release's published contract: the thing every lab's coverage
+    # is scored against, and what "latest catalog" resolves to for good. Publish
+    # one only from a build positively known to be that release.
+    #
+    # Deliberately requires True and not merely "not False". A build that cannot
+    # tell - no checkout to describe, which is the ordinary case for a partner
+    # running from a copied tree - is not thereby a release, and letting the
+    # unknown case through is precisely how a working tree's catalog would come
+    # to be published under a release's number. Releases are published by the
+    # release pipeline, which does have a checkout, so nothing legitimate is lost.
+    if build_is_release(isv_test_version, build_ref()) is not True:
         print(
-            f"Test catalog not uploaded: {isv_test_version} is not a release version, "
-            "so no catalog is published for it. Results will be scored against a "
-            "neighbouring release and flagged in the coverage report."
+            f"Test catalog not uploaded: this build is not verifiably the {isv_test_version} "
+            "release, and a catalog is only published for a release. Results are still "
+            "uploaded, and the coverage report says which catalog it scored them against."
         )
         return True
 

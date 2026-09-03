@@ -347,6 +347,37 @@ class TestGetCatalogVersion:
             describe_checkout.cache_clear()
 
 
+class TestCatalogDocumentDigest:
+    """The envelope carries the number the verdict turns on."""
+
+    def test_the_document_carries_the_digest_of_its_own_entries(self) -> None:
+        """So the saved artifact shows what the service will compare against.
+
+        Diagnosing a run called off-release means reading the digest somewhere;
+        computing it only in passing on the way to the upload left the operator
+        with nothing on disk to look at.
+        """
+        entries = [{"name": "GpuCheck"}]
+        with patch("isvtest.catalog.load_released_tests", return_value={"GpuCheck"}):
+            document = catalog_document(entries, "1.2.3")
+            assert document["catalogDigest"] == catalog_digest(entries)
+
+    def test_the_document_digest_is_what_the_reporter_sends(self) -> None:
+        """One number, read from one place, rather than two that ought to agree."""
+        from isvctl.reporting import _catalog_digest_of
+
+        with patch("isvtest.catalog.load_released_tests", return_value={"GpuCheck"}):
+            document = catalog_document([{"name": "GpuCheck"}], "1.2.3")
+        assert _catalog_digest_of(document) == document["catalogDigest"]
+
+    def test_a_document_without_a_digest_reports_none(self) -> None:
+        """An older artifact, or one whose release manifest could not be read."""
+        from isvctl.reporting import _catalog_digest_of
+
+        assert _catalog_digest_of({"entries": []}) is None
+        assert _catalog_digest_of(None) is None
+
+
 class TestCatalogDigest:
     """The build's own account of which checks it contains."""
 

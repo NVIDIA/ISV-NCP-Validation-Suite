@@ -123,21 +123,20 @@ def warn_if_unreleased(isv_test_version: str | None) -> None:
 
 
 def _catalog_digest_of(catalog_document: dict[str, Any] | None) -> str | None:
-    """Digest the catalog this run built, or None when there is nothing to digest.
+    """The digest of the catalog this run built, or None when it has none.
+
+    Read from the document rather than recomputed, so the value sent to the
+    service is by construction the one written to _output/test_catalog.json and
+    printed during the run. An operator comparing the two is then comparing the
+    same number, not two numbers that ought to agree.
 
     Never fatal. A run that has produced results must be able to report them
-    even when its own provenance cannot be established; the service reads a
+    even when its own provenance could not be established; the service reads a
     missing digest as "unknown" and says nothing rather than guessing.
     """
     if not catalog_document:
         return None
-    try:
-        from isvtest.catalog import catalog_digest
-
-        return catalog_digest(catalog_document["entries"])
-    except Exception as e:
-        logger.warning("Could not compute the test catalog digest: %s", e)
-        return None
+    return catalog_document.get("catalogDigest")
 
 
 def create_test_run(

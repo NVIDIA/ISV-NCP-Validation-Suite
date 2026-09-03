@@ -152,6 +152,7 @@ class TestUpdateTestRun:
         document = {
             "schemaVersion": 2,
             "isvTestVersion": "1.2.3",
+            "catalogDigest": "sha256:abc",
             "capabilities": ["kubernetes", "vm"],
             "suites": ["storage", "iam"],
             "entries": [{"name": "TestA"}],
@@ -166,6 +167,9 @@ class TestUpdateTestRun:
         )
 
         assert result is True
+        # catalogDigest is deliberately absent: the upload payload is built
+        # from named fields, so the envelope can carry a value the published
+        # catalog contract does not. It travels on the test run instead.
         mock_upload_catalog.assert_called_once_with(
             endpoint="https://api.example.com",
             jwt_token="jwt-token",
@@ -188,6 +192,7 @@ class TestUpdateTestRun:
         assert set(catalog_document([], "1.2.3")) == {
             "schemaVersion",
             "isvTestVersion",
+            "catalogDigest",
             "capabilities",
             "suites",
             "entries",

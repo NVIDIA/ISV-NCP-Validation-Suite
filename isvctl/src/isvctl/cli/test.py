@@ -626,7 +626,14 @@ def run(
                     catalog_entries = build_catalog()
                     catalog_version = get_catalog_version()
                     test_catalog_document = catalog_document(catalog_entries, catalog_version)
-                    print_progress(f"Built test catalog: {len(catalog_entries)} tests (version: {catalog_version})")
+                    # The digest is printed beside the count because it, not the
+                    # version, is what the service compares to decide whether
+                    # this build is the release it reports itself as.
+                    digest = test_catalog_document.get("catalogDigest")
+                    print_progress(
+                        f"Built test catalog: {len(catalog_entries)} tests "
+                        f"(version: {catalog_version}, digest: {digest or 'unavailable'})"
+                    )
                     catalog_path = output_dir / "test_catalog.json"
                     catalog_path.write_text(json.dumps(test_catalog_document, indent=2))
                     print_progress(f"  Saved test catalog to: {catalog_path}")

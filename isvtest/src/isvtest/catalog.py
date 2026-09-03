@@ -400,12 +400,23 @@ def catalog_document(entries: list[dict[str, Any]], version: str) -> dict[str, A
     vocabulary expected by the backend upload contract. The per-entry
     ``labels`` are intentionally not summarized at the top level - a consumer
     can derive the label universe from the entries when needed.
+
+    Also carries ``catalogDigest``, so the value the service will compare this
+    build against is legible in the saved artifact rather than only computed in
+    passing on the way to the upload. An operator diagnosing why a run was
+    called off-release should be able to read it off the file the run wrote.
+    Note it covers the released checks only, so it can differ from ``entries``
+    when ``ISVTEST_INCLUDE_UNRELEASED`` is set - see :func:`catalog_digest`.
+
+    Additive, and no schema bump: the upload payload is assembled from named
+    fields rather than from this envelope, so no consumer's parse changes.
     """
     capabilities, suites = suite_vocabularies()
     _assert_disjoint_vocabulary(capabilities, suites)
     return {
         "schemaVersion": CATALOG_SCHEMA_VERSION,
         "isvTestVersion": version,
+        "catalogDigest": catalog_digest(entries),
         "capabilities": capabilities,
         "suites": suites,
         "entries": entries,

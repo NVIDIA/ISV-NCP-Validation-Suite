@@ -370,6 +370,31 @@ class TestCatalogDocumentDigest:
             document = catalog_document([{"name": "GpuCheck"}], "1.2.3")
         assert _catalog_digest_of(document) == document["catalogDigest"]
 
+    def test_the_document_says_whether_its_digest_covers_its_entries(self) -> None:
+        """They can disagree, which is exactly what the flag is for.
+
+        build_catalog honours ISVTEST_INCLUDE_UNRELEASED while catalog_digest
+        never does, so a document can describe more checks than it digests.
+        Publishing one would store a catalog the service digests differently
+        than every build of that release does.
+        """
+        with patch("isvtest.catalog.load_released_tests", return_value={"GpuCheck"}):
+            released = catalog_document([{"name": "GpuCheck"}], "1.2.3")
+            assert released["releasedOnly"] is True
+
+            with_unreleased = catalog_document([{"name": "GpuCheck"}, {"name": "BrandNewCheck"}], "1.2.3")
+            assert with_unreleased["releasedOnly"] is False
+            # The digest is unchanged, which is the mismatch being flagged.
+            assert with_unreleased["catalogDigest"] == released["catalogDigest"]
+            assert len(with_unreleased["entries"]) == 2
+
+    def test_an_unreadable_manifest_is_not_publishable(self) -> None:
+        """Nothing can vouch for the entries, so they are not the released set."""
+        with patch("isvtest.catalog.load_released_tests", side_effect=OSError("gone")):
+            document = catalog_document([{"name": "GpuCheck"}], "1.2.3")
+        assert document["releasedOnly"] is False
+        assert document["catalogDigest"] is None
+
     def test_a_document_without_a_digest_reports_none(self) -> None:
         """An older artifact, or one whose release manifest could not be read."""
         from isvctl.reporting import _catalog_digest_of

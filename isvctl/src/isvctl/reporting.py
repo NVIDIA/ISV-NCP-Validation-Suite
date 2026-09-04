@@ -297,6 +297,7 @@ def update_test_run(
                     schema_version=catalog_document["schemaVersion"],
                     capabilities=catalog_document["capabilities"],
                     suites=catalog_document["suites"],
+                    released_only=catalog_document.get("releasedOnly", True),
                 )
             except SystemExit:
                 logger.warning("Failed to upload test catalog to ISV Lab Service")

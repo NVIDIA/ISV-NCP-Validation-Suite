@@ -424,24 +424,50 @@ def catalog_document(entries: list[dict[str, Any]], version: str) -> dict[str, A
 
     Also carries ``catalogDigest``, so the value the service will compare this
     build against is legible in the saved artifact rather than only computed in
-    passing on the way to the upload. An operator diagnosing why a run was
-    called off-release should be able to read it off the file the run wrote.
-    Note it covers the released checks only, so it can differ from ``entries``
-    when ``ISVTEST_INCLUDE_UNRELEASED`` is set - see :func:`catalog_digest`.
+    passing on the way to the upload, and ``releasedOnly``, which says whether
+    the digest covers the entries beside it or only some of them.
+
+    Those two can disagree, which is the reason the flag exists. The digest
+    always covers the released checks (see :func:`catalog_digest`), while
+    ``entries`` is whatever the caller built - and ``build_catalog`` honours
+    ``ISVTEST_INCLUDE_UNRELEASED``. A document built with that variable set
+    therefore describes more checks than it digests, and publishing it would
+    store a catalog the service digests differently than every build reporting
+    that release does, marking all of them modified for good. The flag lets the
+    upload refuse it; building the document is still fine, and is ordinary in
+    development.
 
     Additive, and no schema bump: the upload payload is assembled from named
     fields rather than from this envelope, so no consumer's parse changes.
     """
     capabilities, suites = suite_vocabularies()
     _assert_disjoint_vocabulary(capabilities, suites)
+    digest = catalog_digest(entries)
     return {
         "schemaVersion": CATALOG_SCHEMA_VERSION,
         "isvTestVersion": version,
-        "catalogDigest": catalog_digest(entries),
+        "catalogDigest": digest,
+        "releasedOnly": _covers_only_released(entries, digest),
         "capabilities": capabilities,
         "suites": suites,
         "entries": entries,
     }
+
+
+def _covers_only_released(entries: list[dict[str, Any]], digest: str | None) -> bool:
+    """Whether every entry in *entries* is one the release manifest accounts for.
+
+    False when the manifest cannot be read at all: an unreadable manifest is
+    exactly the case where nothing can vouch for these entries, and this answer
+    is used to decide whether they may be published.
+    """
+    if digest is None:
+        return False
+    try:
+        released = load_released_tests()
+    except (OSError, ValueError):
+        return False
+    return len(released_entries(entries, released)) == len(entries)
 
 
 def get_catalog_version() -> str:

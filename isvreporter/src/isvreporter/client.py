@@ -317,6 +317,7 @@ def upload_test_catalog(
     schema_version: int,
     capabilities: list[str],
     suites: list[str],
+    released_only: bool = True,
 ) -> bool:
     """Upload test catalog for a suite version (idempotent per version).
 
@@ -333,6 +334,9 @@ def upload_test_catalog(
         schema_version: Catalog document schema version.
         capabilities: Declarable capability vocabulary (platform suites).
         suites: Plain suite names declared by the catalog.
+        released_only: Whether ``entries`` is exactly the set the release
+            manifest accounts for, from the catalog document's ``releasedOnly``.
+            A catalog carrying anything else is refused; see below.
 
     Returns:
         True if catalog was uploaded or already exists, False on error
@@ -352,6 +356,27 @@ def upload_test_catalog(
             f"Test catalog not uploaded: this build is not verifiably the {isv_test_version} "
             "release, and a catalog is only published for a release. Results are still "
             "uploaded, and the coverage report says which catalog it scored them against."
+        )
+        return True
+
+    # A published catalog has to hold exactly the checks a build of that release
+    # digests, because the service digests the catalog's own entry names and
+    # compares. Publishing a catalog built with ISVTEST_INCLUDE_UNRELEASED would
+    # store entries no build's digest covers, so every run reporting that
+    # release would compare unequal and be marked modified -- permanently, since
+    # a published catalog cannot be replaced.
+    #
+    # Refused rather than quietly filtered: the operator asked for a catalog of
+    # what they are running, and publishing a different set under that name
+    # without saying so is how the mismatch would go unnoticed in the first
+    # place.
+    if not released_only:
+        print(
+            "Test catalog not uploaded: this catalog contains checks the release manifest "
+            "does not account for, which usually means ISVTEST_INCLUDE_UNRELEASED is set. "
+            "A published catalog must hold exactly the released checks. Results are still "
+            "uploaded.",
+            file=sys.stderr,
         )
         return True
 

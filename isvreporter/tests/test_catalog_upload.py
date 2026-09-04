@@ -38,6 +38,44 @@ def _on_a_release_tag() -> Iterator[None]:
         yield
 
 
+class TestUploadTestCatalogEntriesGate:
+    """A published catalog must hold exactly the checks a build digests."""
+
+    @patch("isvreporter.client.urlopen")
+    def test_a_catalog_carrying_unreleased_checks_is_refused(self, mock_urlopen: MagicMock) -> None:
+        """Otherwise every run of that release compares unequal, for good.
+
+        The service digests the catalog's own entry names; a build digests the
+        released checks it holds. Publishing a catalog built with
+        ISVTEST_INCLUDE_UNRELEASED stores entries no build's digest covers, and
+        a published catalog cannot be replaced.
+        """
+        with patch("isvreporter.client.build_is_release", return_value=True):
+            assert _upload("1.2.3", released_only=False) is True
+        mock_urlopen.assert_not_called()
+
+    @patch("isvreporter.client.urlopen")
+    def test_the_released_set_publishes_normally(self, mock_urlopen: MagicMock) -> None:
+        get_response = MagicMock()
+        get_response.read.return_value = json.dumps([]).encode()
+        get_response.__enter__ = MagicMock(return_value=get_response)
+        get_response.__exit__ = MagicMock(return_value=False)
+        post_response = MagicMock()
+        post_response.read.return_value = json.dumps({"status": "created"}).encode()
+        post_response.__enter__ = MagicMock(return_value=post_response)
+        post_response.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.side_effect = [get_response, post_response]
+
+        with patch("isvreporter.client.build_is_release", return_value=True):
+            assert _upload("1.2.3", released_only=True) is True
+        assert mock_urlopen.call_count == 2
+
+    def test_refusing_never_fails_the_run(self) -> None:
+        """Results still upload; only the catalog is withheld."""
+        with patch("isvreporter.client.build_is_release", return_value=True):
+            assert _upload("1.2.3", released_only=False) is True
+
+
 class TestUploadTestCatalogReleaseGate:
     """Who is allowed to publish a catalog, and who is only presumed to be."""
 
@@ -89,7 +127,7 @@ class TestUploadTestCatalogReleaseGate:
             assert _upload("1.2.3") is True
 
 
-def _upload(version: str) -> bool:
+def _upload(version: str, *, released_only: bool = True) -> bool:
     return upload_test_catalog(
         endpoint="https://api.example.com",
         jwt_token="test-token",
@@ -98,6 +136,7 @@ def _upload(version: str) -> bool:
         schema_version=2,
         capabilities=["KUBERNETES"],
         suites=["network"],
+        released_only=released_only,
     )
 
 

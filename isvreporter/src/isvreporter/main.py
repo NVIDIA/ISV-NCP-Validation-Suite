@@ -343,6 +343,10 @@ def update(
                 # v1 files on disk still say `platforms`.
                 capabilities=catalog_data.get("capabilities") or catalog_data.get("platforms", []),
                 suites=catalog_data.get("suites", []),
+                # Absent on a file written before the flag existed. Those
+                # predate the hazard's only trigger being recorded at all, and
+                # defaulting to a refusal would block republishing them.
+                released_only=catalog_data.get("releasedOnly", True),
             )
         except FileNotFoundError:
             typer.echo(f"Warning: Test catalog file not found: {test_catalog}", err=True)

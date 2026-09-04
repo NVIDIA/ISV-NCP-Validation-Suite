@@ -153,6 +153,7 @@ class TestUpdateTestRun:
             "schemaVersion": 2,
             "isvTestVersion": "1.2.3",
             "catalogDigest": "sha256:abc",
+            "releasedOnly": True,
             "capabilities": ["kubernetes", "vm"],
             "suites": ["storage", "iam"],
             "entries": [{"name": "TestA"}],
@@ -178,6 +179,7 @@ class TestUpdateTestRun:
             schema_version=2,
             capabilities=["kubernetes", "vm"],
             suites=["storage", "iam"],
+            released_only=True,
         )
 
     def test_envelope_fixture_matches_the_real_catalog_document(self) -> None:
@@ -193,6 +195,7 @@ class TestUpdateTestRun:
             "schemaVersion",
             "isvTestVersion",
             "catalogDigest",
+            "releasedOnly",
             "capabilities",
             "suites",
             "entries",

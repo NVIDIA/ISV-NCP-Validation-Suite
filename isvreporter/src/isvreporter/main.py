@@ -303,11 +303,19 @@ def update(
         except Exception as e:
             typer.echo(f"Warning: Failed to upload JUnit XML: {e}", err=True)
 
+    # Read from the catalog rather than from this process: the reporting step of
+    # a split flow can run on a different machine than the one that ran the
+    # tests, and the digest describes the build that produced these results.
+    catalog_digest: str | None = None
+
     # Upload test catalog if provided (for coverage tracking)
     if test_catalog:
         try:
             typer.echo(f"Reading test catalog: {test_catalog}")
             catalog_data = json.loads(test_catalog.read_text())
+            # Taken before the upload, which is skipped entirely for a build
+            # that is not a release -- exactly the build worth reporting.
+            catalog_digest = catalog_data.get("catalogDigest")
             # `or` rather than a .get default: a file carrying an explicit null
             # names a version no more than a file missing the key does, and a
             # .get default only covers the missing key.
@@ -341,6 +349,7 @@ def update(
         log_output=log_output,
         isv_software_version=isv_software_version,
         isv_test_version=isv_test_version,
+        isv_test_catalog_digest=catalog_digest,
     )
 
 

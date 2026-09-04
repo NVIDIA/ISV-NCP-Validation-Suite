@@ -1,0 +1,124 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Tests for `isvctl report update`, the split-flow reporting path.
+
+This is the command the troubleshooting guide recommends as the trap or
+after_script that guarantees a run gets closed, so it is what CI uses. It closed
+runs without any build provenance while reading, from the same file, four other
+fields beside the one that carries it -- leaving exactly the population most
+likely to be running from a drifted tree permanently unknown.
+"""
+
+import json
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+from typer.testing import CliRunner
+
+from isvreporter.main import app
+
+runner = CliRunner()
+
+DIGEST = "sha256:48df75a8524fb5e99b03200a317c424eeb8d7881a6dfa2ee83bd704498000a47"
+
+
+@pytest.fixture
+def _service() -> MagicMock:
+    """Stand in for the whole service, yielding the update call to assert on."""
+    with (
+        patch(
+            "isvreporter.main._get_credentials",
+            return_value=("https://api.example.com", "issuer", "id", "secret"),
+        ),
+        patch("isvreporter.main.get_jwt_token", return_value="jwt-token"),
+        patch("isvreporter.main.upload_test_catalog", return_value=True),
+        patch("isvreporter.main.update_test_run") as update,
+    ):
+        yield update
+
+
+def _catalog(tmp_path: Path, **overrides: object) -> Path:
+    document = {
+        "schemaVersion": 2,
+        "isvTestVersion": "0.11.0",
+        "catalogDigest": DIGEST,
+        "capabilities": ["KUBERNETES"],
+        "suites": ["network"],
+        "entries": [{"name": "GpuCheck"}],
+        **overrides,
+    }
+    path = tmp_path / "test_catalog.json"
+    path.write_text(json.dumps(document))
+    return path
+
+
+def _update(*args: str) -> None:
+    result = runner.invoke(
+        app,
+        ["update", "--lab-id", "1", "--test-run-id", "58", "--status", "SUCCESS", *args],
+    )
+    assert result.exit_code == 0, result.output
+
+
+def test_the_digest_travels_with_the_run(_service: MagicMock, tmp_path: Path) -> None:
+    _update("--test-catalog", str(_catalog(tmp_path)))
+
+    assert _service.call_args.kwargs["isv_test_catalog_digest"] == DIGEST
+
+
+def test_the_digest_is_read_from_the_file_not_from_this_process(_service: MagicMock, tmp_path: Path) -> None:
+    """The reporting step may run on a different machine than the tests.
+
+    A CI job closing out a run that executed on a cluster must report the build
+    that produced the results, not whatever the runner happens to hold.
+    """
+    other = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+    _update("--test-catalog", str(_catalog(tmp_path, catalogDigest=other)))
+
+    assert _service.call_args.kwargs["isv_test_catalog_digest"] == other
+
+
+def test_a_failed_catalog_upload_still_reports_the_digest(_service: MagicMock, tmp_path: Path) -> None:
+    """The digest is read before the upload, and does not depend on it.
+
+    A build that is not a release publishes no catalog at all -- and that is
+    precisely the build whose provenance is worth recording.
+    """
+    with patch("isvreporter.main.upload_test_catalog", side_effect=RuntimeError("no route")):
+        _update("--test-catalog", str(_catalog(tmp_path)))
+
+    assert _service.call_args.kwargs["isv_test_catalog_digest"] == DIGEST
+
+
+def test_an_older_catalog_file_carries_no_digest(_service: MagicMock, tmp_path: Path) -> None:
+    """Written before the field existed. Unknown, and not reconstructed."""
+    document = json.loads(_catalog(tmp_path).read_text())
+    del document["catalogDigest"]
+    path = tmp_path / "old_catalog.json"
+    path.write_text(json.dumps(document))
+
+    _update("--test-catalog", str(path))
+
+    assert _service.call_args.kwargs["isv_test_catalog_digest"] is None
+
+
+def test_no_catalog_means_no_provenance(_service: MagicMock) -> None:
+    """Nothing to read is unknown, which is the honest answer."""
+    _update()
+
+    assert _service.call_args.kwargs["isv_test_catalog_digest"] is None

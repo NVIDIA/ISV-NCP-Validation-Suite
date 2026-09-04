@@ -25,6 +25,9 @@ import pytest
 
 from isvreporter.client import upload_test_catalog
 
+DIGEST = "sha256:" + "a" * 64
+RELEASE_REF = "v1.2.3-0-gdeadbee"
+
 
 @pytest.fixture
 def _on_a_release_tag() -> Iterator[None]:
@@ -38,68 +41,24 @@ def _on_a_release_tag() -> Iterator[None]:
         yield
 
 
-class TestUploadTestCatalogEntriesGate:
-    """A published catalog must hold exactly the checks a build digests."""
-
-    @patch("isvreporter.client.urlopen")
-    def test_a_catalog_carrying_unreleased_checks_is_refused(self, mock_urlopen: MagicMock) -> None:
-        """Otherwise every run of that release compares unequal, for good.
-
-        The service digests the catalog's own entry names; a build digests the
-        released checks it holds. Publishing a catalog built with
-        ISVTEST_INCLUDE_UNRELEASED stores entries no build's digest covers, and
-        a published catalog cannot be replaced.
-        """
-        with patch("isvreporter.client.build_is_release", return_value=True):
-            assert _upload("1.2.3", released_only=False) is True
-        mock_urlopen.assert_not_called()
-
-    @patch("isvreporter.client.urlopen")
-    def test_the_released_set_publishes_normally(self, mock_urlopen: MagicMock) -> None:
-        get_response = MagicMock()
-        get_response.read.return_value = json.dumps([]).encode()
-        get_response.__enter__ = MagicMock(return_value=get_response)
-        get_response.__exit__ = MagicMock(return_value=False)
-        post_response = MagicMock()
-        post_response.read.return_value = json.dumps({"status": "created"}).encode()
-        post_response.__enter__ = MagicMock(return_value=post_response)
-        post_response.__exit__ = MagicMock(return_value=False)
-        mock_urlopen.side_effect = [get_response, post_response]
-
-        with patch("isvreporter.client.build_is_release", return_value=True):
-            assert _upload("1.2.3", released_only=True) is True
-        assert mock_urlopen.call_count == 2
-
-    def test_refusing_never_fails_the_run(self) -> None:
-        """Results still upload; only the catalog is withheld."""
-        with patch("isvreporter.client.build_is_release", return_value=True):
-            assert _upload("1.2.3", released_only=False) is True
-
-
 class TestUploadTestCatalogReleaseGate:
     """Who is allowed to publish a catalog, and who is only presumed to be."""
 
     @patch("isvreporter.client.urlopen")
     def test_a_clean_release_tag_may_publish(self, mock_urlopen: MagicMock) -> None:
-        get_response = MagicMock()
-        get_response.read.return_value = json.dumps([]).encode()
-        get_response.__enter__ = MagicMock(return_value=get_response)
-        get_response.__exit__ = MagicMock(return_value=False)
         post_response = MagicMock()
         post_response.read.return_value = json.dumps({"status": "created"}).encode()
         post_response.__enter__ = MagicMock(return_value=post_response)
         post_response.__exit__ = MagicMock(return_value=False)
-        mock_urlopen.side_effect = [get_response, post_response]
+        mock_urlopen.return_value = post_response
 
-        with patch("isvreporter.client.build_ref", return_value="v1.2.3-0-gdeadbee"):
-            assert _upload("1.2.3") is True
-        assert mock_urlopen.call_count == 2
+        assert _upload("1.2.3", source_ref=RELEASE_REF) is True
+        assert mock_urlopen.call_count == 1
 
     @patch("isvreporter.client.urlopen")
     def test_a_build_past_the_tag_may_not(self, mock_urlopen: MagicMock) -> None:
         """The lab-42 build: its checks are not the ones 1.2.3 published."""
-        with patch("isvreporter.client.build_ref", return_value="v1.2.3-9-g08339c7"):
-            assert _upload("1.2.3") is True
+        assert _upload("1.2.3", source_ref="v1.2.3-9-g08339c7") is False
         mock_urlopen.assert_not_called()
 
     @patch("isvreporter.client.urlopen")
@@ -110,24 +69,21 @@ class TestUploadTestCatalogReleaseGate:
         catalog would come to be published under a release's number, which
         "latest catalog" then resolves to for good.
         """
-        with patch("isvreporter.client.build_ref", return_value=None):
-            assert _upload("1.2.3") is True
+        assert _upload("1.2.3", source_ref="unknown") is False
         mock_urlopen.assert_not_called()
 
     @patch("isvreporter.client.urlopen")
     def test_a_stale_install_may_not_either(self, mock_urlopen: MagicMock) -> None:
         """Metadata says 1.2.3, the tree is at v2.0.0: neither is safe to publish."""
-        with patch("isvreporter.client.build_ref", return_value="v2.0.0-0-gdeadbee"):
-            assert _upload("1.2.3") is True
+        assert _upload("1.2.3", source_ref="v2.0.0-0-gdeadbee") is False
         mock_urlopen.assert_not_called()
 
-    def test_refusing_to_publish_never_fails_the_run(self) -> None:
-        """Results still upload; only the catalog is withheld."""
-        with patch("isvreporter.client.build_ref", return_value="v1.2.3-9-g08339c7"):
-            assert _upload("1.2.3") is True
+    def test_refusing_to_publish_is_reported_to_the_publication_command(self) -> None:
+        """Catalog publication fails independently from ordinary result upload."""
+        assert _upload("1.2.3", source_ref="v1.2.3-9-g08339c7") is False
 
 
-def _upload(version: str, *, released_only: bool = True) -> bool:
+def _upload(version: str, *, source_ref: str = RELEASE_REF) -> bool:
     return upload_test_catalog(
         endpoint="https://api.example.com",
         jwt_token="test-token",
@@ -136,7 +92,8 @@ def _upload(version: str, *, released_only: bool = True) -> bool:
         schema_version=2,
         capabilities=["KUBERNETES"],
         suites=["network"],
-        released_only=released_only,
+        catalog_digest=DIGEST,
+        isv_test_build_ref=source_ref,
     )
 
 
@@ -157,18 +114,12 @@ class TestUploadTestCatalog:
     @patch("isvreporter.client.urlopen")
     def test_successful_upload(self, mock_urlopen: MagicMock) -> None:
         """Test successful catalog upload returns True."""
-        # GET returns empty list (version not found), POST returns success
-        get_response = MagicMock()
-        get_response.read.return_value = json.dumps([]).encode()
-        get_response.__enter__ = MagicMock(return_value=get_response)
-        get_response.__exit__ = MagicMock(return_value=False)
-
         post_response = MagicMock()
         post_response.read.return_value = json.dumps({"status": "created"}).encode()
         post_response.__enter__ = MagicMock(return_value=post_response)
         post_response.__exit__ = MagicMock(return_value=False)
 
-        mock_urlopen.side_effect = [get_response, post_response]
+        mock_urlopen.return_value = post_response
 
         entries = [
             {
@@ -200,18 +151,22 @@ class TestUploadTestCatalog:
             schema_version=2,
             capabilities=["kubernetes", "vm"],
             suites=["storage"],
+            catalog_digest=DIGEST,
+            isv_test_build_ref=RELEASE_REF,
         )
 
         assert result is True
-        assert mock_urlopen.call_count == 2
+        assert mock_urlopen.call_count == 1
 
-        post_call = mock_urlopen.call_args_list[1]
+        post_call = mock_urlopen.call_args
         request = post_call[0][0]
         assert request.full_url == "https://api.example.com/v1/test-catalog"
         assert request.method == "POST"
 
         payload = json.loads(request.data.decode())
         assert payload["isvTestVersion"] == "1.2.3"
+        assert payload["catalogDigest"] == DIGEST
+        assert payload["isvTestBuildRef"] == RELEASE_REF
         assert payload["schemaVersion"] == 2
         assert payload["capabilities"] == ["kubernetes", "vm"]
         assert payload["suites"] == ["storage"]
@@ -224,8 +179,8 @@ class TestUploadTestCatalog:
         assert payload["entries"][1]["test_ids"] == []
 
     @patch("isvreporter.client.urlopen")
-    def test_skips_upload_when_version_exists(self, mock_urlopen: MagicMock) -> None:
-        """Test that upload is skipped when version already exists."""
+    def test_idempotent_backend_response_returns_true(self, mock_urlopen: MagicMock) -> None:
+        """The backend accepts an identical repeat upload."""
         get_response = MagicMock()
         get_response.read.return_value = json.dumps(["1.2.3"]).encode()
         get_response.__enter__ = MagicMock(return_value=get_response)
@@ -240,14 +195,16 @@ class TestUploadTestCatalog:
             schema_version=2,
             capabilities=["kubernetes"],
             suites=["storage"],
+            catalog_digest=DIGEST,
+            isv_test_build_ref=RELEASE_REF,
         )
 
         assert result is True
         mock_urlopen.assert_called_once()
 
     @patch("isvreporter.client.urlopen")
-    def test_conflict_returns_true(self, mock_urlopen: MagicMock) -> None:
-        """Test that 409 Conflict (catalog already exists) returns True."""
+    def test_conflict_returns_false(self, mock_urlopen: MagicMock) -> None:
+        """Changed identity under an existing version is a real conflict."""
         mock_urlopen.side_effect = HTTPError(
             url="https://api.example.com/v1/test-catalog",
             code=HTTPStatus.CONFLICT,
@@ -264,9 +221,11 @@ class TestUploadTestCatalog:
             schema_version=2,
             capabilities=["kubernetes"],
             suites=["storage"],
+            catalog_digest=DIGEST,
+            isv_test_build_ref=RELEASE_REF,
         )
 
-        assert result is True
+        assert result is False
 
     @patch("isvreporter.client.urlopen")
     def test_server_error_returns_false(self, mock_urlopen: MagicMock) -> None:
@@ -287,6 +246,8 @@ class TestUploadTestCatalog:
             schema_version=2,
             capabilities=["kubernetes"],
             suites=["storage"],
+            catalog_digest=DIGEST,
+            isv_test_build_ref=RELEASE_REF,
         )
 
         assert result is False
@@ -304,6 +265,8 @@ class TestUploadTestCatalog:
             schema_version=2,
             capabilities=["kubernetes"],
             suites=["storage"],
+            catalog_digest=DIGEST,
+            isv_test_build_ref=RELEASE_REF,
         )
 
         assert result is False
@@ -327,6 +290,8 @@ class TestUploadTestCatalog:
             schema_version=2,
             capabilities=["kubernetes"],
             suites=["storage"],
+            catalog_digest=DIGEST,
+            isv_test_build_ref="v1.0.0-0-gdeadbee",
         )
 
         call_args = mock_urlopen.call_args
@@ -338,7 +303,7 @@ class TestUploadTestCatalog:
         assert entry["description"] == ""
         assert entry["labels"] == []
         assert "markers" not in entry
-        assert entry["source"] == ""
+        assert "source" not in entry
         assert entry["suite"] == ""
         assert entry["capability"] is None
         assert entry["requires"] == []
@@ -347,15 +312,11 @@ class TestUploadTestCatalog:
     @patch("isvreporter.client.urlopen")
     def test_forwards_catalog_axis_vocabulary(self, mock_urlopen: MagicMock) -> None:
         """Schema version and catalog axis lists are sent in the envelope."""
-        get_response = MagicMock()
-        get_response.read.return_value = json.dumps([]).encode()
-        get_response.__enter__ = MagicMock(return_value=get_response)
-        get_response.__exit__ = MagicMock(return_value=False)
         post_response = MagicMock()
         post_response.read.return_value = json.dumps({"status": "created"}).encode()
         post_response.__enter__ = MagicMock(return_value=post_response)
         post_response.__exit__ = MagicMock(return_value=False)
-        mock_urlopen.side_effect = [get_response, post_response]
+        mock_urlopen.return_value = post_response
 
         upload_test_catalog(
             endpoint="https://api.example.com",
@@ -365,9 +326,11 @@ class TestUploadTestCatalog:
             schema_version=2,
             capabilities=["kubernetes", "vm"],
             suites=["storage", "iam"],
+            catalog_digest=DIGEST,
+            isv_test_build_ref=RELEASE_REF,
         )
 
-        request = mock_urlopen.call_args_list[1][0][0]
+        request = mock_urlopen.call_args[0][0]
         payload = json.loads(request.data.decode())
         assert payload["schemaVersion"] == 2
         assert payload["capabilities"] == ["kubernetes", "vm"]
@@ -390,6 +353,8 @@ class TestUploadTestCatalog:
             schema_version=2,
             capabilities=["kubernetes"],
             suites=["storage"],
+            catalog_digest=DIGEST,
+            isv_test_build_ref="v1.0.0-0-gdeadbee",
         )
 
         request = mock_urlopen.call_args[0][0]

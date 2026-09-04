@@ -30,7 +30,6 @@ from isvreporter.client import (
     load_test_run_id,
     report_test_results,
     update_test_run,
-    upload_test_catalog,
 )
 from isvreporter.platform import get_platform_from_config, is_valid_platform, normalize_platform
 from isvreporter.version import get_version
@@ -242,7 +241,7 @@ def update(
         Path | None,
         typer.Option(
             "--test-catalog",
-            help="Path to test catalog JSON file to upload for coverage tracking",
+            help="Path to the execution catalog artifact whose identity should be reported",
         ),
     ] = None,
 ) -> None:
@@ -319,39 +318,22 @@ def update(
     # a split flow can run on a different machine than the one that ran the
     # tests, and the digest describes the build that produced these results.
     catalog_digest: str | None = None
+    catalog_build_ref: str | None = None
+    reported_test_version = isv_test_version
 
-    # Upload test catalog if provided (for coverage tracking)
+    # Read run identity from the artifact produced beside the results. Catalog
+    # publication is a separate release operation (`isvctl catalog push`).
     if test_catalog:
         try:
             typer.echo(f"Reading test catalog: {test_catalog}")
             catalog_data = json.loads(test_catalog.read_text())
-            # Taken before the upload, which is skipped entirely for a build
-            # that is not a release -- exactly the build worth reporting.
             catalog_digest = catalog_data.get("catalogDigest")
-            # `or` rather than a .get default: a file carrying an explicit null
-            # names a version no more than a file missing the key does, and a
-            # .get default only covers the missing key.
-            catalog_version = catalog_data.get("isvTestVersion") or isv_test_version or "unknown"
-            catalog_entries = catalog_data.get("entries", [])
-
-            upload_test_catalog(
-                endpoint=endpoint,
-                jwt_token=jwt_token,
-                isv_test_version=catalog_version,
-                entries=catalog_entries,
-                schema_version=catalog_data.get("schemaVersion", 1),
-                # v1 files on disk still say `platforms`.
-                capabilities=catalog_data.get("capabilities") or catalog_data.get("platforms", []),
-                suites=catalog_data.get("suites", []),
-                # Absent on a file written before the flag existed. Those
-                # predate the hazard's only trigger being recorded at all, and
-                # defaulting to a refusal would block republishing them.
-                released_only=catalog_data.get("releasedOnly", True),
-            )
+            catalog_build_ref = catalog_data.get("isvTestBuildRef")
+            reported_test_version = catalog_data.get("isvTestVersion") or isv_test_version
         except FileNotFoundError:
             typer.echo(f"Warning: Test catalog file not found: {test_catalog}", err=True)
         except Exception as e:
-            typer.echo(f"Warning: Failed to upload test catalog: {e}", err=True)
+            typer.echo(f"Warning: Failed to read test catalog: {e}", err=True)
 
     # Update test run with status and log
     update_test_run(
@@ -364,8 +346,9 @@ def update(
         complete_time=complete_time,
         log_output=log_output,
         isv_software_version=isv_software_version,
-        isv_test_version=isv_test_version,
+        isv_test_version=reported_test_version,
         isv_test_catalog_digest=catalog_digest,
+        isv_test_build_ref=catalog_build_ref,
     )
 
     # Raised only now, so the exit code still reports the upload failure while

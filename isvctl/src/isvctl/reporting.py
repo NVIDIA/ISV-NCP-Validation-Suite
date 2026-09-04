@@ -78,15 +78,13 @@ def warn_if_unreleased(isv_test_version: str | None) -> None:
     """Warn at run creation when this checkout is demonstrably not a release.
 
     Said here rather than only in the report because this is the moment the
-    operator is watching, and a build taken between releases runs checks the
-    published catalog does not describe - its results are then scored against a
-    release that never had them and can silently land nowhere.
+    operator is watching. A build taken between releases is supported, but it
+    is not the exact source release named by the static package version.
 
     Only speaks when the checkout proves the point. There is no warning when
     there is nothing to go on, which is the ordinary case for a partner running
-    from a copied tree or an air-gapped cluster: that question is settled by the
-    catalog digest on the service side, which reports it in the coverage view
-    rather than guessing about it here.
+    from a copied tree or an air-gapped cluster; the service reports that source
+    fact as unverified without guessing.
 
     Reads the reference itself rather than asking ``build_is_release`` and then
     re-reading it, so the parts named in the message are the same parts the
@@ -102,25 +100,22 @@ def warn_if_unreleased(isv_test_version: str | None) -> None:
     if tag != isv_test_version:
         logger.warning(
             "Reporting as %s, but this checkout is at v%s. The installed packages are stale "
-            "with respect to the tree, so the checks that run are not the ones %s published. "
-            "Re-sync the workspace (uv sync) to report accurately.",
+            "with respect to the tree. Re-sync the workspace (uv sync) to report "
+            "the intended version; results are still accepted.",
             isv_test_version,
             tag,
-            isv_test_version,
         )
         return
 
     logger.warning(
-        "Reporting as %s, but this checkout is %d commit(s) past v%s (at %s%s). No test catalog "
-        "is published for a build between releases, so these results are scored against v%s and "
-        "any check added since will be flagged in the coverage report. Check out a release tag "
-        "to avoid this.",
+        "Reporting as %s, but this checkout is %d commit(s) past v%s (at %s%s). "
+        "Results are accepted, and the service will label their source as custom. "
+        "Check out a release tag for a supported ISV production run.",
         isv_test_version,
         distance,
         tag,
         commit,
         ", with uncommitted changes" if dirty else "",
-        tag,
     )
 
 
@@ -183,7 +178,6 @@ def create_test_run(
 
     endpoint, ssa_issuer = get_environment_config()
 
-    # Auto-detect ISV test version from package
     isv_test_version = get_isv_test_version()
     warn_if_unreleased(isv_test_version)
 
@@ -235,7 +229,7 @@ def update_test_run(
         junit_xml: Path to JUnit XML file (optional)
         log_content: Direct log content string (optional, alternative to log_file)
         isv_software_version: ISV software stack version (opaque string from ISV)
-        catalog_document: Complete test catalog document for coverage tracking (optional)
+        catalog_document: Catalog identity artifact produced by the executing build (optional)
 
     Returns:
         True if successful, False otherwise
@@ -279,30 +273,13 @@ def update_test_run(
         log_output = redact_text(log_output)
 
     # Auto-detect ISV test version from package
-    isv_test_version = get_isv_test_version()
+    # An artifact may have crossed machines in a remote or split flow. Prefer
+    # the version recorded by the code that executed over this reporter's local
+    # package metadata.
+    isv_test_version = (catalog_document or {}).get("isvTestVersion") or get_isv_test_version()
 
     try:
         jwt_token = get_jwt_token(ssa_issuer, client_id, client_secret)
-
-        # Upload test catalog for coverage tracking (if provided)
-        if catalog_document:
-            try:
-                from isvreporter.client import upload_test_catalog as client_upload_catalog
-
-                client_upload_catalog(
-                    endpoint=endpoint,
-                    jwt_token=jwt_token,
-                    isv_test_version=catalog_document["isvTestVersion"],
-                    entries=catalog_document["entries"],
-                    schema_version=catalog_document["schemaVersion"],
-                    capabilities=catalog_document["capabilities"],
-                    suites=catalog_document["suites"],
-                    released_only=catalog_document.get("releasedOnly", True),
-                )
-            except SystemExit:
-                logger.warning("Failed to upload test catalog to ISV Lab Service")
-            except Exception as e:
-                logger.warning("Failed to upload test catalog: %s", e)
 
         # Upload JUnit XML test results first (if provided)
         if junit_xml and junit_xml.exists():
@@ -324,11 +301,9 @@ def update_test_run(
 
         # Update test run with status and log, even if JUnit upload failed.
         #
-        # The digest comes from the catalog this run already built in-process,
-        # so it describes the build that produced these very results. It is what
-        # lets the service state, rather than infer, whether the build was the
-        # release it reports itself as - and unlike the build ref beside it, it
-        # survives a copied tree and an air-gapped cluster.
+        # The digest and source reference come from the identity artifact the
+        # executing build produced. They remain independent facts even when the
+        # artifact crosses machines for reporting.
         client_update_test_run(
             endpoint=endpoint,
             lab_id=lab_id,
@@ -340,7 +315,10 @@ def update_test_run(
             isv_software_version=isv_software_version,
             isv_test_version=isv_test_version,
             isv_test_catalog_digest=_catalog_digest_of(catalog_document),
-            isv_test_build_ref=build_ref(),
+            # The execution artifact is authoritative, including an explicit
+            # null. Falling back here could attribute a split or remote run to
+            # the later reporting machine's checkout.
+            isv_test_build_ref=(catalog_document or {}).get("isvTestBuildRef"),
         )
         return True
     except SystemExit:

@@ -171,6 +171,9 @@ class TestParseBuildRef:
         """Operator-supplied free text is accepted upstream but carries no detail."""
         assert parse_build_ref(ref) is None
 
+    def test_oversized_distance_yields_no_detail(self) -> None:
+        assert parse_build_ref(f"v0.9.0-{'9' * 5000}-g08339c7") is None
+
 
 class TestBuildIsRelease:
     """True, False, and - the common case in the field - None."""

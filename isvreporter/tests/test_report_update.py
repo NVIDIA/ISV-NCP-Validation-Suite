@@ -45,7 +45,6 @@ def _service() -> MagicMock:
             return_value=("https://api.example.com", "issuer", "id", "secret"),
         ),
         patch("isvreporter.main.get_jwt_token", return_value="jwt-token"),
-        patch("isvreporter.main.upload_test_catalog", return_value=True),
         patch("isvreporter.main.update_test_run") as update,
     ):
         yield update
@@ -56,6 +55,7 @@ def _catalog(tmp_path: Path, **overrides: object) -> Path:
         "schemaVersion": 2,
         "isvTestVersion": "0.11.0",
         "catalogDigest": DIGEST,
+        "isvTestBuildRef": "v0.11.0-3-gabc1234",
         "capabilities": ["KUBERNETES"],
         "suites": ["network"],
         "entries": [{"name": "GpuCheck"}],
@@ -93,16 +93,22 @@ def test_the_digest_is_read_from_the_file_not_from_this_process(_service: MagicM
     assert _service.call_args.kwargs["isv_test_catalog_digest"] == other
 
 
-def test_a_failed_catalog_upload_still_reports_the_digest(_service: MagicMock, tmp_path: Path) -> None:
-    """The digest is read before the upload, and does not depend on it.
-
-    A build that is not a release publishes no catalog at all -- and that is
-    precisely the build whose provenance is worth recording.
-    """
-    with patch("isvreporter.main.upload_test_catalog", side_effect=RuntimeError("no route")):
-        _update("--test-catalog", str(_catalog(tmp_path)))
-
+def test_split_reporting_does_not_publish_a_catalog(_service: MagicMock, tmp_path: Path) -> None:
+    """Catalog publication is reserved for the release workflow."""
+    _update("--test-catalog", str(_catalog(tmp_path)))
     assert _service.call_args.kwargs["isv_test_catalog_digest"] == DIGEST
+
+
+def test_the_original_build_reference_travels_with_the_run(_service: MagicMock, tmp_path: Path) -> None:
+    """The later reporting machine must not replace the executing source identity."""
+    _update("--test-catalog", str(_catalog(tmp_path)))
+    assert _service.call_args.kwargs["isv_test_build_ref"] == "v0.11.0-3-gabc1234"
+
+
+def test_the_original_version_travels_with_the_run(_service: MagicMock, tmp_path: Path) -> None:
+    """The artifact version wins when the reporting machine supplies none."""
+    _update("--test-catalog", str(_catalog(tmp_path)))
+    assert _service.call_args.kwargs["isv_test_version"] == "0.11.0"
 
 
 def test_an_older_catalog_file_carries_no_digest(_service: MagicMock, tmp_path: Path) -> None:

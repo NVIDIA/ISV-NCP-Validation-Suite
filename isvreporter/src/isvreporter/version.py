@@ -26,13 +26,11 @@ tree several commits past ``v0.9.0`` still carries ``0.9.0`` while running
 checks that release never had. That is a separate fact and it travels in its
 own field, never folded into the version string.
 
-The authoritative answer to it is the catalog digest in ``isvtest.catalog``,
-which compares the checks this build contains against the ones the release
-published, and needs no checkout at all. What lives here is the optional
-detail layered on top: when a git checkout does happen to be present, the
-commit distance from the tag turns "not the 0.9.0 release" into "9 commits
-past v0.9.0 at 08339c7". Nothing depends on it - partners copy the source
-tree onto clusters and run air-gapped, where it is simply absent.
+Source and catalog identity are independent observations. This module reports
+the optional source reference; ``isvtest.catalog`` reports the catalog digest.
+When a git checkout is present, the reference identifies a clean tag, extra
+commits, or local changes. Partners may copy the source tree onto air-gapped
+clusters, where source provenance is simply unverified.
 """
 
 import logging
@@ -108,8 +106,7 @@ def describe_checkout() -> str | None:
     None is the ordinary answer, not an error. There is no checkout when the
     package was installed from a wheel, when a partner copied the source tree
     onto a cluster without ``.git``, or when the environment is air-gapped and
-    shallow-cloned. Every such case leaves the catalog digest to answer the
-    question this only decorates.
+    shallow-cloned. Every such case reports source provenance as unverified.
 
     Cached: the answer cannot change within a process, and every package's
     version lookup would otherwise spawn its own git.
@@ -192,7 +189,13 @@ def parse_build_ref(ref: str | None) -> tuple[str, int, str, bool] | None:
     match = _DESCRIBE_PATTERN.match(ref.strip())
     if match is None:
         return None
-    return match["tag"], int(match["distance"]), match["commit"], bool(match["dirty"])
+    try:
+        distance = int(match["distance"])
+    except ValueError:
+        # Python limits extremely long decimal conversions. Treat hostile or
+        # corrupt input like every other unreadable reference: unverified.
+        return None
+    return match["tag"], distance, match["commit"], bool(match["dirty"])
 
 
 def build_is_release(package_version: str, ref: str | None) -> bool | None:
@@ -203,10 +206,7 @@ def build_is_release(package_version: str, ref: str | None) -> bool | None:
     to go on** - no checkout, unreadable output, or operator-supplied free text.
 
     None is the common case in the field and must not be read as either answer.
-    It is the honest report from a mechanism that only works where git does; the
-    catalog digest answers the same question everywhere, and the service prefers
-    it. This exists so the client can warn an operator locally, before a run,
-    without waiting to be told by the service afterwards.
+    It is the honest report from a mechanism that only works where git does.
 
     A tag that disagrees with the installed metadata counts as not-a-release:
     the install is stale with respect to the tree, so the checks that run are

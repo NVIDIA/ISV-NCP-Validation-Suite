@@ -23,7 +23,7 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from isvreporter.version import build_is_release, build_ref
+from isvreporter.version import build_is_release
 
 # Constants
 OUTPUT_DIR = Path("_output")
@@ -162,12 +162,12 @@ def update_test_run(
         isv_test_version: ISV test tool version (e.g., "1.12.3")
         isv_test_catalog_digest: Digest of the checks this build contains, from
             ``isvtest.catalog.catalog_digest``. The service compares it against
-            the catalog published for isv_test_version to establish whether this
-            build is that release. Omitted when it cannot be computed.
+            the catalog published for isv_test_version to classify catalog
+            provenance independently. Omitted when it cannot be computed.
         isv_test_build_ref: ``git describe`` output for the checkout, when there
-            is one (e.g. ``"v0.9.0-9-g08339c7"``). Detail only - it enriches the
-            message the digest already decided, and is absent for the many
-            partners running from a copied tree or an air-gapped cluster.
+            is one (e.g. ``"v0.9.0-9-g08339c7"``). It independently classifies
+            source provenance and is absent for the many partners running from
+            a copied tree or an air-gapped cluster.
 
     Returns:
         API response dictionary
@@ -317,13 +317,14 @@ def upload_test_catalog(
     schema_version: int,
     capabilities: list[str],
     suites: list[str],
-    released_only: bool = True,
+    catalog_digest: str,
+    isv_test_build_ref: str,
 ) -> bool:
-    """Upload test catalog for a suite version (idempotent per version).
+    """Publish a release catalog, idempotent for an identical identity.
 
     Sends the full list of available validation tests for a given isvtest
-    version. If the backend already has a catalog for this version, it
-    returns 409 Conflict which is treated as success (dedup).
+    version. A 409 means a different identity already occupies the version and
+    is returned as a publication failure.
 
     Args:
         endpoint: ISV Lab Service endpoint URL
@@ -334,12 +335,11 @@ def upload_test_catalog(
         schema_version: Catalog document schema version.
         capabilities: Declarable capability vocabulary (platform suites).
         suites: Plain suite names declared by the catalog.
-        released_only: Whether ``entries`` is exactly the set the release
-            manifest accounts for, from the catalog document's ``releasedOnly``.
-            A catalog carrying anything else is refused; see below.
+        catalog_digest: Digest carried by the generated catalog artifact.
+        isv_test_build_ref: Build reference carried by that same artifact.
 
     Returns:
-        True if catalog was uploaded or already exists, False on error
+        True if the identical catalog was accepted, False on rejection or error
     """
     # A catalog is a release's published contract: the thing every lab's coverage
     # is scored against, and what "latest catalog" resolves to for good. Publish
@@ -351,52 +351,21 @@ def upload_test_catalog(
     # unknown case through is precisely how a working tree's catalog would come
     # to be published under a release's number. Releases are published by the
     # release pipeline, which does have a checkout, so nothing legitimate is lost.
-    if build_is_release(isv_test_version, build_ref()) is not True:
+    if build_is_release(isv_test_version, isv_test_build_ref) is not True:
         print(
             f"Test catalog not uploaded: this build is not verifiably the {isv_test_version} "
             "release, and a catalog is only published for a release. Results are still "
             "uploaded, and the coverage report says which catalog it scored them against."
         )
-        return True
-
-    # A published catalog has to hold exactly the checks a build of that release
-    # digests, because the service digests the catalog's own entry names and
-    # compares. Publishing a catalog built with ISVTEST_INCLUDE_UNRELEASED would
-    # store entries no build's digest covers, so every run reporting that
-    # release would compare unequal and be marked modified -- permanently, since
-    # a published catalog cannot be replaced.
-    #
-    # Refused rather than quietly filtered: the operator asked for a catalog of
-    # what they are running, and publishing a different set under that name
-    # without saying so is how the mismatch would go unnoticed in the first
-    # place.
-    if not released_only:
-        print(
-            "Test catalog not uploaded: this catalog contains checks the release manifest "
-            "does not account for, which usually means ISVTEST_INCLUDE_UNRELEASED is set. "
-            "A published catalog must hold exactly the released checks. Results are still "
-            "uploaded.",
-            file=sys.stderr,
-        )
-        return True
-
-    # Check if this version's catalog already exists
-    try:
-        check_url = f"{endpoint}/v1/test-catalog"
-        check_req = Request(check_url, headers={"Authorization": f"Bearer {jwt_token}"}, method="GET")
-        with urlopen(check_req, timeout=10) as resp:
-            versions = json.loads(resp.read().decode())
-            if isv_test_version in versions:
-                print(f"Test catalog already exists for version {isv_test_version} (skipped)")
-                return True
-    except Exception:
-        pass
+        return False
 
     url = f"{endpoint}/v1/test-catalog"
 
     payload = {
         "schemaVersion": schema_version,
         "isvTestVersion": isv_test_version,
+        "catalogDigest": catalog_digest,
+        "isvTestBuildRef": isv_test_build_ref,
         "capabilities": capabilities,
         "suites": suites,
         "entries": [
@@ -404,7 +373,6 @@ def upload_test_catalog(
                 "name": e["name"],
                 "description": e.get("description", ""),
                 "labels": e.get("labels", []),
-                "source": e.get("source", ""),
                 "suite": e.get("suite", ""),
                 "capability": e.get("capability"),
                 "requires": e.get("requires", []),
@@ -427,8 +395,11 @@ def upload_test_catalog(
             return True
     except HTTPError as e:
         if e.code == 409:
-            print(f"Test catalog already exists for version {isv_test_version} (skipped)")
-            return True
+            print(
+                f"ERROR: A different catalog already exists for version {isv_test_version}",
+                file=sys.stderr,
+            )
+            return False
         print(f"ERROR: Failed to upload test catalog (HTTP {e.code})", file=sys.stderr)
         print(f"Response: {e.read().decode()}", file=sys.stderr)
         return False

@@ -89,7 +89,7 @@ skip**. Two configs wire this up:
 - `../../config/storage.yaml` — bare-metal shim-only run (no cluster):
 
   ```bash
-  ISVCTL_DEMO_MODE=1 ISVTEST_INCLUDE_UNRELEASED=1 \
+  ISVCTL_DEMO_MODE=1 \
     uv run isvctl test run -f isvctl/configs/providers/my-isv/config/storage.yaml
   ```
 
@@ -99,8 +99,7 @@ skip**. Two configs wire this up:
 
   ```bash
   export K8S_CSI_SHARED_FS_SC=my-isv-rwx
-  ISVTEST_INCLUDE_UNRELEASED=1 \
-    uv run isvctl test run \
+  uv run isvctl test run \
       -f isvctl/configs/providers/my-isv/config/storage-k8s.yaml \
       -- -k "K8sCsi or K8sFile or K8sNfs or StorageProviderApi"
   ```
@@ -151,7 +150,7 @@ in demo mode (the new check ships unreleased, so the orchestrator skips it by
 default):
 
 ```bash
-ISVCTL_DEMO_MODE=1 ISVTEST_INCLUDE_UNRELEASED=1 \
+ISVCTL_DEMO_MODE=1 \
   uv run isvctl test run -f isvctl/configs/providers/my-isv/config/storage.yaml
 ```
 

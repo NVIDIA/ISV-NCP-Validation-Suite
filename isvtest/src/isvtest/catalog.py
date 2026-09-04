@@ -24,18 +24,18 @@ Suite placement and capability requirements come only from canonical
 """
 
 import hashlib
+import json
 import logging
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
 import yaml
-from isvreporter.version import get_version
+from isvreporter.version import build_ref, get_version
 
 from isvtest.core.composite import CompositeCheck, is_composite
 from isvtest.core.discovery import discover_all_tests
 from isvtest.core.resolution import DECLARABLE_CAPABILITIES, canonical_suite_name, resolve_class_key
-from isvtest.release_manifest import INCLUDE_UNRELEASED_ENV, load_released_test_filter, load_released_tests
 
 logger = logging.getLogger(__name__)
 
@@ -188,8 +188,8 @@ def build_label_map() -> dict[str, set[str]]:
 def build_label_file_map() -> dict[str, set[str]]:
     """Map label -> config files (relative to ``isvctl/configs``) that declare it.
 
-    Unlike the catalog this is a raw config scan (not release-gated): it records
-    every suite/provider YAML where a label appears on a check's wiring.
+    This raw config scan records every suite/provider YAML where a label appears
+    on a check's wiring.
     """
     configs_dir = _find_configs_dir()
     if not configs_dir:
@@ -252,36 +252,11 @@ def _build_suite_map() -> dict[str, dict[str, Any]]:
     return suite_map
 
 
-def released_entries(entries: list[dict[str, Any]], released: set[str]) -> list[dict[str, Any]]:
-    """Return the entries of *entries* that *released* accounts for.
-
-    The rule deciding which checks a release contains, in one place. It is
-    load-bearing twice over -- once when building the catalog that gets
-    published, once when digesting the catalog a build holds -- and the two must
-    agree exactly or a build digests a different name set than the catalog it
-    published, which reports every build in the field as modified.
-
-    ``resolve_class_key`` handles variant names (``Check-3b``) matching their
-    base class, so an exact hit is tried first: it is the overwhelmingly common
-    case, and the fallback rescans the released set for every miss.
-    """
-    released_keys = tuple(released)
-    return [
-        entry
-        for entry in entries
-        if str(entry["name"]) in released or resolve_class_key(str(entry["name"]), released_keys) is not None
-    ]
-
-
-def build_catalog(*, released_only: bool = True) -> list[dict[str, Any]]:
+def build_catalog() -> list[dict[str, Any]]:
     """Discover all validation tests and return structured catalog entries.
 
     Each entry is one suite wiring name. Plain suites carry ``requires`` while
     platform suites carry their ``capability`` key.
-
-    Args:
-        released_only: When True, omit tests that are not in the committed
-            release manifest. Set False only when refreshing that manifest.
 
     Returns:
         List of catalog entry dicts, each containing:
@@ -348,19 +323,6 @@ def build_catalog(*, released_only: bool = True) -> list[dict[str, Any]]:
             }
         )
 
-    if released_only:
-        released_tests = load_released_test_filter()
-        if released_tests is None:
-            logger.info("Including unreleased tests in catalog because %s is enabled", INCLUDE_UNRELEASED_ENV)
-        else:
-            kept = released_entries(catalog, released_tests)
-            kept_names = {entry["name"] for entry in kept}
-            omitted_names = sorted(entry["name"] for entry in catalog if entry["name"] not in kept_names)
-            catalog = kept
-            if omitted_names:
-                logger.info("Omitted %d unreleased tests from catalog", len(omitted_names))
-                logger.debug("Unreleased tests omitted from catalog: %s", ", ".join(omitted_names))
-
     logger.info("Built test catalog with %d entries", len(catalog))
     return catalog
 
@@ -414,7 +376,12 @@ def _assert_disjoint_vocabulary(capabilities: list[str], suites: list[str]) -> N
         )
 
 
-def catalog_document(entries: list[dict[str, Any]], version: str) -> dict[str, Any]:
+def catalog_document(
+    entries: list[dict[str, Any]],
+    version: str,
+    *,
+    isv_test_build_ref: str | None = None,
+) -> dict[str, Any]:
     """Wrap catalog ``entries`` in the versioned upload/artifact envelope.
 
     Adds the schema version, the isvtest package version, and the catalog axis
@@ -422,52 +389,23 @@ def catalog_document(entries: list[dict[str, Any]], version: str) -> dict[str, A
     ``labels`` are intentionally not summarized at the top level - a consumer
     can derive the label universe from the entries when needed.
 
-    Also carries ``catalogDigest``, so the value the service will compare this
-    build against is legible in the saved artifact rather than only computed in
-    passing on the way to the upload, and ``releasedOnly``, which says whether
-    the digest covers the entries beside it or only some of them.
-
-    Those two can disagree, which is the reason the flag exists. The digest
-    always covers the released checks (see :func:`catalog_digest`), while
-    ``entries`` is whatever the caller built - and ``build_catalog`` honours
-    ``ISVTEST_INCLUDE_UNRELEASED``. A document built with that variable set
-    therefore describes more checks than it digests, and publishing it would
-    store a catalog the service digests differently than every build reporting
-    that release does, marking all of them modified for good. The flag lets the
-    upload refuse it; building the document is still fine, and is ordinary in
-    development.
-
-    Additive, and no schema bump: the upload payload is assembled from named
-    fields rather than from this envelope, so no consumer's parse changes.
+    The build reference and digest travel in the artifact so later reporting or
+    publication steps describe the code that generated it, not the machine that
+    happens to read it.
     """
     capabilities, suites = suite_vocabularies()
     _assert_disjoint_vocabulary(capabilities, suites)
-    digest = catalog_digest(entries)
-    return {
+    reference = build_ref() if isv_test_build_ref is None else isv_test_build_ref
+    document = {
         "schemaVersion": CATALOG_SCHEMA_VERSION,
         "isvTestVersion": version,
-        "catalogDigest": digest,
-        "releasedOnly": _covers_only_released(entries, digest),
+        "isvTestBuildRef": reference,
         "capabilities": capabilities,
         "suites": suites,
         "entries": entries,
     }
-
-
-def _covers_only_released(entries: list[dict[str, Any]], digest: str | None) -> bool:
-    """Whether every entry in *entries* is one the release manifest accounts for.
-
-    False when the manifest cannot be read at all: an unreadable manifest is
-    exactly the case where nothing can vouch for these entries, and this answer
-    is used to decide whether they may be published.
-    """
-    if digest is None:
-        return False
-    try:
-        released = load_released_tests()
-    except (OSError, ValueError):
-        return False
-    return len(released_entries(entries, released)) == len(entries)
+    document["catalogDigest"] = catalog_digest(document)
+    return document
 
 
 def get_catalog_version() -> str:
@@ -479,51 +417,33 @@ def get_catalog_version() -> str:
     return get_version("isvtest")
 
 
-def catalog_digest(entries: list[dict[str, Any]]) -> str | None:
-    """Return a digest identifying which checks this build actually contains.
+def catalog_digest(document: dict[str, Any]) -> str:
+    """Return the SHA-256 identity of the complete public catalog contract.
 
-    The one fact a running build can state about itself without a git checkout,
-    a git binary or a network: the set of checks it is able to run. Partners
-    copy the source tree onto a cluster and run air-gapped, so anything derived
-    from the surroundings of the code is unavailable exactly when it is most
-    needed; this is derived from the code itself and so is always available.
-
-    The service holds the published catalog for every release and applies this
-    same rule to its entry names. An equal digest proves the build is the
-    release it claims to be; an unequal one proves it is not. Neither is a
-    guess, and no search for a best-matching version is involved - it is one
-    equality test against the version the build itself declared.
-
-    Names only, deduplicated and sorted, newline-joined, UTF-8. Names are what
-    coverage matches results on, so a rewritten description or a re-labelled
-    check does not read as a different build. The corollary is the known blind
-    spot: a build that changes only what a check *does*, never what it is
-    called, is indistinguishable from the release here.
-
-    The release manifest is applied here regardless of
-    ``ISVTEST_INCLUDE_UNRELEASED``, which the caller's ``build_catalog()`` does
-    honour. A published catalog holds a release's released checks, so digesting
-    what the operator chose to *run* would report every partner who sets that
-    variable - Rafay among them - as running a build that is not the release.
-
-    Args:
-        entries: Catalog entries, as returned by :func:`build_catalog`, with or
-            without unreleased tests included.
-
-    Returns:
-        ``"sha256:"`` followed by the hex digest, or ``None`` if the release
-        manifest cannot be read and the released set is therefore unknown.
+    Version and source provenance are intentionally excluded. Set-like lists
+    and entries are canonicalized before compact, key-sorted JSON encoding so
+    semantically identical documents digest identically regardless of discovery
+    or YAML ordering.
     """
-    try:
-        released = load_released_tests()
-    except (OSError, ValueError) as exc:
-        # Claiming a digest over an unfiltered catalog would report a genuine
-        # release as drift, which is worse than declining to say anything.
-        logger.warning("Cannot digest the catalog without the release manifest: %s", exc)
-        return None
-
-    names = sorted(
-        {str(entry["name"]) for entry in entries if resolve_class_key(str(entry["name"]), released) is not None}
-    )
-    payload = "\n".join(names).encode("utf-8")
+    canonical_entries = []
+    for entry in document.get("entries", []):
+        canonical_entries.append(
+            {
+                "name": entry.get("name", ""),
+                "description": entry.get("description", ""),
+                "labels": sorted(set(entry.get("labels") or [])),
+                "capability": entry.get("capability"),
+                "suite": entry.get("suite", ""),
+                "requires": sorted(set(entry.get("requires") or [])),
+                "test_ids": sorted(set(entry.get("test_ids") or [])),
+            }
+        )
+    canonical_entries.sort(key=lambda entry: json.dumps(entry, sort_keys=True, separators=(",", ":")))
+    contract = {
+        "schemaVersion": document.get("schemaVersion", CATALOG_SCHEMA_VERSION),
+        "capabilities": sorted(set(document.get("capabilities") or [])),
+        "suites": sorted(set(document.get("suites") or [])),
+        "entries": canonical_entries,
+    }
+    payload = json.dumps(contract, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     return f"sha256:{hashlib.sha256(payload).hexdigest()}"

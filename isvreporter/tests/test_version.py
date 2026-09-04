@@ -47,6 +47,7 @@ def _uncached_describe() -> Iterator[None]:
 
 
 def _describe(output: str) -> subprocess.CompletedProcess[str]:
+    """Return a successful git-describe process result for *output*."""
     return subprocess.CompletedProcess(args=[], returncode=0, stdout=f"{output}\n", stderr="")
 
 

@@ -145,9 +145,7 @@ The skeleton ships with a `DEMO_MODE = os.environ.get("ISVCTL_DEMO_MODE")
 `AuthenticationError` to make it obvious the backend isn't wired up; demo runs
 return dummy data so the validation passes end-to-end. The optional
 `create_volume` / `delete_volume` stay raising `NotSupportedError` either way
-(volume-provisioning then reports a clean skip). To exercise the storage check
-in demo mode (the new check ships unreleased, so the orchestrator skips it by
-default):
+(volume-provisioning then reports a clean skip). To exercise the storage check in demo mode:
 
 ```bash
 ISVCTL_DEMO_MODE=1 \

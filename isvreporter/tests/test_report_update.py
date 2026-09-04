@@ -117,6 +117,60 @@ def test_an_older_catalog_file_carries_no_digest(_service: MagicMock, tmp_path: 
     assert _service.call_args.kwargs["isv_test_catalog_digest"] is None
 
 
+def test_a_failed_results_upload_still_closes_the_run(_service: MagicMock, tmp_path: Path) -> None:
+    """The bug this command exists to prevent, in the command itself.
+
+    report_test_results exits the process on an HTTP failure. SystemExit is not
+    an Exception, so it travelled past the handler and ended the command before
+    update_test_run ran -- leaving STARTED exactly the run the troubleshooting
+    guide recommends this command to close.
+    """
+    junit = tmp_path / "junit.xml"
+    junit.write_text("<testsuite/>")
+
+    with patch("isvreporter.main.report_test_results", side_effect=SystemExit(1)):
+        result = runner.invoke(
+            app,
+            [
+                "update",
+                "--lab-id",
+                "1",
+                "--test-run-id",
+                "58",
+                "--status",
+                "SUCCESS",
+                "--junit-xml",
+                str(junit),
+            ],
+        )
+
+    _service.assert_called_once()
+    assert _service.call_args.kwargs["status"] == "SUCCESS"
+    # The failure is still reported, only after the run has been closed.
+    assert result.exit_code == 1
+
+
+def test_a_missing_junit_file_remains_a_warning(_service: MagicMock, tmp_path: Path) -> None:
+    """Unchanged: the paths that have always warned still exit zero."""
+    result = runner.invoke(
+        app,
+        [
+            "update",
+            "--lab-id",
+            "1",
+            "--test-run-id",
+            "58",
+            "--status",
+            "SUCCESS",
+            "--junit-xml",
+            str(tmp_path / "absent.xml"),
+        ],
+    )
+
+    _service.assert_called_once()
+    assert result.exit_code == 0, result.output
+
+
 def test_no_catalog_means_no_provenance(_service: MagicMock) -> None:
     """Nothing to read is unknown, which is the honest answer."""
     _update()

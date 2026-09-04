@@ -286,6 +286,7 @@ def update(
     jwt_token = get_jwt_token(ssa_issuer, client_id, client_secret)
 
     # Upload JUnit XML test results first (if provided)
+    results_upload_failed = False
     if junit_xml:
         try:
             typer.echo(f"Reading JUnit XML: {junit_xml}")
@@ -300,6 +301,17 @@ def update(
             )
         except FileNotFoundError:
             typer.echo(f"Warning: JUnit XML file not found: {junit_xml}", err=True)
+        except SystemExit:
+            # report_test_results exits the process on an HTTP or network
+            # failure, and SystemExit is not an Exception, so it used to travel
+            # straight past the handler below and end the command here -- before
+            # the run was closed. This command is what the troubleshooting guide
+            # recommends as the trap that guarantees a run does not stay
+            # STARTED, so a failed upload leaving one STARTED defeated its
+            # entire purpose. The failure is still reported through the exit
+            # code, after the run has been closed.
+            results_upload_failed = True
+            typer.echo("Warning: Failed to upload JUnit XML", err=True)
         except Exception as e:
             typer.echo(f"Warning: Failed to upload JUnit XML: {e}", err=True)
 
@@ -351,6 +363,12 @@ def update(
         isv_test_version=isv_test_version,
         isv_test_catalog_digest=catalog_digest,
     )
+
+    # Raised only now, so the exit code still reports the upload failure while
+    # the run itself has been closed. Deliberately not raised for the other
+    # failure paths above, which have always been warnings that exit zero.
+    if results_upload_failed:
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":

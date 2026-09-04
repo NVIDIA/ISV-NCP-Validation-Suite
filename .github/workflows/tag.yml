@@ -17,8 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: release
     timeout-minutes: 10
-    outputs:
-      version: ${{ steps.version.outputs.value }}
     steps:
       # fetch-depth: 0 so existing tags are visible to the guards below.
       # persist-credentials: false so no write-capable token is left behind in
@@ -140,24 +138,6 @@ jobs:
               ;;
           esac
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-
-      - name: Generate release catalog artifact
-        env:
-          VERSION: ${{ steps.version.outputs.value }}
-        run: |
-          uv sync --locked
-          export ISVTEST_BUILD_REF="v$VERSION-0-g$(git rev-parse --short=12 HEAD)"
-          uv run isvctl catalog push --dry-run
-
-      - name: Preserve release catalog artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: release-catalog-${{ steps.version.outputs.value }}
-          path: _output/test_catalog.json
-          if-no-files-found: error
-
       - name: Create tag
         env:
           GH_TOKEN: ${{ github.token }}
@@ -170,21 +150,24 @@ jobs:
             -f sha="$SHA" > /dev/null
           echo "Created tag v$VERSION at $SHA"
 
+  # Both publish jobs build the catalog from this commit rather than passing an
+  # artifact between them. The endpoint and credentials come from the job's
+  # environment, so the same secret names resolve to a different service per job.
   publish-staging:
     needs: tag
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 10
     steps:
+      # fetch-depth: 0 so the tag the previous job created is visible here. A
+      # catalog is only published from a build git describes as that exact
+      # release, and a shallow clone carries no tags to describe.
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - uses: astral-sh/setup-uv@v7
-      - uses: actions/download-artifact@v6
-        with:
-          name: release-catalog-${{ needs.tag.outputs.version }}
-          path: release-catalog
       - name: Publish catalog to staging
         env:
           ISV_SERVICE_ENDPOINT: ${{ secrets.ISV_SERVICE_ENDPOINT }}
@@ -193,7 +176,7 @@ jobs:
           ISV_CLIENT_SECRET: ${{ secrets.ISV_CLIENT_SECRET }}
         run: |
           uv sync --locked
-          uv run isvctl catalog push --file release-catalog/test_catalog.json
+          uv run isvctl catalog push
 
   publish-production:
     needs: [tag, publish-staging]
@@ -201,16 +184,14 @@ jobs:
     environment: production
     timeout-minutes: 10
     steps:
+      # fetch-depth: 0 for the same reason as publish-staging.
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - uses: astral-sh/setup-uv@v7
-      - uses: actions/download-artifact@v6
-        with:
-          name: release-catalog-${{ needs.tag.outputs.version }}
-          path: release-catalog
-      - name: Publish identical catalog to production
+      - name: Publish catalog to production
         env:
           ISV_SERVICE_ENDPOINT: ${{ secrets.ISV_SERVICE_ENDPOINT }}
           ISV_SSA_ISSUER: ${{ secrets.ISV_SSA_ISSUER }}
@@ -218,4 +199,4 @@ jobs:
           ISV_CLIENT_SECRET: ${{ secrets.ISV_CLIENT_SECRET }}
         run: |
           uv sync --locked
-          uv run isvctl catalog push --file release-catalog/test_catalog.json
+          uv run isvctl catalog push

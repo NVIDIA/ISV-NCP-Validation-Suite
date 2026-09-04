@@ -319,9 +319,9 @@ After bumping, open a PR, review, and merge. Then the repo maintainers will crea
 
 1. Go to **Actions** > **Create version tag** in GitHub
 2. Enter the version (e.g. `1.0.0`, without leading `v`)
-3. The workflow verifies all package versions, generates one catalog artifact,
-   creates `v1.0.0`, and publishes that exact artifact to staging
-4. After production approval, the same artifact is published to production
+3. The workflow verifies all package versions, creates `v1.0.0`, then builds the
+   catalog from that tagged commit and publishes it to staging
+4. After production approval, the catalog is published to production
 
 The workflow tags whichever branch it is dispatched from, and only `main` or a
 `releases/**` branch is accepted. It will not re-cut an existing tag - tags are

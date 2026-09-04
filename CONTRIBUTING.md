@@ -9,40 +9,49 @@ Thank you for your interest in contributing! This project is a **Python monorepo
 
 ## Table of Contents
 
-- [Issues Management] (#issues-management)
+- [Issues Management](#issues-management)
+- [Find Something to Work On](#find-something-to-work-on)
 - [About This Codebase](#about-this-codebase)
 - [Code of Conduct](#code-of-conduct)
 - [Getting Started](#getting-started)
 - [Development](#development)
 - [Testing](#testing)
 - [Pull Request Process](#pull-request-process)
+- [Review Process](#review-process)
 - [Developer Certificate of Origin (DCO)](#developer-certificate-of-origin-dco)
 - [Releasing](#releasing)
 
 ## Issues Management
 
-Read the README.md to understand the project
-Check existing issues to avoid duplicates
-Browse discussions for questions
-Review the security policy for security-related contributions
+- Read the `README.md` to understand the project.
+- Check existing issues to avoid duplicates.
+- Browse [Discussions](https://github.com/NVIDIA/ai-cloud-validation/discussions) for questions.
+- Review the [security policy](SECURITY.md) for security-related contributions.
 
 Ways to contribute:
 
-🐛 Report bugs via GitHub issues
-💡 Suggest features through feature requests
-📝 Improve documentation
-🧪 Add tests to increase coverage
-🔧 Fix issues with code contributions
-💬 Help others in discussions
+- 🐛 Report bugs via GitHub issues
+- 💡 Suggest features through feature requests
+- 📝 Improve documentation
+- 🧪 Add tests to increase coverage
+- 🔧 Fix issues with code contributions
+- 💬 Help others in discussions
 
-Reporting Issues
+### Reporting Issues
+
 When reporting issues:
 
-Use the issue templates when available
-Provide clear reproduction steps
-Include environment details (OS, Kubernetes version, etc.)
-Add relevant logs or error messages
-Search existing issues first to avoid duplicates
+- Use the issue templates when available.
+- Provide clear reproduction steps.
+- Include environment details (OS, Kubernetes version, etc.).
+- Add relevant logs or error messages.
+- Search existing issues first to avoid duplicates.
+
+## Find Something to Work On
+
+- Browse [`good first issue`](https://github.com/NVIDIA/ai-cloud-validation/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) for beginner-friendly tasks, or [`help wanted`](https://github.com/NVIDIA/ai-cloud-validation/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) for slightly larger ones.
+- **Claiming an issue:** comment on it to let others know you're taking it, so effort isn't duplicated.
+- Not sure where to start? Adding a provider stub via the [my-isv scaffold](isvctl/configs/providers/my-isv/scripts/README.md) with `make demo-test` is a self-contained first contribution that needs no real cloud hardware.
 
 ## About This Codebase
 
@@ -184,6 +193,14 @@ workflow). Without it the orchestrator logs `Skipping unreleased validation
 - Ensure all CI checks pass before requesting review.
 - Be responsive to feedback and code review comments.
 - Assign reviewer as `NCP ISV Lab Maintainer` - at least one engineer will review the PR.
+
+## Review Process
+
+Maintainers review PRs on a best-effort basis. Reviews are collaborative — suggested
+changes are meant to help your contribution land, not to criticize. Once approved, a
+maintainer will merge your PR. If you haven't heard back, feel free to ping the PR.
+
+[PLACEHOLDER: team to confirm timeline] — e.g., an initial response within N business days.
 
 ## Developer Certificate of Origin (DCO)
 

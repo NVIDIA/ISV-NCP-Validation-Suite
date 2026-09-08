@@ -13,24 +13,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Version resolution and build provenance for all workspace packages.
+"""Version and build provenance for all workspace packages.
 
-The canonical version lives in each package's pyproject.toml. At runtime,
-importlib.metadata reads it from installed package metadata (works in wheels,
-editable installs, and airgapped environments after ``uv sync``). That number
-is reported verbatim: it is the one thing about the build that is known
-exactly, and every consumer is entitled to read it as a plain release number.
+The version comes from installed package metadata, which importlib.metadata
+reads from a wheel, an editable install, or an air-gapped tree after ``uv
+sync``. It is reported exactly as it stands, with nothing appended, so every
+consumer can read it as a plain release number.
 
-What it does not say is whether this checkout has moved past that release. A
-tree several commits past ``v0.9.0`` still carries ``0.9.0`` while running
-checks that release never had. That is a separate fact and it travels in its
-own field, never folded into the version string.
+The version cannot say whether the checkout has moved past that release: a tree
+several commits past ``v0.9.0`` still reports ``0.9.0`` while running checks
+that release never had. That is a separate fact, and it travels in its own
+field rather than being folded into the version string. Two such facts exist
+and are observed independently - the source reference reported here, and the
+catalog digest reported by ``isvtest.catalog``.
 
-Source and catalog identity are independent observations. This module reports
-the optional source reference; ``isvtest.catalog`` reports the catalog digest.
-When a git checkout is present, the reference identifies a clean tag, extra
-commits, or local changes. Partners may copy the source tree onto air-gapped
-clusters, where source provenance is simply unverified.
+Source provenance is optional by design. Partners install from wheels and copy
+the source tree onto air-gapped clusters, so there is often no checkout to
+describe and no network to ask. Every function here answers None in that case,
+and None always means "nothing to go on" - never "no", and never a default.
+Nothing downstream may require a source reference to exist.
 """
 
 import logging
@@ -63,8 +64,7 @@ _DESCRIBE_PATTERN = re.compile(r"^v(?P<tag>.+)-(?P<distance>\d+)-g(?P<commit>[0-
 _DESCRIBE_TIMEOUT_SECONDS = 5
 
 # Lets a pipeline that builds an artifact elsewhere pass down provenance the
-# running copy cannot rediscover - the air-gapped case, where there is no
-# checkout to describe and no network to ask.
+# running copy cannot rediscover.
 BUILD_REF_ENV = "ISVTEST_BUILD_REF"
 
 # Matches the service column that stores it; truncated rather than dropped so an
@@ -79,12 +79,12 @@ _SOURCE_RELATIVE_PATH = Path("isvreporter/src/isvreporter/version.py")
 def _repository_root() -> Path | None:
     """Return the git checkout this module lives in, or None when installed.
 
-    Only this workspace's own tree counts. Creating an environment inside
-    another repository is ordinary - ``uv sync`` puts ``.venv`` under whatever
-    tree it is run from, and ``--target`` installs anywhere at all - and a
-    ``v*`` tag there describes cleanly enough to be taken for ours, which would
-    report a partner's version for our checks. An editable install still
-    counts, because its files stay in the source tree.
+    Only this workspace's own tree counts. An environment created inside another
+    repository is ordinary - ``uv sync`` puts ``.venv`` under whatever tree it
+    runs from - and a ``v*`` tag there would describe cleanly enough to pass for
+    ours, reporting a partner's version for our checks. Matching this file's own
+    path within the tree is what rules that out. Editable installs still count,
+    since their files stay in the source tree.
     """
     here = Path(__file__).resolve()
     for parent in here.parents:
@@ -98,19 +98,13 @@ def _repository_root() -> Path | None:
 def describe_checkout() -> str | None:
     """Return this checkout's ``git describe`` output, or None when unavailable.
 
-    The workspace releases its packages in lockstep off a single repository tag,
-    so one description covers all of them. Reported verbatim
-    (``v0.9.0-9-g08339c7``, with ``-dirty`` appended for uncommitted changes)
-    rather than reshaped into a version: the recipient should receive the
-    observation, not this module's interpretation of it.
+    The workspace releases every package off a single repository tag, so one
+    description covers them all. It is passed on exactly as git prints it
+    (``v0.9.0-9-g08339c7``, with ``-dirty`` for uncommitted changes), so callers
+    receive the observation rather than this module's reading of it.
 
-    None is the ordinary answer, not an error. There is no checkout when the
-    package was installed from a wheel, when a partner copied the source tree
-    onto a cluster without ``.git``, or when the environment is air-gapped and
-    shallow-cloned. Every such case reports source provenance as unverified.
-
-    Cached: the answer cannot change within a process, and every package's
-    version lookup would otherwise spawn its own git.
+    Cached because the answer cannot change within a process, and each package's
+    version lookup would otherwise start its own git.
     """
     root = _repository_root()
     if root is None:
@@ -141,15 +135,13 @@ def describe_checkout() -> str | None:
 def build_ref() -> str | None:
     """Return where this build came from, or None when nothing can say.
 
-    Prefers ``ISVTEST_BUILD_REF``, so a pipeline that builds an artifact and
-    ships it into an air-gapped cluster can pass down provenance it knows and
-    the running copy cannot rediscover. Falls back to describing the checkout
-    when there is one.
+    Prefers ``ISVTEST_BUILD_REF``, which lets a pipeline that builds elsewhere
+    pass down provenance the running copy cannot rediscover. Falls back to
+    describing the checkout when there is one.
 
-    The value is free text from the environment and is not validated beyond a
-    length bound: an operator supplying their own reference should not have to
-    match ``git describe`` output to be believed, and nothing downstream is
-    permitted to depend on it.
+    The environment value is free text, checked only for length: an operator
+    supplying their own reference should not have to imitate ``git describe``
+    output to be recorded.
     """
     supplied = os.environ.get(BUILD_REF_ENV, "").strip()
     if supplied:
@@ -160,11 +152,8 @@ def build_ref() -> str | None:
 def get_version(package_name: str) -> str:
     """Return the version of *package_name*, or ``"dev"`` if unavailable.
 
-    The installed package metadata, verbatim. Deliberately no git and no
-    suffix: this is the base version, and build provenance belongs in
-    :func:`build_ref` and the catalog digest rather than folded in here, where
-    it would corrupt the one value every consumer can read as a plain release
-    number.
+    The installed metadata, verbatim - no git, no suffix. Build provenance
+    belongs in :func:`build_ref` and the catalog digest, not folded in here.
 
     Args:
         package_name: Distribution name (e.g. ``"isvreporter"``).
@@ -181,14 +170,13 @@ def get_version(package_name: str) -> str:
 class RunIdentity(NamedTuple):
     """What a run reports about the build that produced its results.
 
-    Every field is optional. A run whose version could not be read reports
-    nothing rather than a placeholder, and the service records the absence as
-    unknown; see :func:`get_version` for why no value here is ever invented.
+    Every field may be None. Nothing here is invented to fill a gap; the service
+    records an absence as unknown.
 
-    Args:
-        isv_test_version: Release number the results are reported under, or None.
-        catalog_digest: Digest of the catalog the build executed, or None.
-        build_ref: Source reference the build recorded, or None.
+    Attributes:
+        isv_test_version: Release number the results are reported under.
+        catalog_digest: Digest of the catalog the build executed.
+        build_ref: Source reference the build recorded.
     """
 
     isv_test_version: str | None
@@ -202,20 +190,22 @@ def run_identity(
 ) -> RunIdentity:
     """Read a run's identity from the catalog artifact its build produced.
 
-    The reporting step of a split or remote flow can run on a different machine
-    than the one that executed the tests, so the artifact is authoritative and
-    *local_version* is only a fallback for a run that produced no artifact.
+    Reporting can run on a different machine than the one that executed the
+    tests, so the artifact wins and *local_version* only covers a run that
+    produced no artifact at all. The digest and the reference are taken exactly
+    as the artifact gives them, absent ones included: substituting local values
+    would credit a split or remote run to the reporting machine's checkout.
 
-    The digest and the reference are taken as they stand, including an explicit
-    absence: falling back for either would attribute a split or remote run to
-    the reporting machine's checkout. Values are read from the document rather
-    than recomputed, so what reaches the service is by construction what was
-    written to _output/test_catalog.json and printed during the run.
+    Values are read from the artifact rather than recomputed, so the digest the
+    service receives is the one written to _output/test_catalog.json and printed
+    during the run, not a second number that ought to agree with it.
 
-    Never fatal. A run that has produced results must be able to report them
-    even when its own provenance could not be established; the service reads a
-    missing digest or reference as "unknown" and says nothing rather than
-    guessing.
+    Args:
+        catalog_document: Parsed test_catalog.json, or None if there was none.
+        local_version: Version to fall back on when the artifact names none.
+
+    Returns:
+        The version, catalog digest and source reference to report.
     """
     document = catalog_document or {}
     return RunIdentity(
@@ -228,9 +218,14 @@ def run_identity(
 def parse_build_ref(ref: str | None) -> tuple[str, int, str, bool] | None:
     """Split a ``git describe`` reference into (tag, distance, commit, dirty).
 
-    Returns None for anything this cannot read, including the operator-supplied
-    free text :func:`build_ref` also accepts. Callers must treat that as "no
-    detail available" rather than as evidence of anything.
+    Returns None for anything it cannot read, including the operator-supplied
+    free text :func:`build_ref` also accepts.
+
+    Args:
+        ref: A reference from :func:`build_ref`, or None.
+
+    Returns:
+        The parsed parts, or None when the reference carries no readable detail.
     """
     if ref is None:
         return None
@@ -249,22 +244,24 @@ def parse_build_ref(ref: str | None) -> tuple[str, int, str, bool] | None:
 def build_is_release(package_version: str, ref: str | None) -> bool | None:
     """Whether this build is the release its version names, per *ref*.
 
-    Returns True on a clean commit tagged with the reported version, False when
-    the reference demonstrably differs from it, and **None when there is nothing
-    to go on** - no checkout, unreadable output, or operator-supplied free text.
+    True on a clean commit tagged with the reported version, False when the
+    reference says otherwise, None when there is nothing to go on. None is the
+    common case in the field and must not be read as either answer.
 
-    None is the common case in the field and must not be read as either answer.
-    It is the honest report from a mechanism that only works where git does.
+    A tag disagreeing with the installed metadata counts as False: the install
+    is stale against the tree, so the checks that run are not the ones the
+    reported version published.
 
-    A tag that disagrees with the installed metadata counts as not-a-release:
-    the install is stale with respect to the tree, so the checks that run are
-    not the ones the reported version published.
+    *ref* is a parameter rather than a call to :func:`build_ref`, so a caller
+    holding a known-absent reference stays distinguishable from one that has not
+    looked yet, and so this predicate never shells out to git on its own.
 
-    *ref* is required rather than defaulting to :func:`build_ref`. A caller
-    holding a known-absent reference and a caller that has not looked yet are
-    different situations with different answers, and a predicate that quietly
-    shells out to git would hide the one dependency this design exists to keep
-    optional.
+    Args:
+        package_version: Version the build reports itself under.
+        ref: Source reference to judge it against, or None.
+
+    Returns:
+        True, False, or None when the reference cannot answer.
     """
     parsed = parse_build_ref(ref)
     if parsed is None:

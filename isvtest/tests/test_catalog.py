@@ -327,17 +327,17 @@ class TestCatalogDocumentDigest:
 
     def test_the_document_digest_is_what_the_reporter_sends(self) -> None:
         """One number, read from one place, rather than two that ought to agree."""
-        from isvctl.reporting import _catalog_digest_of
+        from isvreporter.version import run_identity
 
         document = catalog_document([{"name": "GpuCheck"}], "1.2.3")
-        assert _catalog_digest_of(document) == document["catalogDigest"]
+        assert run_identity(document, "0.0.0").catalog_digest == document["catalogDigest"]
 
     def test_a_document_without_a_digest_reports_none(self) -> None:
         """An older artifact without a recorded digest is unverified."""
-        from isvctl.reporting import _catalog_digest_of
+        from isvreporter.version import run_identity
 
-        assert _catalog_digest_of({"entries": []}) is None
-        assert _catalog_digest_of(None) is None
+        assert run_identity({"entries": []}, "0.0.0").catalog_digest is None
+        assert run_identity(None, "0.0.0").catalog_digest is None
 
 
 class TestCatalogDigest:

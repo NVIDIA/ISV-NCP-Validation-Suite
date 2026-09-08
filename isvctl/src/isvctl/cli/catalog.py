@@ -22,7 +22,7 @@ import json
 import logging
 from collections import Counter
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from isvreporter.version import build_is_release
@@ -155,6 +155,37 @@ def labels_cmd(
     console.print(table)
 
 
+def _validate_artifact(document: Any) -> None:
+    """Check an artifact this process did not build, raising on anything unusable.
+
+    Only the ``--file`` path needs this. A generated document comes straight out
+    of :func:`catalog_document`, which sets ``catalogDigest`` from the same
+    contents this would re-hash, so running it there would only ever confirm
+    what the builder just wrote.
+    """
+    catalog_entries = document["entries"]
+    catalog_version = document["isvTestVersion"]
+    recorded_digest = document["catalogDigest"]
+    reference = document["isvTestBuildRef"]
+    schema_version = document["schemaVersion"]
+    capabilities = document["capabilities"]
+    suites = document["suites"]
+    if not isinstance(catalog_entries, list):
+        raise TypeError("entries must be a list")
+    if not isinstance(catalog_version, str) or not catalog_version:
+        raise ValueError("isvTestVersion is required")
+    if not isinstance(recorded_digest, str):
+        raise TypeError("catalogDigest must be a string")
+    if not isinstance(schema_version, int) or schema_version < 1:
+        raise ValueError("schemaVersion must be a positive integer")
+    if not isinstance(capabilities, list) or not isinstance(suites, list):
+        raise TypeError("capabilities and suites must be lists")
+    if recorded_digest != catalog_digest(document):
+        raise ValueError("catalogDigest does not match the artifact contents")
+    if not isinstance(reference, str) or not reference:
+        raise ValueError("isvTestBuildRef is required")
+
+
 @app.command("push")
 def push(
     verbose: Annotated[
@@ -201,7 +232,11 @@ def push(
         except (OSError, json.JSONDecodeError) as exc:
             print_error(f"Cannot read catalog artifact: {exc}")
             raise typer.Exit(1)
-        catalog_path = file
+        try:
+            _validate_artifact(document)
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            print_error(f"Invalid catalog artifact: {exc}")
+            raise typer.Exit(1)
     else:
         print_progress("Building test catalog...")
         catalog_entries = build_catalog()
@@ -212,31 +247,13 @@ def push(
         catalog_path.write_text(json.dumps(document, indent=2))
         print_progress(f"  Saved to: {catalog_path}")
 
-    try:
-        catalog_entries = document["entries"]
-        catalog_version = document["isvTestVersion"]
-        recorded_digest = document["catalogDigest"]
-        reference = document["isvTestBuildRef"]
-        schema_version = document["schemaVersion"]
-        capabilities = document["capabilities"]
-        suites = document["suites"]
-        if not isinstance(catalog_entries, list):
-            raise TypeError("entries must be a list")
-        if not isinstance(catalog_version, str) or not catalog_version:
-            raise ValueError("isvTestVersion is required")
-        if not isinstance(recorded_digest, str):
-            raise TypeError("catalogDigest must be a string")
-        if not isinstance(schema_version, int) or schema_version < 1:
-            raise ValueError("schemaVersion must be a positive integer")
-        if not isinstance(capabilities, list) or not isinstance(suites, list):
-            raise TypeError("capabilities and suites must be lists")
-        if recorded_digest != catalog_digest(document):
-            raise ValueError("catalogDigest does not match the artifact contents")
-        if not isinstance(reference, str) or not reference:
-            raise ValueError("isvTestBuildRef is required")
-    except (AttributeError, KeyError, TypeError, ValueError) as exc:
-        print_error(f"Invalid catalog artifact: {exc}")
-        raise typer.Exit(1)
+    catalog_entries = document["entries"]
+    catalog_version = document["isvTestVersion"]
+    recorded_digest = document["catalogDigest"]
+    reference = document["isvTestBuildRef"]
+    schema_version = document["schemaVersion"]
+    capabilities = document["capabilities"]
+    suites = document["suites"]
 
     print_progress(f"  {len(catalog_entries)} tests (version: {catalog_version}, digest: {recorded_digest})")
     if build_is_release(catalog_version, reference) is not True:

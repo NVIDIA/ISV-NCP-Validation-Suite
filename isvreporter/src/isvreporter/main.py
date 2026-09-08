@@ -32,7 +32,7 @@ from isvreporter.client import (
     update_test_run,
 )
 from isvreporter.platform import get_platform_from_config, is_valid_platform, normalize_platform
-from isvreporter.version import get_version
+from isvreporter.version import get_version, run_identity
 
 app = typer.Typer(
     name="report",
@@ -314,22 +314,15 @@ def update(
         except Exception as e:
             typer.echo(f"Warning: Failed to upload JUnit XML: {e}", err=True)
 
-    # Read from the catalog rather than from this process: the reporting step of
-    # a split flow can run on a different machine than the one that ran the
-    # tests, and the digest describes the build that produced these results.
-    catalog_digest: str | None = None
-    catalog_build_ref: str | None = None
-    reported_test_version = isv_test_version
-
-    # Read run identity from the artifact produced beside the results. Catalog
-    # publication is a separate release operation (`isvctl catalog push`).
+    # Read run identity from the artifact produced beside the results, not from
+    # this process: the reporting step of a split flow can run on a different
+    # machine than the one that ran the tests. Catalog publication is a separate
+    # release operation (`isvctl catalog push`).
+    identity = run_identity(None, isv_test_version)
     if test_catalog:
         try:
             typer.echo(f"Reading test catalog: {test_catalog}")
-            catalog_data = json.loads(test_catalog.read_text())
-            catalog_digest = catalog_data.get("catalogDigest")
-            catalog_build_ref = catalog_data.get("isvTestBuildRef")
-            reported_test_version = catalog_data.get("isvTestVersion") or isv_test_version
+            identity = run_identity(json.loads(test_catalog.read_text()), isv_test_version)
         except FileNotFoundError:
             typer.echo(f"Warning: Test catalog file not found: {test_catalog}", err=True)
         except Exception as e:
@@ -346,9 +339,9 @@ def update(
         complete_time=complete_time,
         log_output=log_output,
         isv_software_version=isv_software_version,
-        isv_test_version=reported_test_version,
-        isv_test_catalog_digest=catalog_digest,
-        isv_test_build_ref=catalog_build_ref,
+        isv_test_version=identity.isv_test_version,
+        isv_test_catalog_digest=identity.catalog_digest,
+        isv_test_build_ref=identity.build_ref,
     )
 
     # Raised only now, so the exit code still reports the upload failure while

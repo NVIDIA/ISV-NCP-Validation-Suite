@@ -40,6 +40,7 @@ import subprocess
 from functools import lru_cache
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from typing import Any, NamedTuple
 
 logger = logging.getLogger(__name__)
 
@@ -175,6 +176,53 @@ def get_version(package_name: str) -> str:
         return version(package_name)
     except PackageNotFoundError:
         return "dev"
+
+
+class RunIdentity(NamedTuple):
+    """What a run reports about the build that produced its results.
+
+    Every field is optional. A run whose version could not be read reports
+    nothing rather than a placeholder, and the service records the absence as
+    unknown; see :func:`get_version` for why no value here is ever invented.
+
+    Args:
+        isv_test_version: Release number the results are reported under, or None.
+        catalog_digest: Digest of the catalog the build executed, or None.
+        build_ref: Source reference the build recorded, or None.
+    """
+
+    isv_test_version: str | None
+    catalog_digest: str | None
+    build_ref: str | None
+
+
+def run_identity(
+    catalog_document: dict[str, Any] | None,
+    local_version: str | None,
+) -> RunIdentity:
+    """Read a run's identity from the catalog artifact its build produced.
+
+    The reporting step of a split or remote flow can run on a different machine
+    than the one that executed the tests, so the artifact is authoritative and
+    *local_version* is only a fallback for a run that produced no artifact.
+
+    The digest and the reference are taken as they stand, including an explicit
+    absence: falling back for either would attribute a split or remote run to
+    the reporting machine's checkout. Values are read from the document rather
+    than recomputed, so what reaches the service is by construction what was
+    written to _output/test_catalog.json and printed during the run.
+
+    Never fatal. A run that has produced results must be able to report them
+    even when its own provenance could not be established; the service reads a
+    missing digest or reference as "unknown" and says nothing rather than
+    guessing.
+    """
+    document = catalog_document or {}
+    return RunIdentity(
+        isv_test_version=document.get("isvTestVersion") or local_version,
+        catalog_digest=document.get("catalogDigest"),
+        build_ref=document.get("isvTestBuildRef"),
+    )
 
 
 def parse_build_ref(ref: str | None) -> tuple[str, int, str, bool] | None:

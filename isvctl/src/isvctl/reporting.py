@@ -25,7 +25,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from isvreporter.version import build_ref, parse_build_ref
+from isvreporter.version import build_ref, parse_build_ref, run_identity
 
 from isvctl.redaction import redact_text
 
@@ -117,23 +117,6 @@ def warn_if_unreleased(isv_test_version: str | None) -> None:
         commit,
         ", with uncommitted changes" if dirty else "",
     )
-
-
-def _catalog_digest_of(catalog_document: dict[str, Any] | None) -> str | None:
-    """The digest of the catalog this run built, or None when it has none.
-
-    Read from the document rather than recomputed, so the value sent to the
-    service is by construction the one written to _output/test_catalog.json and
-    printed during the run. An operator comparing the two is then comparing the
-    same number, not two numbers that ought to agree.
-
-    Never fatal. A run that has produced results must be able to report them
-    even when its own provenance could not be established; the service reads a
-    missing digest as "unknown" and says nothing rather than guessing.
-    """
-    if not catalog_document:
-        return None
-    return catalog_document.get("catalogDigest")
 
 
 def create_test_run(
@@ -272,11 +255,11 @@ def update_test_run(
         log_output = log_output.replace("\x00", "")
         log_output = redact_text(log_output)
 
-    # Auto-detect ISV test version from package
-    # An artifact may have crossed machines in a remote or split flow. Prefer
-    # the version recorded by the code that executed over this reporter's local
-    # package metadata.
-    isv_test_version = (catalog_document or {}).get("isvTestVersion") or get_isv_test_version()
+    # An artifact may have crossed machines in a remote or split flow, so the
+    # executing build's own record of what it was wins over this reporter's
+    # local package metadata.
+    identity = run_identity(catalog_document, get_isv_test_version())
+    isv_test_version = identity.isv_test_version
 
     try:
         jwt_token = get_jwt_token(ssa_issuer, client_id, client_secret)
@@ -300,10 +283,6 @@ def update_test_run(
                 logger.warning("Failed to upload JUnit XML: %s", e)
 
         # Update test run with status and log, even if JUnit upload failed.
-        #
-        # The digest and source reference come from the identity artifact the
-        # executing build produced. They remain independent facts even when the
-        # artifact crosses machines for reporting.
         client_update_test_run(
             endpoint=endpoint,
             lab_id=lab_id,
@@ -314,11 +293,8 @@ def update_test_run(
             log_output=log_output,
             isv_software_version=isv_software_version,
             isv_test_version=isv_test_version,
-            isv_test_catalog_digest=_catalog_digest_of(catalog_document),
-            # The execution artifact is authoritative, including an explicit
-            # null. Falling back here could attribute a split or remote run to
-            # the later reporting machine's checkout.
-            isv_test_build_ref=(catalog_document or {}).get("isvTestBuildRef"),
+            isv_test_catalog_digest=identity.catalog_digest,
+            isv_test_build_ref=identity.build_ref,
         )
         return True
     except SystemExit:
